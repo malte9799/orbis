@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="description" content="Wettervorhersage und interaktiver Wetter-Globus mit Regenradar, Wind, Waldbränden, Stürmen, Tornados und Erdbeben." />
+    <title>Wetter-Globus</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#/">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="#1b3a7a"/><path d="M5 13c5 2 9-3 14 0s6 1 8 0M4.5 19c6 1 9-3 14 0s6 2 9 0" stroke="#6fb6ff" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="23" cy="9" r="5" fill="#ffc533"/></svg>
+        <span>Wetter-Globus</span>
+      </a>
+      <nav class="tabs" aria-label="Ansicht">
+        <a href="#/" data-route="forecast">Vorhersage</a>
+        <a href="#/globus" data-route="globe">Globus</a>
+      </nav>
+    </header>
+    <div id="app"></div>
+    <noscript>Diese App benötigt JavaScript.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
