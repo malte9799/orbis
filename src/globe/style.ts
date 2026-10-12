@@ -1,4 +1,5 @@
 import type { StyleSpecification } from 'maplibre-gl';
+import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
 export type BaseId = 'satellite' | 'nasa' | 'dark' | 'light';
 
@@ -9,8 +10,6 @@ export const BASES: { id: BaseId; label: string }[] = [
   { id: 'light', label: 'Hell' },
 ];
 
-const carto = (style: string) => ['a', 'b', 'c', 'd'].map((s) => `https://${s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}@2x.png`);
-const CARTO_ATTR = '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/attributions">CARTO</a>';
 
 export function gibsDate(daysAgo = 1): string {
   return new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
@@ -31,6 +30,10 @@ export const EUMETSAT_IR =
 export const IMERG_WMS =
   'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=IMERG_Precipitation_Rate&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
+/** DWD precipitation radar composite for Germany (5 min, 1 km), latest scan. */
+export const DWD_RADAR_WMS =
+  'https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Niederschlagsradar&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+
 export const DWD_WMS =
   'https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Warnungen_Gemeinden_vereinigt&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
@@ -44,7 +47,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
   return {
     version: 8,
     projection: { type: projection },
-    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    glyphs: OFM_GLYPHS,
     sky: {
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
     },
@@ -63,10 +66,14 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
       },
-      dark: { type: 'raster', tiles: carto('dark_nolabels'), tileSize: 256, maxzoom: 18, attribution: CARTO_ATTR },
-      light: { type: 'raster', tiles: carto('voyager_nolabels'), tileSize: 256, maxzoom: 18, attribution: CARTO_ATTR },
-      'labels-dark': { type: 'raster', tiles: carto('dark_only_labels'), tileSize: 256, maxzoom: 18 },
-      'labels-light': { type: 'raster', tiles: carto('voyager_only_labels'), tileSize: 256, maxzoom: 18 },
+      ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR },
+      'dwd-radar': {
+        type: 'raster',
+        tiles: [DWD_RADAR_WMS],
+        tileSize: 256,
+        bounds: [1.5, 45.5, 19, 56.5],
+        attribution: 'Radar © <a href="https://www.dwd.de/">DWD</a>',
+      },
       field: {
         type: 'raster',
         tiles: ['wxfield://temp/0/{z}/{x}/{y}'],
@@ -104,23 +111,29 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>',
       },
       night: empty,
+      'dwd-warn': empty,
+      gauges: { ...empty, attribution: 'Pegel: <a href="https://www.pegelonline.wsv.de/">WSV PEGELONLINE</a>' },
+      cities: { ...empty, attribution: 'Wetter: <a href="https://open-meteo.com/">Open-Meteo</a>' },
+      aq: { ...empty, attribution: 'Luftqualität: Copernicus CAMS / Open-Meteo' },
       isobars: empty,
       'nws-poly': empty,
       tracks: empty,
-      quakes: empty,
+      quakes: { ...empty, attribution: 'Erdbeben: USGS, <a href="https://www.emsc-csem.org/">EMSC</a>' },
       firms: empty,
       events: empty,
       marker: empty,
     },
     layers: [
       { id: 'space', type: 'background', paint: { 'background-color': '#05070d' } },
-      ...(['satellite', 'nasa', 'dark', 'light'] as const).map((id) => ({
+      ...(['satellite', 'nasa'] as const).map((id) => ({
         id: `base-${id}`,
         type: 'raster' as const,
         source: id,
         layout: { visibility: 'none' as const },
         paint: id === 'satellite' ? { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 } : {},
       })),
+      ...baseLayers('dark'),
+      ...baseLayers('light'),
       {
         id: 'field',
         type: 'raster',
@@ -128,14 +141,28 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         layout: { visibility: 'none' },
         paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
       },
+      { id: 'dwd-radar', type: 'raster', source: 'dwd-radar', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85 } },
       { id: 'sat-ir', type: 'raster', source: 'sat-ir', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       { id: 'imerg', type: 'raster', source: 'imerg', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       // Radar & OWM layers are inserted before this anchor at runtime.
       { id: 'anchor-weather', type: 'background', layout: { visibility: 'none' }, paint: { 'background-opacity': 0 } },
       { id: 'dwd', type: 'raster', source: 'dwd', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.75 } },
       { id: 'hotspots', type: 'raster', source: 'hotspots', layout: { visibility: 'none' } },
-      { id: 'labels-dark', type: 'raster', source: 'labels-dark', layout: { visibility: 'none' } },
-      { id: 'labels-light', type: 'raster', source: 'labels-light', layout: { visibility: 'none' } },
+      {
+        id: 'dwd-warn-fill',
+        type: 'fill',
+        source: 'dwd-warn',
+        layout: { visibility: 'none' },
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.45 },
+      },
+      {
+        id: 'dwd-warn-line',
+        type: 'line',
+        source: 'dwd-warn',
+        layout: { visibility: 'none' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': 1 },
+      },
+      ...labelLayers(),
       {
         id: 'night',
         type: 'fill',
@@ -164,7 +191,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
           'symbol-placement': 'line',
           'symbol-spacing': 320,
           'text-field': ['to-string', ['get', 'p']],
-          'text-font': ['Open Sans Semibold'],
+          'text-font': FONT_BOLD,
           'text-size': 11,
           'text-keep-upright': true,
         },
@@ -178,7 +205,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         layout: {
           visibility: 'none',
           'text-field': ['format', ['get', 'label'], { 'font-scale': 1.5 }, '\n', {}, ['to-string', ['get', 'p']], { 'font-scale': 0.75 }],
-          'text-font': ['Open Sans Semibold'],
+          'text-font': FONT_BOLD,
           'text-size': 15,
           'text-allow-overlap': true,
         },
@@ -259,6 +286,62 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
           'icon-ignore-placement': true,
           'symbol-sort-key': ['get', 'weight'],
         },
+      },
+      {
+        id: 'gauges',
+        type: 'circle',
+        source: 'gauges',
+        layout: { visibility: 'none', 'circle-sort-key': ['get', 'weight'] },
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 6, 12, 8],
+          'circle-stroke-color': 'rgba(255,255,255,0.9)',
+          'circle-stroke-width': 1,
+        },
+      },
+      {
+        id: 'aq-circle',
+        type: 'circle',
+        source: 'aq',
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 9, 8, 14],
+          'circle-stroke-color': 'rgba(0,0,0,0.5)',
+          'circle-stroke-width': 1,
+        },
+      },
+      {
+        id: 'aq-text',
+        type: 'symbol',
+        source: 'aq',
+        layout: {
+          visibility: 'none',
+          'text-field': ['to-string', ['get', 'aqi']],
+          'text-font': FONT_BOLD,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 3, 9, 8, 12],
+          'text-allow-overlap': true,
+        },
+        paint: { 'text-color': '#10131c' },
+      },
+      {
+        id: 'cities',
+        type: 'symbol',
+        source: 'cities',
+        layout: {
+          visibility: 'none',
+          'icon-image': ['get', 'icon'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.75, 7, 1],
+          'text-field': ['format', ['get', 'temp'], { 'font-scale': 1.1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, ['get', 'name'], { 'font-scale': 0.8 }],
+          'text-font': FONT_REGULAR,
+          'text-size': 12,
+          'text-anchor': 'left',
+          'text-offset': [1.3, 0],
+          'text-justify': 'left',
+          'symbol-sort-key': ['get', 'rank'],
+          'icon-padding': 4,
+        },
+        paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.3 },
       },
       {
         id: 'marker',

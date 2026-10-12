@@ -12,23 +12,32 @@ Wetter-App mit zwei Ansichten:
 
 ## Ebenen der Karte
 
+Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
+
 | Bereich | Ebene | Quelle |
 |---|---|---|
-| Karte | Satellit, NASA-Tagesbild (VIIRS), Dunkel, Hell, Ortsnamen, Tag/Nacht-Grenze | Esri, NASA GIBS, CARTO/OSM |
-| Live | Regenradar mit Zeitleiste (letzte 2 h) | RainViewer |
-| Live | Satellit Infrarot (weltweites Wolkenbild) | EUMETSAT |
-| Live | Niederschlag aus Satellitendaten (30 min) | NASA GPM IMERG |
-| Vorhersage | Wind, Windböen, Temperatur, gefühlte Temperatur, Luftfeuchtigkeit, Taupunkt, Niederschlag, Bewölkung, Luftdruck, Schneehöhe, Gewitterenergie (CAPE) – mit Zeitleiste bis +5 Tage | Open-Meteo |
-| Vorhersage | Animierte Windpartikel, Isobaren mit Hoch-/Tiefdruckzentren | Open-Meteo |
-| Ereignisse | Waldbrände | NASA EONET, GDACS |
-| Ereignisse | Feuer-Hotspots (Satellit) | NASA FIRMS (über GIBS, oder als Punkte mit eigenem Key) |
-| Ereignisse | Stürme & tropische Wirbelstürme inkl. Zugbahn | NASA EONET, GDACS |
-| Ereignisse | Tornados & Unwetterwarnungen (USA) | NOAA NWS, SPC Storm Reports |
-| Ereignisse | Erdbeben (7 Tage, ab M 2,5) | USGS |
-| Ereignisse | Vulkane, Fluten, Dürren, Erdrutsche, Eisberge, Staubstürme | NASA EONET, GDACS |
-| Ereignisse | Unwetterwarnungen Deutschland | Deutscher Wetterdienst (WMS) |
+| Karte | Dunkel/Hell (Vektorkarte), Ortsnamen auf Deutsch, Grenzen | [OpenFreeMap](https://openfreemap.org) / OpenStreetMap |
+| Karte | Satellit, NASA-Tagesbild (VIIRS), Tag/Nacht-Grenze | Esri, NASA GIBS |
+| Live | Regenradar weltweit (letzte 2 h) | RainViewer |
+| Live | Radar Deutschland (5 min, 1 km) | Deutscher Wetterdienst |
+| Live | Satellit Infrarot, Niederschlag aus Satellitendaten | EUMETSAT, NASA GPM IMERG |
+| Vorhersage | Wind, Böen, Temperatur, gefühlte Temperatur, Luftfeuchte, Taupunkt, Niederschlag, Bewölkung, Luftdruck, Schneehöhe, CAPE – Zeitleiste bis +5 Tage, Windpartikel, Isobaren | Open-Meteo |
+| Ereignisse | Waldbrände, Feuer-Hotspots, Stürme & Zyklone, Tornados (USA), Vulkane, Fluten, Dürren, Eis | NASA EONET/FIRMS, GDACS, NOAA |
+| Ereignisse | Erdbeben – Europa ab M 1,5, weltweit ab M 2,5 | EMSC, USGS |
+| Europa | Städtewetter (~190 Städte), Unwetterwarnungen DE (anklickbar) | Open-Meteo, DWD |
+| Europa | Pegelstände & Hochwasser an Bundeswasserstraßen | PEGELONLINE (WSV) |
+| Europa | Luftqualität & Pollen in europäischen Städten | Copernicus CAMS via Open-Meteo |
+| Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, Ersatz airplanes.live |
+| Luftraum | Wetterballons (Radiosonden) | SondeHub |
+| Weltraum | Satelliten (ISS, Wetter-, GPS-, Galileo-Satelliten), Starlink, Bodenspur per Klick | CelesTrak + SGP4 im Browser |
+| Verkehr | Schiffsrouten, Fährlinien | Global Shipping Lanes (CC BY 4.0), OSM |
+| Infrastruktur | Seekabel mit Anlandepunkten, Internetknoten (IXPs) | TeleGeography, PeeringDB |
+| Infrastruktur | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke u. a.; beim Zoomen einzelne Windräder | WRI Global Power Plant Database, OSM (Overpass) |
 
-Alle Quellen sind ohne API-Schlüssel nutzbar. Optional (im Ebenen-Panel unter „Erweitert“):
+Nicht enthalten, weil es dafür keine kostenlose, frei nutzbare Quelle gibt: Live-Schiffspositionen (AIS)
+und Blitzortung.
+
+Optional (im Ebenen-Panel unter „Erweitert“):
 
 - **OpenWeatherMap**-Key → zusätzliche hochauflösende Wetterkarten
 - **NASA FIRMS** MAP_KEY → einzelne Feuer-Hotspots als anklickbare Punkte
@@ -61,4 +70,6 @@ GitHub Pages (in den Repo-Einstellungen unter *Pages → Source* „GitHub Actio
 - Die kostenlosen APIs haben Nutzungslimits (Open-Meteo: 10 000 Aufrufe/Tag für nicht-kommerzielle Nutzung,
   jeder Rasterpunkt zählt als Aufruf). Das globale Raster wird deshalb eine Stunde im Browser zwischengespeichert.
 - Tornado-Daten gibt es nur für die USA – dort werden Tornados offiziell gewarnt und gemeldet.
+- Einige Datensätze sind nur für nicht-kommerzielle Nutzung frei (u. a. TeleGeography-Seekabel, Esri-Satellitenbild,
+  airplanes.live). Für eine kommerzielle Nutzung müssten diese ersetzt oder lizenziert werden.
 - Die Rohdaten stammen von den jeweiligen Anbietern; für Warnungen gelten immer die amtlichen Stellen.

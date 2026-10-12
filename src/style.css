@@ -1396,3 +1396,12 @@ svg.hourly {
     min-width: 70px;
   }
 }
+
+.ev-text small.note {
+  color: #f2c94c;
+}
+
+.pop-grid.two {
+  grid-template-columns: auto 1fr;
+  margin: 6px 0 4px;
+}

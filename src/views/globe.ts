@@ -31,6 +31,9 @@ import {
   type ModelGrid,
 } from '../api/model';
 import { getCurrent, reverseGeocode } from '../api/openmeteo';
+import { inEurope, loadEmsc } from '../api/europe';
+import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, SECTIONS, type ExtraId } from '../globe/extras';
+import { labelPaint } from '../globe/vector';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
@@ -41,7 +44,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, gibsDate, gibsFires, gibsTrueColor, type BaseId } from '../globe/style';
+import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -50,11 +53,12 @@ import { describe, weatherIcon } from '../weather';
 // ---------------------------------------------------------------------------
 // Configuration
 
-type LiveId = 'radar' | 'sat-ir' | 'imerg';
+type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 const LIVE_LAYERS: { id: LiveId; label: string; hint: string }[] = [
-  { id: 'radar', label: 'Regenradar', hint: 'RainViewer, letzte 2 h' },
+  { id: 'radar', label: 'Regenradar', hint: 'weltweit – RainViewer, letzte 2 h' },
+  { id: 'dwd-radar', label: 'Radar Deutschland', hint: 'DWD, alle 5 min, 1 km Auflösung' },
   { id: 'sat-ir', label: 'Satellit (Infrarot)', hint: 'Wolken weltweit – EUMETSAT' },
   { id: 'imerg', label: 'Niederschlag (Satellit)', hint: 'NASA GPM IMERG, 30 min' },
 ];
@@ -70,19 +74,18 @@ const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'pressure_new', label: 'Luftdruck (OWM)' },
 ];
 
-type GroupId = 'fires' | 'hotspots' | 'storms' | 'tornado' | 'quakes' | 'volcanoes' | 'floods' | 'ice' | 'dwd';
-type FeedId = 'eonet' | 'gdacs' | 'usgs' | 'nws' | 'spc' | 'firms';
+type GroupId = 'fires' | 'hotspots' | 'storms' | 'tornado' | 'quakes' | 'volcanoes' | 'floods' | 'ice';
+type FeedId = 'eonet' | 'gdacs' | 'usgs' | 'emsc' | 'nws' | 'spc' | 'firms';
 
 const GROUPS: { id: GroupId; label: string; hint: string; icon: EventKind; feeds: FeedId[] }[] = [
   { id: 'fires', label: 'Waldbrände', hint: 'NASA EONET, GDACS', icon: 'fire', feeds: ['eonet', 'gdacs'] },
   { id: 'hotspots', label: 'Feuer-Hotspots', hint: 'NASA FIRMS Satellit (VIIRS)', icon: 'heat', feeds: [] },
   { id: 'storms', label: 'Stürme & Zyklone', hint: 'mit Zugbahnen – EONET, GDACS', icon: 'storm', feeds: ['eonet', 'gdacs'] },
   { id: 'tornado', label: 'Tornados & Unwetter (USA)', hint: 'NWS-Warnungen, SPC-Meldungen', icon: 'tornado', feeds: ['nws', 'spc'] },
-  { id: 'quakes', label: 'Erdbeben', hint: 'USGS, letzte 7 Tage, ab M2.5', icon: 'quake', feeds: ['usgs'] },
+  { id: 'quakes', label: 'Erdbeben', hint: '7 Tage – Europa ab M1.5 (EMSC), weltweit ab M2.5 (USGS)', icon: 'quake', feeds: ['usgs', 'emsc'] },
   { id: 'volcanoes', label: 'Vulkane', hint: 'aktive Ausbrüche – EONET, GDACS', icon: 'volcano', feeds: ['eonet', 'gdacs'] },
   { id: 'floods', label: 'Fluten, Dürren & Erdrutsche', hint: 'GDACS, EONET', icon: 'flood', feeds: ['eonet', 'gdacs'] },
   { id: 'ice', label: 'Eis, Schnee, Staub & Hitze', hint: 'Eisberge, Sandstürme – EONET', icon: 'ice', feeds: ['eonet'] },
-  { id: 'dwd', label: 'Unwetterwarnungen DE', hint: 'Deutscher Wetterdienst', icon: 'other', feeds: [] },
 ];
 
 const KIND_GROUP: Record<EventKind, GroupId> = {
@@ -108,6 +111,7 @@ interface GlobeState {
   /** wind particle animation */
   wind: boolean;
   isobars: boolean;
+  extras: Partial<Record<ExtraId, boolean>>;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
   center: [number, number];
@@ -123,6 +127,7 @@ const DEFAULT_STATE: GlobeState = {
   overlay: 'wind',
   wind: true,
   isobars: false,
+  extras: { cities: true, dwdwarn: true },
   groups: { fires: true, storms: true, tornado: true, quakes: true, volcanoes: true },
   projection: 'mercator',
   center: [10, 35],
@@ -141,12 +146,19 @@ export interface GlobeView {
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
-  const STATE_VERSION = 2;
+  const STATE_VERSION = 3;
   const saved = store.getGlobeState<Partial<GlobeState>>({});
   // v2: 2D map became the default view – reset the projection of older saved states once.
-  if ((saved.version ?? 1) < STATE_VERSION) Object.assign(saved, { projection: 'mercator', overlay: 'wind', wind: true, version: STATE_VERSION });
+  if ((saved.version ?? 1) < 2) Object.assign(saved, { projection: 'mercator', overlay: 'wind', wind: true });
+  // v3: European data & infrastructure layers – enable city weather and DWD warnings once.
+  if ((saved.version ?? 1) < 3) {
+    const oldDwd = (saved.groups as Record<string, boolean> | undefined)?.dwd;
+    saved.extras = { cities: true, dwdwarn: oldDwd ?? true, ...saved.extras };
+  }
+  saved.version = STATE_VERSION;
   const state: GlobeState = { ...DEFAULT_STATE, ...saved };
   state.groups = { ...state.groups };
+  state.extras = { ...state.extras };
   const save = () => store.setGlobeState(state);
 
   const el = document.createElement('main');
@@ -202,6 +214,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   let wind: WindParticles | null = null;
   let nightTimer = 0;
   let refreshTimer = 0;
+  let liveTimer = 0;
   let popup: Popup | null = null;
 
   // ----- feeds -------------------------------------------------------------
@@ -209,6 +222,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     eonet: { at: 0, loading: null },
     gdacs: { at: 0, loading: null },
     usgs: { at: 0, loading: null },
+    emsc: { at: 0, loading: null },
     nws: { at: 0, loading: null },
     spc: { at: 0, loading: null },
     firms: { at: 0, loading: null },
@@ -220,6 +234,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   let spcPoints: EventFeature[] = [];
   let nwsPolys: Feature<Polygon | MultiPolygon, { color: string; event: string }>[] = [];
   let quakePoints: EventFeature[] = [];
+  let emscPoints: EventFeature[] = [];
+  let extras: ExtraLayers | null = null;
   let firmsCount = 0;
 
   const FEED_LOADERS: Record<FeedId, () => Promise<void>> = {
@@ -233,6 +249,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     },
     usgs: async () => {
       quakePoints = await loadQuakes();
+    },
+    emsc: async () => {
+      emscPoints = await loadEmsc();
     },
     nws: async () => {
       const r = await loadNwsSevere();
@@ -254,6 +273,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     eonet: 'NASA EONET',
     gdacs: 'GDACS',
     usgs: 'USGS Erdbeben',
+    emsc: 'EMSC Erdbeben Europa',
     nws: 'NWS (USA)',
     spc: 'SPC Tornado-Meldungen',
     firms: 'NASA FIRMS',
@@ -292,7 +312,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       features.map((f) => ({ ...f, properties: { ...f.properties, group: group ?? KIND_GROUP[f.properties.kind] } }));
     const all = [...tag(eonetPoints), ...tag(gdacsPoints), ...tag(nwsPoints, 'tornado'), ...tag(spcPoints, 'tornado')];
     setData('events', all);
-    setData('quakes', quakePoints);
+    // In Europe EMSC is more complete (smaller quakes); elsewhere USGS.
+    setData('quakes', emscPoints.length ? [...emscPoints, ...quakePoints.filter((q) => !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1]))] : quakePoints);
     setData('nws-poly', nwsPolys);
     setData('tracks', eonetTracks.filter((t) => t.properties.kind === 'storm'));
   }
@@ -304,13 +325,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   function groupCount(id: GroupId): number | null {
     switch (id) {
       case 'quakes':
-        return feedData.usgs.at ? quakePoints.length : null;
+        return feedData.usgs.at || feedData.emsc.at
+          ? emscPoints.length + quakePoints.filter((q) => !emscPoints.length || !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1])).length
+          : null;
       case 'tornado':
         return feedData.nws.at || feedData.spc.at ? nwsPoints.length + spcPoints.length : null;
       case 'hotspots':
         return firmsCount || null;
-      case 'dwd':
-        return null;
       default: {
         if (!feedData.eonet.at && !feedData.gdacs.at) return null;
         return [...eonetPoints, ...gdacsPoints].filter((f) => KIND_GROUP[f.properties.kind] === id).length;
@@ -320,6 +341,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
 
   // ----- panel -------------------------------------------------------------
   function renderPanel() {
+    const scrollTop = panel.querySelector('.panel-scroll')?.scrollTop ?? 0;
+    const keysOpen = panel.querySelector<HTMLDetailsElement>('details.keys')?.open ?? false;
     const keys = store.getKeys();
     const layerBtn = (id: OverlayId, label: string, swatch: string, hint = '') =>
       `<label class="layer-btn ${state.overlay === id ? 'on' : ''}" title="${escapeHtml(hint || label)}">
@@ -331,6 +354,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     };
     const LIVE_SWATCH: Record<LiveId, string> = {
       radar: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)',
+      'dwd-radar': 'linear-gradient(135deg,#a0e6ff,#2f6fe0,#2bd46f,#ffe14d,#e8384f)',
       'sat-ir': 'linear-gradient(135deg,#111,#888,#fff)',
       imerg: 'linear-gradient(135deg,#9fd8ff,#2f6fe0,#2bd46f,#ffe14d)',
     };
@@ -361,7 +385,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         <h3>Ereignisse</h3>
         ${GROUPS.map((g) => {
           const count = groupCount(g.id);
-          const color = g.id === 'dwd' ? '#e8384f' : kindColor(g.icon);
+          const color = kindColor(g.icon);
           return `<label class="row ev-row">
             <input type="checkbox" data-group="${g.id}" ${state.groups[g.id] ? 'checked' : ''}/>
             ${glyphSvg(g.icon, color)}
@@ -369,6 +393,21 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
             <span class="badge">${state.groups[g.id] && loading(g) ? '…' : count != null ? count : ''}</span>
           </label>`;
         }).join('')}
+
+        ${SECTIONS.map(
+          (sec) => `<h3>${sec.title}</h3>
+          ${EXTRAS.filter((d) => d.section === sec.id)
+            .map((d) => {
+              const note = extras?.note(d.id);
+              return `<label class="row ev-row">
+                <input type="checkbox" data-extra="${d.id}" ${state.extras[d.id] ? 'checked' : ''}/>
+                ${glyphSvg(d.glyph, d.color)}
+                <span class="ev-text"><span>${escapeHtml(d.label)}</span><small data-note-for="${d.id}" class="${note ? 'note' : ''}">${escapeHtml(note ?? d.hint)}</small></span>
+                <span class="badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>
+              </label>`;
+            })
+            .join('')}`,
+        ).join('')}
 
         <details class="keys">
           <summary>Erweitert: API-Schlüssel (optional)</summary>
@@ -387,6 +426,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         Daten: Open-Meteo, RainViewer, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, NOAA/NWS, GDACS, DWD.</p>
       </div>`;
 
+    panel.querySelector('.panel-scroll')!.scrollTop = scrollTop;
+    panel.querySelector<HTMLDetailsElement>('details.keys')!.open = keysOpen;
+    panel.querySelectorAll<HTMLInputElement>('input[data-extra]').forEach((i) =>
+      i.addEventListener('change', () => {
+        const id = i.dataset.extra as ExtraId;
+        state.extras[id] = i.checked;
+        extras?.toggle(id, i.checked);
+        updateBadges();
+        save();
+      }),
+    );
     panel.querySelectorAll<HTMLInputElement>('input[name=base]').forEach((i) =>
       i.addEventListener('change', () => {
         state.base = i.value as BaseId;
@@ -454,10 +504,40 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   };
 
+  /** Update counts/notes of the extra layers without re-rendering the whole panel. */
+  function updateBadges() {
+    if (!extras) return;
+    for (const d of EXTRAS) {
+      const badge = panel.querySelector(`[data-badge-for="${d.id}"]`);
+      if (badge) badge.textContent = extras.badge(d.id);
+      const note = panel.querySelector(`[data-note-for="${d.id}"]`);
+      if (note) {
+        const n = extras.note(d.id);
+        note.textContent = n ?? d.hint;
+        note.classList.toggle('note', !!n);
+      }
+    }
+  }
+
   function applyBase() {
+    if (!map) return;
     for (const b of BASES) vis(`base-${b.id}`, state.base === b.id);
-    vis('labels-dark', state.labels && state.base !== 'light');
-    vis('labels-light', state.labels && state.base === 'light');
+    const layers = map.getStyle().layers;
+    for (const l of layers) {
+      if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
+      else if (l.id.startsWith('vbase-light-')) vis(l.id, state.base === 'light');
+      else if (l.id.startsWith('lbl-')) vis(l.id, state.labels);
+    }
+    // dark text on the light map, white text everywhere else
+    const c = labelPaint(state.base === 'light' ? 'onLight' : 'onDark');
+    for (const l of layers) {
+      if (!l.id.startsWith('lbl-')) continue;
+      if (l.type === 'symbol' && l.id !== 'lbl-water') {
+        map.setPaintProperty(l.id, 'text-color', c.color);
+        map.setPaintProperty(l.id, 'text-halo-color', c.halo);
+      } else if (l.id === 'lbl-border-country') map.setPaintProperty(l.id, 'line-color', c.border);
+      else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.state);
+    }
   }
 
   function applyNight() {
@@ -484,7 +564,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     vis('tracks', !!state.groups.storms);
     vis('nws-fill', !!state.groups.tornado);
     vis('nws-line', !!state.groups.tornado);
-    vis('dwd', !!state.groups.dwd);
     const firmsKey = !!store.getKeys().firms;
     vis('firms', !!state.groups.hotspots && firmsKey);
     vis('hotspots', !!state.groups.hotspots && !firmsKey);
@@ -605,6 +684,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     stopAnimation();
     vis('field', false);
     vis('sat-ir', o === 'sat-ir');
+    vis('dwd-radar', o === 'dwd-radar');
     vis('imerg', o === 'imerg');
     setRadarVisible(o === 'radar');
     for (const l of OWM_LAYERS) vis(`owm-${l.id}`, false);
@@ -796,6 +876,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#88ddee,#0099cc,#0077aa,#005588,#ffee00,#ffaa00,#ff4400,#c10000,#ffaaff)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
+    } else if (o === 'dwd-radar') {
+      html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)"></div>
+        <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">Unwetter</span></div>`;
     } else if (o === 'sat-ir') {
       html = `<div class="legend-title">Satellit Infrarot <small>live · hohe, kalte Wolken erscheinen hell</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#111,#777,#fff)"></div>
@@ -956,6 +1040,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
+      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
+      extras.init();
+      extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       applyPadding();
       applyBase();
       applyNight();
@@ -974,18 +1061,32 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     map.on('movestart', hideReadout);
     map.on('moveend', () => {
       refreshDetail();
+      extras?.onMoveEnd();
       const c = map!.getCenter();
       state.center = [+c.lng.toFixed(3), +c.lat.toFixed(3)];
       state.zoom = +map!.getZoom().toFixed(2);
       save();
     });
 
-    const interactive = ['ev-circle', 'quakes', 'firms', 'nws-fill'];
+    const interactive = ['ev-circle', 'quakes', 'firms', 'nws-fill', ...EXTRA_CLICK_LAYERS];
+    const areaLayers = ['nws-fill', 'dwd-warn-fill', 'cables'];
     map.on('click', (e) => {
       const layers = interactive.filter((l) => map!.getLayer(l));
-      const hits = map!.queryRenderedFeatures(e.point, { layers });
-      const hit = hits.find((h) => h.layer.id !== 'nws-fill') ?? hits[0];
-      if (hit && hit.layer.id === 'firms') {
+      // a few pixels of tolerance makes small/moving objects easier to hit
+      const box: [[number, number], [number, number]] = [
+        [e.point.x - 4, e.point.y - 4],
+        [e.point.x + 4, e.point.y + 4],
+      ];
+      const hits = map!.queryRenderedFeatures(box, { layers });
+      const hit = hits.find((h) => !areaLayers.includes(h.layer.id)) ?? hits[0];
+      extras?.clearSelection();
+      const extraResult = hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null;
+      if (extraResult?.type === 'weather') {
+        weatherPopup(extraResult.lng, extraResult.lat);
+      } else if (extraResult) {
+        const node = openPopup({ lng: extraResult.lng, lat: extraResult.lat }, extraResult.html);
+        extraResult.after?.(node);
+      } else if (hit && hit.layer.id === 'firms') {
         const p = hit.properties as { frp: number; conf: string; time: string };
         openPopup(e.lngLat, `<div class="pop"><div class="pop-head">${glyphSvg('fire', '#ff5a1f', 26)}<b>Feuer-Hotspot</b></div>
           <div class="pop-sub">Strahlungsleistung ${fmt.num(p.frp, 1)} MW · Konfidenz ${escapeHtml(p.conf)}</div>
@@ -995,7 +1096,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         openPopup(e.lngLat, `<div class="pop"><div class="pop-head">${glyphSvg('tornado', String(hit.properties.color), 26)}<b>${escapeHtml(hit.properties.event)}</b></div>
           <div class="pop-sub">Warngebiet des National Weather Service</div>
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
-      } else if (hit) {
+      } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
         weatherPopup(e.lngLat.lng, e.lngLat.lat);
@@ -1015,7 +1116,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         initMap();
       } else {
         map.resize();
-        if (state.wind) wind?.start();
+        if (state.wind && needsModel()) wind?.start();
+        extras?.resume();
       }
       if (focus) focusPlace(focus.lat, focus.lon, focus.zoom ?? 6, true);
       clearInterval(refreshTimer);
@@ -1023,11 +1125,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         ensureFeeds(true);
         if (state.overlay === 'radar') ensureRadar();
       }, REFRESH_MS);
+      // Live image layers: bust the tile cache so new scans appear (DWD radar: every 5 min)
+      clearInterval(liveTimer);
+      liveTimer = window.setInterval(() => {
+        if (!map || document.hidden) return;
+        const t = `&_t=${Math.floor(Date.now() / 300000)}`;
+        const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, imerg: IMERG_WMS };
+        const url = live[state.overlay];
+        if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([url + t]);
+      }, 5 * 60000);
     },
     deactivate() {
       clearInterval(refreshTimer);
+      clearInterval(liveTimer);
       stopAnimation();
       wind?.stop();
+      extras?.stop();
       hideReadout();
       popup?.remove();
     },
