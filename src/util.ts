@@ -39,7 +39,10 @@ export const fmt = {
     return `${/^-0(,0*)?$/.test(s) ? s.slice(1) : s}°`;
   },
   num: (n: number | null | undefined, digits = 0) =>
-    n == null || Number.isNaN(n) ? '–' : n.toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits }),
+    n == null || Number.isNaN(n)
+      ? '–'
+      : // avoid "-0" for tiny negative values
+        (Math.abs(n) < 0.5 / 10 ** digits ? 0 : n).toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits }),
   /** Open-Meteo returns local wall-clock times without offset ("2026-10-12T14:00"). */
   hour: (iso: string) => iso.slice(11, 16),
   weekday: (isoDate: string, long = false) => {

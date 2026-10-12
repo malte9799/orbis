@@ -439,7 +439,7 @@ export class ExtraLayers {
       }
       switch (def.id) {
         case 'cities':
-          this.loadOnce('cities', 30 * 60000, () => this.loadCities());
+          this.loadOnce('cities', 60 * 60000, () => this.loadCities());
           break;
         case 'dwdwarn':
           this.loadOnce('dwdwarn', 10 * 60000, () => this.loadDwd());

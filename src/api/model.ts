@@ -1,12 +1,13 @@
+import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
+
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
 // fetched and blended in seamlessly.
 
+/** Fetched variables – kept at 10 so each location costs exactly one API call. */
 export const MODEL_VARS = [
   'temperature_2m',
-  'apparent_temperature',
   'relative_humidity_2m',
-  'dew_point_2m',
   'precipitation',
   'cloud_cover',
   'pressure_msl',
@@ -16,14 +17,18 @@ export const MODEL_VARS = [
   'snow_depth',
   'cape',
 ] as const;
-export type ModelVar = (typeof MODEL_VARS)[number] | 'u' | 'v';
+/** Derived in the browser: wind vector, dew point and apparent temperature. */
+export type ModelVar = (typeof MODEL_VARS)[number] | 'u' | 'v' | 'dew_point_2m' | 'apparent_temperature';
+const DERIVED = ['u', 'v', 'dew_point_2m', 'apparent_temperature'] as const;
 
 export interface ModelGrid {
   /** latitude of the first (northernmost) row */
   lat0: number;
   /** longitude of the first (westernmost) column */
   lon0: number;
-  step: number;
+  /** grid spacing in degrees (longitude / latitude) */
+  dx: number;
+  dy: number;
   nx: number;
   ny: number;
   /** global grids wrap around in longitude */
@@ -34,81 +39,90 @@ export interface ModelGrid {
   data: Record<ModelVar, Float32Array>;
 }
 
-export class ModelLimitError extends Error {}
+export { OpenMeteoLimitError as ModelLimitError };
 
 const FORECAST_DAYS = 5;
 
 type HourlyRow = { hourly: Record<string, (number | null)[]> & { time: string[] } };
 
 async function fetchPoints(points: [number, number][]): Promise<HourlyRow[]> {
-  const BATCH = 150;
-  const batches: [number, number][][] = [];
-  for (let i = 0; i < points.length; i += BATCH) batches.push(points.slice(i, i + BATCH));
-  const out: HourlyRow[][] = new Array(batches.length);
-  // two requests at a time – gentle on the free API
-  let next = 0;
-  const worker = async () => {
-    while (next < batches.length) {
-      const i = next++;
-      const chunk = batches[i];
-      const q = new URLSearchParams({
-        latitude: chunk.map((p) => p[0].toFixed(2)).join(','),
-        longitude: chunk.map((p) => p[1].toFixed(2)).join(','),
-        hourly: MODEL_VARS.join(','),
-        forecast_days: String(FORECAST_DAYS),
-        temporal_resolution: 'hourly_3',
-        wind_speed_unit: 'kmh',
-        timezone: 'GMT',
-        cell_selection: 'nearest',
-      });
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`);
-      if (res.status === 429) throw new ModelLimitError('Open-Meteo-Limit erreicht');
-      if (!res.ok) throw new Error(`Open-Meteo HTTP ${res.status}`);
-      const json = (await res.json()) as HourlyRow | HourlyRow[];
-      out[i] = Array.isArray(json) ? json : [json];
-    }
-  };
-  await Promise.all([worker(), worker()]);
-  return out.flat();
+  const BATCH = 100;
+  const out: HourlyRow[] = [];
+  for (let i = 0; i < points.length; i += BATCH) {
+    const chunk = points.slice(i, i + BATCH);
+    const q = new URLSearchParams({
+      latitude: chunk.map((p) => p[0].toFixed(2)).join(','),
+      longitude: chunk.map((p) => p[1].toFixed(2)).join(','),
+      hourly: MODEL_VARS.join(','),
+      forecast_days: String(FORECAST_DAYS),
+      wind_speed_unit: 'kmh',
+      timezone: 'GMT',
+    });
+    const json = await omFetch<HourlyRow | HourlyRow[]>(`https://api.open-meteo.com/v1/forecast?${q}`, chunk.length);
+    out.push(...(Array.isArray(json) ? json : [json]));
+  }
+  return out;
 }
 
-async function fetchGrid(lat0: number, lon0: number, step: number, nx: number, ny: number, wrap: boolean): Promise<ModelGrid> {
+/** Magnus formula */
+function dewPoint(t: number, rh: number) {
+  const g = Math.log(Math.max(rh, 1) / 100) + (17.62 * t) / (243.12 + t);
+  return (243.12 * g) / (17.62 - g);
+}
+
+/** Apparent temperature (Steadman / Australian BoM), wind in m/s */
+function apparent(t: number, rh: number, ws: number) {
+  const e = (rh / 100) * 6.105 * Math.exp((17.27 * t) / (237.7 + t));
+  return t + 0.33 * e - 0.7 * ws - 4.0;
+}
+
+function derive(data: Record<ModelVar, Float32Array>) {
+  const len = data.temperature_2m.length;
+  for (const k of DERIVED) data[k] = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const t = data.temperature_2m[i];
+    const rh = data.relative_humidity_2m[i];
+    const spd = data.wind_speed_10m[i] / 3.6;
+    const dir = (data.wind_direction_10m[i] * Math.PI) / 180;
+    // direction is where the wind comes FROM
+    data.u[i] = -spd * Math.sin(dir);
+    data.v[i] = -spd * Math.cos(dir);
+    data.dew_point_2m[i] = dewPoint(t, rh);
+    data.apparent_temperature[i] = apparent(t, rh, spd);
+  }
+}
+
+async function fetchGrid(lat0: number, lon0: number, dx: number, dy: number, nx: number, ny: number, wrap: boolean): Promise<ModelGrid> {
   const points: [number, number][] = [];
-  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) points.push([lat0 - y * step, lon0 + x * step]);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) points.push([lat0 - y * dy, lon0 + x * dx]);
   const rows = await fetchPoints(points);
-  const times = rows[0].hourly.time.map((t) => Date.parse(`${t}Z`));
+  // hourly data, thinned to 3-hourly steps (plenty for the map, a third of the memory)
+  const allTimes = rows[0].hourly.time.map((t) => Date.parse(`${t}Z`));
+  const keep = allTimes.map((_, i) => i).filter((i) => i % 3 === 0);
+  const times = keep.map((i) => allTimes[i]);
   const nt = times.length;
-  const stepHours = nt > 1 ? (times[1] - times[0]) / 3600000 : 1;
   const n = nx * ny;
   const data = {} as Record<ModelVar, Float32Array>;
-  for (const v of [...MODEL_VARS, 'u', 'v'] as ModelVar[]) data[v] = new Float32Array(nt * n);
-
+  for (const v of MODEL_VARS) data[v] = new Float32Array(nt * n);
   rows.forEach((row, p) => {
     const h = row.hourly;
     for (const v of MODEL_VARS) {
       const src = h[v] ?? [];
       const dst = data[v];
-      for (let t = 0; t < nt; t++) {
-        const val = src[t];
-        dst[t * n + p] = val == null ? NaN : v === 'precipitation' ? val / stepHours : val;
-      }
-    }
-    // Wind vector (m/s) for particles; direction is where the wind comes FROM.
-    for (let t = 0; t < nt; t++) {
-      const i = t * n + p;
-      const spd = data.wind_speed_10m[i] / 3.6;
-      const dir = (data.wind_direction_10m[i] * Math.PI) / 180;
-      data.u[i] = -spd * Math.sin(dir);
-      data.v[i] = -spd * Math.cos(dir);
+      keep.forEach((src_i, t) => {
+        const val = src[src_i];
+        dst[t * n + p] = val == null ? NaN : val;
+      });
     }
   });
-  return { lat0, lon0, step, nx, ny, wrap, times, data };
+  derive(data);
+  return { lat0, lon0, dx, dy, nx, ny, wrap, times, data };
 }
 
 // ---------------------------------------------------------------------------
-// Global grid (10°, 612 points) – cached in memory and localStorage for 1 h.
+// Global grid (15° × 10°, 408 points = 408 API calls) – cached in memory and localStorage for 1 h.
 
-const CACHE_KEY = 'wg.model.v2';
+const CACHE_KEY = 'wg.model.v3';
 const CACHE_MS = 60 * 60 * 1000;
 let globalGrid: ModelGrid | null = null;
 let globalAt = 0;
@@ -122,7 +136,7 @@ export function getGlobalModel(): Promise<ModelGrid> {
     globalAt = cached.at;
     return Promise.resolve(cached.grid);
   }
-  globalPromise ??= fetchGrid(80, -180, 10, 36, 17, true)
+  globalPromise ??= omPriority(() => fetchGrid(80, -180, 15, 10, 24, 17, true))
     .then((g) => {
       globalGrid = g;
       globalAt = Date.now();
@@ -150,9 +164,10 @@ function fromB64(s: string) {
 
 function writeCache(g: ModelGrid) {
   try {
-    localStorage.removeItem('wg.cache.grid'); // pre-v2 cache
+    localStorage.removeItem('wg.cache.grid'); // older caches
+    localStorage.removeItem('wg.model.v2');
     const data: Record<string, string> = {};
-    for (const [k, v] of Object.entries(g.data)) if (k !== 'u' && k !== 'v') data[k] = toB64(v);
+    for (const [k, v] of Object.entries(g.data)) if (!(DERIVED as readonly string[]).includes(k)) data[k] = toB64(v);
     localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), g: { ...g, data } }));
   } catch {
     /* quota exceeded – memory cache only */
@@ -167,14 +182,7 @@ function readCache(): { at: number; grid: ModelGrid } | null {
     if (Date.now() - at > CACHE_MS) return null;
     const data = {} as Record<ModelVar, Float32Array>;
     for (const [k, v] of Object.entries(g.data)) data[k as ModelVar] = fromB64(v);
-    data.u = new Float32Array(data.wind_speed_10m.length);
-    data.v = new Float32Array(data.wind_speed_10m.length);
-    for (let i = 0; i < data.u.length; i++) {
-      const spd = data.wind_speed_10m[i] / 3.6;
-      const dir = (data.wind_direction_10m[i] * Math.PI) / 180;
-      data.u[i] = -spd * Math.sin(dir);
-      data.v[i] = -spd * Math.cos(dir);
-    }
+    derive(data);
     return { at, grid: { ...g, data } };
   } catch {
     return null;
@@ -184,8 +192,9 @@ function readCache(): { at: number; grid: ModelGrid } | null {
 // ---------------------------------------------------------------------------
 // Detail grid for the current viewport.
 
-const NICE_STEPS = [0.25, 0.5, 1, 2, 2.5, 5];
-const MAX_DETAIL_POINTS = 180;
+// coarser than 2.5° would barely improve on the global grid but still cost ~100 calls
+const NICE_STEPS = [0.25, 0.5, 1, 2, 2.5];
+const MAX_DETAIL_POINTS = 100;
 const detailCache = new Map<string, Promise<ModelGrid>>();
 
 export interface Bounds {
@@ -221,7 +230,7 @@ export function detailRequest(b: Bounds): { key: string; lat0: number; lon0: num
 export function getDetailModel(req: NonNullable<ReturnType<typeof detailRequest>>): Promise<ModelGrid> {
   let p = detailCache.get(req.key);
   if (!p) {
-    p = fetchGrid(req.lat0, req.lon0, req.step, req.nx, req.ny, false);
+    p = fetchGrid(req.lat0, req.lon0, req.step, req.step, req.nx, req.ny, false);
     p.catch(() => detailCache.delete(req.key));
     detailCache.set(req.key, p);
     if (detailCache.size > 8) detailCache.delete(detailCache.keys().next().value!);
@@ -233,8 +242,8 @@ export function getDetailModel(req: NonNullable<ReturnType<typeof detailRequest>
 // Sampling
 
 function bilinear(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
-  let x = (lon - g.lon0) / g.step;
-  let y = (g.lat0 - lat) / g.step;
+  let x = (lon - g.lon0) / g.dx;
+  let y = (g.lat0 - lat) / g.dy;
   if (g.wrap) {
     x = ((x % g.nx) + g.nx) % g.nx;
     y = Math.max(0, Math.min(g.ny - 1, y));
@@ -272,8 +281,8 @@ export class ModelSampler {
     const gv = bilinear(this.global, this.global.data[v], this.t, lat, lon);
     const d = this.detail;
     if (!d) return gv;
-    const x = (lon - d.lon0) / d.step;
-    const y = (d.lat0 - lat) / d.step;
+    const x = (lon - d.lon0) / d.dx;
+    const y = (d.lat0 - lat) / d.dy;
     if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return gv;
     if (this.detailT < 0) {
       // match time step by timestamp (both grids share the model run, but be safe)
@@ -295,5 +304,5 @@ export function nearestTimeIndex(times: number[], at = Date.now()): number {
 }
 
 export function isLimitError(e: unknown) {
-  return e instanceof ModelLimitError;
+  return e instanceof OpenMeteoLimitError;
 }

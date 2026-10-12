@@ -64,7 +64,9 @@ GitHub Pages (in den Repo-Einstellungen unter *Pages → Source* „GitHub Actio
 
 ## Hinweise
 
-- Die Vorhersage-Ebenen basieren auf einem globalen 10°-Raster (612 Punkte, alle 3 Stunden für 5 Tage).
+- Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 5 Tage);
+  Taupunkt und gefühlte Temperatur werden im Browser berechnet. Alle Open-Meteo-Abrufe laufen über eine Drossel,
+  die unter dem Minutenlimit bleibt.
   Beim Hineinzoomen wird automatisch ein feineres Raster (bis 0,25°) für den sichtbaren Ausschnitt geladen
   und nahtlos eingeblendet. Die Werte werden im Browser bilinear interpoliert.
 - Die kostenlosen APIs haben Nutzungslimits (Open-Meteo: 10 000 Aufrufe/Tag für nicht-kommerzielle Nutzung,

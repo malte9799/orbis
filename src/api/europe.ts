@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, MultiPolygon, Point, Polygon } from 'geojson';
 import { fetchJson, fmt } from '../util';
+import { omFetch } from './omlimit';
 import { aqiLabel, describe, pollenLabel } from '../weather';
 import { EUROPE_CITIES, WORLD_CITIES, type City } from './cities';
 import type { EventFeature, EventProps } from './events';
@@ -195,7 +196,7 @@ async function multi<T>(base: string, cities: City[], params: Record<string, str
       timezone: 'GMT',
       ...params,
     });
-    const r = await fetchJson<T | T[]>(`${base}?${q}`, undefined, 30000);
+    const r = await omFetch<T | T[]>(`${base}?${q}`, chunk.length, true);
     out.push(...(Array.isArray(r) ? r : [r]));
   }
   return out;

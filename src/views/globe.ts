@@ -375,6 +375,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         </div>
 
         <h3>Vorhersage <small class="h3-note">${modelLoading ? 'lädt …' : globalModel ? 'bis +5 Tage' : ''}</small></h3>
+        ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}
         <div class="layer-grid" role="radiogroup" aria-label="Vorhersage-Ebene">
           ${FIELD_ORDER.map((f) => layerBtn(f, FIELDS[f].label, fieldSwatch(f))).join('')}
           ${keys.owm ? OWM_LAYERS.map((l) => layerBtn(`owm-${l.id}`, l.label, 'linear-gradient(135deg,#556,#99a)')).join('') : ''}
@@ -571,22 +572,28 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
 
   // ----- forecast model ----------------------------------------------------
   const needsModel = () => isField(state.overlay) || state.wind || state.isobars;
-  let limitWarned = false;
+  let modelErrorText = '';
 
   function modelError(e: unknown) {
-    if (isLimitError(e)) {
-      if (!limitWarned) toast('Tageslimit der kostenlosen Open-Meteo-API erreicht – bitte später erneut versuchen.', 'error');
-      limitWarned = true;
-    } else {
-      toast('Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.', 'error');
-    }
+    console.warn('Vorhersagedaten', e);
+    const msg = isLimitError(e)
+      ? `${(e as Error).message} – bitte später erneut versuchen.`
+      : 'Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.';
+    if (msg !== modelErrorText) toast(msg, 'error');
+    modelErrorText = msg;
+    renderPanel();
+    renderLegend();
   }
 
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
-    if (modelLoading) renderPanel();
+    if (modelLoading) {
+      renderPanel();
+      renderLegend();
+    }
     try {
       const g = await getGlobalModel();
+      modelErrorText = '';
       if (g !== globalModel) {
         const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[timeIdx] : Date.now();
         globalModel = g;
@@ -868,7 +875,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
       const grad = gradient ?? `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
       html = `<div class="legend-title">${escapeHtml(def.label)} <small>${def.unit}${
-        sampler ? ` · ${escapeHtml(timeLabel(sampler.time))}` : modelLoading ? ' · lädt …' : ''
+        sampler ? ` · ${escapeHtml(timeLabel(sampler.time))}` : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${escapeHtml(modelErrorText)}` : ''
       }</small></div>
         <div class="legend-bar" style="background:${grad}"></div>
         <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
