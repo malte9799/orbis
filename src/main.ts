@@ -12,7 +12,7 @@ setWorkerUrl(workerUrl);
 const app = document.getElementById('app')!;
 
 const forecast = createForecastView((p: Place) => {
-  location.hash = `#/globus?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
+  location.hash = `#/karte?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
 });
 const globe = createGlobeView((p: Place) => {
   store.setLastPlace(p);
@@ -29,7 +29,7 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/globus') ? 'globe' : 'forecast';
+  const next = path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   forecast.el.hidden = next !== 'forecast';

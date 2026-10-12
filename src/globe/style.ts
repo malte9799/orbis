@@ -23,6 +23,14 @@ export const gibsTrueColor = (date: string) =>
 export const gibsFires = (date: string) =>
   `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=VIIRS_NOAA20_Thermal_Anomalies_375m_All&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&TIME=${date}`;
 
+/** Live global infrared cloud composite (multi-satellite) from EUMETSAT's view service. */
+export const EUMETSAT_IR =
+  'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=mumi:worldcloudmap_ir108&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+
+/** NASA GPM IMERG satellite precipitation rate (30 min, latest available). */
+export const IMERG_WMS =
+  'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=IMERG_Precipitation_Rate&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+
 export const DWD_WMS =
   'https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Warnungen_Gemeinden_vereinigt&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
@@ -32,10 +40,11 @@ const empty = { type: 'geojson' as const, data: { type: 'FeatureCollection' as c
  * Complete style with every layer present but hidden; the panel only flips visibility,
  * which keeps the z-order stable: base → weather → warnings → labels → night → events.
  */
-export function buildStyle(nasaDate: string, firesDate: string): StyleSpecification {
+export function buildStyle(nasaDate: string, firesDate: string, projection: 'globe' | 'mercator'): StyleSpecification {
   return {
     version: 8,
-    projection: { type: 'globe' },
+    projection: { type: projection },
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
     sky: {
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
     },
@@ -65,6 +74,20 @@ export function buildStyle(nasaDate: string, firesDate: string): StyleSpecificat
         maxzoom: 5,
         attribution: 'Modelldaten: <a href="https://open-meteo.com/">Open-Meteo</a>',
       },
+      'sat-ir': {
+        type: 'raster',
+        tiles: [EUMETSAT_IR],
+        tileSize: 256,
+        maxzoom: 7,
+        attribution: 'Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a>',
+      },
+      imerg: {
+        type: 'raster',
+        tiles: [IMERG_WMS],
+        tileSize: 256,
+        maxzoom: 7,
+        attribution: 'NASA GPM IMERG',
+      },
       hotspots: {
         type: 'raster',
         tiles: [gibsFires(firesDate)],
@@ -81,6 +104,7 @@ export function buildStyle(nasaDate: string, firesDate: string): StyleSpecificat
         attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>',
       },
       night: empty,
+      isobars: empty,
       'nws-poly': empty,
       tracks: empty,
       quakes: empty,
@@ -102,8 +126,10 @@ export function buildStyle(nasaDate: string, firesDate: string): StyleSpecificat
         type: 'raster',
         source: 'field',
         layout: { visibility: 'none' },
-        paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 200 },
+        paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
       },
+      { id: 'sat-ir', type: 'raster', source: 'sat-ir', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
+      { id: 'imerg', type: 'raster', source: 'imerg', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       // Radar & OWM layers are inserted before this anchor at runtime.
       { id: 'anchor-weather', type: 'background', layout: { visibility: 'none' }, paint: { 'background-opacity': 0 } },
       { id: 'dwd', type: 'raster', source: 'dwd', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.75 } },
@@ -116,6 +142,51 @@ export function buildStyle(nasaDate: string, firesDate: string): StyleSpecificat
         source: 'night',
         layout: { visibility: 'none' },
         paint: { 'fill-color': '#000814', 'fill-opacity': 0.38, 'fill-antialias': false },
+      },
+      {
+        id: 'isobars',
+        type: 'line',
+        source: 'isobars',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { visibility: 'none', 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': 'rgba(255,255,255,0.75)',
+          'line-width': ['case', ['get', 'major'], 1.6, 0.9],
+        },
+      },
+      {
+        id: 'isobar-labels',
+        type: 'symbol',
+        source: 'isobars',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        layout: {
+          visibility: 'none',
+          'symbol-placement': 'line',
+          'symbol-spacing': 320,
+          'text-field': ['to-string', ['get', 'p']],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 11,
+          'text-keep-upright': true,
+        },
+        paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.65)', 'text-halo-width': 1.4 },
+      },
+      {
+        id: 'pressure-centers',
+        type: 'symbol',
+        source: 'isobars',
+        filter: ['==', ['geometry-type'], 'Point'],
+        layout: {
+          visibility: 'none',
+          'text-field': ['format', ['get', 'label'], { 'font-scale': 1.5 }, '\n', {}, ['to-string', ['get', 'p']], { 'font-scale': 0.75 }],
+          'text-font': ['Open Sans Semibold'],
+          'text-size': 15,
+          'text-allow-overlap': true,
+        },
+        paint: {
+          'text-color': ['case', ['==', ['get', 'kind'], 'high'], '#ff6b6b', '#6bb6ff'],
+          'text-halo-color': 'rgba(0,0,0,0.7)',
+          'text-halo-width': 1.5,
+        },
       },
       {
         id: 'nws-fill',

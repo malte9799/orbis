@@ -5,17 +5,21 @@ Wetter-App mit zwei Ansichten:
 - **Vorhersage** – aktuelles Wetter, 48-Stunden-Diagramm, 14-Tage-Vorhersage, Wind, UV, Luftqualität,
   Pollen, Sonnenauf-/-untergang und amtliche Unwetterwarnungen (DWD für Deutschland, NWS für die USA).
   Ortssuche, eigener Standort und Favoriten.
-- **Globus** – interaktiver 3D-Globus (ähnlich zoom.earth) mit Wetterebenen und Naturereignissen.
-  Ein Klick auf den Globus zeigt das aktuelle Wetter an dieser Stelle.
+- **Karte** – interaktive Wetterkarte nach dem Vorbild von zoom.earth: standardmäßig als 2D-Karte,
+  per Schalter **2D / 3D** auch als Globus. Live-Ebenen, Vorhersage-Ebenen mit Zeitleiste (bis +5 Tage,
+  abspielbar), animierte Windströmung, Isobaren und Naturereignisse. Der Wert unter dem Mauszeiger wird
+  angezeigt, ein Klick zeigt das Wetter an dieser Stelle.
 
-## Ebenen auf dem Globus
+## Ebenen der Karte
 
 | Bereich | Ebene | Quelle |
 |---|---|---|
 | Karte | Satellit, NASA-Tagesbild (VIIRS), Dunkel, Hell, Ortsnamen, Tag/Nacht-Grenze | Esri, NASA GIBS, CARTO/OSM |
-| Wetter | Regenradar mit Zeitleiste (letzte 2 h) | RainViewer |
-| Wetter | Temperatur, Bewölkung, Niederschlag, Luftdruck (globales Modellraster) | Open-Meteo |
-| Wetter | Animierte Windströmung | Open-Meteo |
+| Live | Regenradar mit Zeitleiste (letzte 2 h) | RainViewer |
+| Live | Satellit Infrarot (weltweites Wolkenbild) | EUMETSAT |
+| Live | Niederschlag aus Satellitendaten (30 min) | NASA GPM IMERG |
+| Vorhersage | Wind, Windböen, Temperatur, gefühlte Temperatur, Luftfeuchtigkeit, Taupunkt, Niederschlag, Bewölkung, Luftdruck, Schneehöhe, Gewitterenergie (CAPE) – mit Zeitleiste bis +5 Tage | Open-Meteo |
+| Vorhersage | Animierte Windpartikel, Isobaren mit Hoch-/Tiefdruckzentren | Open-Meteo |
 | Ereignisse | Waldbrände | NASA EONET, GDACS |
 | Ereignisse | Feuer-Hotspots (Satellit) | NASA FIRMS (über GIBS, oder als Punkte mit eigenem Key) |
 | Ereignisse | Stürme & tropische Wirbelstürme inkl. Zugbahn | NASA EONET, GDACS |
@@ -41,8 +45,8 @@ npm run preview   # Build lokal ansehen
 ```
 
 Technik: Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion.
-Die Modellfelder werden über ein eigenes Kachel-Protokoll (`wxfield://`) im Browser bilinear interpoliert,
-der Wind wird als Partikelanimation auf einem Canvas über dem Globus gezeichnet.
+Die Modellfelder werden über ein eigenes Kachel-Protokoll (`wxfield://`) im Browser gerendert,
+der Wind wird als Partikelanimation auf einem Canvas über der Karte gezeichnet, Isobaren per Marching Squares.
 
 ## Deployment
 
@@ -51,7 +55,10 @@ GitHub Pages (in den Repo-Einstellungen unter *Pages → Source* „GitHub Actio
 
 ## Hinweise
 
-- Die kostenlosen APIs haben Nutzungslimits (Open-Meteo: 10 000 Aufrufe/Tag für nicht-kommerzielle Nutzung).
-  Das globale Modellraster (612 Punkte) wird deshalb 45 Minuten im Browser zwischengespeichert.
+- Die Vorhersage-Ebenen basieren auf einem globalen 10°-Raster (612 Punkte, alle 3 Stunden für 5 Tage).
+  Beim Hineinzoomen wird automatisch ein feineres Raster (bis 0,25°) für den sichtbaren Ausschnitt geladen
+  und nahtlos eingeblendet. Die Werte werden im Browser bilinear interpoliert.
+- Die kostenlosen APIs haben Nutzungslimits (Open-Meteo: 10 000 Aufrufe/Tag für nicht-kommerzielle Nutzung,
+  jeder Rasterpunkt zählt als Aufruf). Das globale Raster wird deshalb eine Stunde im Browser zwischengespeichert.
 - Tornado-Daten gibt es nur für die USA – dort werden Tornados offiziell gewarnt und gemeldet.
 - Die Rohdaten stammen von den jeweiligen Anbietern; für Warnungen gelten immer die amtlichen Stellen.

@@ -21,19 +21,46 @@ import {
   type EventKind,
   type RadarFrames,
 } from '../api/events';
-import { getCurrent, getGlobalGrid, reverseGeocode, type Grid } from '../api/openmeteo';
+import {
+  detailRequest,
+  getDetailModel,
+  getGlobalModel,
+  isLimitError,
+  ModelSampler,
+  nearestTimeIndex,
+  type ModelGrid,
+} from '../api/model';
+import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
-import { FIELDS, nightPolygon, registerFieldProtocol, setFieldGrid, WindParticles, type FieldId } from '../globe/overlay';
+import {
+  FIELDS,
+  isobars,
+  nightPolygon,
+  registerFieldProtocol,
+  setActiveSampler,
+  WindParticles,
+  type FieldId,
+} from '../globe/overlay';
 import { BASES, buildStyle, gibsDate, gibsFires, gibsTrueColor, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
-import { compass, escapeHtml, fmt, safeUrl, toast } from '../util';
+import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
 // Configuration
 
-type OverlayId = 'none' | FieldId | 'radar' | `owm-${string}`;
+type LiveId = 'radar' | 'sat-ir' | 'imerg';
+type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
+
+const LIVE_LAYERS: { id: LiveId; label: string; hint: string }[] = [
+  { id: 'radar', label: 'Regenradar', hint: 'RainViewer, letzte 2 h' },
+  { id: 'sat-ir', label: 'Satellit (Infrarot)', hint: 'Wolken weltweit – EUMETSAT' },
+  { id: 'imerg', label: 'Niederschlag (Satellit)', hint: 'NASA GPM IMERG, 30 min' },
+];
+
+const FIELD_ORDER: FieldId[] = ['wind', 'gusts', 'temp', 'feels', 'humidity', 'dewpoint', 'precip', 'cloud', 'pressure', 'snow', 'cape'];
+const isField = (o: string): o is FieldId => o in FIELDS;
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -78,24 +105,28 @@ interface GlobeState {
   labels: boolean;
   night: boolean;
   overlay: OverlayId;
+  /** wind particle animation */
   wind: boolean;
+  isobars: boolean;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
   center: [number, number];
   zoom: number;
   panelOpen: boolean;
+  version?: number;
 }
 
 const DEFAULT_STATE: GlobeState = {
   base: 'satellite',
   labels: true,
   night: true,
-  overlay: 'none',
-  wind: false,
+  overlay: 'wind',
+  wind: true,
+  isobars: false,
   groups: { fires: true, storms: true, tornado: true, quakes: true, volcanoes: true },
-  projection: 'globe',
-  center: [10, 30],
-  zoom: 1.7,
+  projection: 'mercator',
+  center: [10, 35],
+  zoom: 2.2,
   panelOpen: window.innerWidth > 720,
 };
 
@@ -110,7 +141,11 @@ export interface GlobeView {
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
-  const state: GlobeState = { ...DEFAULT_STATE, ...store.getGlobeState<Partial<GlobeState>>({}) };
+  const STATE_VERSION = 2;
+  const saved = store.getGlobeState<Partial<GlobeState>>({});
+  // v2: 2D map became the default view – reset the projection of older saved states once.
+  if ((saved.version ?? 1) < STATE_VERSION) Object.assign(saved, { projection: 'mercator', overlay: 'wind', wind: true, version: STATE_VERSION });
+  const state: GlobeState = { ...DEFAULT_STATE, ...saved };
   state.groups = { ...state.groups };
   const save = () => store.setGlobeState(state);
 
@@ -129,10 +164,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
         <button class="btn icon-btn tl-play" aria-label="Abspielen"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
-        <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Radarzeit"/>
+        <div class="tl-track">
+          <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Zeit"/>
+          <div class="tl-days"></div>
+        </div>
+        <button class="btn small tl-now" title="Zur aktuellen Zeit">Jetzt</button>
         <span class="tl-time"></span>
       </div>
-    </div>`;
+    </div>
+    <div class="readout" hidden></div>`;
 
   const panel = el.querySelector<HTMLElement>('.panel')!;
   const legend = el.querySelector<HTMLElement>('.legend')!;
@@ -153,8 +193,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   let map: MlMap | null = null;
   let ready = false;
   let pendingFocus: { lat: number; lon: number; zoom?: number } | null = null;
-  let grid: Grid | null = null;
-  let gridPromise: Promise<Grid> | null = null;
+  let globalModel: ModelGrid | null = null;
+  let detailModel: ModelGrid | null = null;
+  let detailKey = '';
+  let modelLoading = false;
+  let timeIdx = -1;
+  let sampler: ModelSampler | null = null;
   let wind: WindParticles | null = null;
   let nightTimer = 0;
   let refreshTimer = 0;
@@ -277,15 +321,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   // ----- panel -------------------------------------------------------------
   function renderPanel() {
     const keys = store.getKeys();
-    const overlays: { id: OverlayId; label: string }[] = [
-      { id: 'none', label: 'Keine' },
-      { id: 'radar', label: 'Regenradar (live)' },
-      { id: 'temp', label: 'Temperatur' },
-      { id: 'cloud', label: 'Bewölkung' },
-      { id: 'precip', label: 'Niederschlag (Modell)' },
-      { id: 'pressure', label: 'Luftdruck' },
-      ...(keys.owm ? OWM_LAYERS.map((l) => ({ id: `owm-${l.id}` as OverlayId, label: l.label })) : []),
-    ];
+    const layerBtn = (id: OverlayId, label: string, swatch: string, hint = '') =>
+      `<label class="layer-btn ${state.overlay === id ? 'on' : ''}" title="${escapeHtml(hint || label)}">
+        <input type="radio" name="overlay" value="${id}" ${state.overlay === id ? 'checked' : ''}/>
+        <span class="swatch" style="background:${swatch}"></span><span>${escapeHtml(label)}</span></label>`;
+    const fieldSwatch = (f: FieldId) => {
+      const { stops, gradient } = FIELDS[f].legend;
+      return gradient ?? `linear-gradient(135deg, ${stops.map(([, c]) => c).join(', ')})`;
+    };
+    const LIVE_SWATCH: Record<LiveId, string> = {
+      radar: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)',
+      'sat-ir': 'linear-gradient(135deg,#111,#888,#fff)',
+      imerg: 'linear-gradient(135deg,#9fd8ff,#2f6fe0,#2bd46f,#ffe14d)',
+    };
     const loading = (g: (typeof GROUPS)[number]) => g.feeds.some((f) => feedData[f].loading);
     panel.innerHTML = `
       <div class="panel-scroll">
@@ -295,14 +343,20 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         </div>
         <label class="row"><input type="checkbox" data-opt="labels" ${state.labels ? 'checked' : ''}/> Ortsnamen & Grenzen</label>
         <label class="row"><input type="checkbox" data-opt="night" ${state.night ? 'checked' : ''}/> Tag/Nacht-Grenze</label>
-        <label class="row"><input type="checkbox" data-opt="projection" ${state.projection === 'globe' ? 'checked' : ''}/> 3D-Globus</label>
 
-        <h3>Wetter</h3>
-        <div class="radio-list" role="radiogroup" aria-label="Wetterebene">
-          ${overlays.map((o) => `<label class="row"><input type="radio" name="overlay" value="${o.id}" ${state.overlay === o.id ? 'checked' : ''}/> ${escapeHtml(o.label)}</label>`).join('')}
+        <h3>Live</h3>
+        <div class="layer-grid" role="radiogroup" aria-label="Live-Ebene">
+          ${LIVE_LAYERS.map((l) => layerBtn(l.id, l.label, LIVE_SWATCH[l.id], l.hint)).join('')}
+          ${layerBtn('none', 'Keine', 'transparent')}
         </div>
-        <label class="row"><input type="checkbox" data-opt="wind" ${state.wind ? 'checked' : ''}/> Wind-Animation</label>
-        ${grid ? `<p class="small muted">Modellstand: ${escapeHtml(fmt.dateTime(`${grid.time}Z`))}</p>` : ''}
+
+        <h3>Vorhersage <small class="h3-note">${modelLoading ? 'lädt …' : globalModel ? 'bis +5 Tage' : ''}</small></h3>
+        <div class="layer-grid" role="radiogroup" aria-label="Vorhersage-Ebene">
+          ${FIELD_ORDER.map((f) => layerBtn(f, FIELDS[f].label, fieldSwatch(f))).join('')}
+          ${keys.owm ? OWM_LAYERS.map((l) => layerBtn(`owm-${l.id}`, l.label, 'linear-gradient(135deg,#556,#99a)')).join('') : ''}
+        </div>
+        <label class="row"><input type="checkbox" data-opt="wind" ${state.wind ? 'checked' : ''}/> Wind-Animation (Partikel)</label>
+        <label class="row"><input type="checkbox" data-opt="isobars" ${state.isobars ? 'checked' : ''}/> Isobaren & Hoch/Tief</label>
 
         <h3>Ereignisse</h3>
         ${GROUPS.map((g) => {
@@ -318,17 +372,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
 
         <details class="keys">
           <summary>Erweitert: API-Schlüssel (optional)</summary>
+          <form class="keys-form" autocomplete="off">
           <p class="small muted">Alle Grundfunktionen laufen ohne Schlüssel. Mit kostenlosen Schlüsseln werden zusätzliche Quellen freigeschaltet.
           Schlüssel werden nur lokal im Browser gespeichert.</p>
           <label class="field-label">OpenWeatherMap <small>(hochauflösende Wetterkarten)</small>
             <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
           <label class="field-label">NASA FIRMS MAP_KEY <small>(einzelne Feuer-Hotspots als Punkte)</small>
             <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
-          <button class="btn small" data-act="save-keys">Speichern</button>
+          <button class="btn small" type="submit">Speichern</button>
+          </form>
         </details>
 
-        <p class="small muted attribution-note">Klick auf den Globus zeigt das aktuelle Wetter an diesem Ort.
-        Daten: Open-Meteo, RainViewer, NASA (EONET, GIBS, FIRMS), USGS, NOAA/NWS, GDACS, DWD.</p>
+        <p class="small muted attribution-note">Klick auf die Karte zeigt das aktuelle Wetter an diesem Ort.
+        Daten: Open-Meteo, RainViewer, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, NOAA/NWS, GDACS, DWD.</p>
       </div>`;
 
     panel.querySelectorAll<HTMLInputElement>('input[name=base]').forEach((i) =>
@@ -341,22 +397,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     );
     panel.querySelectorAll<HTMLInputElement>('input[name=overlay]').forEach((i) =>
       i.addEventListener('change', () => {
+        const prev = state.overlay;
         state.overlay = i.value as OverlayId;
+        // Wind layers bring their particles along (like zoom.earth); leaving them removes them again.
+        const windy = (o: OverlayId) => isField(o) && !!FIELDS[o].particles;
+        if (windy(state.overlay) && !windy(prev)) state.wind = true;
+        else if (!windy(state.overlay) && windy(prev)) state.wind = false;
         applyOverlay();
+        renderPanel();
         save();
       }),
     );
     panel.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
       i.addEventListener('change', () => {
         const opt = i.dataset.opt!;
-        if (opt === 'projection') {
-          state.projection = i.checked ? 'globe' : 'mercator';
-          map?.setProjection({ type: state.projection });
-        } else if (opt === 'labels' || opt === 'night' || opt === 'wind') {
+        if (opt === 'labels' || opt === 'night' || opt === 'wind' || opt === 'isobars') {
           state[opt] = i.checked;
           if (opt === 'labels') applyBase();
           if (opt === 'night') applyNight();
-          if (opt === 'wind') applyWind();
+          if (opt === 'wind' || opt === 'isobars') applyModelLayers();
         }
         save();
       }),
@@ -369,7 +428,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         save();
       }),
     );
-    panel.querySelector('[data-act=save-keys]')!.addEventListener('click', () => {
+    panel.querySelector('.keys-form')!.addEventListener('submit', (e) => {
+      e.preventDefault();
       const get = (k: string) => panel.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       store.setKeys({ owm: get('owm'), firms: get('firms') });
       feedData.firms.at = 0;
@@ -404,9 +464,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     clearInterval(nightTimer);
     vis('night', state.night);
     if (!state.night) return;
-    const update = () => (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon());
-    update();
-    nightTimer = window.setInterval(update, 60000);
+    updateNight();
+    nightTimer = window.setInterval(updateNight, 60000);
+  }
+
+  /** The terminator follows the forecast timeline when one is shown. */
+  function updateNight() {
+    if (!state.night) return;
+    const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
+    (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon(at));
   }
 
   function applyGroups() {
@@ -424,87 +490,161 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     vis('hotspots', !!state.groups.hotspots && !firmsKey);
   }
 
-  async function loadGrid(): Promise<Grid> {
-    if (grid) return grid;
-    gridPromise ??= getGlobalGrid().then((g) => {
-      grid = g;
-      setFieldGrid(g);
-      renderPanel();
-      return g;
-    });
-    try {
-      return await gridPromise;
-    } catch (e) {
-      gridPromise = null;
-      throw e;
+  // ----- forecast model ----------------------------------------------------
+  const needsModel = () => isField(state.overlay) || state.wind || state.isobars;
+  let limitWarned = false;
+
+  function modelError(e: unknown) {
+    if (isLimitError(e)) {
+      if (!limitWarned) toast('Tageslimit der kostenlosen Open-Meteo-API erreicht – bitte später erneut versuchen.', 'error');
+      limitWarned = true;
+    } else {
+      toast('Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.', 'error');
     }
+  }
+
+  async function ensureModel(): Promise<boolean> {
+    modelLoading = !globalModel;
+    if (modelLoading) renderPanel();
+    try {
+      const g = await getGlobalModel();
+      if (g !== globalModel) {
+        const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[timeIdx] : Date.now();
+        globalModel = g;
+        timeIdx = nearestTimeIndex(g.times, prevTime);
+        detailModel = null;
+        detailKey = '';
+      }
+      return true;
+    } catch (e) {
+      modelError(e);
+      return false;
+    } finally {
+      if (modelLoading) {
+        modelLoading = false;
+        renderPanel();
+      }
+    }
+  }
+
+  function updateSampler() {
+    if (!map || !globalModel || timeIdx < 0) return;
+    sampler = new ModelSampler(globalModel, detailModel, timeIdx);
+    setActiveSampler(sampler);
+    if (isField(state.overlay)) {
+      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey.replace(/[^\w]/g, '_') || 'g'}`;
+      (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${state.overlay}/${version}/{z}/{x}/{y}`]);
+      vis('field', true);
+    }
+    if (state.isobars) setGeo('isobars', isobars(sampler));
+    updateNight();
+    renderTimeline();
+    renderLegend();
+  }
+
+  async function applyModelLayers() {
+    if (!map) return;
+    const on = needsModel();
+    vis('isobars', on && state.isobars);
+    vis('isobar-labels', on && state.isobars);
+    vis('pressure-centers', on && state.isobars);
+    if (!on || !state.wind) wind?.stop();
+    if (!on) {
+      renderTimeline();
+      updateNight();
+      return;
+    }
+    if (!(await ensureModel()) || !needsModel()) return;
+    updateSampler();
+    refreshDetail();
+    if (state.wind) {
+      wind ??= new WindParticles(map, () => sampler);
+      wind.start();
+    }
+  }
+
+  /** Fetch a finer grid for the current viewport once zoomed in. */
+  let pendingDetail = '';
+  const refreshDetail = debounce(() => {
+    if (!map || !globalModel || !needsModel()) return;
+    const b = map.getBounds();
+    const req = detailRequest({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+    if (!req) {
+      pendingDetail = '';
+      if (detailModel) {
+        detailModel = null;
+        detailKey = '';
+        updateSampler();
+      }
+      return;
+    }
+    if (req.key === detailKey || req.key === pendingDetail) return;
+    pendingDetail = req.key;
+    getDetailModel(req)
+      .then((g) => {
+        if (pendingDetail !== req.key) return;
+        pendingDetail = '';
+        detailModel = g;
+        detailKey = req.key;
+        updateSampler();
+      })
+      .catch((e) => {
+        pendingDetail = '';
+        if (isLimitError(e)) modelError(e);
+        else console.warn('Detailraster nicht verfügbar', e);
+      });
+  }, 700);
+
+  function setGeo(source: string, data: FeatureCollection) {
+    (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
   }
 
   async function applyOverlay() {
     if (!map) return;
     const o = state.overlay;
+    stopAnimation();
     vis('field', false);
+    vis('sat-ir', o === 'sat-ir');
+    vis('imerg', o === 'imerg');
     setRadarVisible(o === 'radar');
     for (const l of OWM_LAYERS) vis(`owm-${l.id}`, false);
-    renderLegend();
+    hideReadout();
 
-    if (o === 'temp' || o === 'cloud' || o === 'precip' || o === 'pressure') {
-      try {
-        await loadGrid();
-      } catch {
-        toast('Modelldaten (Open-Meteo) konnten nicht geladen werden.', 'error');
-        return;
-      }
-      if (state.overlay !== o) return;
-      (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${o}/${grid!.time.replace(/\D/g, '')}/{z}/{x}/{y}`]);
-      vis('field', true);
-      renderLegend();
-    } else if (o.startsWith('owm-')) {
+    if (o.startsWith('owm-')) {
       const layer = o.slice(4);
       const key = store.getKeys().owm;
-      if (!key) return;
-      const id = `owm-${layer}`;
-      if (!map.getSource(id)) {
-        map.addSource(id, {
-          type: 'raster',
-          tiles: [`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${encodeURIComponent(key)}`],
-          tileSize: 256,
-          maxzoom: 10,
-          attribution: 'Wetterkarten © <a href="https://openweathermap.org/">OpenWeather</a>',
-        });
-        map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': 0.85 } }, 'anchor-weather');
+      if (key) {
+        const id = `owm-${layer}`;
+        if (!map.getSource(id)) {
+          map.addSource(id, {
+            type: 'raster',
+            tiles: [`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${encodeURIComponent(key)}`],
+            tileSize: 256,
+            maxzoom: 10,
+            attribution: 'Wetterkarten © <a href="https://openweathermap.org/">OpenWeather</a>',
+          });
+          map.addLayer({ id, type: 'raster', source: id, paint: { 'raster-opacity': 0.85 } }, 'anchor-weather');
+        }
+        vis(id, true);
       }
-      vis(id, true);
     } else if (o === 'radar') {
       await ensureRadar();
     }
-  }
-
-  async function applyWind() {
-    if (!map) return;
-    if (!state.wind) {
-      wind?.stop();
-      return;
-    }
-    try {
-      await loadGrid();
-    } catch {
-      toast('Winddaten konnten nicht geladen werden.', 'error');
-      return;
-    }
-    if (!state.wind) return;
-    wind ??= new WindParticles(map, () => grid);
-    wind.start();
+    await applyModelLayers();
+    renderLegend();
+    renderTimeline();
   }
 
   // ----- radar -------------------------------------------------------------
   let radar: RadarFrames | null = null;
   let radarAt = 0;
   let radarIdx = 0;
-  let radarTimer = 0;
+  let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
+  const daysEl = timeline.querySelector<HTMLDivElement>('.tl-days')!;
   const playBtn = timeline.querySelector<HTMLButtonElement>('.tl-play')!;
+  const nowBtn = timeline.querySelector<HTMLButtonElement>('.tl-now')!;
 
   async function ensureRadar() {
     if (!map) return;
@@ -538,17 +678,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         'anchor-weather',
       );
     }
-    rangeEl.max = String(radar.frames.length - 1);
-    const lastPast = radar.frames.filter((f) => !f.nowcast).length - 1;
-    showRadarFrame(Math.max(0, lastPast));
+    showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
 
+  const lastPastRadarFrame = () => Math.max(0, (radar?.frames.filter((f) => !f.nowcast).length ?? 1) - 1);
+
   function setRadarVisible(on: boolean) {
-    timeline.hidden = !on || !radar;
     if (!radar || !map) return;
     for (const f of radar.frames) vis(`radar-${f.time}`, on);
-    if (!on) stopRadarAnimation();
   }
 
   function showRadarFrame(i: number) {
@@ -557,56 +695,139 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     radar.frames.forEach((f, k) => {
       if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i ? 0.8 : 0);
     });
-    const f = radar.frames[i];
-    rangeEl.value = String(i);
-    timeEl.textContent = `${new Date(f.time * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}${f.nowcast ? ' (Prognose)' : ''}`;
+    renderTimeline();
   }
 
-  function stopRadarAnimation() {
-    clearInterval(radarTimer);
-    radarTimer = 0;
+  // ----- timeline (radar frames or forecast steps) ---------------------------
+  type TimelineMode = 'none' | 'radar' | 'model';
+  const timelineMode = (): TimelineMode =>
+    state.overlay === 'radar' ? (radar?.frames.length ? 'radar' : 'none') : needsModel() && globalModel ? 'model' : 'none';
+
+  const timeLabel = (ms: number) =>
+    new Date(ms).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+
+  let timelineKey = '';
+  function renderTimeline() {
+    const mode = timelineMode();
+    timeline.hidden = mode === 'none';
+    if (mode === 'none') return;
+    const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
+    const idx = mode === 'radar' ? radarIdx : timeIdx;
+    rangeEl.max = String(times.length - 1);
+    rangeEl.value = String(idx);
+    const t = times[idx];
+    const nowcast = mode === 'radar' && radar!.frames[idx].nowcast;
+    const rel = Math.round((t - Date.now()) / 3600000);
+    timeEl.innerHTML = `<b>${escapeHtml(timeLabel(t))}</b><small>${
+      mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
+    }</small>`;
+    // day ticks under the slider (only rebuilt when the time axis changes)
+    const key = `${mode}:${times[0]}:${times.length}`;
+    if (key !== timelineKey) {
+      timelineKey = key;
+      let html = '';
+      if (mode === 'model') {
+        let lastDay = '';
+        times.forEach((tt, i) => {
+          const d = new Date(tt);
+          const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
+          if (day !== lastDay && d.getHours() < 3) {
+            html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
+          }
+          lastDay = day;
+        });
+      }
+      daysEl.innerHTML = html;
+    }
+  }
+
+  function setTimeIndex(i: number) {
+    if (timelineMode() === 'radar') showRadarFrame(i);
+    else if (globalModel) {
+      timeIdx = Math.max(0, Math.min(globalModel.times.length - 1, i));
+      updateSampler();
+    }
+  }
+
+  function stopAnimation() {
+    clearInterval(playTimer);
+    playTimer = 0;
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
     playBtn.setAttribute('aria-label', 'Abspielen');
   }
 
   rangeEl.addEventListener('input', () => {
-    stopRadarAnimation();
-    showRadarFrame(Number(rangeEl.value));
+    stopAnimation();
+    setTimeIndex(Number(rangeEl.value));
+  });
+  nowBtn.addEventListener('click', () => {
+    stopAnimation();
+    if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
+    else if (globalModel) setTimeIndex(nearestTimeIndex(globalModel.times));
   });
   playBtn.addEventListener('click', () => {
-    if (radarTimer) return stopRadarAnimation();
+    if (playTimer) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     playBtn.setAttribute('aria-label', 'Pause');
-    radarTimer = window.setInterval(() => {
-      if (!radar) return;
-      showRadarFrame((radarIdx + 1) % radar.frames.length);
-    }, 700);
+    const radarMode = timelineMode() === 'radar';
+    playTimer = window.setInterval(() => {
+      const n = Number(rangeEl.max) + 1;
+      setTimeIndex(((radarMode ? radarIdx : timeIdx) + 1) % n);
+    }, radarMode ? 700 : 1100);
   });
 
-  // ----- legend ------------------------------------------------------------
+  // ----- legend & readout --------------------------------------------------
   function renderLegend() {
     const o = state.overlay;
     let html = '';
-    if (o in FIELDS) {
-      const def = FIELDS[o as FieldId];
-      const { stops, ticks } = def.legend;
+    if (isField(o)) {
+      const def = FIELDS[o];
+      const { stops, ticks, gradient } = def.legend;
       const lo = stops[0][0];
       const hi = stops[stops.length - 1][0];
       const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
-      const grad =
-        o === 'cloud'
-          ? 'linear-gradient(90deg, rgba(255,255,255,0), #fff)'
-          : `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
-      html = `<div class="legend-title">${escapeHtml(def.label)} <small>${def.unit}</small></div>
+      const grad = gradient ?? `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
+      html = `<div class="legend-title">${escapeHtml(def.label)} <small>${def.unit}${
+        sampler ? ` · ${escapeHtml(timeLabel(sampler.time))}` : modelLoading ? ' · lädt …' : ''
+      }</small></div>
         <div class="legend-bar" style="background:${grad}"></div>
-        <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${t}</span>`).join('')}</div>`;
+        <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
     } else if (o === 'radar') {
-      html = `<div class="legend-title">Niederschlagsradar</div>
+      html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#88ddee,#0099cc,#0077aa,#005588,#ffee00,#ffaa00,#ff4400,#c10000,#ffaaff)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
+    } else if (o === 'sat-ir') {
+      html = `<div class="legend-title">Satellit Infrarot <small>live · hohe, kalte Wolken erscheinen hell</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#111,#777,#fff)"></div>
+        <div class="legend-ticks"><span style="left:0">warm/tief</span><span style="left:100%">kalt/hoch</span></div>`;
+    } else if (o === 'imerg') {
+      html = `<div class="legend-title">Niederschlag Satellit <small>NASA IMERG · mm/h</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)"></div>
+        <div class="legend-ticks"><span style="left:0">0,1</span><span style="left:50%">5</span><span style="left:100%">50+</span></div>`;
     }
     legend.innerHTML = html;
     legend.hidden = !html;
+  }
+
+  const readout = el.querySelector<HTMLDivElement>('.readout')!;
+  const hideReadout = () => {
+    readout.hidden = true;
+  };
+  function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
+    const o = state.overlay;
+    if (!isField(o) || !sampler || !matchMedia('(pointer: fine)').matches) return hideReadout();
+    const def = FIELDS[o];
+    const v = sampler.sample(def.variable, lngLat.lat, lngLat.lng);
+    if (Number.isNaN(v)) return hideReadout();
+    let extra = '';
+    if (o === 'wind' || o === 'gusts') {
+      const u = sampler.sample('u', lngLat.lat, lngLat.lng);
+      const w = sampler.sample('v', lngLat.lat, lngLat.lng);
+      extra = ` ${compass(((Math.atan2(-u, -w) * 180) / Math.PI + 360) % 360)}`;
+    }
+    readout.textContent = `${def.format(v)} ${def.unit}${extra}`;
+    readout.style.transform = `translate(${point.x + 14}px, ${point.y + 14}px)`;
+    readout.hidden = false;
   }
 
   // ----- popups ------------------------------------------------------------
@@ -676,7 +897,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     const fireDate = gibsDate(new Date().getUTCHours() < 12 ? 1 : 0);
     map = new MlMap({
       container: el.querySelector<HTMLElement>('#map')!,
-      style: buildStyle(gibsDate(1), fireDate),
+      style: buildStyle(gibsDate(1), fireDate, state.projection),
       center: state.center,
       zoom: state.zoom,
       maxPitch: 60,
@@ -686,6 +907,36 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
 
     // Locate button
+    // 2D / 3D switch
+    const projCtl = document.createElement('div');
+    projCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group proj-ctl';
+    projCtl.setAttribute('role', 'group');
+    projCtl.setAttribute('aria-label', 'Ansicht');
+    const renderProj = () => {
+      projCtl.innerHTML = (['mercator', 'globe'] as const)
+        .map(
+          (p) =>
+            `<button type="button" data-proj="${p}" class="${state.projection === p ? 'on' : ''}" aria-pressed="${state.projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`,
+        )
+        .join('');
+    };
+    renderProj();
+    projCtl.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-proj]');
+      if (!btn || !map) return;
+      const next = btn.dataset.proj as GlobeState['projection'];
+      if (next === state.projection) return;
+      state.projection = next;
+      map.setProjection({ type: next });
+      if (state.wind && needsModel()) {
+        wind?.stop();
+        wind?.start();
+      }
+      renderProj();
+      save();
+    });
+    map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'top-right');
+
     const locCtl = document.createElement('div');
     locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group';
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
@@ -702,7 +953,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     map.on('load', () => {
       ready = true;
       registerEventIcons(map!);
-      if (state.projection !== 'globe') map!.setProjection({ type: state.projection });
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
@@ -711,7 +961,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       applyNight();
       applyGroups();
       applyOverlay();
-      applyWind();
       syncEventSources();
       ensureFeeds();
       if (pendingFocus) {
@@ -720,7 +969,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       }
     });
 
+    map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
+    map.on('mouseout', hideReadout);
+    map.on('movestart', hideReadout);
     map.on('moveend', () => {
+      refreshDetail();
       const c = map!.getCenter();
       state.center = [+c.lng.toFixed(3), +c.lat.toFixed(3)];
       state.zoom = +map!.getZoom().toFixed(2);
@@ -773,8 +1026,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     },
     deactivate() {
       clearInterval(refreshTimer);
-      stopRadarAnimation();
+      stopAnimation();
       wind?.stop();
+      hideReadout();
       popup?.remove();
     },
   };

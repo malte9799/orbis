@@ -116,9 +116,9 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
             <button class="btn icon-btn ${isFav ? 'on' : ''}" data-act="fav" aria-pressed="${isFav}" title="${isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">
               <svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>
             </button>
-            <button class="btn" data-act="globe" title="Auf Globus zeigen" aria-label="Auf Globus zeigen">
+            <button class="btn" data-act="globe" title="Auf Karte zeigen" aria-label="Auf Karte zeigen">
               <svg viewBox="0 0 24 24" class="btn-ic"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>
-              Auf Globus
+              Auf Karte
             </button>
           </div>
         </div>
