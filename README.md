@@ -10,6 +10,21 @@ Wetter-App mit zwei Ansichten:
   abspielbar), animierte Windströmung, Isobaren und Naturereignisse. Der Wert unter dem Mauszeiger wird
   angezeigt, ein Klick zeigt das Wetter an dieser Stelle.
 
+- **Weltall** – 3D-Sonnensystem (ähnlich NASA „Eyes on the Solar System“). Wer im 3D-Globus weiter
+  herauszoomt, landet automatisch hier; Hineinzoomen auf die Erde führt zurück zur Wetterkarte.
+  - Sonne, alle Planeten, Pluto und wichtige Monde mit Texturen – Planeten anklicken zum Hinfliegen,
+    drehbare Kugel mit Steckbrief, aktuellem Abstand zu Sonne und Erde und Lichtlaufzeit;
+    für Mond und Mars Link zur NASA-Detailkarte (Trek)
+  - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
+  - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
+    SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
+  - Erdsatelliten (ISS, Wetter-, GPS-, Galileo-Satelliten) in Erdnähe, berechnet aus CelesTrak-Bahndaten
+
+  Planetenpositionen stammen aus den JPL-Näherungsformeln (Standish, ±wenige Bogenminuten 1800–2050),
+  der Mond aus der Näherung des Astronomical Almanac. Bahnen der Raumsonden sind vereinfacht und als
+  „angenähert“ gekennzeichnet, da es keine kostenlose, browsertaugliche Bahndaten-API gibt.
+  Texturen: [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0).
+
 ## Ebenen der Karte
 
 Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
@@ -53,7 +68,8 @@ npm run build     # Typecheck + Produktions-Build nach dist/
 npm run preview   # Build lokal ansehen
 ```
 
-Technik: Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion.
+Technik: Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion,
+[three.js](https://threejs.org/) für das Sonnensystem (wird erst beim Öffnen geladen).
 Die Modellfelder werden über ein eigenes Kachel-Protokoll (`wxfield://`) im Browser gerendert,
 der Wind wird als Partikelanimation auf einem Canvas über der Karte gezeichnet, Isobaren per Marching Squares.
 

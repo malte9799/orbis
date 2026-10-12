@@ -14,14 +14,34 @@ const app = document.getElementById('app')!;
 const forecast = createForecastView((p: Place) => {
   location.hash = `#/karte?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
 });
-const globe = createGlobeView((p: Place) => {
-  store.setLastPlace(p);
-  location.hash = '#/';
-});
+const globe = createGlobeView(
+  (p: Place) => {
+    store.setLastPlace(p);
+    location.hash = '#/';
+  },
+  (lat, lon) => {
+    location.hash = `#/weltall?from=earth&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`;
+  },
+);
 app.append(forecast.el, globe.el);
 
+// The 3D solar system (three.js) is loaded on demand.
+type SpaceView = import('./space/view').SpaceView;
+let space: SpaceView | null = null;
+let spaceLoading: Promise<SpaceView> | null = null;
+function loadSpace(): Promise<SpaceView> {
+  spaceLoading ??= import('./space/view').then(({ createSpaceView }) => {
+    space = createSpaceView((lat, lon) => {
+      location.hash = `#/karte?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&proj=globe&from=space`;
+    });
+    app.append(space.el);
+    return space;
+  });
+  return spaceLoading;
+}
+
 let forecastLoaded = false;
-let active: 'forecast' | 'globe' | null = null;
+let active: 'forecast' | 'globe' | 'space' | null = null;
 
 function route() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
@@ -29,12 +49,14 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
+  const next = path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
+  if (active === 'space' && next !== 'space') space?.deactivate();
   forecast.el.hidden = next !== 'forecast';
   globe.el.hidden = next !== 'globe';
-  document.body.classList.toggle('mode-globe', next === 'globe');
+  if (space) space.el.hidden = next !== 'space';
+  document.body.classList.toggle('mode-globe', next !== 'forecast');
   document.querySelectorAll<HTMLAnchorElement>('.tabs a').forEach((a) => {
     const on = a.dataset.route === next;
     a.classList.toggle('active', on);
@@ -42,8 +64,17 @@ function route() {
     else a.removeAttribute('aria-current');
   });
 
-  if (next === 'globe') {
-    globe.activate(hasPos ? { lat, lon, zoom: 6 } : undefined);
+  if (next === 'space') {
+    const wasActive = active === 'space';
+    loadSpace().then((v) => {
+      if (active !== 'space') return;
+      v.el.hidden = false;
+      if (!wasActive) v.activate({ focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined });
+    });
+  } else if (next === 'globe') {
+    const fromSpace = params.get('from') === 'space';
+    const proj = params.get('proj') === 'globe' ? 'globe' : undefined;
+    globe.activate(hasPos ? { lat, lon, zoom: fromSpace ? 2.2 : 6, projection: proj, fromSpace } : proj ? { projection: proj } : undefined);
   } else if (!forecastLoaded || active !== 'forecast') {
     forecastLoaded = true;
     forecast.show(store.getLastPlace());

@@ -141,11 +141,11 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 export interface GlobeView {
   el: HTMLElement;
-  activate(focus?: { lat: number; lon: number; zoom?: number }): void;
+  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
   deactivate(): void;
 }
 
-export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
+export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
   const STATE_VERSION = 3;
   const saved = store.getGlobeState<Partial<GlobeState>>({});
   // v2: 2D map became the default view – reset the projection of older saved states once.
@@ -493,6 +493,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   }
 
   // ----- apply state to map -----------------------------------------------
+  let renderProj = () => {};
+  function setProjection(next: GlobeState['projection']) {
+    if (next === state.projection) return;
+    state.projection = next;
+    map?.setProjection({ type: next });
+    if (state.wind && needsModel()) {
+      wind?.stop();
+      wind?.start();
+    }
+    renderProj();
+    save();
+  }
+
   /** Keep the globe centred in the free area next to the layer panel on wide screens. */
   function applyPadding(animate = false) {
     if (!map) return;
@@ -992,6 +1005,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
       center: state.center,
       zoom: state.zoom,
       maxPitch: 60,
+      minZoom: 0.3, // below this the 3D globe hands over to the solar system view
       attributionControl: { compact: true },
     });
     map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
@@ -1003,29 +1017,48 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
     projCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group proj-ctl';
     projCtl.setAttribute('role', 'group');
     projCtl.setAttribute('aria-label', 'Ansicht');
-    const renderProj = () => {
-      projCtl.innerHTML = (['mercator', 'globe'] as const)
-        .map(
-          (p) =>
-            `<button type="button" data-proj="${p}" class="${state.projection === p ? 'on' : ''}" aria-pressed="${state.projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`,
-        )
-        .join('');
+    renderProj = () => {
+      projCtl.innerHTML =
+        (['mercator', 'globe'] as const)
+          .map(
+            (p) =>
+              `<button type="button" data-proj="${p}" class="${state.projection === p ? 'on' : ''}" aria-pressed="${state.projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`,
+          )
+          .join('') +
+        `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
     };
     renderProj();
     projCtl.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-proj]');
       if (!btn || !map) return;
-      const next = btn.dataset.proj as GlobeState['projection'];
-      if (next === state.projection) return;
-      state.projection = next;
-      map.setProjection({ type: next });
-      if (state.wind && needsModel()) {
-        wind?.stop();
-        wind?.start();
+      if (btn.dataset.proj === 'space') {
+        const c = map.getCenter();
+        onOpenSpace(c.lat, c.lng);
+        return;
       }
-      renderProj();
-      save();
+      setProjection(btn.dataset.proj as GlobeState['projection']);
     });
+
+    // Zooming further out of the 3D globe leaves Earth and enters the solar system.
+    let outTicks = 0;
+    let outTimer = 0;
+    map.getContainer().addEventListener(
+      'wheel',
+      (e) => {
+        if (!map || state.projection !== 'globe' || e.deltaY <= 0 || map.getZoom() > map.getMinZoom() + 0.05) {
+          outTicks = 0;
+          return;
+        }
+        clearTimeout(outTimer);
+        outTimer = window.setTimeout(() => (outTicks = 0), 900);
+        if (++outTicks >= 4) {
+          outTicks = 0;
+          const c = map.getCenter();
+          onOpenSpace(c.lat, c.lng);
+        }
+      },
+      { passive: true },
+    );
     map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'top-right');
 
     const locCtl = document.createElement('div');
@@ -1118,6 +1151,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
   return {
     el,
     activate(focus) {
+      if (focus?.projection) {
+        if (map) setProjection(focus.projection);
+        else state.projection = focus.projection;
+      }
       if (!map) {
         renderPanel();
         initMap();
@@ -1126,7 +1163,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void): GlobeView {
         if (state.wind && needsModel()) wind?.start();
         extras?.resume();
       }
-      if (focus) focusPlace(focus.lat, focus.lon, focus.zoom ?? 6, true);
+      const hasPos = focus?.lat != null && focus?.lon != null;
+      if (hasPos && focus?.fromSpace && map && ready) {
+        // coming back from the solar system: start far out and dive in
+        map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: map.getMinZoom() });
+        map.easeTo({ zoom: focus!.zoom ?? 2.2, duration: 1600 });
+      } else if (hasPos) focusPlace(focus!.lat!, focus!.lon!, focus!.zoom ?? 6, !focus!.fromSpace);
       clearInterval(refreshTimer);
       refreshTimer = window.setInterval(() => {
         ensureFeeds(true);
