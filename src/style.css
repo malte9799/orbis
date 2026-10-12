@@ -1709,3 +1709,28 @@ svg.hourly {
     bottom: 120px;
   }
 }
+
+/* brand */
+.brand {
+  gap: 9px;
+}
+
+.brand-name {
+  font-weight: 800;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, #9fd2ff, #b79bff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-tag {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  padding-left: 9px;
+  border-left: 1px solid var(--border);
+}
+

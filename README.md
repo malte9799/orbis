@@ -1,6 +1,9 @@
-# Wetter-Globus 🌍
+# Orbis 🪐
 
-Wetter-App mit zwei Ansichten:
+**Wetter · Erde · All** – vom Wetter vor der Haustür über die Live-Weltkarte bis ins Sonnensystem,
+in einer App und nahtlos per Zoom verbunden.
+
+Drei Ansichten:
 
 - **Vorhersage** – aktuelles Wetter, 48-Stunden-Diagramm, 14-Tage-Vorhersage, Wind, UV, Luftqualität,
   Pollen, Sonnenauf-/-untergang und amtliche Unwetterwarnungen (DWD für Deutschland, NWS für die USA).

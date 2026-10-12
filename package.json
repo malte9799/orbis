@@ -1,5 +1,6 @@
 {
-  "name": "wetter-globus",
+  "name": "orbis",
+  "description": "Orbis – Wettervorhersage, Live-Weltkarte und 3D-Sonnensystem",
   "private": true,
   "version": "1.0.0",
   "type": "module",

@@ -1,10 +1,11 @@
 {
-  "name": "Wetter-Globus",
-  "short_name": "Wetter",
+  "name": "Orbis – Wetter, Erde & Weltall",
+  "short_name": "Orbis",
+  "description": "Wettervorhersage, Live-Weltkarte und interaktives 3D-Sonnensystem",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0b1020",
   "theme_color": "#0b1020",
   "lang": "de",
-  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }
