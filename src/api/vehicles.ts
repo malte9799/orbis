@@ -1,4 +1,5 @@
 import type { Feature, Point } from 'geojson';
+import { viaProxy } from './proxy';
 import { store } from '../store';
 import { fetchJson } from '../util';
 import { modeStyle } from './transit';
@@ -245,7 +246,7 @@ export const FEEDS: VehicleFeed[] = [
     every: 30,
     async load() {
       const list = await fetchJson<{ lat: string; lon: string; trainno: string; line?: string; dest?: string; SOURCE?: string; late?: number; heading?: number | string }[]>(
-        'https://www3.septa.org/api/TrainView/index.php',
+        viaProxy('https://www3.septa.org/api/TrainView/index.php'),
         undefined,
         20000,
       );
