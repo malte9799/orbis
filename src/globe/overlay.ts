@@ -18,7 +18,9 @@ export type FieldId =
   | 'cloud'
   | 'pressure'
   | 'snow'
-  | 'cape';
+  | 'cape'
+  | 'precipmix'
+  | 'snowfall';
 
 type Rgba = [number, number, number, number];
 
@@ -37,7 +39,12 @@ export interface FieldDef {
    * rendered image uses this – readouts stay on the plain interpolated value.
    */
   organic?: { warp: number; texture?: number; additive?: boolean };
+  /** precipitation coloured as rain or snow depending on the 2 m temperature */
+  phase?: 'mix' | 'snow-only';
 }
+
+/** Below this 2 m temperature [°C] precipitation is drawn as snow. */
+export const SNOW_BELOW = 1;
 
 const WIND_STOPS: [number, string][] = [
   [0, '#3d2e8c'],
@@ -69,6 +76,14 @@ const PRECIP_STOPS: [number, string][] = [
   [20, '#e8384f'],
   [40, '#b03ad6'],
 ];
+export const SNOWFALL_STOPS: [number, string][] = [
+  [0.1, '#eef3ff'],
+  [0.5, '#cfdcff'],
+  [1.5, '#a9a2ff'],
+  [3, '#c46bff'],
+  [6, '#ff6bd6'],
+];
+export { PRECIP_STOPS };
 const PRESSURE_STOPS: [number, string][] = [
   [960, '#5b2bd6'],
   [985, '#2f7fd8'],
@@ -199,6 +214,26 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     legend: { stops: SNOW_STOPS, ticks: [0.01, 0.5, 1, 2, 3] },
     format: (v) => fmt.num(v * 100, 0),
   },
+  precipmix: {
+    label: 'Niederschlag',
+    unit: 'mm/h',
+    variable: 'precipitation',
+    organic: { warp: 0.5, texture: 0.6 },
+    phase: 'mix',
+    color: ramp(PRECIP_STOPS, 215, 0.08),
+    legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
+    format: num(1),
+  },
+  snowfall: {
+    label: 'Schneefall',
+    unit: 'mm/h',
+    variable: 'precipitation',
+    organic: { warp: 0.5, texture: 0.6 },
+    phase: 'snow-only',
+    color: ramp(SNOWFALL_STOPS, 225, 0.08),
+    legend: { stops: SNOWFALL_STOPS, ticks: [0.1, 1.5, 3, 6] },
+    format: num(1),
+  },
   cape: {
     label: 'Gewitterenergie (CAPE)',
     unit: 'J/kg',
@@ -212,12 +247,17 @@ export const FIELDS: Record<FieldId, FieldDef> = {
 
 // The protocol reads the active sampler; the tile URL carries a version so MapLibre
 // re-requests tiles whenever field, time step or detail grid change.
-let activeSampler: ModelSampler | null = null;
+// Several maps can render fields at once; each registers its sampler under a key that
+// appears in the tile URL (wxfield://<field>/<key>~<version>/…, key defaults to 'map').
+const samplers = new Map<string, ModelSampler>();
 let protocolRegistered = false;
 
-export function setActiveSampler(s: ModelSampler | null) {
-  activeSampler = s;
+export function setActiveSampler(s: ModelSampler | null, key = 'map') {
+  if (s) samplers.set(key, s);
+  else samplers.delete(key);
 }
+
+const snowColor = ramp(SNOWFALL_STOPS, 225, 0.08);
 
 function tile2lon(x: number, z: number) {
   return (x / 2 ** z) * 360 - 180;
@@ -280,13 +320,13 @@ export function registerFieldProtocol() {
   protocolRegistered = true;
   // URL format: wxfield://<field>/<version>/<z>/<x>/<y>
   addProtocol('wxfield', async (params) => {
-    const m = /^wxfield:\/\/(\w+)\/[\w-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
     const def = m ? FIELDS[m[1] as FieldId] : undefined;
-    const sampler = activeSampler;
+    const sampler = m ? samplers.get(m[2] ?? 'map') : undefined;
     if (!m || !def || !sampler) throw new Error('field not ready');
-    const z = +m[2];
-    const x = +m[3];
-    const y = +m[4];
+    const z = +m[3];
+    const x = +m[4];
+    const y = +m[5];
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
     const N = z <= 4 ? 64 : 128;
@@ -298,7 +338,12 @@ export function registerFieldProtocol() {
       for (let px = 0; px < N; px++) {
         const lon = tile2lon(x + (px + 0.5) / N, z);
         const v = def.organic ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
-        const [r, g, b, a] = def.color(v);
+        let [r, g, b, a] = def.color(v);
+        if (def.phase) {
+          const snow = sampler.sample('temperature_2m', lat, lon) < SNOW_BELOW;
+          if (snow) [r, g, b, a] = snowColor(v);
+          else if (def.phase === 'snow-only') a = 0;
+        }
         const o = (py * N + px) * 4;
         img.data[o] = r;
         img.data[o + 1] = g;

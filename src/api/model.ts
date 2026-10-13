@@ -162,21 +162,21 @@ function fromB64(s: string) {
   return new Float32Array(bytes.buffer);
 }
 
-function writeCache(g: ModelGrid) {
+function writeCache(g: ModelGrid, key = CACHE_KEY) {
   try {
     localStorage.removeItem('wg.cache.grid'); // older caches
     localStorage.removeItem('wg.model.v2');
     const data: Record<string, string> = {};
     for (const [k, v] of Object.entries(g.data)) if (!(DERIVED as readonly string[]).includes(k)) data[k] = toB64(v);
-    localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), g: { ...g, data } }));
+    localStorage.setItem(key, JSON.stringify({ at: Date.now(), g: { ...g, data } }));
   } catch {
     /* quota exceeded – memory cache only */
   }
 }
 
-function readCache(): { at: number; grid: ModelGrid } | null {
+function readCache(key = CACHE_KEY): { at: number; grid: ModelGrid } | null {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const { at, g } = JSON.parse(raw) as { at: number; g: Omit<ModelGrid, 'data'> & { data: Record<string, string> } };
     if (Date.now() - at > CACHE_MS) return null;
@@ -187,6 +187,51 @@ function readCache(): { at: number; grid: ModelGrid } | null {
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Regional grid around a place for the forecast page map: 17 × 9 points at 1° (153 calls),
+// the last region is kept in localStorage for an hour.
+
+const REGION_KEY = 'wg.region.v2';
+const REGION_HALF_LON = 8;
+const REGION_HALF_LAT = 4;
+const regionCache = new Map<string, Promise<ModelGrid>>();
+
+export function regionBounds(lat: number, lon: number): Bounds {
+  const lat0 = Math.min(85, Math.round(lat) + REGION_HALF_LAT);
+  const lon0 = Math.round(lon) - REGION_HALF_LON;
+  return { west: lon0, east: lon0 + 2 * REGION_HALF_LON, north: lat0, south: lat0 - 2 * REGION_HALF_LAT };
+}
+
+export function getRegionalModel(lat: number, lon: number): Promise<ModelGrid> {
+  const b = regionBounds(lat, lon);
+  const id = `${b.north}:${b.west}`;
+  let p = regionCache.get(id);
+  if (p) return p;
+  try {
+    const raw = localStorage.getItem(`${REGION_KEY}.id`);
+    const cached = raw === id ? readCache(REGION_KEY) : null;
+    if (cached) {
+      p = Promise.resolve(cached.grid);
+      regionCache.set(id, p);
+      return p;
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  p = fetchGrid(b.north, b.west, 1, 1, 2 * REGION_HALF_LON + 1, 2 * REGION_HALF_LAT + 1, false).then((g) => {
+    writeCache(g, REGION_KEY);
+    try {
+      localStorage.setItem(`${REGION_KEY}.id`, id);
+    } catch {
+      /* ignore */
+    }
+    return g;
+  });
+  p.catch(() => regionCache.delete(id));
+  regionCache.set(id, p);
+  return p;
 }
 
 // ---------------------------------------------------------------------------

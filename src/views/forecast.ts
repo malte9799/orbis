@@ -1,6 +1,7 @@
 import { getAlerts, type Alert } from '../api/alerts';
 import { getAirQuality, getForecast, reverseGeocode, type AirQuality, type Forecast } from '../api/openmeteo';
 import { renderHourlyChart } from '../chart';
+import { createForecastMap, type ForecastMap } from './fcmap';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { beaufort, compass, escapeHtml, fmt, tempColor, toast } from '../util';
@@ -29,6 +30,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
   const favs = el.querySelector<HTMLElement>('.favs')!;
   let current: Place = store.getLastPlace();
   let loadSeq = 0;
+  let fcMap: ForecastMap | null = null;
 
   el.querySelector('[data-act=locate]')!.addEventListener('click', async () => {
     try {
@@ -58,6 +60,8 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
     store.setLastPlace(current);
     renderFavs();
     const my = ++loadSeq;
+    fcMap?.destroy();
+    fcMap = null;
     body.innerHTML = skeleton();
     try {
       const [f, aq, alerts] = await Promise.all([
@@ -151,12 +155,16 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
         <div class="hourly-wrap"></div>
       </section>
 
+      <section class="card fc-map-card"></section>
+
       <section class="card">
         <h2>14-Tage-Vorhersage</h2>
         ${renderDaily(f)}
       </section>`;
 
     renderHourlyChart(body.querySelector<HTMLElement>('.hourly-wrap')!, f);
+    fcMap?.destroy();
+    fcMap = createForecastMap(body.querySelector<HTMLElement>('.fc-map-card')!, current, f);
 
     body.querySelector('[data-act=fav]')!.addEventListener('click', (e) => {
       const on = store.toggleFavorite(current);

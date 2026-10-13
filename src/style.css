@@ -2102,3 +2102,143 @@ svg.hourly {
     height: 56px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Forecast page weather map */
+.fcm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.fcm-head h2 {
+  margin: 0;
+}
+.fcm-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fcm-modes .seg-chip {
+  height: 32px;
+  font-size: 0.85rem;
+}
+.fcm-hint {
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: -2px 0 8px;
+}
+.fcm-map {
+  position: relative;
+  height: 440px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b1220;
+  border: 1px solid var(--border);
+}
+.fcm-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  z-index: 2;
+}
+.fcm-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+.fcm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 10px 0 2px;
+}
+.fcm-leg {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 3px;
+}
+.fcm-leg-label {
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+.fcm-leg-label small {
+  color: var(--muted);
+}
+.fcm-leg-bar {
+  height: 8px;
+  border-radius: 4px;
+}
+.fcm-leg-ticks {
+  position: relative;
+  height: 14px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.fcm-leg-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.fcm-leg-ticks span:first-child {
+  transform: none;
+}
+.fcm-leg-ticks span:last-child {
+  transform: translateX(-100%);
+}
+.fcm-time {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.fcm-time input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.fcm-when {
+  min-width: 128px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.fcm-play svg {
+  fill: currentColor;
+  stroke: none;
+}
+.fcm-src {
+  margin: 6px 0 0;
+}
+@media (max-width: 640px) {
+  .fcm-map {
+    height: 320px;
+  }
+  .fcm-when {
+    min-width: 0;
+    font-size: 0.82rem;
+  }
+}
+.fcm-empty {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(10, 16, 32, 0.8);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
