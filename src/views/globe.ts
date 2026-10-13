@@ -45,7 +45,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -536,6 +536,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const BASE_THUMB: Record<BaseId, string> = {
     satellite: `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`,
     nasa: `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`,
+    blue: `<img alt="" loading="lazy" src="${BLUE_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
     night: `<img alt="" loading="lazy" src="${BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
     dark: miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a'),
     light: miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5'),
@@ -702,9 +703,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function applyBase() {
     if (!map) return;
     for (const b of BASES) vis(`base-${b.id}`, state.base === b.id);
-    // the NASA base is a stack (Blue Marble + two days of imagery)
-    vis('base-nasa-blue', state.base === 'nasa');
-    vis('base-nasa-d2', state.base === 'nasa');
     const layers = map.getStyle().layers;
     for (const l of layers) {
       if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
@@ -1256,10 +1254,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('load', () => {
       ready = true;
       registerEventIcons(map!);
-      // NASA "Tagesbild": yesterday on top, the day before underneath (fills swath gaps),
-      // Blue Marble at the very bottom (fills night and remaining gaps)
+      // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
-      (map!.getSource('nasad2') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(2))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();

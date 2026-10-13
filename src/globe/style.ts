@@ -1,11 +1,12 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
-export type BaseId = 'satellite' | 'nasa' | 'night' | 'dark' | 'light';
+export type BaseId = 'satellite' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
 
 export const BASES: { id: BaseId; label: string }[] = [
   { id: 'satellite', label: 'Satellit' },
   { id: 'nasa', label: 'NASA Tagesbild' },
+  { id: 'blue', label: 'NASA Blue Marble' },
   { id: 'night', label: 'Nachtlichter' },
   { id: 'dark', label: 'Dunkel' },
   { id: 'light', label: 'Hell' },
@@ -86,12 +87,6 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tileSize: 256,
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
-      },
-      nasad2: {
-        type: 'raster',
-        tiles: [gibsTrueColor(nasaDate)],
-        tileSize: 256,
-        maxzoom: 9,
       },
       blackmarble: {
         type: 'raster',
@@ -180,11 +175,8 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         layout: { visibility: 'none' as const },
         paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
       },
-      // NASA "Tagesbild": Blue Marble (gap-free) at the bottom, then two days of live imagery
-      // stacked on top so inter-orbit gaps and the night side fall through instead of going black.
-      { id: 'base-nasa-blue', type: 'raster' as const, source: 'bluemarble', layout: { visibility: 'none' as const }, paint: { 'raster-brightness-max': 0.9 } },
-      { id: 'base-nasa-d2', type: 'raster' as const, source: 'nasad2', layout: { visibility: 'none' as const } },
       { id: 'base-nasa', type: 'raster' as const, source: 'nasa', layout: { visibility: 'none' as const } },
+      { id: 'base-blue', type: 'raster' as const, source: 'bluemarble', layout: { visibility: 'none' as const } },
       { id: 'base-night', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
       ...baseLayers('dark'),
       ...baseLayers('light'),
