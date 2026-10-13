@@ -69,7 +69,7 @@ function route() {
     loadSpace().then((v) => {
       if (active !== 'space') return;
       v.el.hidden = false;
-      if (!wasActive) v.activate({ focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined });
+      if (!wasActive) v.activate({ focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, site: params.get('site') ?? undefined });
     });
   } else if (next === 'globe') {
     const fromSpace = params.get('from') === 'space';

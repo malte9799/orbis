@@ -18,6 +18,13 @@ Drei Ansichten:
   - Sonne, alle Planeten, Pluto und wichtige Monde mit Texturen – Planeten anklicken zum Hinfliegen,
     drehbare Kugel mit Steckbrief, aktuellem Abstand zu Sonne und Erde und Lichtlaufzeit;
     für Mond und Mars Link zur NASA-Detailkarte (Trek)
+  - Mond in hoher Auflösung: LRO-Farbmosaik (4k/8k) mit Relief aus dem LOLA-Höhenmodell
+    ([NASA CGI Moon Kit](https://svs.gsfc.nasa.gov/4720), wird beim Deploy geladen) und beim Heranzoomen
+    nachgeladene Kacheln des LRO-WAC-Mosaiks (≈ 100 m/Pixel, [NASA Moon Trek](https://trek.nasa.gov/moon/)) –
+    Zoom bis ≈ 20 km über die Oberfläche
+  - Flaggen an allen Landestellen (Apollo 11–17, Luna, Surveyor, Chang’e, Chandrayaan-3, SLIM, Odysseus,
+    Blue Ghost, Athena) mit Steckbrief; sie erscheinen erst ab dem Landedatum. Direktlink z. B.
+    `#/weltall?focus=moon&site=apollo11`
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen

@@ -7,6 +7,7 @@ import { propagate } from 'satellite.js';
 import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
 import { BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
+import { COUNTRY, LANDING_SITES, MoonDetail, flagDataUrl, surfaceDir } from './moon';
 import {
   AU_KM,
   eciToEcliptic,
@@ -23,7 +24,7 @@ import {
 
 export interface SpaceView {
   el: HTMLElement;
-  activate(opts?: { focus?: string; lat?: number; lon?: number }): void;
+  activate(opts?: { focus?: string; lat?: number; lon?: number; site?: string }): void;
   deactivate(): void;
 }
 
@@ -85,7 +86,10 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         <label class="row"><input type="checkbox" data-opt="labels" checked/> Beschriftungen</label>
         <label class="row"><input type="checkbox" data-opt="craft" checked/> Raumsonden</label>
         <label class="row"><input type="checkbox" data-opt="sats" checked/> Erdsatelliten (in Erdnähe)</label>
+        <label class="row"><input type="checkbox" data-opt="sites" checked/> Landestellen auf dem Mond</label>
         <p class="small muted">Texturen: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) ·
+        Mond: NASA <a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noopener">CGI Moon Kit</a> (LRO LROC/LOLA) und
+        <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">Moon Trek</a> ·
         Bahnen: JPL-Näherungsformeln · Satelliten: CelesTrak</p>
       </div>
     </aside>
@@ -123,7 +127,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   let speedIdx = REALTIME;
   let playing = true;
   let focusId = 'earth';
-  const opts = { orbits: true, labels: true, craft: true, sats: true };
+  const opts = { orbits: true, labels: true, craft: true, sats: true, sites: true };
+  /** selected landing site on the Moon (info panel) */
+  let siteId: string | null = null;
 
   // positions for the current frame (heliocentric, AU), resolved lazily with dependencies
   let frameCache = new Map<string, Vec3 | null>();
@@ -164,6 +170,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   // focus transition
   let origin: Vec3 = [0, 0, 0];
   let trans: { from: Vec3; to: string; t0: number; dur: number; d0: number; d1: number } | null = null;
+  // camera swing to a spot on the Moon's surface
+  let aim: { from: THREE.Vector3; lat: number; lon: number; t0: number; dur: number; d0: number; d1: number } | null = null;
+  let moonDetail: MoonDetail | null = null;
 
   const radiusAU = (b: Body) => (b.model ? b.model.sizeM / 2000 : b.radiusKm) / AU_KM;
 
@@ -329,6 +338,14 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       }
       world.add(group);
       meshes.set(b.id, { group, spin, body: b });
+      if (b.id === 'moon') {
+        moonDetail = new MoonDetail(mesh, {
+          labelHost,
+          onSite: selectSite,
+          maxTextureSize: renderer.capabilities.maxTextureSize,
+          anisotropy: Math.min(8, renderer.capabilities.getMaxAnisotropy()),
+        });
+      }
     }
 
     // labels
@@ -366,6 +383,11 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         true,
       );
       for (const h of hits) {
+        if (!shown(h.object)) continue;
+        if (h.object.userData.site) {
+          selectSite(h.object.userData.site);
+          return;
+        }
         if (h.object === satPoints && h.index != null) {
           showSatInfo(h.index);
           return;
@@ -389,9 +411,17 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       { passive: true },
     );
 
+    // the user takes over: stop any automatic camera swing
+    controls.addEventListener('start', () => (aim = null));
+
     new ResizeObserver(resize).observe(el);
     resize();
   }
+
+  const shown = (o: THREE.Object3D | null) => {
+    for (; o; o = o.parent) if (!o.visible) return false;
+    return true;
+  };
 
   function glowTexture() {
     const c = document.createElement('canvas');
@@ -426,7 +456,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
 
   function minDistance(b: Body) {
     if (b.kind === 'craft') return b.model ? radiusAU(b) * 1.3 : 1e-6;
-    return radiusAU(b) * (b.id === 'earth' ? 1.3 : 1.15);
+    // the Moon has close-up tiles, so it may be approached to ≈ 20 km altitude
+    return radiusAU(b) * (b.id === 'earth' ? 1.3 : b.id === 'moon' ? 1.012 : 1.15);
   }
 
   function focus(id: string, dist?: number) {
@@ -440,15 +471,36 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     const from = origin;
     trans = { from, to: id, t0: performance.now(), dur: 1600, d0: camera.position.length(), d1: dist ?? viewDistance(b) };
     focusId = id;
+    siteId = null;
+    aim = null;
+    if (moonDetail) moonDetail.selected = null;
     controls.minDistance = 0;
     renderInfo();
     renderList();
     updateHash();
   }
 
+  /** Fly to a landing site on the Moon and show its info. */
+  function selectSite(id: string) {
+    const s = LANDING_SITES.find((x) => x.id === id);
+    if (!s) return;
+    const R = radiusAU(byId.get('moon')!);
+    const far = focusId !== 'moon';
+    if (far) focus('moon', R * 1.6);
+    siteId = id;
+    if (moonDetail) moonDetail.selected = id;
+    // keep the altitude if already closer than the default
+    const d = far ? R * 1.6 : camera.position.length();
+    aim = { from: camera.position.clone().normalize(), lat: s.lat, lon: s.lon, t0: performance.now(), dur: 1800, d0: d, d1: Math.min(d, R * 1.6) };
+    renderInfo();
+    updateHash();
+  }
+
   function overview() {
     trans = { from: origin, to: 'sun', t0: performance.now(), dur: 1800, d0: camera.position.length(), d1: 45 };
     focusId = 'sun';
+    siteId = null;
+    aim = null;
     controls.minDistance = 0;
     renderInfo();
     renderList();
@@ -456,20 +508,18 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   }
 
   function updateHash() {
-    const h = `#/weltall?focus=${focusId}`;
+    const h = `#/weltall?focus=${focusId}${siteId ? `&site=${siteId}` : ''}`;
     if (location.hash !== h) history.replaceState(null, '', h);
   }
 
-  /** Direction (three.js, world) of a geographic point on Earth for the current time. */
-  function earthSurfaceDir(lat: number, lon: number) {
-    const m = meshes.get('earth')!;
+  /** Direction (three.js, world) of a geographic point on a body for the current time. */
+  function surfaceDirOf(id: string, lat: number, lon: number) {
+    const m = meshes.get(id)!;
     m.group.updateMatrixWorld(true);
-    const phi = ((lon + 180) * Math.PI) / 180;
-    const theta = ((90 - lat) * Math.PI) / 180;
-    const local = new THREE.Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta));
     const mesh = m.spin.children[0];
-    return local.applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+    return surfaceDir(lat, lon).applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
   }
+  const pxPerRad = () => el.clientHeight / 2 / Math.tan((camera.fov * Math.PI) / 360);
 
   function openEarthMap() {
     const m = meshes.get('earth')!;
@@ -521,6 +571,18 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         m.spin.rotation.y = Math.atan2(-d.z, d.x);
       } else if (b.rotationHours) m.spin.rotation.y = ((simTime / 3600000 / b.rotationHours) % 1) * 2 * Math.PI;
     }
+
+    if (aim) {
+      const k = Math.min(1, (now - aim.t0) / aim.dur);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      const to = surfaceDirOf('moon', aim.lat, aim.lon);
+      const q = new THREE.Quaternion().setFromUnitVectors(aim.from, to);
+      const dir = aim.from.clone().applyQuaternion(new THREE.Quaternion().slerp(q, e));
+      // during a focus transition that one sets the distance
+      const d = trans ? camera.position.length() : Math.exp(Math.log(aim.d0) + (Math.log(aim.d1) - Math.log(aim.d0)) * e);
+      camera.position.copy(dir.multiplyScalar(d));
+      if (k >= 1 && !trans) aim = null;
+    }
     toThree(sub([0, 0, 0], origin), sunLight.position);
 
     // orbit lines (rebuilt when time moved far)
@@ -546,11 +608,29 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     updateSatellites(now);
     updateCraftModels();
 
+    adaptControls();
     controls.update();
+    moonDetail?.update(camera, simTime, pxPerRad(), opts.sites);
     renderSplit();
     updateLabels();
+    moonDetail?.updateLabels(camera, el.clientWidth, el.clientHeight, opts.labels);
     updateClock();
     if (!trans && now % 500 < 20) renderLiveInfo();
+  }
+
+  /** Near a surface, zoom and rotate in proportion to the altitude instead of the distance. */
+  function adaptControls() {
+    const b = byId.get(focusId)!;
+    if (b.kind === 'craft' || trans) {
+      controls.zoomSpeed = 1.6;
+      controls.rotateSpeed = 0.6;
+      return;
+    }
+    const r = radiusAU(b);
+    const d = camera.position.length();
+    const alt = Math.max(1e-12, d - r);
+    controls.zoomSpeed = 1.6 * Math.min(1, (2.5 * alt) / d);
+    controls.rotateSpeed = 0.6 * Math.min(1, alt / (2.5 * r));
   }
 
   /**
@@ -731,10 +811,19 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   function updateLabels() {
     const screen = new Map<string, { x: number; y: number } | null>();
     for (const b of ALL) screen.set(b.id, screenOf(resolve(b.id, simTime)));
+    // the focused body hides labels of everything behind it
+    const fb = byId.get(focusId)!;
+    const fs = screen.get(focusId);
+    const camDist = camera.position.length();
+    const fr = fb.kind === 'craft' ? 0 : camDist > radiusAU(fb) ? (Math.tan(Math.asin(radiusAU(fb) / camDist)) * el.clientHeight) / 2 / Math.tan((camera.fov * Math.PI) / 360) : Infinity;
     for (const b of ALL) {
       const d = labels.get(b.id)!;
       const s = screen.get(b.id);
       let show = !!s && opts.labels;
+      if (show && fs && b.id !== focusId && Math.hypot(s!.x - fs.x, s!.y - fs.y) < fr) {
+        const p = resolve(b.id, simTime)!;
+        if (toThree(sub(p, origin), v3b).distanceTo(camera.position) > camDist) show = false;
+      }
       if (b.kind === 'craft' && !opts.craft) show = false;
       if (show && b.parent) {
         // hide moons (and craft at planets) until they separate from their planet on screen
@@ -847,7 +936,42 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     return `${fmt.num(s / 3600, 1)} h`;
   }
 
+  function renderSiteInfo(id: string) {
+    const s = LANDING_SITES.find((x) => x.id === id)!;
+    const dt = new Date(s.date);
+    const when = `${dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}, ${dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
+    const coord = `${fmt.num(Math.abs(s.lat), 2)}° ${s.lat >= 0 ? 'N' : 'S'}, ${fmt.num(Math.abs(s.lon), 2)}° ${s.lon >= 0 ? 'O' : 'W'}`;
+    const rows: [string, string][] = [
+      ['Landung', when],
+      ['Nation', COUNTRY[s.flag]],
+      ...(s.crew ? [['Besatzung', s.crew] as [string, string]] : []),
+      ...(s.craft ? [[s.crewed ? 'Fahrzeug' : 'Mission', s.craft] as [string, string]] : []),
+      ['Ort', s.region],
+      ['Koordinaten', (s.approx ? '≈ ' : '') + coord],
+    ];
+    const years = (Date.now() - dt.getTime()) / (365.25 * 86400000);
+    info.hidden = false;
+    info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
+      <div class="sp-kind">${s.crewed ? 'Bemannte Mondlandung' : 'Mondlandung (robotisch)'}</div>
+      <h2 class="sp-site-title"><img class="sp-flag" src="${flagDataUrl(s.flag)}" alt="Flagge ${escapeHtml(COUNTRY[s.flag])}"/>${escapeHtml(s.name)}</h2>
+      <p>${escapeHtml(s.text)}</p>
+      <dl>${rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+      ${simTime < dt.getTime() ? '<p class="small note">Zum gewählten Zeitpunkt ist hier noch niemand gelandet.</p>' : years >= 1 ? `<p class="small muted">Vor ${fmt.num(years, 0)} Jahren.</p>` : ''}
+      <div class="sp-actions">
+        <button class="btn small" data-a="moon">← Mond</button>
+        <a class="btn small" href="https://de.wikipedia.org/w/index.php?search=${encodeURIComponent(s.name.replace(/ \(.*\)$/, ''))}" target="_blank" rel="noopener">Wikipedia ↗</a>
+      </div>`;
+    info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
+    info.querySelector('[data-a=moon]')!.addEventListener('click', () => {
+      siteId = null;
+      if (moonDetail) moonDetail.selected = null;
+      renderInfo();
+      updateHash();
+    });
+  }
+
   function renderInfo() {
+    if (siteId && focusId === 'moon') return renderSiteInfo(siteId);
     const b = byId.get(focusId)!;
     info.hidden = false;
     const extLink =
@@ -863,6 +987,13 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       <dl class="sp-live"></dl>
       ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>` : ''}
       ${b.approx ? '<p class="small note">Position/Flugbahn angenähert.</p>' : ''}
+      ${
+        b.id === 'moon'
+          ? `<h3 class="sp-sub">Landestellen</h3><div class="sp-sites">${LANDING_SITES.map(
+              (s) => `<button class="sp-site${s.crewed ? ' crewed' : ''}" data-site="${s.id}"><img src="${flagDataUrl(s.flag)}" alt=""/>${escapeHtml(s.name)}</button>`,
+            ).join('')}</div>`
+          : ''
+      }
       ${b.model ? `<p class="small muted">3D-Modell: NASA 3D Resources${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
         crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : ''
       }</p>` : ''}
@@ -872,6 +1003,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
     info.querySelector('[data-a=map]')?.addEventListener('click', openEarthMap);
+    info.querySelectorAll<HTMLButtonElement>('[data-site]').forEach((btn) => btn.addEventListener('click', () => selectSite(btn.dataset.site!)));
     renderLiveInfo();
   }
 
@@ -907,7 +1039,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       }
       active = true;
       resize();
-      const id = o.focus && byId.has(o.focus) ? o.focus : 'earth';
+      const site = o.site && LANDING_SITES.some((s) => s.id === o.site) ? o.site : undefined;
+      const id = site ? 'moon' : o.focus && byId.has(o.focus) ? o.focus : 'earth';
       focusId = id;
       frameCache = new Map();
       origin = resolve(id, simTime) ?? [0, 0, 0];
@@ -915,13 +1048,17 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (id === 'earth' && o.lat != null && o.lon != null) {
         // coming from the weather map: start close above that spot and pull back
         update(performance.now());
-        const dir = earthSurfaceDir(o.lat, o.lon);
+        const dir = surfaceDirOf('earth', o.lat, o.lon);
         camera.position.copy(dir.multiplyScalar(radiusAU(b) * 1.6));
         controls.update();
         trans = { from: origin, to: id, t0: performance.now(), dur: 2200, d0: radiusAU(b) * 1.6, d1: radiusAU(b) * 9 };
       } else if (camera.position.lengthSq() === 0) {
         camera.position.set(0, radiusAU(b) * 1.5, radiusAU(b) * 4);
         controls.minDistance = minDistance(b);
+      }
+      if (site) {
+        update(performance.now());
+        selectSite(site);
       }
       renderInfo();
       renderList();
