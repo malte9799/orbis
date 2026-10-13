@@ -1485,6 +1485,74 @@ svg.hourly {
   transform: rotate(45deg);
 }
 
+.sp-label.kind-site {
+  margin: -14px 0 0 4px;
+  font-size: 11px;
+  color: rgba(235, 238, 250, 0.8);
+}
+
+.sp-label.kind-site.crewed {
+  font-size: 12px;
+  color: #ffe9a8;
+}
+
+.space-info .sp-site-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sp-flag {
+  width: 36px;
+  height: auto;
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.sp-sub {
+  margin: 4px 0 8px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sp-sites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.sp-site {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.sp-site:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.sp-site.crewed {
+  color: #ffe9a8;
+}
+
+.sp-site img {
+  width: 16px;
+  height: auto;
+  border-radius: 1px;
+}
+
 .space-list-toggle {
   position: absolute;
   top: 12px;

@@ -24,6 +24,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Sharper Moon textures (NASA CGI Moon Kit, ~150 MB download), cached between deploys.
+      # Optional: if NASA is unreachable the app keeps its bundled 2k map.
+      - name: Cache Moon textures
+        id: moon-cache
+        uses: actions/cache@v4
+        with:
+          path: public/textures/moon
+          key: moon-textures-${{ hashFiles('scripts/moon-textures.py') }}
+      - uses: actions/setup-python@v5
+        if: steps.moon-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: '3.12'
+      - name: Moon textures
+        if: steps.moon-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 15
+        run: |
+          pip install --quiet numpy pillow
+          python scripts/moon-textures.py public/textures/moon
       - run: npm run build
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
