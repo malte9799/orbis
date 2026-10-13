@@ -148,6 +148,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   let camera: THREE.PerspectiveCamera;
   let controls: OrbitControls;
   let sunLight: THREE.PointLight;
+  let viewLight: THREE.DirectionalLight;
+  let ambientLight: THREE.AmbientLight;
   const meshes = new Map<string, { group: THREE.Group; spin: THREE.Object3D; body: Body }>();
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
@@ -285,12 +287,16 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     scene.background = stars;
     scene.backgroundIntensity = 0.45;
 
-    world.add(new THREE.AmbientLight(0xffffff, 0.07));
+    ambientLight = new THREE.AmbientLight(0xffffff, 0.07);
+    world.add(ambientLight);
     // soft studio reflections for the metal/foil surfaces of the spacecraft models only
     envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     ensureSats();
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     world.add(sunLight);
+    viewLight = new THREE.DirectionalLight(0xffffff, 0);
+    scene.add(viewLight);
+    scene.add(viewLight.target);
 
     const sphere = new THREE.SphereGeometry(1, 96, 48);
     for (const b of BODIES) {
@@ -300,7 +306,14 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (b.kind === 'star') {
         mat = new THREE.MeshBasicMaterial({ map: b.texture ? load(b.texture) : null, color: b.texture ? 0xffffff : b.color });
       } else {
-        mat = new THREE.MeshStandardMaterial({ map: b.texture ? load(b.texture) : null, color: b.texture ? 0xffffff : b.color, roughness: 1, metalness: 0 });
+        const stdOpts: THREE.MeshStandardMaterialParameters = { map: b.texture ? load(b.texture) : null, color: b.texture ? 0xffffff : b.color, roughness: 1, metalness: 0 };
+        if (b.bumpMap) {
+          const bump = loader.load(b.bumpMap);
+          bump.anisotropy = 4;
+          stdOpts.bumpMap = bump;
+          stdOpts.bumpScale = b.bumpScale ?? 0.01;
+        }
+        mat = new THREE.MeshStandardMaterial(stdOpts);
       }
       const mesh = new THREE.Mesh(sphere, mat);
       const r = radiusAU(b);
@@ -522,6 +535,27 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       } else if (b.rotationHours) m.spin.rotation.y = ((simTime / 3600000 / b.rotationHours) % 1) * 2 * Math.PI;
     }
     toThree(sub([0, 0, 0], origin), sunLight.position);
+
+    // close-up lighting: fade from sun to fixed directional light (Google Maps style)
+    const focusBody = byId.get(focusId)!;
+    if (focusBody.kind !== 'star') {
+      const camDist = camera.position.length();
+      const bodyR = radiusAU(focusBody);
+      const closeStart = bodyR * 12;
+      const closeEnd = bodyR * 3;
+      const closeness = Math.max(0, Math.min(1, (closeStart - camDist) / (closeStart - closeEnd)));
+      sunLight.intensity = 3.2 * (1 - closeness);
+      ambientLight.intensity = 0.07 + 0.5 * closeness;
+      viewLight.intensity = 2.5 * closeness;
+      const lightDir = new THREE.Vector3(-0.5, 0.8, 0.3).applyQuaternion(camera.quaternion);
+      viewLight.position.copy(lightDir);
+      viewLight.target.position.set(0, 0, 0);
+      viewLight.target.updateMatrixWorld();
+    } else {
+      sunLight.intensity = 3.2;
+      ambientLight.intensity = 0.07;
+      viewLight.intensity = 0;
+    }
 
     // orbit lines (rebuilt when time moved far)
     for (const b of BODIES) {
@@ -850,12 +884,16 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   function renderInfo() {
     const b = byId.get(focusId)!;
     info.hidden = false;
-    const extLink =
-      b.id === 'moon'
-        ? '<a class="btn small" href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">Detailkarte (NASA Moon Trek) ↗</a>'
-        : b.id === 'mars'
-          ? '<a class="btn small" href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">Detailkarte (NASA Mars Trek) ↗</a>'
-          : '';
+    const trekLinks: Record<string, [string, string]> = {
+      moon: ['https://trek.nasa.gov/moon/', 'NASA Moon Trek'],
+      mars: ['https://trek.nasa.gov/mars/', 'NASA Mars Trek'],
+      mercury: ['https://trek.nasa.gov/mercury/', 'NASA Mercury Trek'],
+      venus: ['https://trek.nasa.gov/venus/', 'NASA Venus Trek'],
+    };
+    const trek = trekLinks[b.id];
+    const extLink = trek
+      ? `<a class="btn small" href="${trek[0]}" target="_blank" rel="noopener">Detailkarte (${trek[1]}) ↗</a>`
+      : '';
     info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
       <div class="sp-kind">${KIND_LABEL[b.kind]}${b.parent ? ` · ${escapeHtml(byId.get(b.parent)?.name ?? '')}` : ''}</div>
       <h2>${escapeHtml(b.name)}</h2>
