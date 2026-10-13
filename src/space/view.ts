@@ -543,15 +543,39 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     updateCraftModels();
 
     controls.update();
-    // keep near/far sensible for the current distance
-    const dist = camera.position.length();
-    camera.near = Math.max(1e-11, dist * 1e-4);
-    camera.far = Math.max(dist * 10, 300);
-    camera.updateProjectionMatrix();
-    renderer!.render(scene, camera);
+    renderSplit();
     updateLabels();
     updateClock();
     if (!trans && now % 500 < 20) renderLiveInfo();
+  }
+
+  /**
+   * Two depth ranges: a depth buffer cannot resolve a 20 m telescope and 4 000 AU of
+   * space at once, so the far range (planets, orbits) is drawn first and the near range
+   * (whatever is close to the camera, e.g. a spacecraft model) after clearing depth.
+   */
+  function renderSplit() {
+    const r = renderer!;
+    const dist = Math.max(1e-14, camera.position.length());
+    const split = dist * 60;
+    r.autoClear = false;
+    r.clear();
+    camera.near = split;
+    camera.far = 5000;
+    camera.updateProjectionMatrix();
+    r.render(scene, camera);
+    r.clearDepth();
+    const bg = scene.background;
+    scene.background = null;
+    camera.near = dist * 1e-4;
+    camera.far = split * 1.001;
+    camera.updateProjectionMatrix();
+    r.render(scene, camera);
+    scene.background = bg;
+    // full range for label projection and picking
+    camera.near = dist * 1e-4;
+    camera.far = 5000;
+    camera.updateProjectionMatrix();
   }
 
   function updateMoonOrbits() {
