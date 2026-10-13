@@ -702,6 +702,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function applyBase() {
     if (!map) return;
     for (const b of BASES) vis(`base-${b.id}`, state.base === b.id);
+    // the NASA base is a stack (Blue Marble + two days of imagery)
+    vis('base-nasa-blue', state.base === 'nasa');
+    vis('base-nasa-d2', state.base === 'nasa');
     const layers = map.getStyle().layers;
     for (const l of layers) {
       if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
@@ -1253,8 +1256,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('load', () => {
       ready = true;
       registerEventIcons(map!);
-      // NASA layer date = yesterday (today's swaths are still incomplete)
+      // NASA "Tagesbild": yesterday on top, the day before underneath (fills swath gaps),
+      // Blue Marble at the very bottom (fills night and remaining gaps)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
+      (map!.getSource('nasad2') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(2))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();

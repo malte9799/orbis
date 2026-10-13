@@ -16,8 +16,12 @@ export function gibsDate(daysAgo = 1): string {
   return new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
 }
 
-export const gibsTrueColor = (date: string) =>
-  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+export const gibsTrueColor = (date: string, sat = 'VIIRS_NOAA20') =>
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${sat}_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+
+/** NASA Blue Marble: static, cloud-free, gap-free full-earth image – fills swath gaps and night. */
+export const BLUE_MARBLE =
+  'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg';
 
 /** Earth at night (NASA Black Marble 2016 composite). */
 export const BLACK_MARBLE = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png';
@@ -69,12 +73,25 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 18,
         attribution: 'Bilder © Esri, Maxar, Earthstar Geographics',
       },
+      bluemarble: {
+        type: 'raster',
+        tiles: [BLUE_MARBLE],
+        tileSize: 256,
+        maxzoom: 8,
+        attribution: 'NASA Blue Marble',
+      },
       nasa: {
         type: 'raster',
         tiles: [gibsTrueColor(nasaDate)],
         tileSize: 256,
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
+      },
+      nasad2: {
+        type: 'raster',
+        tiles: [gibsTrueColor(nasaDate)],
+        tileSize: 256,
+        maxzoom: 9,
       },
       blackmarble: {
         type: 'raster',
@@ -156,13 +173,19 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
     },
     layers: [
       { id: 'space', type: 'background', paint: { 'background-color': '#05070d' } },
-      ...(['satellite', 'nasa', 'night'] as const).map((id) => ({
-        id: `base-${id}`,
+      {
+        id: 'base-satellite',
         type: 'raster' as const,
-        source: id === 'night' ? 'blackmarble' : id,
+        source: 'satellite',
         layout: { visibility: 'none' as const },
-        paint: id === 'satellite' ? { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 } : {},
-      })),
+        paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
+      },
+      // NASA "Tagesbild": Blue Marble (gap-free) at the bottom, then two days of live imagery
+      // stacked on top so inter-orbit gaps and the night side fall through instead of going black.
+      { id: 'base-nasa-blue', type: 'raster' as const, source: 'bluemarble', layout: { visibility: 'none' as const }, paint: { 'raster-brightness-max': 0.9 } },
+      { id: 'base-nasa-d2', type: 'raster' as const, source: 'nasad2', layout: { visibility: 'none' as const } },
+      { id: 'base-nasa', type: 'raster' as const, source: 'nasa', layout: { visibility: 'none' as const } },
+      { id: 'base-night', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
       ...baseLayers('dark'),
       ...baseLayers('light'),
       {
