@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { fetchText, snapshotJson, snapshotText } from './data';
 
 // Earth & environment layers. All sources are free and keyless.
 
@@ -45,7 +46,7 @@ export async function loadAurora(): Promise<AuroraResult> {
 export async function loadGvpVolcanoes(): Promise<FeatureCollection<Point>> {
   const url =
     'https://webservices.volcano.si.edu/geoserver/GVP-VOTW/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=GVP-VOTW:Smithsonian_VOTW_Holocene_Volcanoes&outputFormat=application%2Fjson';
-  const json = await fetchJson<FeatureCollection<Point, Record<string, unknown>>>(url, undefined, 30000);
+  const json = await snapshotJson('volcanoes.json', () => fetchJson<FeatureCollection<Point, Record<string, unknown>>>(url, undefined, 30000));
   const year = new Date().getUTCFullYear();
   return {
     type: 'FeatureCollection',
@@ -120,18 +121,11 @@ export async function loadFirePerimeters(): Promise<FeatureCollection<Geometry>>
 // Tsunami messages – NOAA National / Pacific Tsunami Warning Centers (Atom feeds).
 
 export async function loadTsunami(): Promise<FeatureCollection<Point>> {
-  const feeds = ['https://www.tsunami.gov/events/xml/PAAQAtom.xml', 'https://www.tsunami.gov/events/xml/PHEBAtom.xml'];
+  const feeds = ['PAAQ', 'PHEB'];
   const results = await Promise.allSettled(
-    feeds.map(async (u) => {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 20000);
-      try {
-        const res = await fetch(u, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return new DOMParser().parseFromString(await res.text(), 'application/xml');
-      } finally {
-        clearTimeout(timer);
-      }
+    feeds.map(async (f) => {
+      const xml = await snapshotText(`tsunami/${f}.xml`, () => fetchText(`https://www.tsunami.gov/events/xml/${f}Atom.xml`));
+      return new DOMParser().parseFromString(xml, 'application/xml');
     }),
   );
   if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
@@ -180,14 +174,17 @@ export function doseColor(v: number) {
 }
 
 export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; failed: string[] }> {
-  const [bfs, safecast] = await Promise.allSettled([loadBfs(), loadSafecast()]);
+  const [bfs, eurdep, safecast] = await Promise.allSettled([loadBfs(), loadEurdep(), loadSafecast()]);
   const failed: string[] = [];
   const features: Feature<Point>[] = [];
   if (bfs.status === 'fulfilled') features.push(...bfs.value);
   else failed.push('BfS');
+  // EURDEP contains the German probes too – skip them when the BfS network loaded
+  if (eurdep.status === 'fulfilled') features.push(...eurdep.value.filter((f) => bfs.status !== 'fulfilled' || !String(f.properties?.sid).startsWith('DE')));
+  else failed.push('EURDEP');
   if (safecast.status === 'fulfilled') features.push(...safecast.value);
   else failed.push('Safecast');
-  if (failed.length === 2) throw (bfs as PromiseRejectedResult).reason;
+  if (failed.length === 3) throw (bfs as PromiseRejectedResult).reason;
   return { fc: { type: 'FeatureCollection', features }, failed };
 }
 
@@ -215,6 +212,51 @@ async function loadBfs(): Promise<Feature<Point>[]> {
     });
 }
 
+/** EURDEP – European Radiological Data Exchange Platform (~5,500 probes in 39 countries), via BfS. */
+async function loadEurdep(): Promise<Feature<Point>[]> {
+  const base =
+    'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=opendata:eurdep_latestValue&outputFormat=application/json&sortBy=id';
+  const all: Feature<Point, Record<string, unknown>>[] = [];
+  for (let start = 0; start < 20000; start += 5000) {
+    const page = await fetchJson<FeatureCollection<Point, Record<string, unknown>>>(`${base}&count=5000&startIndex=${start}`, undefined, 40000).catch((e) => {
+      if (start === 0) throw e;
+      return { type: 'FeatureCollection' as const, features: [] };
+    });
+    all.push(...page.features);
+    if (page.features.length < 5000) break;
+  }
+  // several averaging periods per probe – keep the shortest (most recent) one
+  const best = new Map<string, Feature<Point, Record<string, unknown>>>();
+  for (const f of all) {
+    const id = String(f.properties?.id ?? '');
+    const prev = best.get(id);
+    if (!prev || Number(f.properties.analyzed_range_in_h ?? 99) < Number(prev.properties.analyzed_range_in_h ?? 99)) best.set(id, f);
+  }
+  const out: Feature<Point>[] = [];
+  for (const f of best.values()) {
+    const p = f.properties;
+    if (!f.geometry) continue;
+    let v = Number(p.value);
+    const unit = String(p.unit ?? 'µSv/h');
+    if (/nsv/i.test(unit)) v /= 1000;
+    if (!Number.isFinite(v) || v <= 0) continue;
+    out.push(
+      point(f.geometry.coordinates[0], f.geometry.coordinates[1], {
+        sid: p.id,
+        v,
+        color: doseColor(v),
+        label: v.toFixed(2),
+        title: `Messstelle ${String(p.name ?? p.id)}`,
+        subtitle: `${v.toLocaleString('de-DE', { maximumFractionDigits: 3 })} µSv/h · ${String(p.id).slice(0, 2)}`,
+        date: p.end_measure ?? '',
+        url: 'https://remap.jrc.ec.europa.eu/Advanced.aspx',
+        source: 'EURDEP (EU-Kommission, JRC) via BfS',
+      }),
+    );
+  }
+  return out;
+}
+
 interface SafecastDevice {
   device_urn?: string;
   device?: number;
@@ -230,7 +272,7 @@ interface SafecastDevice {
 }
 
 async function loadSafecast(): Promise<Feature<Point>[]> {
-  const list = await fetchJson<SafecastDevice[]>('https://tt.safecast.org/devices', undefined, 30000);
+  const list = await snapshotJson('safecast.json', () => fetchJson<SafecastDevice[]>('https://tt.safecast.org/devices', undefined, 30000));
   const cutoff = Date.now() - 3 * 86400000;
   const out: Feature<Point>[] = [];
   for (const d of list) {

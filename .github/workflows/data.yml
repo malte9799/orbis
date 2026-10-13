@@ -1,0 +1,51 @@
+name: Update data snapshots
+
+# Downloads sources that browsers cannot query directly (no CORS) into the `data` branch,
+# served to the app via raw.githubusercontent.com. Live feeds every 15 min, others daily.
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/fetch-data.ts', 'src/api/camfeeds.ts', '.github/workflows/data.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-snapshots
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Previous snapshot
+        run: |
+          if git fetch --depth=1 origin data; then
+            git worktree add --detach ../data-prev FETCH_HEAD
+          else
+            mkdir -p ../data-prev
+          fi
+      - name: Download sources
+        run: |
+          npx esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
+          node ../fetch-data.mjs ../data-out ../data-prev
+      - name: Publish data branch
+        working-directory: ../data-out
+        run: |
+          rm -rf .git
+          git init -q -b data
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Data snapshot $(date -u +%Y-%m-%dT%H:%MZ)"
+          # a single orphan commit keeps the branch small
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data

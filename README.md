@@ -59,7 +59,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Erde & Umwelt | Alle ~1.300 Vulkane mit letztem Ausbruch | Smithsonian Global Volcanism Program |
 | Erde & Umwelt | Waldbrand-Flächen USA | NIFC WFIGS |
 | Erde & Umwelt | Tsunami-Meldungen (7 Tage) | NOAA National/Pacific Tsunami Warning Center |
-| Erde & Umwelt | Radioaktivität (Ortsdosisleistung) | BfS ODL-Messnetz (DE), Safecast (weltweit, CC0) |
+| Erde & Umwelt | Radioaktivität (Ortsdosisleistung) | BfS ODL-Messnetz (DE), EURDEP (~5.500 Sonden, 39 Länder), Safecast (weltweit, CC0) |
 | Wetter | Meerestemperatur, Meereis | NASA GHRSST MUR, AMSR2 (GIBS) |
 | Luftraum | Raketenstarts mit Countdown & Livestream-Link | The Space Devs Launch Library 2 |
 | Luftraum | Flughäfen mit Abflügen/Ankünften vom Vortag | OpenFreeMap/OSM, OpenSky Network |
@@ -120,6 +120,15 @@ Nicht jede ADS-B-Quelle erlaubt direkte Abrufe aus dem Browser (CORS). Falls im 
 `proxy/cloudflare-worker.js` als Cloudflare Worker anlegen (Workers & Pages → Create → Worker,
 Code ersetzen, Deploy) und die Worker-URL in Orbis unter *Einstellungen → Flugdaten-Proxy*
 eintragen. Der Proxy leitet nur Anfragen an die bekannten Flugdatenquellen weiter.
+
+### Daten-Snapshots (`data`-Branch)
+
+Einige Quellen erlauben keine Abrufe direkt aus dem Browser (fehlende CORS-Header): Seekabel
+(TeleGeography), Vulkane (Smithsonian), Tsunami-Meldungen (NOAA), Safecast, Radio Browser und
+mehrere Webcam-Listen. `.github/workflows/data.yml` lädt sie deshalb serverseitig – live alle
+15 Minuten, den Rest täglich – mit `scripts/fetch-data.ts` in den Branch `data`. Die App liest
+sie über `raw.githubusercontent.com` und fällt sonst auf die Originalquelle zurück. Der erste
+Lauf startet automatisch beim Push, danach per Zeitplan (oder manuell unter *Actions*).
 
 ## Hinweise
 

@@ -23,7 +23,8 @@ import {
 import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { loadTransitNetwork } from '../api/networks';
-import { camFeedsInView } from '../api/camfeeds';
+import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
+import { snapshotJson } from '../api/data';
 import { loadNearbyStations, loadTopStations } from '../api/radio';
 import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
@@ -76,7 +77,6 @@ export type ExtraId =
   | 'pipelines'
   | 'geology'
   | 'plates'
-  | 'nightlights'
   | 'ndvi'
   | 'lst'
   | 'snowcover'
@@ -113,11 +113,10 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
-  { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
+  { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (39 Länder Europas), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
   { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
   { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
   { id: 'plates', section: 'earth', label: 'Tektonische Platten', hint: 'Plattengrenzen (PB2002, Bird 2003)', glyph: 'quake', color: '#ef5350' },
-  { id: 'nightlights', section: 'earth', label: 'Nachtlichter', hint: 'Erde bei Nacht – NASA Black Marble', glyph: 'city', color: '#ffd54f' },
   { id: 'ndvi', section: 'earth', label: 'Vegetation', hint: 'Pflanzenwachstum (NDVI, 8 Tage) – NASA MODIS', glyph: 'wind', color: '#66bb6a' },
   { id: 'lst', section: 'earth', label: 'Bodentemperatur', hint: 'Landoberflächentemperatur am Tag – NASA MODIS', glyph: 'heat', color: '#ff7043' },
   { id: 'snowcover', section: 'earth', label: 'Schneedecke (Satellit)', hint: 'Schneebedeckung – NASA MODIS', glyph: 'ice', color: '#e1f5fe' },
@@ -188,7 +187,6 @@ const LAYERS: Record<ExtraId, string[]> = {
   pipelines: ['pipelines'],
   geology: ['geology'],
   plates: ['plates'],
-  nightlights: ['nightlights'],
   ndvi: ['ndvi'],
   lst: ['lst'],
   snowcover: ['snowcover'],
@@ -298,7 +296,7 @@ export class ExtraLayers {
       gvp: 'Vulkane: <a href="https://volcano.si.edu/">Smithsonian GVP</a>',
       fireareas: 'Brandflächen: <a href="https://data-nifc.opendata.arcgis.com/">NIFC</a>',
       tsunami: 'Tsunami: <a href="https://www.tsunami.gov/">NOAA</a>',
-      radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://safecast.org/">Safecast</a> (CC0)',
+      radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://remap.jrc.ec.europa.eu/">EURDEP</a>, <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC, data.gov.my, Transport Victoria (CC BY 4.0), CTA, Trafiklab',
@@ -428,7 +426,6 @@ export class ExtraLayers {
       if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution, ...extra });
       add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
     };
-    overlay('nightlights', [gibsWms('VIIRS_Black_Marble', '2016-01-01')], 'Nachtlichter: NASA Black Marble', 8, 0.9);
     overlay('ndvi', [gibsWms('MODIS_Terra_NDVI_8Day')], 'Vegetation: NASA MODIS NDVI', 9, 0.75);
     overlay('lst', [gibsWms('MODIS_Terra_Land_Surface_Temp_Day')], 'Bodentemperatur: NASA MODIS', 7, 0.75);
     overlay('snowcover', [gibsWms('MODIS_Terra_NDSI_Snow_Cover')], 'Schneedecke: NASA MODIS', 8, 0.85);
@@ -1250,7 +1247,7 @@ export class ExtraLayers {
           this.loadOnce('radiation', 60 * 60000, async () => {
             const r = await loadRadiation();
             this.setData('radiation', r.fc);
-            return { count: r.fc.features.length, note: r.failed.length ? `${r.failed.join(', ')} nicht erreichbar` : 'Normalbereich in Deutschland: 0,05–0,18 µSv/h' };
+            return { count: r.fc.features.length, note: r.failed.length ? `${r.failed.join(', ')} nicht erreichbar` : 'natürlicher Normalbereich: 0,04–0,20 µSv/h' };
           });
           break;
         case 'launches':
@@ -1863,8 +1860,9 @@ export class ExtraLayers {
       const maxAge = (feed.id === 'singapore' ? 4 : 10) * 60000;
       if (this.camFeedLoading.has(feed.id) || (prev && Date.now() - prev.at < maxAge)) continue;
       this.camFeedLoading.add(feed.id);
-      feed
-        .load()
+      // camera lists are mirrored daily into the data branch (images still load live)
+      const load = SNAPSHOT_CAMS.has(feed.id) ? () => snapshotJson(`cams/${feed.id}.json`, () => feed.load()) : () => feed.load();
+      load()
         .then((features) => {
           this.camFeeds.set(feed.id, { at: Date.now(), features });
           this.camFeedErrors.delete(feed.label);

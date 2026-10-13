@@ -44,7 +44,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -532,6 +532,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const BASE_THUMB: Record<BaseId, string> = {
     satellite: `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`,
     nasa: `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`,
+    night: `<img alt="" loading="lazy" src="${BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
     dark: miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a'),
     light: miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5'),
   };

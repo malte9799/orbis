@@ -1,11 +1,12 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { snapshotJson, snapshotsAvailable } from './data';
 
 // Radio stations from the community database Radio Browser (radio-browser.info, free, public
 // domain data). Overview: the most-listened stations worldwide; zoomed in: all stations
 // near the map centre. Streams play directly in the built-in player.
 
-interface RbStation {
+export interface RbStation {
   stationuuid: string;
   name: string;
   url_resolved: string;
@@ -80,15 +81,47 @@ function toFeatures(list: RbStation[]): FeatureCollection<Point> {
 
 const FIELDS = 'has_geo_info=true&hidebroken=true&order=clickcount&reverse=true';
 
+// The station list is mirrored daily into the data branch (top list + 10° cells), so the
+// map works even when the Radio Browser mirrors are slow or refuse browser requests.
+
 /** Most popular stations worldwide (overview). */
 export async function loadTopStations(): Promise<FeatureCollection<Point>> {
-  return toFeatures(await rb<RbStation[]>(`/json/stations/search?${FIELDS}&limit=4000`));
+  return toFeatures(await snapshotJson('radio/top.json', () => rb<RbStation[]>(`/json/stations/search?${FIELDS}&limit=4000`)));
 }
+
+export const radioCell = (lat: number, lon: number) => `${Math.floor(lat / 10) * 10}_${Math.floor(lon / 10) * 10}`;
+const cellCache = new Map<string, Promise<RbStation[]>>();
 
 /** Stations around a point. */
 export async function loadNearbyStations(lat: number, lon: number, radiusKm: number): Promise<FeatureCollection<Point>> {
-  const r = Math.round(Math.min(600, Math.max(10, radiusKm)) * 1000);
-  return toFeatures(await rb<RbStation[]>(`/json/stations/search?${FIELDS}&limit=1500&geo_lat=${lat.toFixed(3)}&geo_long=${lon.toFixed(3)}&geo_distance=${r}`));
+  const rKm = Math.min(600, Math.max(10, radiusKm));
+  const dLat = rKm / 111;
+  const dLon = rKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  const cells = new Set<string>();
+  for (let y = Math.floor((lat - dLat) / 10) * 10; y <= lat + dLat; y += 10) for (let x = Math.floor((lon - dLon) / 10) * 10; x <= lon + dLon; x += 10) cells.add(radioCell(y, x));
+  try {
+    if (!(await snapshotsAvailable())) throw new Error('no snapshots');
+    const lists = await Promise.all(
+      [...cells].map((c) => {
+        let p = cellCache.get(c);
+        if (!p) {
+          p = snapshotJson<RbStation[]>(`radio/cells/${c}.json`).catch((e) => {
+            // an empty cell has no file – only a failing first cell means "no snapshot"
+            if (String(e).includes('404')) return [];
+            cellCache.delete(c);
+            throw e;
+          });
+          cellCache.set(c, p);
+        }
+        return p;
+      }),
+    );
+    const near = lists.flat().filter((s) => s.geo_lat != null && s.geo_long != null && Math.abs(s.geo_lat - lat) <= dLat && Math.abs(s.geo_long - lon) <= dLon);
+    return toFeatures(near);
+  } catch {
+    const r = Math.round(rKm * 1000);
+    return toFeatures(await rb<RbStation[]>(`/json/stations/search?${FIELDS}&limit=1500&geo_lat=${lat.toFixed(3)}&geo_long=${lon.toFixed(3)}&geo_distance=${r}`));
+  }
 }
 
 /** Count a click (asked for by Radio Browser) and get the current stream URL. */

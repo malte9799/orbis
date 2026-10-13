@@ -1,11 +1,12 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
-export type BaseId = 'satellite' | 'nasa' | 'dark' | 'light';
+export type BaseId = 'satellite' | 'nasa' | 'night' | 'dark' | 'light';
 
 export const BASES: { id: BaseId; label: string }[] = [
   { id: 'satellite', label: 'Satellit' },
   { id: 'nasa', label: 'NASA Tagesbild' },
+  { id: 'night', label: 'Nachtlichter' },
   { id: 'dark', label: 'Dunkel' },
   { id: 'light', label: 'Hell' },
 ];
@@ -17,6 +18,9 @@ export function gibsDate(daysAgo = 1): string {
 
 export const gibsTrueColor = (date: string) =>
   `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${date}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+
+/** Earth at night (NASA Black Marble 2016 composite). */
+export const BLACK_MARBLE = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png';
 
 /** NASA FIRMS thermal anomalies rendered by GIBS WMS (works for its vector layers too). */
 export const gibsFires = (date: string) =>
@@ -71,6 +75,13 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tileSize: 256,
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
+      },
+      blackmarble: {
+        type: 'raster',
+        tiles: [BLACK_MARBLE],
+        tileSize: 256,
+        maxzoom: 8,
+        attribution: 'Nachtlichter: NASA Black Marble',
       },
       ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR },
       'dwd-radar': {
@@ -145,10 +156,10 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
     },
     layers: [
       { id: 'space', type: 'background', paint: { 'background-color': '#05070d' } },
-      ...(['satellite', 'nasa'] as const).map((id) => ({
+      ...(['satellite', 'nasa', 'night'] as const).map((id) => ({
         id: `base-${id}`,
         type: 'raster' as const,
-        source: id,
+        source: id === 'night' ? 'blackmarble' : id,
         layout: { visibility: 'none' as const },
         paint: id === 'satellite' ? { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 } : {},
       })),

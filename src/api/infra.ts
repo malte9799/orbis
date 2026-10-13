@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson, fmt } from '../util';
+import { snapshotJson } from './data';
 
 // ---------------------------------------------------------------------------
 // Shipping lanes – "Global Shipping Lanes" by P. Benden (CC BY 4.0), static GeoJSON on GitHub
@@ -23,9 +24,10 @@ export async function loadShippingLanes(): Promise<FeatureCollection> {
 const CABLE_API = 'https://www.submarinecablemap.com/api/v3';
 
 export async function loadCables(): Promise<{ cables: FeatureCollection; landings: FeatureCollection }> {
+  // TeleGeography sends no CORS headers – use the snapshot from the data branch
   const [cables, landings] = await Promise.all([
-    fetchJson<FeatureCollection>(`${CABLE_API}/cable/cable-geo.json`, undefined, 40000),
-    fetchJson<FeatureCollection>(`${CABLE_API}/landing-point/landing-point-geo.json`, undefined, 40000).catch(
+    snapshotJson('cables/cable-geo.json', () => fetchJson<FeatureCollection>(`${CABLE_API}/cable/cable-geo.json`, undefined, 40000)),
+    snapshotJson('cables/landing-point-geo.json', () => fetchJson<FeatureCollection>(`${CABLE_API}/landing-point/landing-point-geo.json`, undefined, 40000)).catch(
       () => ({ type: 'FeatureCollection', features: [] }) as FeatureCollection,
     ),
   ]);
@@ -41,8 +43,12 @@ export interface CableDetails {
   landing_points?: { name: string }[];
 }
 
-export function loadCableDetails(id: string): Promise<CableDetails> {
-  return fetchJson<CableDetails>(`${CABLE_API}/cable/${encodeURIComponent(id)}.json`, undefined, 15000);
+let cableDetails: Promise<Record<string, CableDetails>> | null = null;
+
+export async function loadCableDetails(id: string): Promise<CableDetails> {
+  cableDetails ??= snapshotJson<Record<string, CableDetails>>('cables/details.json').catch(() => ({}));
+  const d = (await cableDetails)[id];
+  return d ?? fetchJson<CableDetails>(`${CABLE_API}/cable/${encodeURIComponent(id)}.json`, undefined, 15000);
 }
 
 export const cableUrl = (id: string) => `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(id)}`;
