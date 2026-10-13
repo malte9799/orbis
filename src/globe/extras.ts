@@ -4,6 +4,7 @@ import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from 
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
+import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadTsunami } from '../api/earth';
 import {
   AisStream,
@@ -58,6 +59,7 @@ export type ExtraId =
   | 'gvp'
   | 'fireareas'
   | 'tsunami'
+  | 'lightning'
   | 'radiation'
   | 'launches'
   | 'airports'
@@ -114,6 +116,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
+  { id: 'lightning', section: 'earth', label: 'Blitze live', hint: 'Einschläge der letzten 15 Minuten weltweit – Blitzortung.org', glyph: 'bolt', color: '#ffd600' },
   { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (39 Länder Europas), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
   { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
   { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
@@ -170,6 +173,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
   tsunami: ['tsunami-ring', 'tsunami'],
+  lightning: ['lightning-glow', 'lightning'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
   airports: ['airports', 'airports-minor'],
@@ -201,7 +205,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -277,6 +281,7 @@ export class ExtraLayers {
   private feedLoading = new Set<string>();
   private feedErrors = new Set<string>();
   private ais: AisStream | null = null;
+  private lightning: LightningStream | null = null;
 
   constructor(
     private map: MlMap,
@@ -302,6 +307,7 @@ export class ExtraLayers {
       gvp: 'Vulkane: <a href="https://volcano.si.edu/">Smithsonian GVP</a>',
       fireareas: 'Brandflächen: <a href="https://data-nifc.opendata.arcgis.com/">NIFC</a>',
       tsunami: 'Tsunami: <a href="https://www.tsunami.gov/">NOAA</a>',
+      lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> (nicht-kommerziell)',
       radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://remap.jrc.ec.europa.eu/">EURDEP</a>, <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
@@ -315,7 +321,7 @@ export class ExtraLayers {
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -691,6 +697,38 @@ export class ExtraLayers {
         type: 'symbol',
         source: 'tsunami',
         layout: { ...hidden, 'icon-image': 'glyph-tsunami', 'icon-size': 0.8, 'icon-allow-overlap': true },
+      },
+      'marker',
+    );
+    // live lightning: newest strikes bright yellow/white, ageing to dark red
+    const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
+    add(
+      {
+        id: 'lightning-glow',
+        type: 'circle',
+        source: 'lightning',
+        layout: hidden,
+        filter: ['==', ['get', 'age'], 0],
+        paint: {
+          'circle-color': 'rgba(255,230,80,0.35)',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 5, 8, 12],
+          'circle-blur': 0.8,
+        },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'lightning',
+        type: 'circle',
+        source: 'lightning',
+        layout: hidden,
+        paint: {
+          'circle-color': strikeColor,
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 1.6, 6, 3, 10, 5],
+          'circle-stroke-color': 'rgba(0,0,0,0.5)',
+          'circle-stroke-width': 0.5,
+        },
       },
       'marker',
     );
@@ -1251,6 +1289,12 @@ export class ExtraLayers {
             return { count: fc.features.length, note: !fc.features.length ? 'keine Meldungen in den letzten 7 Tagen' : warn ? `${warn} aktive Warnung(en)!` : undefined };
           });
           break;
+        case 'lightning':
+          this.lightning ??= new LightningStream(() => this.lightningStatus());
+          this.lightning.start();
+          this.every('lightning', 3000, () => this.updateLightning());
+          this.updateLightning();
+          break;
         case 'radiation':
           this.loadOnce('radiation', 60 * 60000, async () => {
             const r = await loadRadiation();
@@ -1335,6 +1379,11 @@ export class ExtraLayers {
       this.clear('veh-anim');
       this.clear('veh-fetch');
       this.clear('veh-feeds');
+    }
+    if (!this.on.has('lightning')) {
+      this.clear('lightning');
+      this.lightning?.stop();
+      this.setData('lightning', empty());
     }
     if (!this.on.has('ships') || !hasAisKey()) {
       this.clear('ais-push');
@@ -1846,6 +1895,21 @@ export class ExtraLayers {
     return { note: note ?? this.info.ships?.note };
   }
 
+  private updateLightning() {
+    const l = this.lightning;
+    if (!l) return;
+    this.setData('lightning', l.features());
+    this.lightningStatus();
+  }
+
+  private lightningStatus() {
+    const l = this.lightning;
+    if (!l) return;
+    const note = l.error || (l.connected ? `live verbunden · ${fmt.num(l.received)} Blitze seit Aktivierung · weiß = jetzt, rot = bis 15 min` : 'verbinde …');
+    const prev = this.info.lightning;
+    if (prev?.count !== l.count || prev?.note !== note) this.set('lightning', { count: l.count, note });
+  }
+
   private mergeShips() {
     const all = new Map<number, Ship>();
     for (const s of this.baltic) all.set(s.mmsi, s);
@@ -2156,6 +2220,13 @@ export class ExtraLayers {
         return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'radiation':
         return { type: 'html', html: html('radiation', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'lightning': {
+        const at = Number(p.at);
+        const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
+        const ago = secs < 90 ? `vor ${secs} s` : `vor ${Math.round(secs / 60)} min`;
+        const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b></div>`;
+        return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
+      }
       case 'launches': {
         let list: Launch[] = [];
         try {
