@@ -441,7 +441,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <div class="tile-grid">${extraTiles('infra')}</div>
       <h3>Verkehrsnetze</h3>
       <div class="tile-grid">${extraTiles('networks')}</div>
-      <h3>Kameras</h3>
+      <h3>Kameras &amp; Radio</h3>
       <div class="tile-grid">${extraTiles('cams')}</div>`;
 
     const tabBtn = (id: PanelTab, label: string, n: number) =>
@@ -612,6 +612,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="windy" value="${escapeHtml(keys.windy ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">aisstream.io <small>(kostenloser Schlüssel von aisstream.io – Schiffe weltweit live)</small>
           <input type="password" data-key="aisstream" value="${escapeHtml(keys.aisstream ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
+        <label class="field-label">US National Park Service <small>(kostenloser Schlüssel von nps.gov/subjects/developer – Nationalpark-Webcams)</small>
+          <input type="password" data-key="nps" value="${escapeHtml(keys.nps ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <h3>Nahverkehr live (optional)</h3>
         <label class="field-label">Transport Victoria <small>(KeyId von opendata.transport.vic.gov.au – Melbourne: Züge, Trams, Busse)</small>
           <input type="password" data-key="victoria" value="${escapeHtml(keys.victoria ?? '')}" placeholder="KeyId" autocomplete="off"/></label>
@@ -637,7 +639,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       const proxy = get('adsbProxy');
-      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
+      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();

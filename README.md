@@ -69,6 +69,8 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Verkehr | Autobahn: Staus, Sperrungen, Baustellen | Autobahn GmbH des Bundes |
 | Europa | Bevölkerungswarnungen (MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei) | NINA / BBK |
 | Kameras | Live-Webcams (Bild im Popup) | Fintraffic Digitraffic (Finnland, CC BY 4.0), OpenStreetMap, optional Windy Webcams (kostenloser Schlüssel) |
+| Kameras | Weitere Live-Webcams: London (mit Videoclips), New York, Washington D.C., Kalifornien (Caltrans, ALERTCalifornia-Waldbrandkameras), Ontario, Alberta, Hongkong, Singapur, Autobahn; optional US-Nationalparks | TfL, NYC DOT, DDOT, Caltrans, UC San Diego, 511, HK Transport Department, LTA, Autobahn GmbH, NPS |
+| Radio | Über 50.000 Radiosender weltweit, direkt im eingebauten Player hörbar | Radio Browser |
 | Kameras | Kennzeichen-Kameras (ALPR, u. a. Flock Safety) mit Blickrichtung | OpenStreetMap/DeFlock: Übersicht USA/Kanada aus [deflock-data](https://github.com/flockhopper3/deflock-data), ab Zoom 9 weltweit live per Overpass |
 | Luftraum | Wetterballons (Radiosonden) | SondeHub |
 | Weltraum | Satelliten (ISS, Wetter-, GPS-, Galileo-Satelliten), Starlink, Bodenspur per Klick | CelesTrak + SGP4 im Browser |

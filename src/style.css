@@ -2276,3 +2276,68 @@ svg.hourly {
 .pop-list li {
   line-height: 1.35;
 }
+
+/* radio player */
+.radio-player {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 10px 8px 12px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.radio-player[hidden] {
+  display: none;
+}
+.rp-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+  flex: none;
+}
+.rp-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.rp-text b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.rp-vol {
+  width: 90px;
+  accent-color: #ff4081;
+}
+.rp-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.rp-actions .btn {
+  text-decoration: none;
+}
+@media (max-width: 640px) {
+  .radio-player {
+    bottom: 150px;
+  }
+  .rp-vol {
+    display: none;
+  }
+}

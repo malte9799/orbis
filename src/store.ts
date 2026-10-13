@@ -13,6 +13,8 @@ export interface ApiKeys {
   cta?: string;
   /** Trafiklab GTFS Regional realtime (free) */
   trafiklab?: string;
+  /** US National Park Service API (free) */
+  nps?: string;
 }
 
 export interface Place {

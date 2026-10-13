@@ -29,7 +29,8 @@ export type ExtraGlyph =
   | 'radiation'
   | 'tsunami'
   | 'airport'
-  | 'vessel';
+  | 'vessel'
+  | 'radio';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -108,6 +109,10 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   tsunami: [{ mode: 'stroke', width: 2.2, d: 'M2.5 19c3 0 3.5-1.5 6-1.5S12 19 14.5 19s4-1 7-1M3 14.5C6 7 12 4 17.5 6c-3 .5-4.5 3-3.5 5.5 1 2.4 4 2.6 6 1.3' }],
   airport: [{ mode: 'fill', d: SILHOUETTES.plane! }],
   vessel: [{ mode: 'fill', d: SILHOUETTES.vessel! }],
+  radio: [
+    { mode: 'fill', d: 'M4 9h16a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 21H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 9z' },
+    { mode: 'stroke', width: 2, d: 'M6 8.5L17 3.5' },
+  ],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px

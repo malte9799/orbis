@@ -23,6 +23,9 @@ import {
 import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { loadTransitNetwork } from '../api/networks';
+import { camFeedsInView } from '../api/camfeeds';
+import { loadNearbyStations, loadTopStations } from '../api/radio';
+import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
@@ -66,7 +69,8 @@ export type ExtraId =
   | 'railspeed'
   | 'railelec'
   | 'cyclenet'
-  | 'hikenet';
+  | 'hikenet'
+  | 'radio';
 
 export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'networks' | 'cams';
 
@@ -85,7 +89,7 @@ export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
   { id: 'networks', title: 'Verkehrsnetze' },
-  { id: 'cams', title: 'Kameras' },
+  { id: 'cams', title: 'Kameras & Radio' },
 ];
 
 export const EXTRAS: ExtraDef[] = [
@@ -121,7 +125,8 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
   { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Kern, Kohle, Gas, Wasser, Biomasse …', glyph: 'plant', color: FUELS.Nuclear.color },
-  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'Fintraffic, OpenStreetMap, optional Windy (kostenloser Schlüssel)', glyph: 'webcam', color: '#00bfa5' },
+  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
+  { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
 ];
 
@@ -157,6 +162,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   railelec: ['railelec'],
   cyclenet: ['cyclenet'],
   hikenet: ['hikenet'],
+  radio: ['radio', 'radio-label'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
@@ -165,7 +171,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -206,6 +212,9 @@ export class ExtraLayers {
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
+  private camFeeds = new Map<string, { at: number; features: Feature<Point>[] }>();
+  private camFeedLoading = new Set<string>();
+  private camFeedErrors = new Set<string>();
   private camKey = '';
   private osmCamCount = 0;
   private windyKey = '';
@@ -215,6 +224,9 @@ export class ExtraLayers {
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
   private busnetKey = '';
+  private radioTop: FeatureCollection | null = null;
+  private radioNear: FeatureCollection = empty();
+  private radioKey = '';
   private segs: Segment[] = [];
   private segKey = '';
   private segAt = 0;
@@ -257,8 +269,9 @@ export class ExtraLayers {
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
       busnet: 'ÖPNV-Netz: © OpenStreetMap-Mitwirkende',
+      radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -740,6 +753,33 @@ export class ExtraLayers {
       },
       'marker',
     );
+    add(
+      {
+        id: 'radio',
+        type: 'circle',
+        source: 'radio',
+        layout: { ...hidden, 'circle-sort-key': ['get', 'clicks'] },
+        paint: {
+          'circle-color': ['case', ['get', 'playable'], '#ff4081', '#b0789a'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['interpolate', ['linear'], ['get', 'clicks'], 0, 1.5, 5000, 4], 8, ['interpolate', ['linear'], ['get', 'clicks'], 0, 4, 5000, 8]],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1, 0.3, 8, 1.2],
+          'circle-opacity': 0.9,
+        },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'radio-label',
+        type: 'symbol',
+        source: 'radio',
+        minzoom: 8,
+        layout: { ...hidden, 'text-field': ['get', 'name'], 'text-font': FONT_REGULAR, 'text-size': 10, 'text-offset': [0, 1.0], 'text-anchor': 'top', 'text-optional': true, 'symbol-sort-key': ['-', 0, ['get', 'clicks']] },
+        paint: { 'text-color': '#ffd1e3', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.2 },
+      },
+      'marker',
+    );
     // cameras
     const camIcon = (id: string, source: string): LayerSpecification => ({
       id,
@@ -943,6 +983,7 @@ export class ExtraLayers {
   onMoveEnd() {
     if (this.on.has('aircraft')) this.loadAircraftNow();
     if (this.on.has('busnet')) this.loadBusnetNow();
+    if (this.on.has('radio')) this.loadRadioNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
@@ -1136,6 +1177,9 @@ export class ExtraLayers {
           break;
         case 'busnet':
           this.loadBusnetNow();
+          break;
+        case 'radio':
+          this.loadRadioNow();
           break;
         case 'nina':
           this.loadOnce('nina', 5 * 60000, async () => {
@@ -1355,6 +1399,56 @@ export class ExtraLayers {
   // -------------------------------------------------------------------------
   // Trains & public transport
 
+  /** Radio: popular stations worldwide, all stations around the centre from zoom 6. */
+  private loadRadioNow() {
+    if (!this.radioTop && !this.info.radio?.loading) {
+      this.set('radio', { loading: true });
+      loadTopStations()
+        .then((fc) => {
+          this.radioTop = fc;
+          this.mergeRadio();
+        })
+        .catch((e) => {
+          console.warn('Radio Browser', e);
+          this.set('radio', { loading: false, note: 'Radio Browser nicht erreichbar' });
+        });
+    }
+    const z = this.map.getZoom();
+    if (z < 6) {
+      this.set('radio', { note: 'beliebteste Sender weltweit – reinzoomen für alle Sender der Region' });
+      return;
+    }
+    const c = this.map.getCenter();
+    const b = this.map.getBounds();
+    const km = Math.min(600, (Math.abs(b.getNorth() - b.getSouth()) * 111) / 1.4);
+    const key = `${c.lat.toFixed(1)},${c.lng.toFixed(1)},${Math.round(km / 25)}`;
+    if (key === this.radioKey) return;
+    this.radioKey = key;
+    loadNearbyStations(c.lat, c.lng, km)
+      .then((fc) => {
+        if (this.radioKey !== key) return;
+        this.radioNear = fc;
+        this.mergeRadio();
+      })
+      .catch((e) => {
+        console.warn('Radio Browser nearby', e);
+        this.radioKey = '';
+      });
+  }
+
+  private mergeRadio() {
+    const seen = new Set<string>();
+    const features = [...this.radioNear.features, ...(this.radioTop?.features ?? [])].filter((f) => {
+      const id = String(f.properties?.id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+    this.setData('radio', { type: 'FeatureCollection', features });
+    const playable = features.filter((f) => f.properties?.playable).length;
+    this.set('radio', { loading: false, count: features.length, note: `${playable} direkt abspielbar (pink) · andere öffnen im neuen Tab` });
+  }
+
   /** OSM public transport lines for the view (from zoom 11 – Overpass results get large). */
   private loadBusnetNow() {
     const z = this.map.getZoom();
@@ -1526,7 +1620,8 @@ export class ExtraLayers {
   }
 
   private mergeWebcams() {
-    const all = { type: 'FeatureCollection' as const, features: [...this.fiCams.features, ...this.windyCams.features] };
+    const feedCams = [...this.camFeeds.values()].flatMap((f) => f.features);
+    const all = { type: 'FeatureCollection' as const, features: [...this.fiCams.features, ...this.windyCams.features, ...feedCams] };
     this.setData('webcams', all);
     this.set('webcams', { count: all.features.length + this.osmCamCount || undefined });
     this.updateWebcamNote();
@@ -1535,6 +1630,7 @@ export class ExtraLayers {
   private updateWebcamNote() {
     const notes: string[] = [];
     if (this.map.getZoom() < CAM_DETAIL_ZOOM) notes.push('Webcams aus OpenStreetMap ab Zoomstufe 9');
+    if (this.camFeedErrors.size) notes.push(`${[...this.camFeedErrors].join(', ')} nicht erreichbar`);
     if (!hasWindyKey()) notes.push('weltweit viele weitere mit kostenlosem Windy-Schlüssel (Einstellungen)');
     else if (this.map.getZoom() < 5) notes.push('Windy-Webcams ab Zoomstufe 5');
     this.set('webcams', { note: notes.join(' · ') || undefined });
@@ -1543,6 +1639,29 @@ export class ExtraLayers {
   private loadWebcamsNow() {
     const m = this.map;
     const z = m.getZoom();
+    // regional camera feeds (London, California, Hong Kong, …) once their region is in view
+    const vb = m.getBounds();
+    for (const feed of camFeedsInView({ west: vb.getWest(), south: vb.getSouth(), east: vb.getEast(), north: vb.getNorth() })) {
+      const prev = this.camFeeds.get(feed.id);
+      // signed image URLs (Singapore) expire – refresh those more often
+      const maxAge = (feed.id === 'singapore' ? 4 : 10) * 60000;
+      if (this.camFeedLoading.has(feed.id) || (prev && Date.now() - prev.at < maxAge)) continue;
+      this.camFeedLoading.add(feed.id);
+      feed
+        .load()
+        .then((features) => {
+          this.camFeeds.set(feed.id, { at: Date.now(), features });
+          this.camFeedErrors.delete(feed.label);
+          this.mergeWebcams();
+        })
+        .catch((e) => {
+          console.warn('Webcams', feed.id, e);
+          this.camFeeds.set(feed.id, { at: Date.now(), features: prev?.features ?? [] });
+          this.camFeedErrors.add(feed.label);
+          this.updateWebcamNote();
+        })
+        .finally(() => this.camFeedLoading.delete(feed.id));
+    }
     // OpenStreetMap webcams for the visible area
     if (z >= CAM_DETAIL_ZOOM) {
       const b = this.viewBounds();
@@ -1753,8 +1872,11 @@ export class ExtraLayers {
       case 'webcams-osm': {
         const img = safeUrl(p.image);
         // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
-        const src = img && p.kind === 'road' ? `${img}?t=${Math.floor(Date.now() / 60000)}` : img;
-        const extra = src
+        const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
+        const video = safeUrl(p.video);
+        const extra = video
+          ? `<video class="pop-cam" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
+          : src
           ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
           : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
         return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle: p.subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
@@ -1801,6 +1923,17 @@ export class ExtraLayers {
           lat: pt[1],
         };
       }
+      case 'radio':
+        return {
+          type: 'html',
+          html: cardHtml({ glyph: 'radio', color: '#ff4081', title: p.name, source: 'Radio Browser', extra: radioPopupExtra(p) }),
+          lng: pt[0],
+          lat: pt[1],
+          after: (node) =>
+            node.querySelector('.rp-play')?.addEventListener('click', () =>
+              playStation({ id: String(p.id), name: String(p.name), stream: String(p.stream), favicon: String(p.favicon ?? ''), place: String(p.place ?? '') }),
+            ),
+        };
       case 'busnet-line': {
         const rows = [
           ['Verkehrsmittel', p.modeLabel],
