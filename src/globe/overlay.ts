@@ -31,6 +31,12 @@ export interface FieldDef {
   format(v: number): string;
   /** show wind particles automatically */
   particles?: boolean;
+  /**
+   * Cosmetic sub-grid structure for patchy fields: `warp` shifts the sample position by
+   * fractal noise (fraction of the grid spacing), `texture` modulates the value. Only the
+   * rendered image uses this – readouts stay on the plain interpolated value.
+   */
+  organic?: { warp: number; texture?: number; additive?: boolean };
 }
 
 const WIND_STOPS: [number, string][] = [
@@ -145,6 +151,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Luftfeuchtigkeit',
     unit: '%',
     variable: 'relative_humidity_2m',
+    organic: { warp: 0.3 },
     color: ramp(HUMIDITY_STOPS, 175),
     legend: { stops: HUMIDITY_STOPS, ticks: [0, 25, 50, 75, 100] },
     format: num(),
@@ -161,6 +168,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Niederschlag',
     unit: 'mm/h',
     variable: 'precipitation',
+    organic: { warp: 0.5, texture: 0.6 },
     color: ramp(PRECIP_STOPS, 210, 0.08),
     legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
     format: num(1),
@@ -169,6 +177,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Bewölkung',
     unit: '%',
     variable: 'cloud_cover',
+    organic: { warp: 0.5, texture: 28, additive: true },
     color: (v) => [255, 255, 255, Number.isNaN(v) ? 0 : Math.max(0, Math.min(1, (v - 8) / 92)) ** 1.25 * 225],
     legend: { stops: [[0, '#000'], [100, '#fff']], ticks: [0, 25, 50, 75, 100], gradient: 'linear-gradient(90deg, rgba(255,255,255,0), #fff)' },
     format: num(),
@@ -185,6 +194,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Schneehöhe',
     unit: 'cm',
     variable: 'snow_depth',
+    organic: { warp: 0.3, texture: 0.3 },
     color: ramp(SNOW_STOPS, 210, 0.01),
     legend: { stops: SNOW_STOPS, ticks: [0.01, 0.5, 1, 2, 3] },
     format: (v) => fmt.num(v * 100, 0),
@@ -193,6 +203,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Gewitterenergie (CAPE)',
     unit: 'J/kg',
     variable: 'cape',
+    organic: { warp: 0.4, texture: 0.35 },
     color: ramp(CAPE_STOPS, 190, 100),
     legend: { stops: CAPE_STOPS, ticks: [100, 1000, 2000, 3000, 4500] },
     format: num(),
@@ -214,6 +225,54 @@ function tile2lon(x: number, z: number) {
 function tile2lat(y: number, z: number) {
   const n = Math.PI - (2 * Math.PI * y) / 2 ** z;
   return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+
+// Deterministic 3D value noise on the unit sphere – seamless across tiles, the antimeridian
+// and the poles.
+function hash3(x: number, y: number, z: number) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) & 0xffff) / 32767.5 - 1;
+}
+function vnoise(x: number, y: number, z: number) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz);
+  const l = (a: number, b: number, t: number) => a + (b - a) * t;
+  return l(
+    l(l(hash3(xi, yi, zi), hash3(xi + 1, yi, zi), u), l(hash3(xi, yi + 1, zi), hash3(xi + 1, yi + 1, zi), u), v),
+    l(l(hash3(xi, yi, zi + 1), hash3(xi + 1, yi, zi + 1), u), l(hash3(xi, yi + 1, zi + 1), hash3(xi + 1, yi + 1, zi + 1), u), v),
+    w,
+  );
+}
+/** fractal noise, roughly -1…1; `f` = base frequency in cycles per radian */
+function fbm(lat: number, lon: number, f: number, octaves: number, seed: number) {
+  const la = (lat * Math.PI) / 180, lo = (lon * Math.PI) / 180;
+  const c = Math.cos(la);
+  let x = c * Math.cos(lo) * f + seed, y = c * Math.sin(lo) * f, z = Math.sin(la) * f;
+  let sum = 0, amp = 0.55;
+  for (let o = 0; o < octaves; o++) {
+    sum += amp * vnoise(x, y, z);
+    x *= 2.03; y *= 2.03; z *= 2.03;
+    amp *= 0.5;
+  }
+  return sum * 1.6;
+}
+
+function organicSample(def: FieldDef, s: ModelSampler, lat: number, lon: number): number {
+  const o = def.organic!;
+  const cell = s.cellDeg(lat, lon);
+  // noise wavelength follows the grid spacing: ~1.5 cells for the base octave
+  const f = 180 / Math.PI / (cell * 1.5);
+  const a = o.warp * cell;
+  const wy = fbm(lat, lon, f, 5, 11.3) * a;
+  const wx = (fbm(lat, lon, f, 5, 47.9) * a) / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
+  let v = s.sample(def.variable, Math.max(-89.9, Math.min(89.9, lat + wy)), lon + wx);
+  if (o.texture && !Number.isNaN(v)) {
+    const n = fbm(lat, lon, f * 3, 4, 91.7);
+    v = o.additive ? Math.max(0, Math.min(100, v + n * o.texture * Math.min(1, v / 25))) : Math.max(0, v * (1 + n * o.texture));
+  }
+  return v;
 }
 
 export function registerFieldProtocol() {
@@ -238,7 +297,8 @@ export function registerFieldProtocol() {
       const lat = tile2lat(y + (py + 0.5) / N, z);
       for (let px = 0; px < N; px++) {
         const lon = tile2lon(x + (px + 0.5) / N, z);
-        const [r, g, b, a] = def.color(sampler.sample(def.variable, lat, lon));
+        const v = def.organic ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
+        const [r, g, b, a] = def.color(v);
         const o = (py * N + px) * 4;
         img.data[o] = r;
         img.data[o + 1] = g;

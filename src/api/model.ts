@@ -262,6 +262,73 @@ function bilinear(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: 
   return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
 }
 
+/** Uniform cubic B-spline weights: C2-smooth, no overshoot – no diamond/box artefacts on coarse grids. */
+function bspline(t: number, w: Float64Array) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const u = 1 - t;
+  w[0] = (u * u * u) / 6;
+  w[1] = (3 * t3 - 6 * t2 + 4) / 6;
+  w[2] = (-3 * t3 + 3 * t2 + 3 * t + 1) / 6;
+  w[3] = t3 / 6;
+}
+const WX = new Float64Array(4);
+const WY = new Float64Array(4);
+
+function bicubic(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+  let x = (lon - g.lon0) / g.dx;
+  const y = Math.max(0, Math.min(g.ny - 1, (g.lat0 - lat) / g.dy));
+  if (g.wrap) x = ((x % g.nx) + g.nx) % g.nx;
+  else x = Math.max(0, Math.min(g.nx - 1, x));
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  bspline(x - x0, WX);
+  bspline(y - y0, WY);
+  const o = t * g.nx * g.ny;
+  let sum = 0;
+  for (let j = 0; j < 4; j++) {
+    const yy = Math.max(0, Math.min(g.ny - 1, y0 + j - 1));
+    let row = 0;
+    for (let i = 0; i < 4; i++) {
+      let xx = x0 + i - 1;
+      xx = g.wrap ? (xx + g.nx) % g.nx : Math.max(0, Math.min(g.nx - 1, xx));
+      row += WX[i] * arr[o + yy * g.nx + xx];
+    }
+    sum += WY[j] * row;
+  }
+  return sum;
+}
+
+/**
+ * Skewed fields (lots of zeros, rare large values) are interpolated in a compressed space,
+ * otherwise a single large grid value dominates its whole cell and edges hug the grid lines.
+ */
+const TRANSFORMS: Partial<Record<ModelVar, [(x: number) => number, (y: number) => number]>> = {
+  precipitation: [(x) => Math.log1p(Math.max(0, x) * 10), (y) => Math.max(0, Math.expm1(y) / 10)],
+  snow_depth: [(x) => Math.log1p(Math.max(0, x) * 100), (y) => Math.max(0, Math.expm1(y) / 100)],
+  cape: [(x) => Math.sqrt(Math.max(0, x)), (y) => Math.max(0, y) ** 2],
+};
+const transformed = new WeakMap<Float32Array, Float32Array>();
+function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
+  const src = g.data[v];
+  const tf = TRANSFORMS[v];
+  if (!tf) return src;
+  let out = transformed.get(src);
+  if (!out) {
+    out = new Float32Array(src.length);
+    for (let i = 0; i < src.length; i++) out[i] = tf[0](src[i]);
+    transformed.set(src, out);
+  }
+  return out;
+}
+
+function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
+  const arr = fieldArray(g, v);
+  let r = bicubic(g, arr, t, lat, lon);
+  if (Number.isNaN(r)) r = bilinear(g, arr, t, lat, lon); // NaN neighbour (e.g. no data over sea)
+  return r;
+}
+
 /** Combined sampler: detail grid where available (feathered edges), global grid elsewhere. */
 export class ModelSampler {
   constructor(
@@ -277,23 +344,43 @@ export class ModelSampler {
     return this.global.times[this.t];
   }
 
-  sample(v: ModelVar, lat: number, lon: number): number {
-    const gv = bilinear(this.global, this.global.data[v], this.t, lat, lon);
+  /** Weight of the detail grid at this point (0 outside, 1 well inside). */
+  private detailWeight(lat: number, lon: number): number {
     const d = this.detail;
-    if (!d) return gv;
+    if (!d) return 0;
     const x = (lon - d.lon0) / d.dx;
     const y = (d.lat0 - lat) / d.dy;
-    if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return gv;
-    if (this.detailT < 0) {
-      // match time step by timestamp (both grids share the model run, but be safe)
-      const target = this.time;
-      this.detailT = Math.max(0, d.times.findIndex((tt) => tt >= target));
-    }
-    const dv = bilinear(d, d.data[v], this.detailT, lat, lon);
-    if (Number.isNaN(dv)) return gv;
+    if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
     const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
-    const w = Math.min(1, edge / 1.5);
-    return Number.isNaN(gv) ? dv : dv * w + gv * (1 - w);
+    // wide feather so the two resolutions blend without a visible frame
+    const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
+    const f = Math.min(1, edge / feather);
+    return f * f * (3 - 2 * f);
+  }
+
+  /** Effective grid spacing [deg] at this point – used to scale cosmetic detail. */
+  cellDeg(lat: number, lon: number): number {
+    const w = this.detailWeight(lat, lon);
+    const g = this.global.dy;
+    return this.detail ? g + (this.detail.dy - g) * w : g;
+  }
+
+  sample(v: ModelVar, lat: number, lon: number): number {
+    const gv = smooth(this.global, v, this.t, lat, lon);
+    const w = this.detailWeight(lat, lon);
+    let r = gv;
+    if (w > 0) {
+      const d = this.detail!;
+      if (this.detailT < 0) {
+        // match time step by timestamp (both grids share the model run, but be safe)
+        const target = this.time;
+        this.detailT = Math.max(0, d.times.findIndex((tt) => tt >= target));
+      }
+      const dv = smooth(d, v, this.detailT, lat, lon);
+      if (!Number.isNaN(dv)) r = Number.isNaN(gv) ? dv : dv * w + gv * (1 - w);
+    }
+    const tf = TRANSFORMS[v];
+    return tf && !Number.isNaN(r) ? tf[1](r) : r;
   }
 }
 
