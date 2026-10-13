@@ -30,6 +30,12 @@ export const EUMETSAT_IR =
 export const IMERG_WMS =
   'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=IMERG_Precipitation_Rate&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
+/** Daily satellite ocean products from NASA GIBS (two days back – processing latency). */
+export const gibsSst = (date: string) =>
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Surface_Temperature/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
+export const gibsSeaIce = (date: string) =>
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/AMSRU2_Sea_Ice_Concentration_12km/default/${date}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`;
+
 /** DWD precipitation radar composite for Germany (5 min, 1 km), latest scan. */
 export const DWD_RADAR_WMS =
   'https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Niederschlagsradar&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
@@ -95,6 +101,20 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 7,
         attribution: 'NASA GPM IMERG',
       },
+      sst: {
+        type: 'raster',
+        tiles: [gibsSst(gibsDate(2))],
+        tileSize: 256,
+        maxzoom: 7,
+        attribution: 'Meerestemperatur: NASA GHRSST MUR / GIBS',
+      },
+      seaice: {
+        type: 'raster',
+        tiles: [gibsSeaIce(gibsDate(2))],
+        tileSize: 256,
+        maxzoom: 6,
+        attribution: 'Meereis: NASA AMSR2 / GIBS',
+      },
       hotspots: {
         type: 'raster',
         tiles: [gibsFires(firesDate)],
@@ -144,6 +164,8 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       { id: 'dwd-radar', type: 'raster', source: 'dwd-radar', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85 } },
       { id: 'sat-ir', type: 'raster', source: 'sat-ir', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       { id: 'imerg', type: 'raster', source: 'imerg', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
+      { id: 'sst', type: 'raster', source: 'sst', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85 } },
+      { id: 'seaice', type: 'raster', source: 'seaice', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       // Radar & OWM layers are inserted before this anchor at runtime.
       { id: 'anchor-weather', type: 'background', layout: { visibility: 'none' }, paint: { 'background-opacity': 0 } },
       { id: 'dwd', type: 'raster', source: 'dwd', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.75 } },

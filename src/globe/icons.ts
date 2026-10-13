@@ -22,7 +22,14 @@ export type ExtraGlyph =
   | 'plant'
   | 'webcam'
   | 'alpr'
-  | 'cone';
+  | 'cone'
+  | 'aurora'
+  | 'rocket'
+  | 'train'
+  | 'radiation'
+  | 'tsunami'
+  | 'airport'
+  | 'vessel';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -33,6 +40,8 @@ export const SILHOUETTES: Partial<Record<ExtraGlyph, string>> = {
   balloon: 'M12 2a6 6 0 0 1 6 6c0 3.6-3.4 6.6-5 8h-2c-1.6-1.4-5-4.4-5-8a6 6 0 0 1 6-6zM10 17h4v3.5h-4z',
   drone: 'M5 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM5 16.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM6.4 5.6L10 9.2h4l3.6-3.6 1.4 1.4-3.6 3.6v2.8l3.6 3.6-1.4 1.4-3.6-3.6h-4l-3.6 3.6L5 17l3.6-3.6v-2.8L5 7z',
   satellite: 'M9 9h6v6H9zM1.5 9.5h6v5h-6zm15 0h6v5h-6zM11.2 4h1.6v5h-1.6zm0 11h1.6v5h-1.6z',
+  // ship hull seen from above, bow north
+  vessel: 'M12 1.5c2 2 3.3 4.6 3.3 8V20.5c0 1-.8 1.5-1.6 1.5h-3.4c-.8 0-1.6-.5-1.6-1.5V9.5c0-3.4 1.3-6 3.3-8z',
   // viewing direction of a camera: wedge with its tip at the icon centre, opening north
   cone: 'M12 12L6.2 1.6A12 12 0 0 1 17.8 1.6z',
   sonde: 'M12 1.5a5 5 0 0 1 5 5c0 3-2.8 5.3-4.2 6.5h-1.6C9.8 11.8 7 9.5 7 6.5a5 5 0 0 1 5-5zM11.4 13h1.2v5h-1.2zM9.5 18h5v4h-5z',
@@ -84,6 +93,21 @@ const GLYPHS: Record<GlyphId, Part[]> = {
     { mode: 'stroke', width: 2, d: 'M6 11v5M3 19h7' },
   ],
   cone: [{ mode: 'fill', d: 'M12 12L6.2 1.6A12 12 0 0 1 17.8 1.6z' }],
+  aurora: [{ mode: 'stroke', width: 2, d: 'M3 18c3-9 6-12 9-12s6 3 9 12M6 18c2-6 4-8 6-8s4 2 6 8M10 18c.6-2 1.2-3 2-3s1.4 1 2 3' }],
+  rocket: [
+    { mode: 'fill', d: 'M12 1.5c3 2.5 4 6 4 10v4.5H8v-4.5c0-4 1-7.5 4-10z' },
+    { mode: 'fill', d: 'M8 12.5l-3 3.5v3l3-1.5zM16 12.5l3 3.5v3l-3-1.5zM10.5 17h3l-.5 4h-2z' },
+  ],
+  train: [
+    { mode: 'fill', d: 'M7 3h10a2 2 0 0 1 2 2v10a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2z' },
+    { mode: 'stroke', width: 2, d: 'M8 21l2-3M16 21l-2-3' },
+  ],
+  radiation: [
+    { mode: 'fill', d: 'M12 10.2a1.8 1.8 0 1 1 0 3.6a1.8 1.8 0 1 1 0-3.6zM10.4 9.2L7.3 3.8A9 9 0 0 0 3 12h6.2a2.8 2.8 0 0 1 1.2-2.8zM13.6 9.2l3.1-5.4A9 9 0 0 1 21 12h-6.2a2.8 2.8 0 0 0-1.2-2.8zM10.6 14.8l-3.1 5.4a9 9 0 0 0 9 0l-3.1-5.4a2.8 2.8 0 0 1-2.8 0z' },
+  ],
+  tsunami: [{ mode: 'stroke', width: 2.2, d: 'M2.5 19c3 0 3.5-1.5 6-1.5S12 19 14.5 19s4-1 7-1M3 14.5C6 7 12 4 17.5 6c-3 .5-4.5 3-3.5 5.5 1 2.4 4 2.6 6 1.3' }],
+  airport: [{ mode: 'fill', d: SILHOUETTES.plane! }],
+  vessel: [{ mode: 'fill', d: SILHOUETTES.vessel! }],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px

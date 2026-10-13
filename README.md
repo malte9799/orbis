@@ -49,6 +49,16 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Europa | Pegelstände & Hochwasser an Bundeswasserstraßen | PEGELONLINE (WSV) |
 | Europa | Luftqualität & Pollen in europäischen Städten | Copernicus CAMS via Open-Meteo |
 | Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, adsb.fi, airplanes.live, OpenSky Network (der Reihe nach, die erste erreichbare Quelle wird verwendet) |
+| Erde & Umwelt | Polarlicht-Vorhersage mit Kp-Index | NOAA SWPC (OVATION) |
+| Erde & Umwelt | Alle ~1.300 Vulkane mit letztem Ausbruch | Smithsonian Global Volcanism Program |
+| Erde & Umwelt | Waldbrand-Flächen USA | NIFC WFIGS |
+| Erde & Umwelt | Tsunami-Meldungen (7 Tage) | NOAA National/Pacific Tsunami Warning Center |
+| Erde & Umwelt | Radioaktivität (Ortsdosisleistung) | BfS ODL-Messnetz (DE), Safecast (weltweit, CC0) |
+| Wetter | Meerestemperatur, Meereis | NASA GHRSST MUR, AMSR2 (GIBS) |
+| Luftraum | Raketenstarts mit Countdown & Livestream-Link | The Space Devs Launch Library 2 |
+| Luftraum | Flughäfen mit Abflügen/Ankünften vom Vortag | OpenFreeMap/OSM, OpenSky Network |
+| Verkehr | Schiffe live (AIS) | Fintraffic Digitraffic (Ostsee), optional aisstream.io (weltweit, kostenloser Schlüssel) |
+| Verkehr | Züge live (Finnland) | Fintraffic Digitraffic |
 | Kameras | Live-Webcams (Bild im Popup) | Fintraffic Digitraffic (Finnland, CC BY 4.0), OpenStreetMap, optional Windy Webcams (kostenloser Schlüssel) |
 | Kameras | Kennzeichen-Kameras (ALPR, u. a. Flock Safety) mit Blickrichtung | OpenStreetMap/DeFlock: Übersicht USA/Kanada aus [deflock-data](https://github.com/flockhopper3/deflock-data), ab Zoom 9 weltweit live per Overpass |
 | Luftraum | Wetterballons (Radiosonden) | SondeHub |

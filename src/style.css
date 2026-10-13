@@ -2263,3 +2263,16 @@ svg.hourly {
   margin: 8px 0 4px;
   text-decoration: none;
 }
+
+/* lists in popups (rocket launches) */
+.pop-list {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.pop-list li {
+  line-height: 1.35;
+}

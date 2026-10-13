@@ -5,6 +5,8 @@ export interface ApiKeys {
   adsbProxy?: string;
   /** Windy Webcams API (free tier) */
   windy?: string;
+  /** aisstream.io live AIS (free) */
+  aisstream?: string;
 }
 
 export interface Place {

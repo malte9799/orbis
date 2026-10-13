@@ -53,7 +53,7 @@ import { describe, weatherIcon } from '../weather';
 // ---------------------------------------------------------------------------
 // Configuration
 
-type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg';
+type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 
@@ -70,11 +70,14 @@ const WX_FAMILIES: { id: string; label: string; hint: string; variants: [Overlay
   { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', variants: [['pressure', '']] },
   { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', variants: [['humidity', '']] },
   { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', variants: [['snow', '']] },
+  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', variants: [['sst', 'Meerestemperatur'], ['seaice', 'Meereis']], swatch: 'linear-gradient(135deg,#2b2f8f,#2aa8c8,#f6d743,#e2462f)' },
   { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', variants: [['cape', '']] },
 ];
 const familyOf = (o: OverlayId) => WX_FAMILIES.find((f) => f.variants.some(([v]) => v === o));
 
 const isField = (o: string): o is FieldId => o in FIELDS;
+/** extra-layer sections shown on the "Ereignisse" tab (the others are on "Verkehr") */
+const isEventSection = (s: string) => s === 'europe' || s === 'earth';
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -375,8 +378,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // counts of active layers per tab (shown on the tab buttons)
     const groupOn = (id: GroupId) => !!state.groups[id];
     const extraOn = (id: ExtraId) => !!state.extras[id];
-    const evCount = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length + EXTRAS.filter((d) => d.section === 'europe' && extraOn(d.id)).length;
-    const trCount = EXTRAS.filter((d) => d.section !== 'europe' && extraOn(d.id)).length;
+    const evCount = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length + EXTRAS.filter((d) => isEventSection(d.section) && extraOn(d.id)).length;
+    const trCount = EXTRAS.filter((d) => !isEventSection(d.section) && extraOn(d.id)).length;
     const wxCount = (state.overlay !== 'none' ? 1 : 0) + (state.wind && !FIELDS[state.overlay as FieldId]?.particles ? 1 : 0) + (state.isobars ? 1 : 0);
 
     const tile = (attrs: string, on: boolean, icon: string, label: string, title: string, badge = '') =>
@@ -428,7 +431,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <h3>Naturereignisse</h3>
       <div class="tile-grid">${groupTiles}</div>
       <h3>Europa & Messwerte</h3>
-      <div class="tile-grid">${extraTiles('europe')}</div>`;
+      <div class="tile-grid">${extraTiles('europe')}</div>
+      <h3>Erde & Umwelt</h3>
+      <div class="tile-grid">${extraTiles('earth')}</div>`;
     const traffic = `
       <h3>Luftraum & Weltraum</h3>
       <div class="tile-grid">${extraTiles('air')}</div>
@@ -603,11 +608,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
         <label class="field-label">Windy Webcams <small>(kostenloser Schlüssel von api.windy.com/keys – zehntausende Webcams weltweit)</small>
           <input type="password" data-key="windy" value="${escapeHtml(keys.windy ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
+        <label class="field-label">aisstream.io <small>(kostenloser Schlüssel von aisstream.io – Schiffe weltweit live)</small>
+          <input type="password" data-key="aisstream" value="${escapeHtml(keys.aisstream ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">Flugdaten-Proxy <small>(nur nötig, falls dein Browser alle Flugdatenquellen blockiert – Anleitung im README)</small>
           <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="https://mein-proxy.workers.dev/" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic, Windy Webcams, DeFlock/deflock-data, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
+        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
@@ -620,7 +628,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       const proxy = get('adsbProxy');
-      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
+      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();
@@ -667,7 +675,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
     // hints like "zoom in to see aircraft" for the layers on the current tab
     const tab = state.panelTab ?? 'weather';
-    const notes = EXTRAS.filter((d) => (tab === 'events' ? d.section === 'europe' : tab === 'traffic' ? d.section !== 'europe' : false))
+    const notes = EXTRAS.filter((d) => (tab === 'events' ? isEventSection(d.section) : tab === 'traffic' ? !isEventSection(d.section) : false))
       .map((d) => [d.label, extras!.note(d.id)] as const)
       .filter(([, n]) => n);
     const box = panel.querySelector('.panel-notes');
@@ -847,6 +855,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     vis('sat-ir', o === 'sat-ir');
     vis('dwd-radar', o === 'dwd-radar');
     vis('imerg', o === 'imerg');
+    vis('sst', o === 'sst');
+    vis('seaice', o === 'seaice');
     setRadarVisible(o === 'radar');
     for (const l of OWM_LAYERS) vis(`owm-${l.id}`, false);
     hideReadout();
@@ -1045,6 +1055,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       html = `<div class="legend-title">Satellit Infrarot <small>live · hohe, kalte Wolken erscheinen hell</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#111,#777,#fff)"></div>
         <div class="legend-ticks"><span style="left:0">warm/tief</span><span style="left:100%">kalt/hoch</span></div>`;
+    } else if (o === 'sst') {
+      html = `<div class="legend-title">Meerestemperatur <small>NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)"></div>
+        <div class="legend-ticks"><span style="left:0">−2</span><span style="left:35%">10</span><span style="left:65%">20</span><span style="left:100%">32</span></div>`;
+    } else if (o === 'seaice') {
+      html = `<div class="legend-title">Meereis-Konzentration <small>NASA AMSR2 · vor 2 Tagen</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#0b2a5b,#2d5f9a,#7fa8d6,#d7e6f5,#ffffff)"></div>
+        <div class="legend-ticks"><span style="left:0">15 %</span><span style="left:50%">60 %</span><span style="left:100%">100 %</span></div>`;
     } else if (o === 'imerg') {
       html = `<div class="legend-title">Niederschlag Satellit <small>NASA IMERG · mm/h</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)"></div>
