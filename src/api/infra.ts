@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson, fmt } from '../util';
 import { snapshotJson } from './data';
+import { overpass } from './overpass';
 
 // ---------------------------------------------------------------------------
 // Shipping lanes – "Global Shipping Lanes" by P. Benden (CC BY 4.0), static GeoJSON on GitHub
@@ -230,18 +231,7 @@ const OSM_SOURCE: Record<string, string> = {
 export async function loadOsmPower(b: { west: number; south: number; east: number; north: number }): Promise<FeatureCollection<Point>> {
   const bbox = `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`;
   const query = `[out:json][timeout:25];(nwr["power"="plant"](${bbox});node["power"="generator"]["generator:source"="wind"](${bbox}););out center tags 3000;`;
-  const endpoints = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-  let data: { elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] } | null = null;
-  let lastErr: unknown;
-  for (const ep of endpoints) {
-    try {
-      data = await fetchJson(ep, { method: 'POST', body: new URLSearchParams({ data: query }) }, 30000);
-      break;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  if (!data) throw lastErr;
+  const data = await overpass<{ elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }>(query, 'power', 30000);
   const features: Feature<Point>[] = [];
   for (const el of data.elements) {
     const lat = el.lat ?? el.center?.lat;

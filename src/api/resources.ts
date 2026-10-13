@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { overpass } from './overpass';
 
 // Mineral and energy resources at three levels of detail:
 // • worldwide: mines, oil, gas and coal fields from Wikidata (CC0)
@@ -194,26 +195,13 @@ export const BGR_KOR250_TILES =
 // ---------------------------------------------------------------------------
 // OpenStreetMap: mines, quarries, wells (zoom ≥ 10) and pipelines
 
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-
-async function overpass<T>(query: string): Promise<T> {
-  let lastErr: unknown;
-  for (const ep of OVERPASS) {
-    try {
-      return await fetchJson<T>(ep, { method: 'POST', body: new URLSearchParams({ data: query }) }, 40000);
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
-}
-
 const bbox = (b: Bounds) => `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`;
 
 export async function loadOsmResources(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bbox(b);
   const j = await overpass<{ elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }>(
     `[out:json][timeout:30];(nwr["landuse"="quarry"](${bb});nwr["industrial"="mine"](${bb});nwr["man_made"~"^(mineshaft|adit|petroleum_well|pumpjack)$"](${bb});nwr["industrial"~"^(oil|gas|refinery)$"](${bb}););out center tags 4000;`,
+    'resources',
   );
   const features: Feature<Point>[] = [];
   for (const el of j.elements) {
@@ -241,6 +229,7 @@ export async function loadPipelines(b: Bounds): Promise<FeatureCollection<LineSt
   const bb = bbox(b);
   const j = await overpass<{ elements: { type: string; id: number; geometry?: { lat: number; lon: number }[]; tags?: Record<string, string> }[] }>(
     `[out:json][timeout:35];way["man_made"="pipeline"]["substance"~"^(gas|oil|fuel|hydrogen|natural_gas|lpg|crude_oil|petroleum|water)$"](${bb});out geom tags 5000;`,
+    'pipelines',
   );
   const SUB: Record<string, [string, string]> = {
     gas: ['Gas', '#29b6f6'],

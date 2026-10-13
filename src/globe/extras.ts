@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
-import { groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
+import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadTsunami } from '../api/earth';
 import {
@@ -26,6 +26,7 @@ import { loadTransitNetwork } from '../api/networks';
 import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
 import { snapshotJson } from '../api/data';
 import { loadNearbyStations, loadTopStations } from '../api/radio';
+import { isSuperseded } from '../api/overpass';
 import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
@@ -238,6 +239,11 @@ export class ExtraLayers {
   private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, other: 0 };
   private osmPowerKey = '';
   private aircraftSeq = 0;
+  private aircraftBusy = false;
+  private aircraftAgain = false;
+  private aircraftAt = 0;
+  private aircraftDelay: number | undefined;
+  private aircraftErr = '';
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
@@ -434,7 +440,9 @@ export class ExtraLayers {
       'landcover',
       ['https://services.terrascope.be/wms/v2?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=WORLDCOVER_2021_MAP&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'],
       'Landbedeckung: © ESA WorldCover 2021 (CC BY 4.0)',
-      18,
+      // 10 m data: zoom 14 is full resolution, beyond that MapLibre overzooms instead of
+      // asking the (slow, on-demand rendering) WMS for ever more tiles
+      14,
       0.75,
     );
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
@@ -1385,12 +1393,36 @@ export class ExtraLayers {
     }
   }
 
+  /** Throttled: no overlapping requests and at least 5 s between two (timer + map moves). */
   private loadAircraftNow() {
+    if (!this.on.has('aircraft')) return;
+    if (this.aircraftBusy) {
+      this.aircraftAgain = true;
+      return;
+    }
+    const wait = this.aircraftAt + 5000 - Date.now();
+    if (wait > 0) {
+      clearTimeout(this.aircraftDelay);
+      this.aircraftDelay = window.setTimeout(() => this.loadAircraftNow(), wait);
+      return;
+    }
+    this.aircraftBusy = true;
+    this.aircraftAt = Date.now();
+    this.fetchAircraft().finally(() => {
+      this.aircraftBusy = false;
+      if (this.aircraftAgain) {
+        this.aircraftAgain = false;
+        this.loadAircraftNow();
+      }
+    });
+  }
+
+  private fetchAircraft(): Promise<void> {
     const m = this.map;
     if (m.getZoom() < 5) {
       // zoomed out: coarse worldwide overview (positions refresh every 2 minutes)
       const seq = ++this.aircraftSeq;
-      loadGlobalAircraft()
+      return loadGlobalAircraft()
         .then((fc) => {
           if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
           this.setData('aircraft', fc);
@@ -1401,7 +1433,6 @@ export class ExtraLayers {
           this.setData('aircraft', empty());
           this.set('aircraft', { note: 'Weltübersicht gerade nicht verfügbar – zum Anzeigen näher heranzoomen', count: undefined, loading: false });
         });
-      return;
     }
     const c = m.getCenter();
     const b = m.getBounds();
@@ -1413,16 +1444,20 @@ export class ExtraLayers {
     const nm = km / 1.852;
     const seq = ++this.aircraftSeq;
     if (!this.info.aircraft?.count) this.set('aircraft', { loading: true, note: undefined });
-    loadAircraft(c.lat, c.lng, nm)
+    return loadAircraft(c.lat, c.lng, nm)
       .then((fc) => {
+        this.aircraftErr = '';
         if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
         this.setData('aircraft', fc);
         this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
       })
       .catch((e) => {
-        console.warn('aircraft', e);
+        // log once per distinct failure, not on every refresh
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg !== this.aircraftErr && msg !== AC_ALL_PAUSED) console.warn('aircraft', e);
+        this.aircraftErr = msg;
         if (seq === this.aircraftSeq)
-          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. eigenen Proxy in den Einstellungen eintragen' });
+          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
       });
   }
 
@@ -1526,6 +1561,7 @@ export class ExtraLayers {
         if (this.osmPowerKey === key) this.setData('osm-power', fc);
       })
       .catch((e) => {
+        if (isSuperseded(e) || this.osmPowerKey !== key) return;
         console.warn('Overpass', e);
         this.osmPowerKey = '';
       });
@@ -1569,6 +1605,7 @@ export class ExtraLayers {
             this.mergeResources();
           })
           .catch((e) => {
+            if (isSuperseded(e) || this.resOsmKey !== key) return;
             console.warn('Overpass resources', e);
             this.resOsmKey = '';
           });
@@ -1606,6 +1643,7 @@ export class ExtraLayers {
         this.set('pipelines', { loading: false, count: fc.features.length, note: 'blau Gas · orange Öl · lila Wasserstoff' });
       })
       .catch((e) => {
+        if (isSuperseded(e) || this.pipeKey !== key) return;
         console.warn('Overpass pipelines', e);
         this.pipeKey = '';
         this.set('pipelines', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
@@ -1683,6 +1721,7 @@ export class ExtraLayers {
         this.set('busnet', { loading: false, count: r.lines.features.length, note: r.lines.features.length ? `Linien: ${[...modes].join(', ')}` : 'keine Linien im Ausschnitt erfasst' });
       })
       .catch((e) => {
+        if (isSuperseded(e) || this.busnetKey !== key) return;
         console.warn('Overpass ÖPNV', e);
         this.busnetKey = '';
         this.set('busnet', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar oder überlastet – bitte erneut verschieben' });
@@ -1890,6 +1929,7 @@ export class ExtraLayers {
             this.mergeWebcams();
           })
           .catch((e) => {
+            if (isSuperseded(e) || this.camKey !== key) return;
             console.warn('Overpass webcams', e);
             this.camKey = '';
           });
@@ -1990,6 +2030,7 @@ export class ExtraLayers {
         this.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? `${flock} davon Flock Safety (im Ausschnitt)` : 'keine Kennzeichen-Kameras im Ausschnitt erfasst' });
       })
       .catch((e) => {
+        if (isSuperseded(e) || this.alprKey !== key) return;
         console.warn('Overpass ALPR', e);
         this.alprKey = '';
         this.set('alpr', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });

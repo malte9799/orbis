@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson } from '../util';
+import { overpass } from './overpass';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -11,22 +12,7 @@ export interface Bounds {
   north: number;
 }
 
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-
 type OsmElement = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
-
-async function overpass(query: string): Promise<OsmElement[]> {
-  let lastErr: unknown;
-  for (const ep of OVERPASS) {
-    try {
-      const data = await fetchJson<{ elements: OsmElement[] }>(ep, { method: 'POST', body: new URLSearchParams({ data: query }) }, 30000);
-      return data.elements;
-    } catch (e) {
-      lastErr = e;
-    }
-  }
-  throw lastErr;
-}
 
 const bboxStr = (b: Bounds) => `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`;
 const point = (lon: number, lat: number, properties: Record<string, unknown>): Feature<Point> => ({
@@ -89,8 +75,10 @@ export function loadDigitrafficCams(): Promise<FeatureCollection<Point>> {
 /** Webcams mapped in OpenStreetMap inside the bounds (needs a zoomed-in view). */
 export async function loadOsmWebcams(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bboxStr(b);
-  const els = await overpass(
+  const { elements: els } = await overpass<{ elements: OsmElement[] }>(
     `[out:json][timeout:25];(nwr["webcam"](${bb});nwr["contact:webcam"](${bb});nwr["surveillance"="webcam"](${bb}););out center tags 1500;`,
+    'webcams',
+    30000,
   );
   const features: Feature<Point>[] = [];
   for (const el of els) {
@@ -163,7 +151,7 @@ export const ALPR_SOURCE_LAYER = 'cameras';
 
 export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bboxStr(b);
-  const els = await overpass(`[out:json][timeout:25];nwr["surveillance:type"="ALPR"](${bb});out center tags 5000;`);
+  const { elements: els } = await overpass<{ elements: OsmElement[] }>(`[out:json][timeout:25];nwr["surveillance:type"="ALPR"](${bb});out center tags 5000;`, 'alpr', 30000);
   const features: Feature<Point>[] = [];
   for (const el of els) {
     const lat = el.lat ?? el.center?.lat;

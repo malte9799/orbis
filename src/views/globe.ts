@@ -47,6 +47,7 @@ import {
 } from '../globe/overlay';
 import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
+import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
 import { describe, weatherIcon } from '../weather';
@@ -627,8 +628,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="cta" value="${escapeHtml(keys.cta ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">Trafiklab <small>(„GTFS Regional Realtime“ – Busse & Bahnen in Schweden)</small>
           <input type="password" data-key="trafiklab" value="${escapeHtml(keys.trafiklab ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">Flugdaten-Proxy <small>(nur nötig, falls dein Browser alle Flugdatenquellen blockiert – Anleitung im README)</small>
-          <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="https://mein-proxy.workers.dev/" autocomplete="off"/></label>
+        <label class="field-label">Daten-Proxy <small>(Cloudflare Worker für Flugdaten & OpenStreetMap – Anleitung im README${builtInProxy() ? '; leer lassen = eingebauter Proxy' : ''})</small>
+          <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="${escapeHtml(builtInProxy() || 'https://mein-proxy.workers.dev/')}" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
         PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,

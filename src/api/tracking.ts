@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satrec, type SatRec } from 'satellite.js';
 import { store } from '../store';
+import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
 
 // ---------------------------------------------------------------------------
@@ -244,26 +245,42 @@ const AC_SOURCES: AcSource[] = [
 ];
 
 let preferredSource = -1;
+// Sources that failed are rested before the next attempt (30 s, doubling up to 10 min). Without
+// a proxy most of them block browser requests (CORS) or rate-limit (429) – hammering them every
+// few seconds only fills the console and makes the limits worse.
+const acHealth = AC_SOURCES.map(() => ({ fails: 0, until: 0 }));
+export const AC_ALL_PAUSED = 'Alle Flugdatenquellen pausiert – neuer Versuch in Kürze';
 let lastResult: { at: number; lat: number; lon: number; nm: number; fc: AircraftResult } | null = null;
 
 export interface AircraftResult extends FeatureCollection<Point> {
   source: string;
 }
 
-function viaProxy(url: string) {
-  const proxy = store.getKeys().adsbProxy;
-  return proxy ? `${proxy}${proxy.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}` : url;
-}
-
 let globalCache: { at: number; fc: AircraftResult } | null = null;
+let globalFailedAt = 0;
+let lastProxy: string | undefined;
+
+/** A newly entered proxy may fix what failed before – retry everything right away. */
+function resetOnProxyChange() {
+  const proxy = proxyBase();
+  if (proxy === lastProxy) return;
+  lastProxy = proxy;
+  for (const h of acHealth) Object.assign(h, { fails: 0, until: 0 });
+  globalFailedAt = 0;
+}
 
 /**
  * Worldwide overview of all aircraft from OpenSky (anonymous: 4 of 400 daily credits per
  * call) – cached for two minutes and shown when zoomed out.
  */
 export async function loadGlobalAircraft(): Promise<AircraftResult> {
+  resetOnProxyChange();
   if (globalCache && Date.now() - globalCache.at < 120000) return globalCache.fc;
-  const json = await fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000);
+  if (Date.now() - globalFailedAt < 300000) throw new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)');
+  const json = await fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000).catch((e) => {
+    globalFailedAt = Date.now();
+    throw e;
+  });
   const fc = toFeatures(parseOpenSky(json), 'OpenSky Network (Weltübersicht)');
   globalCache = { at: Date.now(), fc };
   return fc;
@@ -271,12 +288,18 @@ export async function loadGlobalAircraft(): Promise<AircraftResult> {
 
 /** Aircraft within `radiusNm` (max 250) around a point. */
 export async function loadAircraft(lat: number, lon: number, radiusNm: number): Promise<AircraftResult> {
+  resetOnProxyChange();
   const r = Math.min(250, Math.max(10, Math.round(radiusNm)));
   const order = AC_SOURCES.map((_, i) => i);
   if (preferredSource >= 0) order.unshift(...order.splice(preferredSource, 1));
   const errors: string[] = [];
   for (const i of order) {
     const src = AC_SOURCES[i];
+    const health = acHealth[i];
+    if (Date.now() < health.until) {
+      errors.push(`${src.id}: pausiert`);
+      continue;
+    }
     // rate-limited sources: reuse the last answer while the view barely moved
     if (src.minInterval && lastResult?.fc.source === src.label && Date.now() - lastResult.at < src.minInterval * 1000) {
       const moved = Math.hypot(lastResult.lat - lat, (lastResult.lon - lon) * Math.cos((lat * Math.PI) / 180)) * 60;
@@ -286,13 +309,17 @@ export async function loadAircraft(lat: number, lon: number, radiusNm: number): 
       const json = await fetchJson<unknown>(viaProxy(src.url(lat, lon, r)), undefined, 12000);
       const fc = toFeatures(src.parse(json), src.label);
       preferredSource = i;
+      health.fails = 0;
       lastResult = { at: Date.now(), lat, lon, nm: r, fc };
       return fc;
     } catch (e) {
+      health.fails++;
+      health.until = Date.now() + Math.min(600000, 30000 * 2 ** (health.fails - 1));
       errors.push(`${src.id}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   preferredSource = -1;
+  if (errors.every((e) => e.endsWith(': pausiert'))) throw new Error(AC_ALL_PAUSED);
   throw new Error(`Keine Flugdatenquelle erreichbar (${errors.join('; ')})`);
 }
 
