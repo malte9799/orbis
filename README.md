@@ -113,13 +113,33 @@ der Wind wird als Partikelanimation auf einem Canvas über der Karte gezeichnet,
 `.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie auf
 GitHub Pages (in den Repo-Einstellungen unter *Pages → Source* „GitHub Actions“ auswählen).
 
-### Flugdaten-Proxy (optional)
+### Daten-Proxy (Cloudflare Worker, empfohlen)
 
-Nicht jede ADS-B-Quelle erlaubt direkte Abrufe aus dem Browser (CORS). Falls im Karten-Tab
-„keine Flugdatenquelle erreichbar“ erscheint, hilft ein eigener, kostenloser Proxy:
-`proxy/cloudflare-worker.js` als Cloudflare Worker anlegen (Workers & Pages → Create → Worker,
-Code ersetzen, Deploy) und die Worker-URL in Orbis unter *Einstellungen → Flugdaten-Proxy*
-eintragen. Der Proxy leitet nur Anfragen an die bekannten Flugdatenquellen weiter.
+adsb.fi, airplanes.live und OpenSky erlauben keine Abrufe direkt aus dem Browser (CORS), adsb.lol
+drosselt schnell, und die öffentlichen Overpass-Server (OpenStreetMap-Ebenen) lassen pro Nutzer nur
+wenige Anfragen zu. `proxy/cloudflare-worker.js` löst das: Er ergänzt die CORS-Header und speichert
+Antworten zwischen (Flugdaten ~8 s, Overpass 15 min), sodass viele Besucher am selben Ort nur eine
+Anfrage auslösen. Der kostenlose Cloudflare-Tarif erlaubt 100.000 Anfragen pro Tag.
+
+Einrichten:
+
+1. Auf [dash.cloudflare.com](https://dash.cloudflare.com) kostenlos registrieren.
+2. *Compute (Workers) → Workers & Pages → Create → Worker* („Start with Hello World“), Namen
+   vergeben (z. B. `orbis-proxy`) → *Deploy*.
+3. *Edit code*: den Inhalt komplett durch `proxy/cloudflare-worker.js` ersetzen → *Deploy*.
+   Die Adresse lautet dann `https://orbis-proxy.<dein-konto>.workers.dev/`.
+4. Test im Browser: `https://orbis-proxy.<dein-konto>.workers.dev/?url=https%3A%2F%2Fapi.adsb.lol%2Fv2%2Fpoint%2F53.55%2F10%2F25`
+   sollte JSON mit Flugzeugen zeigen.
+5. Absichern (empfohlen): Worker → *Settings → Variables and Secrets → Add* → Typ *Text*,
+   Name `ALLOWED_ORIGINS`, Wert `https://malte9799.github.io,http://localhost:5173` → *Deploy*.
+   Dann können nur Orbis und die lokale Entwicklung dein Tageskontingent nutzen.
+6. Fest in die App einbauen: im GitHub-Repo *Settings → Secrets and variables → Actions →
+   Variables → New repository variable*, Name `PROXY_URL`, Wert = Worker-Adresse aus Schritt 3.
+   Danach *Actions → Deploy to GitHub Pages → Run workflow* (oder beim nächsten Push auf `main`).
+
+Alternativ kann jeder Nutzer eine eigene Worker-Adresse unter *Einstellungen → Daten-Proxy*
+eintragen; sie hat Vorrang vor der eingebauten. Fällt der Proxy aus, greift die App wieder direkt
+auf die Quellen zu.
 
 ### Daten-Snapshots (`data`-Branch)
 

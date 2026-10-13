@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satrec, type SatRec } from 'satellite.js';
 import { store } from '../store';
+import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
 
 // ---------------------------------------------------------------------------
@@ -255,18 +256,13 @@ export interface AircraftResult extends FeatureCollection<Point> {
   source: string;
 }
 
-function viaProxy(url: string) {
-  const proxy = store.getKeys().adsbProxy;
-  return proxy ? `${proxy}${proxy.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}` : url;
-}
-
 let globalCache: { at: number; fc: AircraftResult } | null = null;
 let globalFailedAt = 0;
 let lastProxy: string | undefined;
 
 /** A newly entered proxy may fix what failed before – retry everything right away. */
 function resetOnProxyChange() {
-  const proxy = store.getKeys().adsbProxy ?? '';
+  const proxy = proxyBase();
   if (proxy === lastProxy) return;
   lastProxy = proxy;
   for (const h of acHealth) Object.assign(h, { fails: 0, until: 0 });

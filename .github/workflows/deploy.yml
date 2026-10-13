@@ -25,6 +25,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
+          VITE_PROXY_URL: ${{ vars.PROXY_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

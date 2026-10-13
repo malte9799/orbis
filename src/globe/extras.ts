@@ -1457,7 +1457,7 @@ export class ExtraLayers {
         if (msg !== this.aircraftErr && msg !== AC_ALL_PAUSED) console.warn('aircraft', e);
         this.aircraftErr = msg;
         if (seq === this.aircraftSeq)
-          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. eigenen Proxy in den Einstellungen eintragen' });
+          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
       });
   }
 
