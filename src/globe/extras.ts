@@ -1,5 +1,5 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
-import type { FeatureCollection, Point } from 'geojson';
+import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { groundTrack, loadAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
@@ -21,6 +21,7 @@ import {
   type ShipCat,
 } from '../api/transport';
 import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
+import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
@@ -98,7 +99,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
   { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
-  { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Nahverkehr live ab Stadtzoom – Transitous', glyph: 'train', color: '#ab47bc' },
+  { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden', glyph: 'train', color: '#ab47bc' },
   { id: 'railmap', section: 'infra', label: 'Bahnnetz', hint: 'Gleise, Bahnhöfe, Strecken – OpenRailwayMap', glyph: 'train', color: '#78909c' },
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
@@ -198,6 +199,9 @@ export class ExtraLayers {
   private segAt = 0;
   private segLoading = false;
   private gpsTrains: FeatureCollection = empty();
+  private feedVeh = new Map<string, { at: number; features: Feature<Point>[] }>();
+  private feedLoading = new Set<string>();
+  private feedErrors = new Set<string>();
   private ais: AisStream | null = null;
 
   constructor(
@@ -227,7 +231,7 @@ export class ExtraLayers {
       radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>',
+      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC, data.gov.my, Transport Victoria (CC BY 4.0), CTA, Trafiklab',
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
@@ -820,6 +824,7 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     if (this.on.has('aircraft')) this.loadAircraftNow();
+    if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
     if (this.on.has('webcams')) this.loadWebcamsNow();
@@ -1026,9 +1031,12 @@ export class ExtraLayers {
       this.loadSegmentsNow();
       this.every('veh-anim', 2000, () => this.updateVehicles());
       this.every('veh-fetch', 60000, () => this.loadSegmentsNow(true));
+      this.loadFeedsNow();
+      this.every('veh-feeds', 10000, () => this.loadFeedsNow());
     } else {
       this.clear('veh-anim');
       this.clear('veh-fetch');
+      this.clear('veh-feeds');
     }
     if (!this.on.has('ships') || !hasAisKey()) {
       this.clear('ais-push');
@@ -1244,7 +1252,8 @@ export class ExtraLayers {
     const z = this.map.getZoom();
     const wantRail = this.on.has('trains') && z >= 5;
     const wantLocal = this.on.has('transit') && z >= 10;
-    if (this.on.has('transit')) this.set('transit', { note: z < 10 ? 'ab Stadtzoom (Zoomstufe 10) sichtbar' : this.info.transit?.note === 'ab Stadtzoom (Zoomstufe 10) sichtbar' ? undefined : this.info.transit?.note });
+    const cityNote = 'Fahrplan-Echtzeit (Transitous) ab Zoomstufe 10 – GPS-Regionen schon früher';
+    if (this.on.has('transit')) this.set('transit', { note: z < 10 ? cityNote : this.info.transit?.note === cityNote ? undefined : this.info.transit?.note });
     if (this.on.has('trains')) this.set('trains', { note: this.trainNote() });
     if (!wantRail && !wantLocal) {
       this.segs = [];
@@ -1274,11 +1283,46 @@ export class ExtraLayers {
       });
   }
 
+  /** GPS feeds (Norway, Boston, Toronto, …) for the regions in view, each at its own interval. */
+  private loadFeedsNow() {
+    if (this.map.getZoom() < 4) return;
+    const b = this.map.getBounds();
+    const view = { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+    const active = new Set<string>();
+    for (const feed of feedsInView(view)) {
+      active.add(feed.id);
+      const prev = this.feedVeh.get(feed.id);
+      if (this.feedLoading.has(feed.id) || (prev && Date.now() - prev.at < feed.every * 1000)) continue;
+      this.feedLoading.add(feed.id);
+      // Entur supports a bounding box – pad the view so small pans need no reload
+      const padX = (view.east - view.west) * 0.3;
+      const padY = (view.north - view.south) * 0.3;
+      feed
+        .load({ west: view.west - padX, east: view.east + padX, south: view.south - padY, north: view.north + padY })
+        .then((list) => {
+          this.feedVeh.set(feed.id, { at: Date.now(), features: vehicleFeatures(feed, list) });
+          this.feedErrors.delete(feed.label);
+          this.updateVehicles();
+        })
+        .catch((e) => {
+          console.warn(feed.id, e);
+          this.feedVeh.set(feed.id, { at: Date.now(), features: [] });
+          this.feedErrors.add(feed.label);
+          const note = `${[...this.feedErrors].join(', ')} nicht erreichbar`;
+          if (this.on.has('transit')) this.set('transit', { note });
+        })
+        .finally(() => this.feedLoading.delete(feed.id));
+    }
+    // drop vehicles of regions that left the view
+    for (const id of [...this.feedVeh.keys()]) if (!active.has(id)) this.feedVeh.delete(id);
+  }
+
   private updateVehicles() {
     const rail = this.on.has('trains');
     const local = this.on.has('transit');
     const live = positionsAt(this.segs, Date.now(), (m) => (RAIL_MODES.has(m) ? rail : local));
-    const features = [...live.features, ...(rail ? this.gpsTrains.features : [])];
+    const gps = [...this.feedVeh.values()].flatMap((f) => f.features).filter((f) => (f.properties?.rail ? rail : local));
+    const features = [...live.features, ...gps, ...(rail ? this.gpsTrains.features : [])];
     this.setData('trains', { type: 'FeatureCollection', features });
     const nRail = features.filter((f) => f.properties?.rail).length;
     if (rail && this.info.trains?.count !== nRail) this.set('trains', { count: nRail, loading: false });
@@ -1669,7 +1713,7 @@ export class ExtraLayers {
       }
       case 'trains':
       case 'transit-veh': {
-        if (p.src === 'transitous' || p.src === 'amtrak') return this.vehicleCard(p, pt);
+        if (p.src === 'transitous' || p.src === 'amtrak' || p.src === 'gps') return this.vehicleCard(p, pt);
         const num = Number(p.num);
         return {
           type: 'html',
@@ -1736,8 +1780,11 @@ export class ExtraLayers {
     const t = (ms: unknown) => new Date(Number(ms)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     const delay = Number(p.delay);
     const rows =
-      p.src === 'amtrak'
+      p.src === 'amtrak' || p.src === 'gps'
         ? [
+            ['Art', st.label],
+            ...(p.src === 'gps' ? [['Von', p.from], ['Nach', p.to], ['Verspätung', delay === -999 ? '' : delay > 0 ? `+${delay} min` : 'pünktlich']] : []),
+
             ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
             ['Geschwindigkeit', p.speed != null ? `${p.speed} km/h` : ''],
             ['Status', p.timely],
@@ -1758,8 +1805,8 @@ export class ExtraLayers {
         glyph: 'train',
         color: String(p.color ?? st.color),
         title: p.name,
-        source: p.src === 'amtrak' ? 'Amtraker (Amtrak-GPS)' : 'Transitous',
-        url: p.src === 'amtrak' ? 'https://amtraker.com/' : 'https://transitous.org/',
+        source: p.src === 'amtrak' ? 'Amtraker (Amtrak-GPS)' : p.src === 'gps' ? `${p.feed} (GPS)` : 'Transitous',
+        url: p.src === 'amtrak' ? 'https://amtraker.com/' : p.src === 'gps' ? undefined : 'https://transitous.org/',
         extra,
       }),
       lng: pt[0],

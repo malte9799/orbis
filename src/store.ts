@@ -7,6 +7,12 @@ export interface ApiKeys {
   windy?: string;
   /** aisstream.io live AIS (free) */
   aisstream?: string;
+  /** Transport Victoria open data (free KeyId) */
+  victoria?: string;
+  /** CTA Train Tracker (free) */
+  cta?: string;
+  /** Trafiklab GTFS Regional realtime (free) */
+  trafiklab?: string;
 }
 
 export interface Place {

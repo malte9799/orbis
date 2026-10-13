@@ -60,6 +60,8 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Verkehr | Schiffe live (AIS) | Fintraffic Digitraffic (Ostsee), optional aisstream.io (weltweit, kostenloser Schlüssel) |
 | Verkehr | Züge live: Deutschland & Europa (Position aus Echtzeitfahrplan), GPS in Finnland und USA | Transitous (MOTIS), Fintraffic Digitraffic, Amtraker |
 | Verkehr | Busse, Trams & U-Bahnen live (ab Stadtzoom) | Transitous |
+| Verkehr | Nahverkehr & Bahn per GPS: Norwegen, Boston, Philadelphia, Toronto, Malaysia | Entur, MBTA, SEPTA, TTC (umoiq), data.gov.my (GTFS-Realtime) |
+| Verkehr | optional mit kostenlosem Schlüssel: Melbourne/Victoria, Chicago „L“, Schweden | Transport Victoria, CTA Train Tracker, Trafiklab |
 | Verkehr | Bahnnetz (Gleise, Bahnhöfe) | OpenRailwayMap |
 | Verkehr | Autobahn: Staus, Sperrungen, Baustellen | Autobahn GmbH des Bundes |
 | Europa | Bevölkerungswarnungen (MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei) | NINA / BBK |
