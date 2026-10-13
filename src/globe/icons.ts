@@ -28,6 +28,7 @@ export type ExtraGlyph =
   | 'train'
   | 'radiation'
   | 'tsunami'
+  | 'bolt'
   | 'airport'
   | 'vessel'
   | 'radio';
@@ -106,6 +107,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   radiation: [
     { mode: 'fill', d: 'M12 10.2a1.8 1.8 0 1 1 0 3.6a1.8 1.8 0 1 1 0-3.6zM10.4 9.2L7.3 3.8A9 9 0 0 0 3 12h6.2a2.8 2.8 0 0 1 1.2-2.8zM13.6 9.2l3.1-5.4A9 9 0 0 1 21 12h-6.2a2.8 2.8 0 0 0-1.2-2.8zM10.6 14.8l-3.1 5.4a9 9 0 0 0 9 0l-3.1-5.4a2.8 2.8 0 0 1-2.8 0z' },
   ],
+  bolt: [{ mode: 'fill', d: 'M13.5 2L5 13.5h5.5L9.5 22 19 9.5h-5.8z' }],
   tsunami: [{ mode: 'stroke', width: 2.2, d: 'M2.5 19c3 0 3.5-1.5 6-1.5S12 19 14.5 19s4-1 7-1M3 14.5C6 7 12 4 17.5 6c-3 .5-4.5 3-3.5 5.5 1 2.4 4 2.6 6 1.3' }],
   airport: [{ mode: 'fill', d: SILHOUETTES.plane! }],
   vessel: [{ mode: 'fill', d: SILHOUETTES.vessel! }],
