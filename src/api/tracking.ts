@@ -255,6 +255,20 @@ function viaProxy(url: string) {
   return proxy ? `${proxy}${proxy.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}` : url;
 }
 
+let globalCache: { at: number; fc: AircraftResult } | null = null;
+
+/**
+ * Worldwide overview of all aircraft from OpenSky (anonymous: 4 of 400 daily credits per
+ * call) – cached for two minutes and shown when zoomed out.
+ */
+export async function loadGlobalAircraft(): Promise<AircraftResult> {
+  if (globalCache && Date.now() - globalCache.at < 120000) return globalCache.fc;
+  const json = await fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000);
+  const fc = toFeatures(parseOpenSky(json), 'OpenSky Network (Weltübersicht)');
+  globalCache = { at: Date.now(), fc };
+  return fc;
+}
+
 /** Aircraft within `radiusNm` (max 250) around a point. */
 export async function loadAircraft(lat: number, lon: number, radiusNm: number): Promise<AircraftResult> {
   const r = Math.min(250, Math.max(10, Math.round(radiusNm)));

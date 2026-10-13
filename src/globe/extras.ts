@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
-import { groundTrack, loadAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
+import { groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadTsunami } from '../api/earth';
 import {
@@ -25,8 +25,9 @@ import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { loadTransitNetwork } from '../api/networks';
 import { camFeedsInView } from '../api/camfeeds';
 import { loadNearbyStations, loadTopStations } from '../api/radio';
+import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
-import { escapeHtml, fmt, safeUrl } from '../util';
+import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
@@ -70,7 +71,17 @@ export type ExtraId =
   | 'railelec'
   | 'cyclenet'
   | 'hikenet'
-  | 'radio';
+  | 'radio'
+  | 'resources'
+  | 'pipelines'
+  | 'geology'
+  | 'plates'
+  | 'nightlights'
+  | 'ndvi'
+  | 'lst'
+  | 'snowcover'
+  | 'aerosol'
+  | 'landcover';
 
 export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'networks' | 'cams';
 
@@ -103,6 +114,15 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
   { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
+  { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
+  { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
+  { id: 'plates', section: 'earth', label: 'Tektonische Platten', hint: 'Plattengrenzen (PB2002, Bird 2003)', glyph: 'quake', color: '#ef5350' },
+  { id: 'nightlights', section: 'earth', label: 'Nachtlichter', hint: 'Erde bei Nacht – NASA Black Marble', glyph: 'city', color: '#ffd54f' },
+  { id: 'ndvi', section: 'earth', label: 'Vegetation', hint: 'Pflanzenwachstum (NDVI, 8 Tage) – NASA MODIS', glyph: 'wind', color: '#66bb6a' },
+  { id: 'lst', section: 'earth', label: 'Bodentemperatur', hint: 'Landoberflächentemperatur am Tag – NASA MODIS', glyph: 'heat', color: '#ff7043' },
+  { id: 'snowcover', section: 'earth', label: 'Schneedecke (Satellit)', hint: 'Schneebedeckung – NASA MODIS', glyph: 'ice', color: '#e1f5fe' },
+  { id: 'aerosol', section: 'earth', label: 'Aerosole & Staub', hint: 'Dunst, Rauch, Saharastaub (AOD) – NASA MODIS', glyph: 'dust', color: '#bcaaa4' },
+  { id: 'landcover', section: 'earth', label: 'Landbedeckung', hint: 'Wald, Acker, Siedlung, Wasser (10 m) – ESA WorldCover', glyph: 'city', color: '#4caf50' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
@@ -120,6 +140,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'cyclenet', section: 'networks', label: 'Radnetz', hint: 'Radfernwege & regionale Radrouten – Waymarked Trails', glyph: 'city', color: '#43a047' },
   { id: 'hikenet', section: 'networks', label: 'Wandernetz', hint: 'Wanderwege – Waymarked Trails', glyph: 'city', color: '#8d6e63' },
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
+  { id: 'pipelines', section: 'infra', label: 'Öl- & Gaspipelines', hint: 'Pipelines für Gas, Öl, Wasserstoff (ab Zoom 8) – OpenStreetMap', glyph: 'cable', color: '#29b6f6' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
   { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'TeleGeography, PeeringDB', glyph: 'cable', color: '#9c6bff' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
@@ -163,6 +184,16 @@ const LAYERS: Record<ExtraId, string[]> = {
   cyclenet: ['cyclenet'],
   hikenet: ['hikenet'],
   radio: ['radio', 'radio-label'],
+  resources: ['kor250', 'resources', 'resources-label'],
+  pipelines: ['pipelines'],
+  geology: ['geology'],
+  plates: ['plates'],
+  nightlights: ['nightlights'],
+  ndvi: ['ndvi'],
+  lst: ['lst'],
+  snowcover: ['snowcover'],
+  aerosol: ['aerosol'],
+  landcover: ['landcover'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
@@ -171,7 +202,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -227,6 +258,12 @@ export class ExtraLayers {
   private radioTop: FeatureCollection | null = null;
   private radioNear: FeatureCollection = empty();
   private radioKey = '';
+  private resWd: FeatureCollection = empty();
+  private resMrds: FeatureCollection = empty();
+  private resOsm: FeatureCollection = empty();
+  private resMrdsKey = '';
+  private resOsmKey = '';
+  private pipeKey = '';
   private segs: Segment[] = [];
   private segKey = '';
   private segAt = 0;
@@ -270,8 +307,11 @@ export class ExtraLayers {
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
       busnet: 'ÖPNV-Netz: © OpenStreetMap-Mitwirkende',
       radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
+      resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
+      pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
+      plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -380,6 +420,73 @@ export class ExtraLayers {
         },
       },
       'gauges',
+    );
+    // earth observation & geology (raster overlays, below labels)
+    const gibsWms = (layer: string, time?: string) =>
+      `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${layer}&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256${time ? `&TIME=${time}` : ''}`;
+    const overlay = (id: string, tiles: string[], attribution: string, maxzoom: number, opacity: number, extra: Record<string, unknown> = {}) => {
+      if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution, ...extra });
+      add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
+    };
+    overlay('nightlights', [gibsWms('VIIRS_Black_Marble', '2016-01-01')], 'Nachtlichter: NASA Black Marble', 8, 0.9);
+    overlay('ndvi', [gibsWms('MODIS_Terra_NDVI_8Day')], 'Vegetation: NASA MODIS NDVI', 9, 0.75);
+    overlay('lst', [gibsWms('MODIS_Terra_Land_Surface_Temp_Day')], 'Bodentemperatur: NASA MODIS', 7, 0.75);
+    overlay('snowcover', [gibsWms('MODIS_Terra_NDSI_Snow_Cover')], 'Schneedecke: NASA MODIS', 8, 0.85);
+    overlay('aerosol', [gibsWms('MODIS_Combined_Value_Added_AOD')], 'Aerosole: NASA MODIS', 6, 0.75);
+    overlay(
+      'landcover',
+      ['https://services.terrascope.be/wms/v2?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=WORLDCOVER_2021_MAP&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'],
+      'Landbedeckung: © ESA WorldCover 2021 (CC BY 4.0)',
+      18,
+      0.75,
+    );
+    overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
+    overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
+    add(
+      {
+        id: 'plates',
+        type: 'line',
+        source: 'plates',
+        layout: { ...hidden, 'line-join': 'round' },
+        paint: { 'line-color': '#ff5252', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 1.2, 8, 3], 'line-opacity': 0.85 },
+      },
+      'lbl-border-country',
+    );
+    add(
+      {
+        id: 'pipelines',
+        type: 'line',
+        source: 'pipelines',
+        layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.5, 14, 4], 'line-opacity': 0.9 },
+      },
+      'lbl-border-country',
+    );
+    add(
+      {
+        id: 'resources',
+        type: 'circle',
+        source: 'resources',
+        layout: { ...hidden, 'circle-sort-key': ['get', 'lvl'] },
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['match', ['get', 'lvl'], 0, 2.4, 1.6], 8, ['match', ['get', 'lvl'], 0, 6, 4], 13, 7],
+          'circle-stroke-color': ['case', ['==', ['get', 'cat'], 'oil'], '#ffb300', 'rgba(255,255,255,0.85)'],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1, 0.5, 8, 1.2],
+        },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'resources-label',
+        type: 'symbol',
+        source: 'resources',
+        minzoom: 9,
+        layout: { ...hidden, 'text-field': ['get', 'title'], 'text-font': FONT_REGULAR, 'text-size': 10, 'text-offset': [0, 1.0], 'text-anchor': 'top', 'text-optional': true },
+        paint: { 'text-color': '#efebe9', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.2 },
+      },
+      'marker',
     );
     // transport networks
     const rasterOverlay = (id: string, tiles: string[], attribution: string, maxzoom = 19, opacity = 0.9) => {
@@ -984,6 +1091,8 @@ export class ExtraLayers {
     if (this.on.has('aircraft')) this.loadAircraftNow();
     if (this.on.has('busnet')) this.loadBusnetNow();
     if (this.on.has('radio')) this.loadRadioNow();
+    if (this.on.has('resources')) this.loadResourcesNow();
+    if (this.on.has('pipelines')) this.loadPipelinesNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
@@ -1181,6 +1290,24 @@ export class ExtraLayers {
         case 'radio':
           this.loadRadioNow();
           break;
+        case 'resources':
+          this.loadOnce('resources', Infinity, async () => {
+            this.resWd = await loadWikidataResources();
+            this.mergeResources();
+            return {};
+          });
+          this.loadResourcesNow();
+          break;
+        case 'pipelines':
+          this.loadPipelinesNow();
+          break;
+        case 'plates':
+          this.loadOnce('plates', Infinity, async () => {
+            const fc = await fetchJsonExt<FeatureCollection>('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json');
+            this.setData('plates', fc);
+            return { count: fc.features.length };
+          });
+          break;
         case 'nina':
           this.loadOnce('nina', 5 * 60000, async () => {
             const fc = await loadNina();
@@ -1264,8 +1391,19 @@ export class ExtraLayers {
   private loadAircraftNow() {
     const m = this.map;
     if (m.getZoom() < 5) {
-      this.setData('aircraft', empty());
-      this.set('aircraft', { note: 'zum Anzeigen näher heranzoomen', count: undefined, loading: false });
+      // zoomed out: coarse worldwide overview (positions refresh every 2 minutes)
+      const seq = ++this.aircraftSeq;
+      loadGlobalAircraft()
+        .then((fc) => {
+          if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
+          this.setData('aircraft', fc);
+          this.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min) – reinzoomen für Live-Details' });
+        })
+        .catch(() => {
+          if (seq !== this.aircraftSeq) return;
+          this.setData('aircraft', empty());
+          this.set('aircraft', { note: 'Weltübersicht gerade nicht verfügbar – zum Anzeigen näher heranzoomen', count: undefined, loading: false });
+        });
       return;
     }
     const c = m.getCenter();
@@ -1398,6 +1536,84 @@ export class ExtraLayers {
 
   // -------------------------------------------------------------------------
   // Trains & public transport
+
+  /** Resources: Wikidata worldwide; USGS MRDS from zoom 7; OpenStreetMap from zoom 10. */
+  private loadResourcesNow() {
+    const z = this.map.getZoom();
+    if (z >= 7) {
+      const b = this.viewBounds(4);
+      const key = Object.values(b).join(',');
+      if (key !== this.resMrdsKey) {
+        this.resMrdsKey = key;
+        loadMrds(b)
+          .then((fc) => {
+            if (this.resMrdsKey !== key) return;
+            this.resMrds = fc;
+            this.mergeResources();
+          })
+          .catch((e) => {
+            console.warn('USGS MRDS', e);
+            this.resMrdsKey = '';
+          });
+      }
+    } else if (this.resMrds.features.length) {
+      this.resMrds = empty();
+      this.resMrdsKey = '';
+    }
+    if (z >= 10) {
+      const b = this.viewBounds(20);
+      const key = Object.values(b).join(',');
+      if (key !== this.resOsmKey) {
+        this.resOsmKey = key;
+        loadOsmResources(b)
+          .then((fc) => {
+            if (this.resOsmKey !== key) return;
+            this.resOsm = fc;
+            this.mergeResources();
+          })
+          .catch((e) => {
+            console.warn('Overpass resources', e);
+            this.resOsmKey = '';
+          });
+      }
+    } else if (this.resOsm.features.length) {
+      this.resOsm = empty();
+      this.resOsmKey = '';
+    }
+    this.mergeResources();
+  }
+
+  private mergeResources() {
+    const features = [...this.resWd.features, ...this.resMrds.features, ...this.resOsm.features];
+    this.setData('resources', { type: 'FeatureCollection', features });
+    const z = this.map.getZoom();
+    const level = z < 7 ? 'Weltübersicht (Wikidata) – reinzoomen für USGS/BGR (ab 7) und OSM (ab 10)' : z < 10 ? 'Regional: Wikidata, USGS MRDS, BGR (DE) – ab Zoom 10 OpenStreetMap' : 'Lokal: alle Quellen inkl. OpenStreetMap';
+    if (features.length || !this.info.resources?.loading) this.set('resources', { count: features.length, note: level });
+  }
+
+  private loadPipelinesNow() {
+    const z = this.map.getZoom();
+    if (z < 8) {
+      this.set('pipelines', { note: 'ab Zoomstufe 8 sichtbar' });
+      return;
+    }
+    const b = this.viewBounds(10);
+    const key = Object.values(b).join(',');
+    if (key === this.pipeKey) return;
+    this.pipeKey = key;
+    this.set('pipelines', { loading: true, note: undefined });
+    loadPipelines(b)
+      .then((fc) => {
+        if (this.pipeKey !== key) return;
+        this.setData('pipelines', fc);
+        this.set('pipelines', { loading: false, count: fc.features.length, note: 'blau Gas · orange Öl · lila Wasserstoff' });
+      })
+      .catch((e) => {
+        console.warn('Overpass pipelines', e);
+        this.pipeKey = '';
+        this.set('pipelines', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      });
+  }
 
   /** Radio: popular stations worldwide, all stations around the centre from zoom 6. */
   private loadRadioNow() {
@@ -1921,6 +2137,19 @@ export class ExtraLayers {
           html: cardHtml({ glyph: 'rocket', color: '#ff6e40', title: p.pad || 'Startplatz', subtitle: p.place, source: 'The Space Devs', url: 'https://thespacedevs.com/', extra: `<ol class="pop-list">${items}</ol>` }),
           lng: pt[0],
           lat: pt[1],
+        };
+      }
+      case 'resources':
+        return { type: 'html', html: cardHtml({ glyph: 'plant', color: String(p.color), title: p.title, subtitle: [p.catLabel, p.subtitle].filter(Boolean).join(' · '), source: p.source, url: p.url }), lng: pt[0], lat: pt[1] };
+      case 'pipelines':
+        return { type: 'html', html: html('cable', String(p.color)), lng: at.lng, lat: at.lat };
+      case 'plates': {
+        const t = { SUB: 'Subduktionszone', OSR: 'Ozeanischer Rücken', OTF: 'Transformstörung', CRB: 'Kontinentaler Grabenbruch', CTF: 'Kontinentale Transformstörung', CCB: 'Kontinentale Kollision', OCB: 'Ozeanische Kollision' } as Record<string, string>;
+        return {
+          type: 'html',
+          html: cardHtml({ glyph: 'quake', color: '#ef5350', title: `Plattengrenze ${String(p.Name ?? '')}`, subtitle: [p.PlateA && p.PlateB ? `${p.PlateA} – ${p.PlateB}` : '', t[String(p.Type)] ?? p.Type].filter(Boolean).join(' · '), source: 'Bird (2003), PB2002' }),
+          lng: at.lng,
+          lat: at.lat,
         };
       }
       case 'radio':

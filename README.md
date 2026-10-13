@@ -49,6 +49,12 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Europa | Pegelstände & Hochwasser an Bundeswasserstraßen | PEGELONLINE (WSV) |
 | Europa | Luftqualität & Pollen in europäischen Städten | Copernicus CAMS via Open-Meteo |
 | Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, adsb.fi, airplanes.live, OpenSky Network (der Reihe nach, die erste erreichbare Quelle wird verwendet) |
+| Erde & Umwelt | Rohstoffvorkommen (Öl, Gas, Kohle, Erze, Salz, Steine …) – weltweit grob, ab Zoom 7 regional, ab Zoom 10 einzelne Bergwerke/Bohrlöcher | Wikidata, USGS MRDS, BGR KOR250 (DE), OpenStreetMap |
+| Erde & Umwelt | Geologie (beim Zoomen immer genauer), tektonische Plattengrenzen | Macrostrat, Bird (2003) PB2002 |
+| Erde & Umwelt | Nachtlichter, Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole | NASA GIBS (Black Marble, MODIS) |
+| Erde & Umwelt | Landbedeckung 10 m | ESA WorldCover |
+| Verkehr | Öl- & Gaspipelines (ab Zoom 8) | OpenStreetMap |
+| Luftraum | Flugzeuge: Weltübersicht beim Herauszoomen (alle 2 min) | OpenSky Network |
 | Erde & Umwelt | Polarlicht-Vorhersage mit Kp-Index | NOAA SWPC (OVATION) |
 | Erde & Umwelt | Alle ~1.300 Vulkane mit letztem Ausbruch | Smithsonian Global Volcanism Program |
 | Erde & Umwelt | Waldbrand-Flächen USA | NIFC WFIGS |
