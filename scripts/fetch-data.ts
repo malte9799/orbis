@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 
 const [OUT, PREV] = process.argv.slice(2);
 if (!OUT) throw new Error('usage: fetch-data <outDir> [prevDir]');
-const UA = { 'User-Agent': 'Orbis-data/1.0 (+https://github.com/malte9799/weather)' };
+const UA = { 'User-Agent': 'Orbis-data/1.0 (+https://github.com/malte9799/orbis)' };
 const DAY = 23 * 3600 * 1000;
 
 if (PREV && existsSync(PREV)) cpSync(PREV, OUT, { recursive: true, filter: (src) => !src.includes('/.git') });

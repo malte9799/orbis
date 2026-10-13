@@ -8,7 +8,7 @@ function dataBase(): string {
   const m = /^([\w-]+)\.github\.io$/.exec(location.hostname);
   const repo = location.pathname.split('/').filter(Boolean)[0];
   if (m && repo) return `https://raw.githubusercontent.com/${m[1]}/${repo}/data/`;
-  return 'https://raw.githubusercontent.com/malte9799/weather/data/';
+  return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
 }
 
 export const DATA_BASE = dataBase();
