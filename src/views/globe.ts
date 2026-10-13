@@ -148,8 +148,8 @@ const DEFAULT_STATE: GlobeState = {
   extras: { cities: true, dwdwarn: true },
   groups: { fires: true, storms: true, tornado: true, quakes: true, volcanoes: true },
   projection: 'mercator',
-  center: [10, 35],
-  zoom: 2.2,
+  center: [store.getLastPlace().lon, store.getLastPlace().lat],
+  zoom: 5,
   panelOpen: window.innerWidth > 720,
 };
 
@@ -217,7 +217,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const panelToggle = el.querySelector<HTMLButtonElement>('.panel-toggle')!;
 
   el.querySelector('.globe-search')!.appendChild(
-    createSearch((p) => focusPlace(p.lat, p.lon, 7, true), 'Ort suchen und hinfliegen …'),
+    createSearch((p) => { store.setLastPlace(p); focusPlace(p.lat, p.lon, 7, true); }, 'Ort suchen und hinfliegen …'),
   );
   panelToggle.addEventListener('click', () => {
     state.panelOpen = panel.hidden;
@@ -1245,6 +1245,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     locCtl.querySelector('button')!.addEventListener('click', async () => {
       try {
         const { lat, lon } = await locate();
+        store.setLastPlace({ name: '', lat, lon });
         focusPlace(lat, lon, 8, true);
       } catch {
         toast('Standort konnte nicht ermittelt werden.', 'error');
