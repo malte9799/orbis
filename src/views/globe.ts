@@ -12,6 +12,7 @@ import {
   kindColor,
   loadEonet,
   loadFirms,
+  loadFirmsSnapshot,
   loadGdacs,
   loadNwsSevere,
   loadQuakes,
@@ -260,6 +261,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let firmsCount = 0;
+  let firmsOk = false;
 
   const FEED_LOADERS: Record<FeedId, () => Promise<void>> = {
     eonet: async () => {
@@ -286,10 +288,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     },
     firms: async () => {
       const key = store.getKeys().firms;
-      if (!key) return;
-      const fc = await loadFirms(key);
+      // own key → live points; otherwise the shared worldwide snapshot from the data branch
+      const fc = key ? await loadFirms(key) : await loadFirmsSnapshot();
       firmsCount = fc.features.length;
+      firmsOk = fc.features.length > 0;
       (map?.getSource('firms') as GeoJSONSource | undefined)?.setData(fc);
+      applyGroups();
     },
   };
   const FEED_NAMES: Record<FeedId, string> = {
@@ -305,7 +309,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function ensureFeeds(force = false) {
     const needed = new Set<FeedId>();
     for (const g of GROUPS) if (state.groups[g.id]) g.feeds.forEach((f) => needed.add(f));
-    if (state.groups.hotspots && store.getKeys().firms) needed.add('firms');
+    if (state.groups.hotspots) needed.add('firms');
     for (const id of needed) {
       const fd = feedData[id];
       if (fd.loading || (!force && Date.now() - fd.at < REFRESH_MS)) continue;
@@ -607,14 +611,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         freigeschaltet. Schlüssel werden nur lokal in diesem Browser gespeichert.</p>
         <label class="field-label">OpenWeatherMap <small>(zusätzliche hochauflösende Wetterkarten)</small>
           <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
-        <label class="field-label">NASA FIRMS MAP_KEY <small>(Feuer-Hotspots als einzelne, anklickbare Punkte)</small>
+        <label class="field-label">NASA FIRMS MAP_KEY <small>(eigener Schlüssel für aktuellere Feuer-Hotspots – sonst wird ein gemeinsamer Snapshot genutzt)</small>
           <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
         <label class="field-label">Windy Webcams <small>(kostenloser Schlüssel von api.windy.com/keys – zehntausende Webcams weltweit)</small>
           <input type="password" data-key="windy" value="${escapeHtml(keys.windy ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">aisstream.io <small>(kostenloser Schlüssel von aisstream.io – Schiffe weltweit live)</small>
           <input type="password" data-key="aisstream" value="${escapeHtml(keys.aisstream ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">US National Park Service <small>(kostenloser Schlüssel von nps.gov/subjects/developer – Nationalpark-Webcams)</small>
-          <input type="password" data-key="nps" value="${escapeHtml(keys.nps ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
+          <input type="password" data-key="nps" value="${escapeHtml(keys.nps ?? '')}" placeholder="API-Key (optional – sonst gemeinsamer Snapshot)" autocomplete="off"/></label>
         <h3>Nahverkehr live (optional)</h3>
         <label class="field-label">Transport Victoria <small>(KeyId von opendata.transport.vic.gov.au – Melbourne: Züge, Trams, Busse)</small>
           <input type="password" data-key="victoria" value="${escapeHtml(keys.victoria ?? '')}" placeholder="KeyId" autocomplete="off"/></label>
@@ -642,6 +646,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const proxy = get('adsbProxy');
       store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
+      firmsOk = false;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();
       applyGroups();
@@ -739,9 +744,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     vis('tracks', !!state.groups.storms);
     vis('nws-fill', !!state.groups.tornado);
     vis('nws-line', !!state.groups.tornado);
-    const firmsKey = !!store.getKeys().firms;
-    vis('firms', !!state.groups.hotspots && firmsKey);
-    vis('hotspots', !!state.groups.hotspots && !firmsKey);
+    // clickable points (own key or shared snapshot) when available, else the raster image
+    vis('firms', !!state.groups.hotspots && firmsOk);
+    vis('hotspots', !!state.groups.hotspots && !firmsOk);
   }
 
   // ----- forecast model ----------------------------------------------------

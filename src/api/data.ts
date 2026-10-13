@@ -4,6 +4,8 @@
 // Every loader falls back to the original source if the snapshot is unavailable.
 
 function dataBase(): string {
+  // Node (the data Action) has no location – snapshots are read only in the browser.
+  if (typeof location === 'undefined') return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
   // On GitHub Pages (owner.github.io/repo) use that repository, otherwise the main one.
   const m = /^([\w-]+)\.github\.io$/.exec(location.hostname);
   const repo = location.pathname.split('/').filter(Boolean)[0];

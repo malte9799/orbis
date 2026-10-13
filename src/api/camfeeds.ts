@@ -223,9 +223,10 @@ export const CAM_FEEDS: CamFeed[] = [
 ];
 
 /** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML). */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn']);
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();
-  return CAM_FEEDS.filter((f) => (!f.key || keys[f.key]) && f.bbox[0] < b.east && f.bbox[2] > b.west && f.bbox[1] < b.north && f.bbox[3] > b.south);
+  // a keyed feed is available either with the user's key or via the shared snapshot
+  return CAM_FEEDS.filter((f) => (!f.key || keys[f.key] || SNAPSHOT_CAMS.has(f.id)) && f.bbox[0] < b.east && f.bbox[2] > b.west && f.bbox[1] < b.north && f.bbox[3] > b.south);
 }

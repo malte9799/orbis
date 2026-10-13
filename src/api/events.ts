@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon, MultiPolygon, Position } from 'geojson';
 import { fetchJson } from '../util';
+import { snapshotJson } from './data';
 
 /** Kinds of natural events shown on the globe. */
 export type EventKind =
@@ -377,9 +378,11 @@ export async function loadGdacs(): Promise<EventFeature[]> {
 // ---------------------------------------------------------------------------
 // NASA FIRMS active fire hotspots (requires a free MAP_KEY)
 
-export async function loadFirms(mapKey: string): Promise<FeatureCollection<Point, { frp: number; conf: string; time: string }>> {
+export type FirmsFC = FeatureCollection<Point, { frp: number; conf: string; time: string }>;
+
+export async function loadFirms(mapKey: string, source = 'VIIRS_NOAA20_NRT', days = 1): Promise<FirmsFC> {
   const res = await fetch(
-    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(mapKey)}/VIIRS_NOAA20_NRT/world/1`,
+    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(mapKey)}/${source}/world/${days}`,
   );
   if (!res.ok) throw new Error(`FIRMS HTTP ${res.status}`);
   const [header, ...rows] = (await res.text()).trim().split(/\r?\n/);
@@ -402,6 +405,11 @@ export async function loadFirms(mapKey: string): Promise<FeatureCollection<Point
       };
     }),
   };
+}
+
+/** Shared worldwide FIRMS snapshot from the data branch (no user key needed). */
+export function loadFirmsSnapshot(): Promise<FirmsFC> {
+  return snapshotJson<FirmsFC>('firms/world.json');
 }
 
 // ---------------------------------------------------------------------------

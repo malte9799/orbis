@@ -8,7 +8,12 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
-(globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY };
+(globalThis as { localStorage?: unknown }).localStorage = {
+  getItem: (k: string) => (k === 'wg.keys' ? JSON.stringify(envKeys) : null),
+  setItem() {},
+  removeItem() {},
+};
 
 const [OUT, PREV] = process.argv.slice(2);
 if (!OUT) throw new Error('usage: fetch-data <outDir> [prevDir]');
@@ -70,6 +75,31 @@ await task('tsunami', 0, async () => {
 
 await task('safecast', 0, async () => {
   write('safecast.json', await json('https://tt.safecast.org/devices'));
+});
+
+await task('firms', 0, async () => {
+  const key = process.env.FIRMS_MAP_KEY;
+  if (!key) {
+    console.log('  no FIRMS_MAP_KEY secret – skipping');
+    return;
+  }
+  const { loadFirms } = await import('../src/api/events');
+  const byId = new Map<string, unknown>();
+  for (const sensor of ['VIIRS_NOAA20_NRT', 'VIIRS_NOAA21_NRT', 'VIIRS_SNPP_NRT']) {
+    try {
+      const fc = await loadFirms(key, sensor, 1);
+      for (const f of fc.features) {
+        const [lon, lat] = f.geometry.coordinates;
+        f.geometry.coordinates = [Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4];
+        byId.set(`${f.geometry.coordinates[0]},${f.geometry.coordinates[1]},${f.properties.time}`, f);
+      }
+      console.log(`  ${sensor}: ${fc.features.length}`);
+    } catch (e) {
+      console.warn(`  ${sensor}: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  if (!byId.size) throw new Error('no FIRMS data');
+  write('firms/world.json', { type: 'FeatureCollection', features: [...byId.values()] });
 });
 
 // ---------------------------------------------------------------------------

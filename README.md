@@ -130,6 +130,15 @@ mehrere Webcam-Listen. `.github/workflows/data.yml` lädt sie deshalb serverseit
 sie über `raw.githubusercontent.com` und fällt sonst auf die Originalquelle zurück. Der erste
 Lauf startet automatisch beim Push, danach per Zeitplan (oder manuell unter *Actions*).
 
+**Schlüssel für alle Nutzer teilen (optional):** Dienste mit kostenlosem Schlüssel, deren Daten
+sich als Datei abbilden lassen, kann die Action mit *deinem* Schlüssel abrufen – er liegt dann
+nur als GitHub-Secret vor, nie im Browser, und alle Nutzer teilen sich das Ergebnis. Unterstützt:
+`FIRMS_MAP_KEY` (weltweite, anklickbare Feuer-Hotspots) und `NPS_API_KEY` (Nationalpark-Webcams).
+Secret anlegen unter *Settings → Secrets and variables → Actions*. Ohne Secret wird die Ebene
+ohne Schlüssel bzw. mit dem alten Rasterbild angezeigt. Nicht für alle teilbar sind
+ortsabhängige oder Dauerverbindungs-Dienste (OpenWeatherMap, aisstream, Windy, Fahrzeug-Feeds) –
+die bleiben pro Nutzer unter *Einstellungen*.
+
 ## Hinweise
 
 - Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 5 Tage);

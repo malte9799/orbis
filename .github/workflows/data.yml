@@ -37,6 +37,13 @@ jobs:
             mkdir -p ../data-prev
           fi
       - name: Download sources
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          NPS_API_KEY: ${{ secrets.NPS_API_KEY }}
+          WINDY_KEY: ${{ secrets.WINDY_KEY }}
+          VICTORIA_KEY: ${{ secrets.VICTORIA_KEY }}
+          CTA_KEY: ${{ secrets.CTA_KEY }}
+          TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
         run: |
           npx esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
           node ../fetch-data.mjs ../data-out ../data-prev
