@@ -20,6 +20,12 @@ const HOSTS = {
   'opensky-network.org': 30,
   'overpass-api.de': 900,
   'overpass.private.coffee': 900,
+  '511on.ca': 600,
+  '511.alberta.ca': 600,
+  'developer.nps.gov': 600,
+  'maps2.dcgis.dc.gov': 600,
+  'verkehr.autobahn.de': 600,
+  'www3.septa.org': 30,
 };
 // the worldwide OpenSky overview is large and changes slowly
 const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchParams.has('lamin') ? 90 : HOSTS[url.hostname]);

@@ -1,4 +1,5 @@
 import type { Feature, Point } from 'geojson';
+import { viaProxy } from './proxy';
 import { store } from '../store';
 import { fetchJson } from '../util';
 
@@ -133,7 +134,7 @@ export const CAM_FEEDS: CamFeed[] = [
     bbox: [-77.15, 38.79, -76.9, 39.0],
     async load() {
       const fc = await fetchJson<Parameters<typeof genericCams>[0]>(
-        'https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Sensors_WebMercator/MapServer/93/query?where=1%3D1&outFields=*&outSR=4326&f=geojson',
+        viaProxy('https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Transportation_Sensors_WebMercator/MapServer/93/query?where=1%3D1&outFields=*&outSR=4326&f=geojson'),
         undefined,
         20000,
       );
@@ -147,7 +148,7 @@ export const CAM_FEEDS: CamFeed[] = [
       bbox: host === '511on.ca' ? [-95.2, 41.6, -74.3, 56.9] : [-120.0, 49.0, -110.0, 60.0],
       async load() {
         const list = await fetchJson<{ Id: string | number; Roadway?: string; Location?: string; Latitude: number; Longitude: number; Views?: { Url: string; Status?: string; Description?: string }[] }[]>(
-          `https://${host}/api/v2/get/cameras?format=json`,
+          viaProxy(`https://${host}/api/v2/get/cameras?format=json`),
           undefined,
           30000,
         );
@@ -190,9 +191,9 @@ export const CAM_FEEDS: CamFeed[] = [
     bbox: [5.8, 47.2, 15.1, 55.1],
     async load() {
       const AB = 'https://verkehr.autobahn.de/o/autobahn';
-      const { roads } = await fetchJson<{ roads: string[] }>(`${AB}/`, undefined, 20000);
+      const { roads } = await fetchJson<{ roads: string[] }>(viaProxy(`${AB}/`), undefined, 20000);
       const parts = await Promise.allSettled(
-        roads.map((r) => fetchJson<{ webcam?: { identifier: string; title?: string; subtitle?: string; coordinate?: { lat: string; long: string }; imageurl?: string; linkurl?: string }[] }>(`${AB}/${encodeURIComponent(r.trim())}/services/webcam`, undefined, 20000)),
+        roads.map((r) => fetchJson<{ webcam?: { identifier: string; title?: string; subtitle?: string; coordinate?: { lat: string; long: string }; imageurl?: string; linkurl?: string }[] }>(viaProxy(`${AB}/${encodeURIComponent(r.trim())}/services/webcam`), undefined, 20000)),
       );
       return parts.flatMap((p) =>
         p.status !== 'fulfilled'
@@ -212,8 +213,8 @@ export const CAM_FEEDS: CamFeed[] = [
       const key = store.getKeys().nps!;
       // NPS accepts the key as the X-Api-Key header (its recommended method) or a query param
       const j = await fetchJson<{ data: { id: string; title: string; url?: string; latitude?: number | string; longitude?: number | string; images?: { url: string }[]; isStreaming?: boolean; status?: string; relatedParks?: { fullName?: string }[] }[] }>(
-        `https://developer.nps.gov/api/v1/webcams?limit=600&api_key=${encodeURIComponent(key)}`,
-        { headers: { 'X-Api-Key': key } },
+        viaProxy(`https://developer.nps.gov/api/v1/webcams?limit=600&api_key=${encodeURIComponent(key)}`),
+        undefined,
         30000,
       );
       return j.data
