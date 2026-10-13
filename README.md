@@ -62,7 +62,10 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Verkehr | Busse, Trams & U-Bahnen live (ab Stadtzoom) | Transitous |
 | Verkehr | Nahverkehr & Bahn per GPS: Norwegen, Boston, Philadelphia, Toronto, Malaysia | Entur, MBTA, SEPTA, TTC (umoiq), data.gov.my (GTFS-Realtime) |
 | Verkehr | optional mit kostenlosem Schlüssel: Melbourne/Victoria, Chicago „L“, Schweden | Transport Victoria, CTA Train Tracker, Trafiklab |
-| Verkehr | Bahnnetz (Gleise, Bahnhöfe) | OpenRailwayMap |
+| Verkehrsnetze | Straßennetz (Autobahn bis Kreisstraße, mit Straßennummern) | OpenFreeMap / OpenStreetMap |
+| Verkehrsnetze | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | OpenRailwayMap |
+| Verkehrsnetze | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | OpenStreetMap (Overpass) |
+| Verkehrsnetze | Radnetz, Wandernetz | Waymarked Trails |
 | Verkehr | Autobahn: Staus, Sperrungen, Baustellen | Autobahn GmbH des Bundes |
 | Europa | Bevölkerungswarnungen (MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei) | NINA / BBK |
 | Kameras | Live-Webcams (Bild im Popup) | Fintraffic Digitraffic (Finnland, CC BY 4.0), OpenStreetMap, optional Windy Webcams (kostenloser Schlüssel) |

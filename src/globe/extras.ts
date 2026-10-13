@@ -22,6 +22,7 @@ import {
 } from '../api/transport';
 import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
+import { loadTransitNetwork } from '../api/networks';
 import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
@@ -59,9 +60,15 @@ export type ExtraId =
   | 'transit'
   | 'railmap'
   | 'autobahn'
-  | 'nina';
+  | 'nina'
+  | 'roadnet'
+  | 'busnet'
+  | 'railspeed'
+  | 'railelec'
+  | 'cyclenet'
+  | 'hikenet';
 
-export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'cams';
+export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'networks' | 'cams';
 
 export interface ExtraDef {
   id: ExtraId;
@@ -77,6 +84,7 @@ export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'earth', title: 'Erde & Umwelt' },
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
+  { id: 'networks', title: 'Verkehrsnetze' },
   { id: 'cams', title: 'Kameras' },
 ];
 
@@ -100,7 +108,13 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
   { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
   { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden', glyph: 'train', color: '#ab47bc' },
-  { id: 'railmap', section: 'infra', label: 'Bahnnetz', hint: 'Gleise, Bahnhöfe, Strecken – OpenRailwayMap', glyph: 'train', color: '#78909c' },
+  { id: 'roadnet', section: 'networks', label: 'Straßennetz', hint: 'Autobahnen bis Kreisstraßen mit Nummern – OpenStreetMap', glyph: 'city', color: '#f57c00' },
+  { id: 'railmap', section: 'networks', label: 'Bahnnetz', hint: 'Gleise, Bahnhöfe, Strecken – OpenRailwayMap', glyph: 'train', color: '#78909c' },
+  { id: 'busnet', section: 'networks', label: 'Bus- & ÖPNV-Netz', hint: 'Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Stadtzoom) – OpenStreetMap', glyph: 'train', color: '#7e57c2' },
+  { id: 'railspeed', section: 'networks', label: 'Bahn: Geschwindigkeit', hint: 'zulässige Streckengeschwindigkeit – OpenRailwayMap', glyph: 'train', color: '#e53935' },
+  { id: 'railelec', section: 'networks', label: 'Bahn: Elektrifizierung', hint: 'Stromsysteme der Strecken – OpenRailwayMap', glyph: 'plant', color: '#fdd835' },
+  { id: 'cyclenet', section: 'networks', label: 'Radnetz', hint: 'Radfernwege & regionale Radrouten – Waymarked Trails', glyph: 'city', color: '#43a047' },
+  { id: 'hikenet', section: 'networks', label: 'Wandernetz', hint: 'Wanderwege – Waymarked Trails', glyph: 'city', color: '#8d6e63' },
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
   { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'TeleGeography, PeeringDB', glyph: 'cable', color: '#9c6bff' },
@@ -132,11 +146,17 @@ const LAYERS: Record<ExtraId, string[]> = {
   tsunami: ['tsunami-ring', 'tsunami'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
-  airports: ['airports'],
+  airports: ['airports', 'airports-minor'],
   ships: ['ships'],
   trains: ['trains', 'trains-label'],
   transit: ['transit-veh', 'transit-label'],
   railmap: ['railmap'],
+  roadnet: ['road-secondary', 'road-primary', 'road-trunk', 'road-motorway', 'road-ref'],
+  busnet: ['busnet-line', 'busnet-label', 'busnet-stop'],
+  railspeed: ['railspeed'],
+  railelec: ['railelec'],
+  cyclenet: ['cyclenet'],
+  hikenet: ['hikenet'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
@@ -145,7 +165,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -194,6 +214,7 @@ export class ExtraLayers {
   private alprTilesFailed = false;
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
+  private busnetKey = '';
   private segs: Segment[] = [];
   private segKey = '';
   private segAt = 0;
@@ -235,8 +256,9 @@ export class ExtraLayers {
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
+      busnet: 'ÖPNV-Netz: © OpenStreetMap-Mitwirkende',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -346,6 +368,108 @@ export class ExtraLayers {
       },
       'gauges',
     );
+    // transport networks
+    const rasterOverlay = (id: string, tiles: string[], attribution: string, maxzoom = 19, opacity = 0.9) => {
+      if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution });
+      add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
+    };
+    const orm = (style: string) => ['a', 'b', 'c'].map((sub) => `https://${sub}.tiles.openrailwaymap.org/${style}/{z}/{x}/{y}.png`);
+    rasterOverlay('railspeed', orm('maxspeed'), 'Streckengeschwindigkeit: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)');
+    rasterOverlay('railelec', orm('electrification'), 'Elektrifizierung: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)');
+    rasterOverlay('cyclenet', ['https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png'], 'Radrouten: <a href="https://cycling.waymarkedtrails.org/">Waymarked Trails</a> (CC BY-SA)', 18, 0.95);
+    rasterOverlay('hikenet', ['https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png'], 'Wanderwege: <a href="https://hiking.waymarkedtrails.org/">Waymarked Trails</a> (CC BY-SA)', 18, 0.95);
+    const road = (id: string, cls: string[], minzoom: number, color: string, w: [number, number, number, number]) =>
+      add(
+        {
+          id,
+          type: 'line',
+          source: 'ofm',
+          'source-layer': 'transportation',
+          minzoom,
+          filter: ['all', ['in', ['get', 'class'], ['literal', cls]], ['!=', ['get', 'ramp'], 1]],
+          layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': color,
+            'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], w[0], w[1], w[2], w[3]],
+            'line-opacity': ['case', ['==', ['get', 'brunnel'], 'tunnel'], 0.45, 0.9],
+          },
+        },
+        'lbl-border-country',
+      );
+    road('road-secondary', ['secondary'], 8, '#ffe082', [8, 0.6, 14, 4]);
+    road('road-primary', ['primary'], 6, '#ffb74d', [6, 0.6, 14, 5]);
+    road('road-trunk', ['trunk'], 4, '#ff8a65', [4, 0.6, 14, 6]);
+    road('road-motorway', ['motorway'], 3, '#e53935', [3, 0.7, 14, 7]);
+    add(
+      {
+        id: 'road-ref',
+        type: 'symbol',
+        source: 'ofm',
+        'source-layer': 'transportation_name',
+        minzoom: 6,
+        filter: ['all', ['has', 'ref'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]]],
+        layout: {
+          ...hidden,
+          'symbol-placement': 'line',
+          'symbol-spacing': 400,
+          'text-field': ['get', 'ref'],
+          'text-font': FONT_BOLD,
+          'text-size': 10,
+          'text-rotation-alignment': 'viewport',
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': ['match', ['get', 'class'], 'motorway', '#1565c0', 'trunk', '#c62828', '#ef6c00'],
+          'text-halo-width': 3,
+        },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'busnet-line',
+        type: 'line',
+        source: 'busnet',
+        layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round', 'line-sort-key': ['get', 'order'] },
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 11, ['match', ['get', 'mode'], 'bus', 1.2, 2], 16, ['match', ['get', 'mode'], 'bus', 3, 5]],
+          'line-opacity': 0.85,
+        },
+      },
+      'lbl-border-country',
+    );
+    add(
+      {
+        id: 'busnet-stop',
+        type: 'circle',
+        source: 'busnet-stops',
+        minzoom: 13,
+        layout: hidden,
+        paint: { 'circle-color': '#ffffff', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 17, 5], 'circle-stroke-color': '#7e57c2', 'circle-stroke-width': 1.5 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'busnet-label',
+        type: 'symbol',
+        source: 'busnet',
+        minzoom: 12,
+        filter: ['!=', ['get', 'ref'], ''],
+        layout: {
+          ...hidden,
+          'symbol-placement': 'line',
+          'symbol-spacing': 300,
+          'text-field': ['get', 'ref'],
+          'text-font': FONT_BOLD,
+          'text-size': 10,
+          'text-rotation-alignment': 'viewport',
+        },
+        paint: { 'text-color': '#ffffff', 'text-halo-color': ['get', 'color'], 'text-halo-width': 2.5 },
+      },
+      'marker',
+    );
     // earth & environment
     add(
       {
@@ -446,34 +570,28 @@ export class ExtraLayers {
       'marker',
     );
     // transport
-    add(
-      {
-        id: 'airports',
-        type: 'symbol',
-        source: 'ofm',
-        'source-layer': 'aerodrome_label',
-        minzoom: 3,
-        filter: [
-          'all',
-          ['has', 'iata'],
-          ['any', ['==', ['get', 'class'], 'international'], ['all', ['>=', ['zoom'], 6], ['==', ['get', 'class'], 'public']], ['>=', ['zoom'], 8]],
-        ],
-        layout: {
-          ...hidden,
-          'icon-image': 'glyph-airport',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 9, 0.8],
-          'text-field': ['step', ['zoom'], '', 5, ['get', 'iata']],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-offset': [0, 1.1],
-          'text-anchor': 'top',
-          'text-optional': true,
-          'symbol-sort-key': ['match', ['get', 'class'], 'international', 0, 1],
-        },
-        paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
+    const airportLayer = (id: string, minzoom: number, classes: string[]): LayerSpecification => ({
+      id,
+      type: 'symbol',
+      source: 'ofm',
+      'source-layer': 'aerodrome_label',
+      minzoom,
+      filter: ['all', ['has', 'iata'], ['in', ['get', 'class'], ['literal', classes]]],
+      layout: {
+        ...hidden,
+        'icon-image': 'glyph-airport',
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 9, 0.8],
+        'text-field': ['step', ['zoom'], '', 5, ['get', 'iata']],
+        'text-font': FONT_BOLD,
+        'text-size': 10,
+        'text-offset': [0, 1.1],
+        'text-anchor': 'top',
+        'text-optional': true,
       },
-      'marker',
-    );
+      paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
+    });
+    add(airportLayer('airports', 3, ['international']), 'marker');
+    add(airportLayer('airports-minor', 7, ['public', 'regional', 'other', 'military', 'private']), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
         type: 'raster',
@@ -824,6 +942,7 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     if (this.on.has('aircraft')) this.loadAircraftNow();
+    if (this.on.has('busnet')) this.loadBusnetNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
@@ -1014,6 +1133,9 @@ export class ExtraLayers {
             const n = (k: string) => r.points.features.filter((f) => f.properties?.kind === k).length;
             return { count: r.points.features.length, note: `${n('jam')} Staus · ${n('closure')} Sperrungen · ${n('roadworks')} Baustellen` };
           });
+          break;
+        case 'busnet':
+          this.loadBusnetNow();
           break;
         case 'nina':
           this.loadOnce('nina', 5 * 60000, async () => {
@@ -1232,6 +1354,33 @@ export class ExtraLayers {
 
   // -------------------------------------------------------------------------
   // Trains & public transport
+
+  /** OSM public transport lines for the view (from zoom 11 – Overpass results get large). */
+  private loadBusnetNow() {
+    const z = this.map.getZoom();
+    if (z < 11) {
+      this.set('busnet', { note: 'ab Stadtzoom (Zoomstufe 11) – Daten aus OpenStreetMap' });
+      return;
+    }
+    const b = this.viewBounds(z >= 13 ? 50 : 10);
+    const key = Object.values(b).join(',');
+    if (key === this.busnetKey) return;
+    this.busnetKey = key;
+    this.set('busnet', { loading: true, note: undefined });
+    loadTransitNetwork(b)
+      .then((r) => {
+        if (this.busnetKey !== key) return;
+        this.setData('busnet', r.lines);
+        this.setData('busnet-stops', r.stops);
+        const modes = new Set(r.lines.features.map((f) => f.properties?.modeLabel));
+        this.set('busnet', { loading: false, count: r.lines.features.length, note: r.lines.features.length ? `Linien: ${[...modes].join(', ')}` : 'keine Linien im Ausschnitt erfasst' });
+      })
+      .catch((e) => {
+        console.warn('Overpass ÖPNV', e);
+        this.busnetKey = '';
+        this.set('busnet', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar oder überlastet – bitte erneut verschieben' });
+      });
+  }
 
   private async loadGpsTrains() {
     const [fi, us] = await Promise.allSettled([loadTrains(), loadAmtrak()]);
@@ -1652,6 +1801,28 @@ export class ExtraLayers {
           lat: pt[1],
         };
       }
+      case 'busnet-line': {
+        const rows = [
+          ['Verkehrsmittel', p.modeLabel],
+          ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
+          ['Betreiber', p.operator],
+        ].filter(([, v]) => v);
+        return {
+          type: 'html',
+          html: cardHtml({
+            glyph: 'train',
+            color: String(p.color),
+            title: p.ref ? `${p.modeLabel} ${p.ref}` : p.name || String(p.modeLabel),
+            subtitle: p.ref ? p.name : '',
+            source: 'OpenStreetMap',
+            url: p.url,
+            extra: `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`,
+          }),
+          lng: at.lng,
+          lat: at.lat,
+        };
+      }
+      case 'airports-minor':
       case 'airports': {
         const icao = String(p.icao ?? '');
         const name = String(p['name:de'] ?? p.name ?? 'Flughafen');

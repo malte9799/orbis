@@ -439,6 +439,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <div class="tile-grid">${extraTiles('air')}</div>
       <h3>Verkehr & Infrastruktur</h3>
       <div class="tile-grid">${extraTiles('infra')}</div>
+      <h3>Verkehrsnetze</h3>
+      <div class="tile-grid">${extraTiles('networks')}</div>
       <h3>Kameras</h3>
       <div class="tile-grid">${extraTiles('cams')}</div>`;
 
@@ -622,7 +624,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
         PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
-        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
