@@ -54,8 +54,10 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
+const FORCE = process.env.FORCE === '1' || process.env.FORCE === 'true';
+
 async function task(name: string, everyMs: number, fn: () => Promise<void>) {
-  if (everyMs && meta.tasks[name] && Date.now() - meta.tasks[name] < everyMs) return;
+  if (!FORCE && everyMs && meta.tasks[name] && Date.now() - meta.tasks[name] < everyMs) return;
   const t0 = Date.now();
   try {
     await fn();
@@ -85,9 +87,10 @@ await task('firms', 0, async () => {
   }
   const { loadFirms } = await import('../src/api/events');
   const byId = new Map<string, unknown>();
-  for (const sensor of ['VIIRS_NOAA20_NRT', 'VIIRS_NOAA21_NRT', 'VIIRS_SNPP_NRT']) {
+  for (const sensor of ['VIIRS_NOAA20_NRT', 'VIIRS_NOAA21_NRT', 'VIIRS_SNPP_NRT', 'MODIS_NRT']) {
     try {
-      const fc = await loadFirms(key, sensor, 1);
+      // explicit world bounding box (west,south,east,north) – more reliable than the 'world' keyword
+      const fc = await loadFirms(key, sensor, 1, '-180,-90,180,90');
       for (const f of fc.features) {
         const [lon, lat] = f.geometry.coordinates;
         f.geometry.coordinates = [Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4];
@@ -98,7 +101,17 @@ await task('firms', 0, async () => {
       console.warn(`  ${sensor}: ${e instanceof Error ? e.message : e}`);
     }
   }
-  if (!byId.size) throw new Error('no FIRMS data');
+  if (!byId.size) {
+    // diagnose: show what FIRMS actually returned (status + first line)
+    try {
+      const res = await fetch(`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${key}/VIIRS_NOAA20_NRT/-180,-90,180,90/1`);
+      const body = await res.text();
+      console.warn(`  diagnose: HTTP ${res.status}, ${body.length} bytes, start: ${JSON.stringify(body.slice(0, 160))}`);
+    } catch (e) {
+      console.warn(`  diagnose failed: ${e instanceof Error ? e.message : e}`);
+    }
+    throw new Error('no FIRMS data');
+  }
   write('firms/world.json', { type: 'FeatureCollection', features: [...byId.values()] });
 });
 

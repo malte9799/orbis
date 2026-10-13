@@ -380,9 +380,9 @@ export async function loadGdacs(): Promise<EventFeature[]> {
 
 export type FirmsFC = FeatureCollection<Point, { frp: number; conf: string; time: string }>;
 
-export async function loadFirms(mapKey: string, source = 'VIIRS_NOAA20_NRT', days = 1): Promise<FirmsFC> {
+export async function loadFirms(mapKey: string, source = 'VIIRS_NOAA20_NRT', days = 1, area = 'world'): Promise<FirmsFC> {
   const res = await fetch(
-    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(mapKey)}/${source}/world/${days}`,
+    `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(mapKey)}/${source}/${area}/${days}`,
   );
   if (!res.ok) throw new Error(`FIRMS HTTP ${res.status}`);
   const [header, ...rows] = (await res.text()).trim().split(/\r?\n/);

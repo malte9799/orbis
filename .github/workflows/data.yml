@@ -7,6 +7,11 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Alle Quellen neu laden (Drosselung ignorieren)'
+        type: boolean
+        default: true
   push:
     branches: [main]
     paths: ['scripts/fetch-data.ts', 'src/api/camfeeds.ts', '.github/workflows/data.yml']
@@ -38,6 +43,7 @@ jobs:
           fi
       - name: Download sources
         env:
+          FORCE: ${{ github.event.inputs.force }}
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
           NPS_API_KEY: ${{ secrets.NPS_API_KEY }}
           WINDY_KEY: ${{ secrets.WINDY_KEY }}
