@@ -17,6 +17,7 @@ const SAT_GROUPS: Record<string, string> = {
   stations: 'Raumstation',
   visual: 'Hell sichtbar',
   weather: 'Wettersatellit',
+  science: 'Forschung',
   'gps-ops': 'GPS',
   galileo: 'Galileo',
   starlink: 'Starlink',

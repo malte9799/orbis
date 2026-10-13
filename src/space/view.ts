@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { propagate } from 'satellite.js';
 import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
-import { BODIES, CRAFT, setPositionResolver, type Body } from './bodies';
+import { BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import {
   AU_KM,
   eciToEcliptic,
@@ -160,7 +163,97 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   let origin: Vec3 = [0, 0, 0];
   let trans: { from: Vec3; to: string; t0: number; dur: number; d0: number; d1: number } | null = null;
 
-  const radiusAU = (b: Body) => b.radiusKm / AU_KM;
+  const radiusAU = (b: Body) => (b.model ? b.model.sizeM / 2000 : b.radiusKm) / AU_KM;
+
+  // ----- NASA 3D models (glTF), loaded only when needed --------------------
+  let gltfLoader: GLTFLoader | null = null;
+  let envMap: THREE.Texture | null = null;
+  const gltfCache = new Map<string, Promise<THREE.Object3D>>();
+  const crafts = new Map<string, { group: THREE.Group; state: 'idle' | 'loading' | 'ready' | 'error' }>();
+
+  function loadModel(url: string) {
+    if (!gltfLoader) {
+      const draco = new DRACOLoader().setDecoderPath('./draco/');
+      gltfLoader = new GLTFLoader().setDRACOLoader(draco);
+    }
+    let p = gltfCache.get(url);
+    if (!p) {
+      p = gltfLoader.loadAsync(url).then((g) => g.scene);
+      gltfCache.set(url, p);
+    }
+    return p;
+  }
+
+  /** Load (once) and place the model of a craft; scaled to its real size in AU. */
+  function ensureCraftModel(b: Body) {
+    let c = crafts.get(b.id);
+    if (!c) {
+      c = { group: new THREE.Group(), state: 'idle' };
+      c.group.visible = false;
+      scene.add(c.group);
+      crafts.set(b.id, c);
+    }
+    if (c.state !== 'idle' || !b.model) return c;
+    c.state = 'loading';
+    if (b.id === focusId) renderInfo();
+    const entry = c;
+    loadModel(b.model.url)
+      .then((src) => {
+        const obj = src.clone(true);
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        obj.position.sub(center); // centre the model on the craft's position
+        const inner = new THREE.Group();
+        inner.add(obj);
+        inner.scale.setScalar(b.model!.sizeM / Math.max(size.x, size.y, size.z) / (AU_KM * 1000));
+        obj.traverse((o) => {
+          const mesh = o as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+            const std = mat as THREE.MeshStandardMaterial;
+            if ('envMap' in std) {
+              std.envMap = envMap;
+              std.envMapIntensity = 0.55;
+              std.needsUpdate = true;
+            }
+          }
+          mesh.userData.id = b.id;
+        });
+        entry.group.add(inner);
+        entry.state = 'ready';
+        if (b.id === focusId) renderInfo();
+      })
+      .catch((e) => {
+        console.warn('Modell', b.id, e);
+        entry.state = 'error';
+        if (b.id === focusId) renderInfo();
+      });
+    return c;
+  }
+
+  function updateCraftModels() {
+    const pxPerRad = el.clientHeight / 2 / Math.tan((camera.fov * Math.PI) / 360);
+    for (const b of CRAFT) {
+      if (!b.model) continue;
+      const p = resolve(b.id, simTime);
+      const c = crafts.get(b.id);
+      if (!p || !opts.craft) {
+        if (c) c.group.visible = false;
+        continue;
+      }
+      toThree(sub(p, origin), v3m);
+      const dist = Math.max(1e-15, v3m.distanceTo(camera.position));
+      const px = (radiusAU(b) / dist) * pxPerRad;
+      // only fetch a model once it would be at least a few pixels big (or is selected)
+      if (px < 1.5 && b.id !== focusId && !c) continue;
+      const cc = c ?? ensureCraftModel(b);
+      if (px >= 1.5 || b.id === focusId) ensureCraftModel(b);
+      cc.group.visible = cc.state === 'ready' && px > 0.5;
+      cc.group.position.copy(v3m);
+    }
+  }
+  const v3m = new THREE.Vector3();
 
   function init() {
     renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
@@ -189,6 +282,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     scene.backgroundIntensity = 0.45;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+    // soft studio reflections for the metal/foil surfaces of the spacecraft models only
+    envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    ensureSats();
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     scene.add(sunLight);
 
@@ -261,7 +357,10 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       ray.params.Points = { threshold: camera.position.length() * 0.01 };
-      const hits = ray.intersectObjects([...[...meshes.values()].map((m) => m.group), ...(satPoints?.visible ? [satPoints] : [])], true);
+      const hits = ray.intersectObjects(
+        [...[...meshes.values()].map((m) => m.group), ...[...crafts.values()].filter((c) => c.group.visible).map((c) => c.group), ...(satPoints?.visible ? [satPoints] : [])],
+        true,
+      );
       for (const h of hits) {
         if (h.object === satPoints && h.index != null) {
           showSatInfo(h.index);
@@ -317,12 +416,13 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   // ----- focus & camera ----------------------------------------------------
   function viewDistance(b: Body) {
     if (b.kind === 'star') return radiusAU(b) * 8;
-    if (b.kind === 'craft') return 0.002;
+    if (b.kind === 'craft') return b.model ? radiusAU(b) * 5 : 0.002;
     return radiusAU(b) * 4;
   }
 
   function minDistance(b: Body) {
-    return b.kind === 'craft' ? 1e-6 : radiusAU(b) * (b.id === 'earth' ? 1.3 : 1.15);
+    if (b.kind === 'craft') return b.model ? radiusAU(b) * 1.3 : 1e-6;
+    return radiusAU(b) * (b.id === 'earth' ? 1.3 : 1.15);
   }
 
   function focus(id: string, dist?: number) {
@@ -440,6 +540,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     updateMoonOrbits();
     updateTrails();
     updateSatellites(now);
+    updateCraftModels();
 
     controls.update();
     // keep near/far sensible for the current distance
@@ -513,19 +614,36 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   }
   const pts0 = (l: THREE.Line) => (l.geometry.getAttribute('position')?.count ?? 0) > 1;
 
+  function ensureSats() {
+    if (sats.length || satsLoading) return;
+    satsLoading = true;
+    loadSatellites()
+      .then((s) => {
+        sats = s;
+        satById = new Map(s.map((x) => [x.id, x]));
+      })
+      .catch(() => toast('Satellitendaten (CelesTrak) konnten nicht geladen werden.'))
+      .finally(() => (satsLoading = false));
+  }
+  let satById = new Map<string, Sat>();
+  setSatLookup((norad, ms) => {
+    const s = satById.get(norad);
+    if (!s) return null;
+    const pv = propagate(s.satrec, new Date(ms));
+    if (!pv || typeof pv.position !== 'object') return null;
+    const earth = resolve('earth', ms);
+    if (!earth) return null;
+    const e = eciToEcliptic([pv.position.x, pv.position.y, pv.position.z]);
+    return [earth[0] + e[0], earth[1] + e[1], earth[2] + e[2]];
+  });
+
   function updateSatellites(now: number) {
     const earth = resolve('earth', simTime)!;
     const near = len(sub(origin, earth)) < 0.02 && opts.sats;
     if (!satPoints) return;
     satPoints.visible = near && sats.length > 0;
     if (!near) return;
-    if (!sats.length && !satsLoading) {
-      satsLoading = true;
-      loadSatellites()
-        .then((s) => (sats = s))
-        .catch(() => toast('Satellitendaten (CelesTrak) konnten nicht geladen werden.'))
-        .finally(() => (satsLoading = false));
-    }
+    ensureSats();
     if (!sats.length) return;
     if (now - (satPoints.userData.at ?? 0) < 250) {
       toThree(sub(earth, origin), satPoints.position);
@@ -591,7 +709,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       }
       if (b.id === focusId) show = !!s;
       // no label on top of a body that already fills part of the screen
-      if (show && b.kind !== 'craft') {
+      if (show && (b.kind !== 'craft' || b.model)) {
         const p = resolve(b.id, simTime)!;
         const dist = toThree(sub(p, origin), v3b).distanceTo(camera.position);
         const px = (radiusAU(b) / dist) * (el.clientHeight / 2) / Math.tan((camera.fov * Math.PI) / 360);
@@ -706,6 +824,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       <dl class="sp-live"></dl>
       ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>` : ''}
       ${b.approx ? '<p class="small note">Position/Flugbahn angenähert.</p>' : ''}
+      ${b.model ? `<p class="small muted">3D-Modell: NASA 3D Resources${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
+        crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : ''
+      }</p>` : ''}
       <div class="sp-actions">
         ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : ''}
         ${extLink}

@@ -32,6 +32,8 @@ export interface Body {
   orbit?: boolean;
   /** orbital period around the parent (moons) */
   periodDays?: number;
+  /** NASA 3D model (glTF), loaded on demand; sizeM = real largest dimension in metres */
+  model?: { url: string; sizeM: number; note?: string };
 }
 
 export type PositionContext = (id: string) => Vec3;
@@ -386,11 +388,52 @@ export function setPositionResolver(fn: typeof positionOf) {
   positionOf = fn;
 }
 
+/** Earth satellites resolved from live orbital elements (set by the view once loaded). */
+let satLookup: (norad: string, ms: number) => Vec3 | null = () => null;
+export function setSatLookup(fn: typeof satLookup) {
+  satLookup = fn;
+}
+
+const m = (file: string, sizeM: number, note?: string) => ({ url: `./models/${file}`, sizeM, note });
+
 export const CRAFT: Body[] = [
+  {
+    id: 'iss',
+    name: 'ISS',
+    kind: 'craft',
+    parent: 'earth',
+    radiusKm: 0.055,
+    color: '#ffffff',
+    model: m('iss.glb', 109),
+    position: (ms) => satLookup('25544', ms),
+    facts: [
+      ['Bahnhöhe', '≈ 420 km'],
+      ['Geschwindigkeit', '≈ 27 600 km/h'],
+      ['Besatzung', 'seit November 2000 dauerhaft bewohnt'],
+    ],
+    description: 'Die Internationale Raumstation – Position live aus aktuellen Bahndaten (CelesTrak).',
+  },
+  {
+    id: 'hubble',
+    name: 'Hubble-Teleskop',
+    kind: 'craft',
+    parent: 'earth',
+    radiusKm: 0.0066,
+    color: '#d6dbe8',
+    model: m('hubble.glb', 13.2),
+    position: (ms) => satLookup('20580', ms),
+    facts: [
+      ['Start', '24. April 1990'],
+      ['Bahnhöhe', '≈ 515 km'],
+      ['Spiegel', '2,4 m'],
+    ],
+    description: 'Das berühmte Weltraumteleskop – Position live aus aktuellen Bahndaten (CelesTrak).',
+  },
   {
     id: 'voyager1',
     name: 'Voyager 1',
     kind: 'craft',
+    model: m('voyager.glb', 16),
     radiusKm: 0.002,
     color: '#ffd23f',
     approx: true,
@@ -406,6 +449,7 @@ export const CRAFT: Body[] = [
     id: 'voyager2',
     name: 'Voyager 2',
     kind: 'craft',
+    model: m('voyager.glb', 16),
     radiusKm: 0.002,
     color: '#ffd23f',
     approx: true,
@@ -435,6 +479,7 @@ export const CRAFT: Body[] = [
     id: 'pioneer10',
     name: 'Pioneer 10',
     kind: 'craft',
+    model: m('pioneer.glb', 8),
     radiusKm: 0.002,
     color: '#b0b8c8',
     approx: true,
@@ -449,6 +494,7 @@ export const CRAFT: Body[] = [
     id: 'pioneer11',
     name: 'Pioneer 11',
     kind: 'craft',
+    model: m('pioneer.glb', 8, 'Modell: Pioneer 10 (baugleich)'),
     radiusKm: 0.002,
     color: '#b0b8c8',
     approx: true,
@@ -462,6 +508,7 @@ export const CRAFT: Body[] = [
     id: 'jwst',
     name: 'James-Webb-Teleskop',
     kind: 'craft',
+    model: m('jwst.glb', 21),
     radiusKm: 0.01,
     color: '#ffb84d',
     approx: true,
@@ -490,6 +537,7 @@ export const CRAFT: Body[] = [
     id: 'parker',
     name: 'Parker Solar Probe',
     kind: 'craft',
+    model: m('parker.glb', 6),
     radiusKm: 0.002,
     color: '#ff7a45',
     approx: true,
@@ -518,6 +566,7 @@ export const CRAFT: Body[] = [
     id: 'juno',
     name: 'Juno',
     kind: 'craft',
+    model: m('juno.glb', 20),
     radiusKm: 0.002,
     color: '#ffd23f',
     approx: true,
@@ -532,9 +581,10 @@ export const CRAFT: Body[] = [
     id: 'perseverance',
     name: 'Perseverance & Ingenuity',
     kind: 'craft',
+    model: m('perseverance.glb', 3),
     radiusKm: 0.002,
     color: '#ff9966',
-    position: near('mars', '2021-02-18', [3400, 0, 1100]),
+    position: near('mars', '2021-02-18', [3226, 0, 1044]),
     facts: [
       ['Landung', '18. Februar 2021, Jezero-Krater'],
       ['Aufgabe', 'Suche nach Spuren früheren Lebens'],
@@ -544,10 +594,27 @@ export const CRAFT: Body[] = [
     id: 'curiosity',
     name: 'Curiosity',
     kind: 'craft',
+    model: m('perseverance.glb', 3, 'Modell: Perseverance (nahezu baugleich)'),
     radiusKm: 0.002,
     color: '#ff9966',
-    position: near('mars', '2012-08-06', [-3390, 0, -280]),
+    position: near('mars', '2012-08-06', [-3379, 0, -279]),
     facts: [['Landung', '6. August 2012, Gale-Krater']],
+  },
+  {
+    id: 'lro',
+    name: 'Lunar Reconnaissance Orbiter',
+    kind: 'craft',
+    parent: 'moon',
+    radiusKm: 0.003,
+    color: '#ffd23f',
+    approx: true,
+    model: m('lro.glb', 5),
+    position: near('moon', '2009-06-23', [0, 0, 1787]),
+    facts: [
+      ['Start', '18. Juni 2009'],
+      ['Bahnhöhe', '≈ 50–200 km über dem Mond'],
+    ],
+    description: 'Kartiert den Mond in höchster Auflösung.',
   },
   {
     id: 'europaclipper',

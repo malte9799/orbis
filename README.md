@@ -22,6 +22,9 @@ Drei Ansichten:
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
   - Erdsatelliten (ISS, Wetter-, GPS-, Galileo-Satelliten) in Erdnähe, berechnet aus CelesTrak-Bahndaten
+  - 3D-Modelle der NASA ([NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), frei verwendbar) für
+    James-Webb-Teleskop, Hubble, ISS, Voyager, Pioneer, Parker Solar Probe, Juno, Perseverance/Curiosity und LRO.
+    Sie werden erst geladen, wenn man ein Objekt anwählt oder nah genug heranzoomt; Hubble und ISS mit Live-Position
 
   Planetenpositionen stammen aus den JPL-Näherungsformeln (Standish, ±wenige Bogenminuten 1800–2050),
   der Mond aus der Näherung des Astronomical Almanac. Bahnen der Raumsonden sind vereinfacht und als
