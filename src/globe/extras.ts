@@ -327,12 +327,14 @@ export class ExtraLayers {
         id: 'aurora',
         type: 'heatmap',
         source: 'aurora',
+        // a large-scale phenomenon on a 1° grid – fades out before the grid becomes visible
+        maxzoom: 8,
         layout: hidden,
         paint: {
           'heatmap-weight': ['interpolate', ['linear'], ['get', 'v'], 3, 0.05, 30, 0.6, 90, 1],
-          'heatmap-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, 6, 3, 30, 6, 160],
+          'heatmap-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, 6, 3, 30, 6, 170, 8, 480],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.9, 5, 0.6],
-          'heatmap-opacity': 0.8,
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 6.5, 0.8, 8, 0],
           'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,255,120,0)', 0.15, 'rgba(0,255,120,0.35)', 0.45, 'rgba(60,255,140,0.75)', 0.75, '#d4ff5a', 1, '#ff5ac8'],
         },
       },
