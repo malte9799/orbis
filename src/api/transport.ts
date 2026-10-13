@@ -377,7 +377,9 @@ export async function loadTrains(): Promise<FeatureCollection<Point>> {
   );
   return {
     type: 'FeatureCollection',
-    features: list.map((t) => point(t.location.coordinates[0], t.location.coordinates[1], { num: t.trainNumber, date: t.departureDate, speed: t.speed, at: t.timestamp })),
+    features: list.map((t) =>
+      point(t.location.coordinates[0], t.location.coordinates[1], { src: 'fi', rail: true, num: t.trainNumber, name: `Zug ${t.trainNumber}`, color: '#ffca28', date: t.departureDate, speed: t.speed, at: t.timestamp }),
+    ),
   };
 }
 

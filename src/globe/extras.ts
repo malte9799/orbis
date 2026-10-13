@@ -20,6 +20,7 @@ import {
   type Ship,
   type ShipCat,
 } from '../api/transport';
+import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
@@ -53,7 +54,11 @@ export type ExtraId =
   | 'launches'
   | 'airports'
   | 'ships'
-  | 'trains';
+  | 'trains'
+  | 'transit'
+  | 'railmap'
+  | 'autobahn'
+  | 'nina';
 
 export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'cams';
 
@@ -78,6 +83,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'cities', section: 'europe', label: 'Städtewetter', hint: 'aktuelles Wetter in ~200 Städten', glyph: 'city', color: '#5b9dff' },
   { id: 'dwdwarn', section: 'europe', label: 'Unwetterwarnungen DE', hint: 'Deutscher Wetterdienst, amtlich', glyph: 'warn', color: '#e53935' },
   { id: 'gauges', section: 'europe', label: 'Pegel & Hochwasser DE', hint: 'PEGELONLINE, Bundeswasserstraßen', glyph: 'gauge', color: '#3d9ad1' },
+  { id: 'nina', section: 'europe', label: 'Bevölkerungswarnungen', hint: 'NINA: MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei', glyph: 'warn', color: '#c2185b' },
   { id: 'aq', section: 'europe', label: 'Luftqualität & Pollen', hint: 'europäische Städte – Copernicus CAMS', glyph: 'air', color: '#50c878' },
   { id: 'aurora', section: 'earth', label: 'Polarlicht', hint: 'Vorhersage für die nächste Stunde – NOAA SWPC', glyph: 'aurora', color: '#3ddc84' },
   { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
@@ -91,7 +97,10 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
-  { id: 'trains', section: 'infra', label: 'Züge live (Finnland)', hint: 'GPS-Position aller Züge – Fintraffic', glyph: 'train', color: '#ffca28' },
+  { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
+  { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Nahverkehr live ab Stadtzoom – Transitous', glyph: 'train', color: '#ab47bc' },
+  { id: 'railmap', section: 'infra', label: 'Bahnnetz', hint: 'Gleise, Bahnhöfe, Strecken – OpenRailwayMap', glyph: 'train', color: '#78909c' },
+  { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
   { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'TeleGeography, PeeringDB', glyph: 'cable', color: '#9c6bff' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
@@ -124,14 +133,18 @@ const LAYERS: Record<ExtraId, string[]> = {
   launches: ['launches'],
   airports: ['airports'],
   ships: ['ships'],
-  trains: ['trains'],
+  trains: ['trains', 'trains-label'],
+  transit: ['transit-veh', 'transit-label'],
+  railmap: ['railmap'],
+  autobahn: ['autobahn-line', 'autobahn'],
+  nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
 };
 
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -180,6 +193,11 @@ export class ExtraLayers {
   private alprTilesFailed = false;
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
+  private segs: Segment[] = [];
+  private segKey = '';
+  private segAt = 0;
+  private segLoading = false;
+  private gpsTrains: FeatureCollection = empty();
   private ais: AisStream | null = null;
 
   constructor(
@@ -209,9 +227,12 @@ export class ExtraLayers {
       radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0)',
+      trains: 'Züge: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>',
+      autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
+      'autobahn-line': '',
+      nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -449,27 +470,102 @@ export class ExtraLayers {
       },
       'marker',
     );
+    if (!m.getSource('railmap'))
+      m.addSource('railmap', {
+        type: 'raster',
+        tiles: ['a', 'b', 'c'].map((sub) => `https://${sub}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`),
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: 'Bahnnetz: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)',
+      });
+    add({ id: 'railmap', type: 'raster', source: 'railmap', layout: hidden, paint: { 'raster-opacity': 0.85 } }, 'lbl-border-country');
     add(
       {
-        id: 'trains',
-        type: 'symbol',
-        source: 'trains',
-        layout: {
-          ...hidden,
-          'icon-image': 'glyph-train',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.45, 10, 0.8],
-          'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 9, ['to-string', ['get', 'num']]],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-offset': [0, 1.1],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: { 'text-color': '#ffe082', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
+        id: 'nina-fill',
+        type: 'fill',
+        source: 'nina',
+        layout: hidden,
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.25 },
+      },
+      'lbl-border-country',
+    );
+    add(
+      {
+        id: 'nina-line',
+        type: 'line',
+        source: 'nina',
+        layout: hidden,
+        paint: { 'line-color': ['get', 'color'], 'line-width': 1.4 },
+      },
+      'lbl-border-country',
+    );
+    add(
+      {
+        id: 'autobahn-line',
+        type: 'line',
+        source: 'autobahn-line',
+        minzoom: 6,
+        layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 12, 6], 'line-opacity': 0.85 },
       },
       'marker',
     );
+    add(
+      {
+        id: 'autobahn',
+        type: 'circle',
+        source: 'autobahn',
+        minzoom: 5,
+        layout: { ...hidden, 'circle-sort-key': ['match', ['get', 'kind'], 'closure', 3, 'jam', 2, 'warning', 1, 0] },
+        paint: {
+          'circle-color': ['get', 'color'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, ['match', ['get', 'kind'], 'roadworks', 2, 3], 11, ['match', ['get', 'kind'], 'roadworks', 5, 7]],
+          'circle-stroke-color': ['match', ['get', 'kind'], 'closure', '#ffffff', 'rgba(0,0,0,0.6)'],
+          'circle-stroke-width': 1.2,
+        },
+      },
+      'marker',
+    );
+    const vehicleLayers = (id: string, label: string, filter: ExpressionSpecification) => {
+      add(
+        {
+          id,
+          type: 'circle',
+          source: 'trains',
+          filter,
+          layout: hidden,
+          paint: {
+            'circle-color': ['get', 'color'],
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.6, 10, 5, 14, 7],
+            'circle-stroke-color': ['case', ['==', ['get', 'realTime'], false], 'rgba(255,255,255,0.45)', '#ffffff'],
+            'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 4, 0.8, 10, 1.5],
+          },
+        },
+        'marker',
+      );
+      add(
+        {
+          id: label,
+          type: 'symbol',
+          source: 'trains',
+          filter,
+          minzoom: 9,
+          layout: {
+            ...hidden,
+            'text-field': ['get', 'name'],
+            'text-font': FONT_BOLD,
+            'text-size': 10,
+            'text-offset': [0, 1.0],
+            'text-anchor': 'top',
+            'text-optional': true,
+          },
+          paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
+        },
+        'marker',
+      );
+    };
+    vehicleLayers('trains', 'trains-label', ['==', ['get', 'rail'], true]);
+    vehicleLayers('transit-veh', 'transit-label', ['!=', ['get', 'rail'], true]);
     add(
       {
         id: 'ships',
@@ -724,6 +820,7 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     if (this.on.has('aircraft')) this.loadAircraftNow();
+    if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
     if (this.on.has('webcams')) this.loadWebcamsNow();
     if (this.on.has('alpr')) this.loadAlprNow();
@@ -902,16 +999,37 @@ export class ExtraLayers {
           }
           break;
         case 'trains':
-          this.loadOnce('trains', 15000, async () => {
-            const fc = await loadTrains();
-            this.setData('trains', fc);
-            return { count: fc.features.length };
+          this.loadOnce('trains', 30000, () => this.loadGpsTrains());
+          break;
+        case 'autobahn':
+          this.loadOnce('autobahn', 10 * 60000, async () => {
+            const r = await loadAutobahn();
+            this.setData('autobahn', r.points);
+            this.setData('autobahn-line', r.lines);
+            const n = (k: string) => r.points.features.filter((f) => f.properties?.kind === k).length;
+            return { count: r.points.features.length, note: `${n('jam')} Staus · ${n('closure')} Sperrungen · ${n('roadworks')} Baustellen` };
+          });
+          break;
+        case 'nina':
+          this.loadOnce('nina', 5 * 60000, async () => {
+            const fc = await loadNina();
+            this.setData('nina', fc);
+            const ids = new Set(fc.features.map((f) => f.properties?.id));
+            return { count: ids.size, note: ids.size ? undefined : 'derzeit keine Warnungen' };
           });
           break;
       }
     }
     if (!this.on.has('sats') && !this.on.has('starlink')) this.clear('sat-pos');
     if (!this.on.has('launches')) this.clear('launch-labels');
+    if (this.on.has('trains') || this.on.has('transit')) {
+      this.loadSegmentsNow();
+      this.every('veh-anim', 2000, () => this.updateVehicles());
+      this.every('veh-fetch', 60000, () => this.loadSegmentsNow(true));
+    } else {
+      this.clear('veh-anim');
+      this.clear('veh-fetch');
+    }
     if (!this.on.has('ships') || !hasAisKey()) {
       this.clear('ais-push');
       this.ais?.stop();
@@ -1102,6 +1220,69 @@ export class ExtraLayers {
         console.warn('Overpass', e);
         this.osmPowerKey = '';
       });
+  }
+
+  // -------------------------------------------------------------------------
+  // Trains & public transport
+
+  private async loadGpsTrains() {
+    const [fi, us] = await Promise.allSettled([loadTrains(), loadAmtrak()]);
+    const features = [...(fi.status === 'fulfilled' ? fi.value.features : []), ...(us.status === 'fulfilled' ? us.value : [])];
+    this.gpsTrains = { type: 'FeatureCollection', features };
+    this.updateVehicles();
+    const failed = [fi.status === 'rejected' ? 'Finnland' : '', us.status === 'rejected' ? 'Amtrak' : ''].filter(Boolean);
+    return { note: this.trainNote(failed) };
+  }
+
+  private trainNote(failed: string[] = []) {
+    const z = this.map.getZoom();
+    return [z < 5 ? 'Deutschland & Europa ab Zoomstufe 5' : '', failed.length ? `${failed.join(', ')} nicht erreichbar` : ''].filter(Boolean).join(' · ') || undefined;
+  }
+
+  /** Fetch Transitous trip segments for the view (rail from zoom 5, local transport from zoom 10). */
+  private loadSegmentsNow(force = false) {
+    const z = this.map.getZoom();
+    const wantRail = this.on.has('trains') && z >= 5;
+    const wantLocal = this.on.has('transit') && z >= 10;
+    if (this.on.has('transit')) this.set('transit', { note: z < 10 ? 'ab Stadtzoom (Zoomstufe 10) sichtbar' : this.info.transit?.note === 'ab Stadtzoom (Zoomstufe 10) sichtbar' ? undefined : this.info.transit?.note });
+    if (this.on.has('trains')) this.set('trains', { note: this.trainNote() });
+    if (!wantRail && !wantLocal) {
+      this.segs = [];
+      this.segKey = '';
+      this.updateVehicles();
+      return;
+    }
+    const b = this.viewBounds(z >= 10 ? 20 : 2);
+    const key = `${Object.values(b).join(',')}|${Math.round(z)}`;
+    if (this.segLoading || (!force && key === this.segKey && Date.now() - this.segAt < 60000)) return;
+    this.segLoading = true;
+    const now = Date.now();
+    loadSegments(b, z, now - 30000, now + 3 * 60000)
+      .then((segs) => {
+        this.segs = segs;
+        this.segKey = key;
+        this.segAt = Date.now();
+        this.updateVehicles();
+      })
+      .catch((e) => {
+        console.warn('Transitous', e);
+        if (this.on.has('trains')) this.set('trains', { note: 'Transitous nicht erreichbar – nur GPS-Züge (Finnland, USA)' });
+        if (this.on.has('transit')) this.set('transit', { note: 'Transitous nicht erreichbar' });
+      })
+      .finally(() => {
+        this.segLoading = false;
+      });
+  }
+
+  private updateVehicles() {
+    const rail = this.on.has('trains');
+    const local = this.on.has('transit');
+    const live = positionsAt(this.segs, Date.now(), (m) => (RAIL_MODES.has(m) ? rail : local));
+    const features = [...live.features, ...(rail ? this.gpsTrains.features : [])];
+    this.setData('trains', { type: 'FeatureCollection', features });
+    const nRail = features.filter((f) => f.properties?.rail).length;
+    if (rail && this.info.trains?.count !== nRail) this.set('trains', { count: nRail, loading: false });
+    if (local && this.info.transit?.count !== features.length - nRail) this.set('transit', { count: features.length - nRail });
   }
 
   // -------------------------------------------------------------------------
@@ -1486,7 +1667,9 @@ export class ExtraLayers {
           lat: pt[1],
         };
       }
-      case 'trains': {
+      case 'trains':
+      case 'transit-veh': {
+        if (p.src === 'transitous' || p.src === 'amtrak') return this.vehicleCard(p, pt);
         const num = Number(p.num);
         return {
           type: 'html',
@@ -1520,6 +1703,25 @@ export class ExtraLayers {
           },
         };
       }
+      case 'autobahn':
+        return { type: 'html', html: html('warn', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'nina-fill': {
+        const id = String(p.id ?? '');
+        return {
+          type: 'html',
+          html: cardHtml({ glyph: 'warn', color: String(p.color), title: p.title, subtitle: p.subtitle, date: p.date, source: p.source, url: p.url, extra: '<div class="pop-loading small">Text wird geladen …</div>' }),
+          lng: at.lng,
+          lat: at.lat,
+          after: (node) => {
+            loadNinaDetails(id)
+              .then((txt) => {
+                const el = node.querySelector('.pop-loading');
+                if (el) el.outerHTML = txt ? `<p class="pop-desc">${escapeHtml(txt.slice(0, 700))}${txt.length > 700 ? ' …' : ''}</p>` : '';
+              })
+              .catch(() => node.querySelector('.pop-loading')?.remove());
+          },
+        };
+      }
       case 'power':
       case 'osm-power': {
         const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : 'plant';
@@ -1527,6 +1729,42 @@ export class ExtraLayers {
       }
     }
     return null;
+  }
+
+  private vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResult {
+    const st = modeStyle(String(p.mode));
+    const t = (ms: unknown) => new Date(Number(ms)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const delay = Number(p.delay);
+    const rows =
+      p.src === 'amtrak'
+        ? [
+            ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
+            ['Geschwindigkeit', p.speed != null ? `${p.speed} km/h` : ''],
+            ['Status', p.timely],
+          ]
+        : [
+            ['Art', st.label],
+            ['Abschnitt', `${p.from} → ${p.to}`],
+            ['Ankunft', `${t(p.arr)} Uhr`],
+            ['Verspätung', delay === -999 ? 'keine Echtzeitdaten' : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : 'pünktlich'],
+          ];
+    const extra = `<div class="pop-grid two">${rows
+      .filter(([, v]) => v)
+      .map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`)
+      .join('')}</div>${p.src === 'transitous' ? '<div class="small muted">Position aus Echtzeitfahrplan berechnet</div>' : ''}`;
+    return {
+      type: 'html',
+      html: cardHtml({
+        glyph: 'train',
+        color: String(p.color ?? st.color),
+        title: p.name,
+        source: p.src === 'amtrak' ? 'Amtraker (Amtrak-GPS)' : 'Transitous',
+        url: p.src === 'amtrak' ? 'https://amtraker.com/' : 'https://transitous.org/',
+        extra,
+      }),
+      lng: pt[0],
+      lat: pt[1],
+    };
   }
 
   clearSelection() {

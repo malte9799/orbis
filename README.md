@@ -58,7 +58,11 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Luftraum | Raketenstarts mit Countdown & Livestream-Link | The Space Devs Launch Library 2 |
 | Luftraum | Flughäfen mit Abflügen/Ankünften vom Vortag | OpenFreeMap/OSM, OpenSky Network |
 | Verkehr | Schiffe live (AIS) | Fintraffic Digitraffic (Ostsee), optional aisstream.io (weltweit, kostenloser Schlüssel) |
-| Verkehr | Züge live (Finnland) | Fintraffic Digitraffic |
+| Verkehr | Züge live: Deutschland & Europa (Position aus Echtzeitfahrplan), GPS in Finnland und USA | Transitous (MOTIS), Fintraffic Digitraffic, Amtraker |
+| Verkehr | Busse, Trams & U-Bahnen live (ab Stadtzoom) | Transitous |
+| Verkehr | Bahnnetz (Gleise, Bahnhöfe) | OpenRailwayMap |
+| Verkehr | Autobahn: Staus, Sperrungen, Baustellen | Autobahn GmbH des Bundes |
+| Europa | Bevölkerungswarnungen (MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei) | NINA / BBK |
 | Kameras | Live-Webcams (Bild im Popup) | Fintraffic Digitraffic (Finnland, CC BY 4.0), OpenStreetMap, optional Windy Webcams (kostenloser Schlüssel) |
 | Kameras | Kennzeichen-Kameras (ALPR, u. a. Flock Safety) mit Blickrichtung | OpenStreetMap/DeFlock: Übersicht USA/Kanada aus [deflock-data](https://github.com/flockhopper3/deflock-data), ab Zoom 9 weltweit live per Overpass |
 | Luftraum | Wetterballons (Radiosonden) | SondeHub |
