@@ -19,7 +19,10 @@ export type ExtraGlyph =
   | 'cable'
   | 'wind'
   | 'solar'
-  | 'plant';
+  | 'plant'
+  | 'webcam'
+  | 'alpr'
+  | 'cone';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -30,6 +33,8 @@ export const SILHOUETTES: Partial<Record<ExtraGlyph, string>> = {
   balloon: 'M12 2a6 6 0 0 1 6 6c0 3.6-3.4 6.6-5 8h-2c-1.6-1.4-5-4.4-5-8a6 6 0 0 1 6-6zM10 17h4v3.5h-4z',
   drone: 'M5 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM5 16.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM6.4 5.6L10 9.2h4l3.6-3.6 1.4 1.4-3.6 3.6v2.8l3.6 3.6-1.4 1.4-3.6-3.6h-4l-3.6 3.6L5 17l3.6-3.6v-2.8L5 7z',
   satellite: 'M9 9h6v6H9zM1.5 9.5h6v5h-6zm15 0h6v5h-6zM11.2 4h1.6v5h-1.6zm0 11h1.6v5h-1.6z',
+  // viewing direction of a camera: wedge with its tip at the icon centre, opening north
+  cone: 'M12 12L6.2 1.6A12 12 0 0 1 17.8 1.6z',
   sonde: 'M12 1.5a5 5 0 0 1 5 5c0 3-2.8 5.3-4.2 6.5h-1.6C9.8 11.8 7 9.5 7 6.5a5 5 0 0 1 5-5zM11.4 13h1.2v5h-1.2zM9.5 18h5v4h-5z',
 };
 
@@ -70,6 +75,15 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   wind: [{ mode: 'stroke', width: 2, d: 'M12 11v11M9 22h6M12 11L12 2.5M12 11l7.5 4.3M12 11l-7.5 4.3' }],
   solar: [{ mode: 'stroke', width: 1.8, d: 'M3 18l3-10h12l3 10zM4.5 13h15M9.3 8l-1.3 10M14.7 8l1.3 10M12 18v4' }],
   plant: [{ mode: 'fill', d: 'M2 21V11l5 3v-3l5 3v-3l5 3V4h4v17z' }],
+  webcam: [
+    { mode: 'stroke', width: 2, d: 'M17 9.5a5 5 0 1 1-10 0a5 5 0 1 1 10 0M8.5 15.5L7 21h10l-1.5-5.5' },
+    { mode: 'fill', d: 'M13.8 9.5a1.8 1.8 0 1 1-3.6 0a1.8 1.8 0 1 1 3.6 0' },
+  ],
+  alpr: [
+    { mode: 'fill', d: 'M3 7h13l5-2.5v9L16 11H3z' },
+    { mode: 'stroke', width: 2, d: 'M6 11v5M3 19h7' },
+  ],
+  cone: [{ mode: 'fill', d: 'M12 12L6.2 1.6A12 12 0 0 1 17.8 1.6z' }],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px

@@ -3,7 +3,8 @@ import type { FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { groundTrack, loadAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
-import { escapeHtml, fmt } from '../util';
+import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
+import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
@@ -25,9 +26,11 @@ export type ExtraId =
   | 'cables'
   | 'wind'
   | 'solar'
-  | 'plants';
+  | 'plants'
+  | 'webcams'
+  | 'alpr';
 
-export type SectionId = 'europe' | 'air' | 'infra';
+export type SectionId = 'europe' | 'air' | 'infra' | 'cams';
 
 export interface ExtraDef {
   id: ExtraId;
@@ -42,6 +45,7 @@ export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
+  { id: 'cams', title: 'Kameras' },
 ];
 
 export const EXTRAS: ExtraDef[] = [
@@ -58,6 +62,8 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
   { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Kern, Kohle, Gas, Wasser, Biomasse …', glyph: 'plant', color: FUELS.Nuclear.color },
+  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'Fintraffic, OpenStreetMap, optional Windy (kostenloser Schlüssel)', glyph: 'webcam', color: '#00bfa5' },
+  { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
 ];
 
 const LAYERS: Record<ExtraId, string[]> = {
@@ -74,12 +80,17 @@ const LAYERS: Record<ExtraId, string[]> = {
   wind: ['power', 'osm-power'],
   solar: ['power', 'osm-power'],
   plants: ['power', 'osm-power'],
+  webcams: ['webcams', 'webcams-osm'],
+  alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
 };
 
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr'];
+
+/** Zoom from which cameras are loaded for the visible area (Overpass). */
+const CAM_DETAIL_ZOOM = 9;
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
@@ -115,6 +126,14 @@ export class ExtraLayers {
   private osmPowerKey = '';
   private aircraftSeq = 0;
   private ready = false;
+  private fiCams: FeatureCollection = empty();
+  private windyCams: FeatureCollection = empty();
+  private camKey = '';
+  private osmCamCount = 0;
+  private windyKey = '';
+  private alprKey = '';
+  private alprTilesAdded = false;
+  private alprTilesFailed = false;
 
   constructor(
     private map: MlMap,
@@ -133,8 +152,11 @@ export class ExtraLayers {
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://airplanes.live/">airplanes.live</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
+      webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>',
+      'webcams-osm': 'Webcams: © OpenStreetMap',
+      alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -244,6 +266,63 @@ export class ExtraLayers {
       },
       'gauges',
     );
+    // cameras
+    const camIcon = (id: string, source: string): LayerSpecification => ({
+      id,
+      type: 'symbol',
+      source,
+      layout: {
+        ...hidden,
+        'icon-image': 'glyph-webcam',
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.55, 9, 0.85],
+        'icon-allow-overlap': ['step', ['zoom'], false, 8, true],
+      },
+      paint: { 'icon-opacity': 0.95 },
+    });
+    add(camIcon('webcams', 'webcams'), 'marker');
+    add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
+    add(
+      {
+        id: 'alpr-cone',
+        type: 'symbol',
+        source: 'alpr',
+        minzoom: 13,
+        filter: ['>=', ['get', 'dir'], 0],
+        layout: {
+          ...hidden,
+          'icon-image': 'sil-cone',
+          'icon-size': ['interpolate', ['exponential', 2], ['zoom'], 13, 1.4, 16, 3.2, 18, 6],
+          'icon-rotate': ['get', 'dir'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: { 'icon-color': ['case', ['get', 'flock'], '#ef4444', '#ff9800'], 'icon-opacity': 0.4 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'alpr',
+        type: 'circle',
+        source: 'alpr',
+        layout: hidden,
+        paint: {
+          'circle-color': ['case', ['get', 'flock'], '#ef4444', '#ff9800'],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+        },
+      },
+      'marker',
+    );
+    m.on('error', (ev) => {
+      const e = ev as typeof ev & { sourceId?: string };
+      if (e.sourceId !== 'alpr-us' && e.sourceId !== 'alpr-ca') return;
+      if (!this.alprTilesFailed) console.warn('ALPR-Übersicht', e.error);
+      this.alprTilesFailed = true;
+      this.updateAlprNote();
+    });
     // moving objects on top
     add(
       {
@@ -389,6 +468,8 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     if (this.on.has('aircraft')) this.loadAircraftNow();
+    if (this.on.has('webcams')) this.loadWebcamsNow();
+    if (this.on.has('alpr')) this.loadAlprNow();
     if (this.on.has('wind') || this.on.has('solar') || this.on.has('plants')) this.loadOsmPowerNow();
   }
 
@@ -488,6 +569,22 @@ export class ExtraLayers {
         case 'solar':
         case 'plants':
           this.ensurePower();
+          break;
+        case 'webcams':
+          this.loadOnce('webcams', 6 * 60 * 60000, async () => {
+            try {
+              this.fiCams = await loadDigitrafficCams();
+            } catch (e) {
+              console.warn('Digitraffic', e);
+            }
+            this.mergeWebcams();
+            return {};
+          });
+          this.loadWebcamsNow();
+          break;
+        case 'alpr':
+          this.ensureAlprTiles();
+          this.loadAlprNow();
           break;
       }
     }
@@ -680,6 +777,158 @@ export class ExtraLayers {
   }
 
   // -------------------------------------------------------------------------
+  // Cameras
+
+  private viewBounds(step = 20) {
+    const b = this.map.getBounds();
+    const snap = (v: number, f: (x: number) => number) => f(v * step) / step;
+    return {
+      west: snap(b.getWest(), Math.floor),
+      south: snap(b.getSouth(), Math.floor),
+      east: snap(b.getEast(), Math.ceil),
+      north: snap(b.getNorth(), Math.ceil),
+    };
+  }
+
+  private mergeWebcams() {
+    const all = { type: 'FeatureCollection' as const, features: [...this.fiCams.features, ...this.windyCams.features] };
+    this.setData('webcams', all);
+    this.set('webcams', { count: all.features.length + this.osmCamCount || undefined });
+    this.updateWebcamNote();
+  }
+
+  private updateWebcamNote() {
+    const notes: string[] = [];
+    if (this.map.getZoom() < CAM_DETAIL_ZOOM) notes.push('Webcams aus OpenStreetMap ab Zoomstufe 9');
+    if (!hasWindyKey()) notes.push('weltweit viele weitere mit kostenlosem Windy-Schlüssel (Einstellungen)');
+    else if (this.map.getZoom() < 5) notes.push('Windy-Webcams ab Zoomstufe 5');
+    this.set('webcams', { note: notes.join(' · ') || undefined });
+  }
+
+  private loadWebcamsNow() {
+    const m = this.map;
+    const z = m.getZoom();
+    // OpenStreetMap webcams for the visible area
+    if (z >= CAM_DETAIL_ZOOM) {
+      const b = this.viewBounds();
+      const key = Object.values(b).join(',');
+      if (key !== this.camKey) {
+        this.camKey = key;
+        loadOsmWebcams(b)
+          .then((fc) => {
+            if (this.camKey !== key) return;
+            this.setData('webcams-osm', fc);
+            this.osmCamCount = fc.features.length;
+            this.mergeWebcams();
+          })
+          .catch((e) => {
+            console.warn('Overpass webcams', e);
+            this.camKey = '';
+          });
+      }
+    }
+    // Windy webcams around the map centre
+    if (hasWindyKey() && z >= 5) {
+      const c = m.getCenter();
+      const b = m.getBounds();
+      const km = Math.min(250, (Math.abs(b.getNorth() - b.getSouth()) * 111) / 2);
+      const key = `${c.lat.toFixed(1)},${c.lng.toFixed(1)},${Math.round(km / 10)}`;
+      // image URLs expire after 10 minutes on the free tier – reload at least that often
+      if (key !== this.windyKey || Date.now() - (this.info.webcams?.at ?? 0) > 8 * 60000) {
+        this.windyKey = key;
+        loadWindyWebcams(c.lat, c.lng, km)
+          .then((fc) => {
+            if (this.windyKey !== key) return;
+            this.windyCams = fc;
+            this.mergeWebcams();
+          })
+          .catch((e) => {
+            console.warn('Windy', e);
+            this.windyKey = '';
+            this.set('webcams', { note: 'Windy-Webcams nicht erreichbar – Schlüssel prüfen' });
+          });
+      }
+    }
+    this.updateWebcamNote();
+  }
+
+  private ensureAlprTiles() {
+    if (this.alprTilesAdded) return;
+    this.alprTilesAdded = true;
+    const m = this.map;
+    const attribution = 'ALPR-Übersicht: <a href="https://github.com/flockhopper3/deflock-data">deflock-data</a>, © OpenStreetMap (ODbL)';
+    m.addSource('alpr-us', { type: 'vector', url: ALPR_TILES_US, attribution });
+    m.addSource('alpr-ca', { type: 'vector', url: ALPR_TILES_CA });
+    for (const src of ['alpr-us', 'alpr-ca']) {
+      m.addLayer(
+        {
+          id: `alpr-heat-${src}`,
+          type: 'heatmap',
+          source: src,
+          'source-layer': ALPR_SOURCE_LAYER,
+          maxzoom: CAM_DETAIL_ZOOM + 0.5,
+          paint: {
+            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
+            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
+            'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+            'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(239,68,68,0)', 0.2, 'rgba(239,68,68,0.45)', 0.5, '#f97316', 0.8, '#fde047', 1, '#ffffff'],
+          },
+        },
+        'alpr-cone',
+      );
+      m.addLayer(
+        {
+          id: `alpr-dots-${src}`,
+          type: 'circle',
+          source: src,
+          'source-layer': ALPR_SOURCE_LAYER,
+          minzoom: 6,
+          maxzoom: CAM_DETAIL_ZOOM,
+          paint: { 'circle-color': '#ef4444', 'circle-radius': 1.8, 'circle-opacity': 0.8 },
+        },
+        'alpr-cone',
+      );
+    }
+    LAYERS.alpr.push('alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
+    this.apply();
+  }
+
+  private updateAlprNote() {
+    const z = this.map.getZoom();
+    if (z >= CAM_DETAIL_ZOOM) return; // keeps the per-view summary
+    const notes: string[] = [];
+    if (z < CAM_DETAIL_ZOOM)
+      notes.push(this.alprTilesFailed ? 'Übersicht nicht erreichbar – ab Zoomstufe 9 live aus OpenStreetMap' : 'Übersicht USA/Kanada · Details ab Zoomstufe 9 (weltweit)');
+    this.set('alpr', { note: notes.join(' · ') || undefined });
+  }
+
+  private loadAlprNow() {
+    this.updateAlprNote();
+    if (this.map.getZoom() < CAM_DETAIL_ZOOM) {
+      this.setData('alpr', empty());
+      this.alprKey = '';
+      return;
+    }
+    const b = this.viewBounds();
+    const key = Object.values(b).join(',');
+    if (key === this.alprKey) return;
+    this.alprKey = key;
+    this.set('alpr', { loading: true });
+    loadAlpr(b)
+      .then((fc) => {
+        if (this.alprKey !== key) return;
+        this.setData('alpr', fc);
+        const flock = fc.features.filter((f) => f.properties?.flock).length;
+        this.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? `${flock} davon Flock Safety (im Ausschnitt)` : 'keine Kennzeichen-Kameras im Ausschnitt erfasst' });
+      })
+      .catch((e) => {
+        console.warn('Overpass ALPR', e);
+        this.alprKey = '';
+        this.set('alpr', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      });
+  }
+
+  // -------------------------------------------------------------------------
   // Clicks
 
   click(f: MapGeoJSONFeature, at: { lng: number; lat: number }): ClickResult | null {
@@ -765,6 +1014,28 @@ export class ExtraLayers {
       }
       case 'ixp':
         return { type: 'html', html: cardHtml({ glyph: 'cable', color: '#e040fb', title: p.title, subtitle: p.subtitle, source: 'PeeringDB', url: p.url }), lng: pt[0], lat: pt[1] };
+      case 'webcams':
+      case 'webcams-osm': {
+        const img = safeUrl(p.image);
+        // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
+        const src = img && p.kind === 'road' ? `${img}?t=${Math.floor(Date.now() / 60000)}` : img;
+        const extra = src
+          ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
+          : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
+        return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle: p.subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
+      }
+      case 'alpr': {
+        const dir = Number(p.dir);
+        const rows = [
+          ['Hersteller', p.brand],
+          ['Betreiber', p.operator],
+          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}°` : ''],
+          ['Montage', p.mount],
+        ].filter(([, v]) => v);
+        const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : ''}
+          <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
+        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? '#ef4444' : '#ff9800', title: p.title, source: 'OpenStreetMap / DeFlock', url: p.url, extra }), lng: pt[0], lat: pt[1] };
+      }
       case 'power':
       case 'osm-power': {
         const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : 'plant';

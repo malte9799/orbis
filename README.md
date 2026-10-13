@@ -49,6 +49,8 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Europa | Pegelstände & Hochwasser an Bundeswasserstraßen | PEGELONLINE (WSV) |
 | Europa | Luftqualität & Pollen in europäischen Städten | Copernicus CAMS via Open-Meteo |
 | Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, adsb.fi, airplanes.live, OpenSky Network (der Reihe nach, die erste erreichbare Quelle wird verwendet) |
+| Kameras | Live-Webcams (Bild im Popup) | Fintraffic Digitraffic (Finnland, CC BY 4.0), OpenStreetMap, optional Windy Webcams (kostenloser Schlüssel) |
+| Kameras | Kennzeichen-Kameras (ALPR, u. a. Flock Safety) mit Blickrichtung | OpenStreetMap/DeFlock: Übersicht USA/Kanada aus [deflock-data](https://github.com/flockhopper3/deflock-data), ab Zoom 9 weltweit live per Overpass |
 | Luftraum | Wetterballons (Radiosonden) | SondeHub |
 | Weltraum | Satelliten (ISS, Wetter-, GPS-, Galileo-Satelliten), Starlink, Bodenspur per Klick | CelesTrak + SGP4 im Browser |
 | Verkehr | Schiffsrouten, Fährlinien | Global Shipping Lanes (CC BY 4.0), OSM |

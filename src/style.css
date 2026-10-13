@@ -2242,3 +2242,24 @@ svg.hourly {
   white-space: nowrap;
   pointer-events: none;
 }
+
+/* webcam popups */
+.pop-cam {
+  display: block;
+  margin: 8px 0 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  min-height: 120px;
+}
+.pop-cam img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+.pop-cam-link {
+  display: inline-flex;
+  margin: 8px 0 4px;
+  text-decoration: none;
+}

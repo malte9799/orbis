@@ -433,7 +433,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <h3>Luftraum & Weltraum</h3>
       <div class="tile-grid">${extraTiles('air')}</div>
       <h3>Verkehr & Infrastruktur</h3>
-      <div class="tile-grid">${extraTiles('infra')}</div>`;
+      <div class="tile-grid">${extraTiles('infra')}</div>
+      <h3>Kameras</h3>
+      <div class="tile-grid">${extraTiles('cams')}</div>`;
 
     const tabBtn = (id: PanelTab, label: string, n: number) =>
       `<button type="button" role="tab" class="ptab ${tab === id ? 'on' : ''}" data-tab="${id}" aria-selected="${tab === id}">${label}${n ? `<span class="ptab-n">${n}</span>` : ''}</button>`;
@@ -599,11 +601,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
         <label class="field-label">NASA FIRMS MAP_KEY <small>(Feuer-Hotspots als einzelne, anklickbare Punkte)</small>
           <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
+        <label class="field-label">Windy Webcams <small>(kostenloser Schlüssel von api.windy.com/keys – zehntausende Webcams weltweit)</small>
+          <input type="password" data-key="windy" value="${escapeHtml(keys.windy ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">Flugdaten-Proxy <small>(nur nötig, falls dein Browser alle Flugdatenquellen blockiert – Anleitung im README)</small>
           <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="https://mein-proxy.workers.dev/" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic, Windy Webcams, DeFlock/deflock-data, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
@@ -616,12 +620,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       const proxy = get('adsbProxy');
-      store.setKeys({ owm: get('owm'), firms: get('firms'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
+      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();
       applyGroups();
       ensureFeeds();
+      extras?.resume();
       renderPanel();
       toast('Einstellungen gespeichert');
     });
