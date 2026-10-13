@@ -599,9 +599,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
         <label class="field-label">NASA FIRMS MAP_KEY <small>(Feuer-Hotspots als einzelne, anklickbare Punkte)</small>
           <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
+        <label class="field-label">Flugdaten-Proxy <small>(nur nötig, falls dein Browser alle Flugdatenquellen blockiert – Anleitung im README)</small>
+          <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="https://mein-proxy.workers.dev/" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-        PEGELONLINE, Copernicus CAMS, adsb.lol, SondeHub, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
@@ -613,7 +615,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
-      store.setKeys({ owm: get('owm'), firms: get('firms') });
+      const proxy = get('adsbProxy');
+      store.setKeys({ owm: get('owm'), firms: get('firms'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();

@@ -48,7 +48,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Europa | Städtewetter (~190 Städte), Unwetterwarnungen DE (anklickbar) | Open-Meteo, DWD |
 | Europa | Pegelstände & Hochwasser an Bundeswasserstraßen | PEGELONLINE (WSV) |
 | Europa | Luftqualität & Pollen in europäischen Städten | Copernicus CAMS via Open-Meteo |
-| Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, Ersatz airplanes.live |
+| Luftraum | Flugzeuge, Hubschrauber, Segelflieger, Ballone, Drohnen (live, ab Zoom 5) | adsb.lol, adsb.fi, airplanes.live, OpenSky Network (der Reihe nach, die erste erreichbare Quelle wird verwendet) |
 | Luftraum | Wetterballons (Radiosonden) | SondeHub |
 | Weltraum | Satelliten (ISS, Wetter-, GPS-, Galileo-Satelliten), Starlink, Bodenspur per Klick | CelesTrak + SGP4 im Browser |
 | Verkehr | Schiffsrouten, Fährlinien | Global Shipping Lanes (CC BY 4.0), OSM |
@@ -83,6 +83,14 @@ der Wind wird als Partikelanimation auf einem Canvas über der Karte gezeichnet,
 
 `.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie auf
 GitHub Pages (in den Repo-Einstellungen unter *Pages → Source* „GitHub Actions“ auswählen).
+
+### Flugdaten-Proxy (optional)
+
+Nicht jede ADS-B-Quelle erlaubt direkte Abrufe aus dem Browser (CORS). Falls im Karten-Tab
+„keine Flugdatenquelle erreichbar“ erscheint, hilft ein eigener, kostenloser Proxy:
+`proxy/cloudflare-worker.js` als Cloudflare Worker anlegen (Workers & Pages → Create → Worker,
+Code ersetzen, Deploy) und die Worker-URL in Orbis unter *Einstellungen → Flugdaten-Proxy*
+eintragen. Der Proxy leitet nur Anfragen an die bekannten Flugdatenquellen weiter.
 
 ## Hinweise
 

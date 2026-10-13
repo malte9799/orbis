@@ -44,8 +44,8 @@ export const store = {
   getGlobeState: <T>(fallback: T): T => read('wg.globe', fallback),
   setGlobeState: (s: unknown) => write('wg.globe', s),
 
-  getKeys: (): { owm?: string; firms?: string } => read('wg.keys', {}),
-  setKeys: (k: { owm?: string; firms?: string }) => write('wg.keys', k),
+  getKeys: (): { owm?: string; firms?: string; adsbProxy?: string } => read('wg.keys', {}),
+  setKeys: (k: { owm?: string; firms?: string; adsbProxy?: string }) => write('wg.keys', k),
 
   cacheGet<T>(key: string, maxAgeMs: number): T | null {
     const entry = read<{ t: number; v: T } | null>(`wg.cache.${key}`, null);

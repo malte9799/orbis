@@ -49,7 +49,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'dwdwarn', section: 'europe', label: 'Unwetterwarnungen DE', hint: 'Deutscher Wetterdienst, amtlich', glyph: 'warn', color: '#e53935' },
   { id: 'gauges', section: 'europe', label: 'Pegel & Hochwasser DE', hint: 'PEGELONLINE, Bundeswasserstraßen', glyph: 'gauge', color: '#3d9ad1' },
   { id: 'aq', section: 'europe', label: 'Luftqualität & Pollen', hint: 'europäische Städte – Copernicus CAMS', glyph: 'air', color: '#50c878' },
-  { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol', glyph: 'plane', color: '#f2c94c' },
+  { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
@@ -130,7 +130,7 @@ export class ExtraLayers {
       cables: 'Seekabel: <a href="https://www.submarinecablemap.com/">TeleGeography</a>',
       ixp: 'Internetknoten: <a href="https://www.peeringdb.com/">PeeringDB</a>',
       power: 'Kraftwerke: <a href="https://datasets.wri.org/dataset/globalpowerplantdatabase">WRI GPPD, CC BY 4.0</a>',
-      aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL)',
+      aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://airplanes.live/">airplanes.live</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
     };
@@ -565,11 +565,12 @@ export class ExtraLayers {
       .then((fc) => {
         if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
         this.setData('aircraft', fc);
-        this.set('aircraft', { loading: false, count: fc.features.length, note: nm > 250 ? 'nur Umkreis 460 km um die Kartenmitte' : undefined });
+        this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
       })
       .catch((e) => {
         console.warn('aircraft', e);
-        if (seq === this.aircraftSeq) this.set('aircraft', { loading: false, note: 'Quelle nicht erreichbar' });
+        if (seq === this.aircraftSeq)
+          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. eigenen Proxy in den Einstellungen eintragen' });
       });
   }
 
