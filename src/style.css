@@ -1734,3 +1734,371 @@ svg.hourly {
   border-left: 1px solid var(--border);
 }
 
+
+/* ---------- Layer panel v2: tabs + tiles ---------- */
+.globe-view .panel {
+  bottom: 118px;
+  padding-top: 8px;
+}
+
+.ptabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 10px 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ptab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 32px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ptab.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ptab-n {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 0.7rem;
+  line-height: 17px;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.tile-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ltile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 62px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ltile:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ltile.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.18);
+  color: var(--text);
+}
+
+.ltile .swatch {
+  width: 26px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.ltile-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.66rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ltile-badge:empty {
+  display: none;
+}
+
+.seg-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.seg-chip {
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.seg-chip.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.22);
+  color: var(--text);
+}
+
+.seg-chip.toggle::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  vertical-align: 0;
+}
+
+.seg-chip.toggle.on::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.extras-row {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.panel-meta {
+  margin: 4px 0;
+}
+
+.panel-notes .note {
+  color: #f2c94c;
+  margin: 4px 0;
+}
+
+/* ---------- base map switcher (Google-Maps style) ---------- */
+.base-switch {
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  bottom: 28px;
+}
+
+.base-current {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  background: #222;
+}
+
+.base-current .thumb,
+.base-opt .thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.thumb img,
+.thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.base-current-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 0 4px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.base-current-label svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.base-pop {
+  position: absolute;
+  left: 86px;
+  bottom: 0;
+  padding: 10px;
+  background: rgba(13, 18, 38, 0.95);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.base-options {
+  display: flex;
+  gap: 8px;
+}
+
+.base-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 72px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.base-opt .thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+}
+
+.base-opt.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.base-opt.on .thumb {
+  border-color: var(--accent);
+}
+
+.base-toggles {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.base-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.base-toggles input {
+  accent-color: var(--accent);
+}
+
+/* ---------- settings dialog ---------- */
+.globe-top .settings-btn {
+  flex: none;
+}
+
+.settings-dialog {
+  width: min(460px, calc(100% - 24px));
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card-solid);
+  color: var(--text);
+}
+
+.settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.settings-dialog h2 {
+  margin-bottom: 8px;
+}
+
+.settings-dialog h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .globe-view .panel {
+    bottom: 8px;
+  }
+
+  .base-switch {
+    bottom: 40px;
+  }
+
+  body:has(.globe-view .panel:not([hidden])) .base-switch {
+    display: none;
+  }
+
+  .base-pop {
+    left: 0;
+    bottom: 86px;
+  }
+
+  .base-options {
+    gap: 6px;
+  }
+
+  .base-opt {
+    width: 60px;
+  }
+
+  .base-opt .thumb {
+    width: 56px;
+    height: 56px;
+  }
+}

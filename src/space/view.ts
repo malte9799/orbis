@@ -143,6 +143,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   // ----- three.js ----------------------------------------------------------
   let renderer: THREE.WebGLRenderer | null = null;
   let scene: THREE.Scene;
+  /** everything except the camera; rescaled per frame so the camera sits at distance 1 */
+  let world: THREE.Group;
   let camera: THREE.PerspectiveCamera;
   let controls: OrbitControls;
   let sunLight: THREE.PointLight;
@@ -190,7 +192,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     if (!c) {
       c = { group: new THREE.Group(), state: 'idle' };
       c.group.visible = false;
-      scene.add(c.group);
+      world.add(c.group);
       crafts.set(b.id, c);
     }
     if (c.state !== 'idle' || !b.model) return c;
@@ -261,6 +263,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     canvasHost.appendChild(renderer.domElement);
     scene = new THREE.Scene();
+    world = new THREE.Group();
+    scene.add(world);
     camera = new THREE.PerspectiveCamera(45, 1, 1e-10, 2000);
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -281,12 +285,12 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     scene.background = stars;
     scene.backgroundIntensity = 0.45;
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+    world.add(new THREE.AmbientLight(0xffffff, 0.07));
     // soft studio reflections for the metal/foil surfaces of the spacecraft models only
     envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     ensureSats();
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
-    scene.add(sunLight);
+    world.add(sunLight);
 
     const sphere = new THREE.SphereGeometry(1, 96, 48);
     for (const b of BODIES) {
@@ -323,7 +327,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         glow.scale.setScalar(r * 9);
         group.add(glow);
       }
-      scene.add(group);
+      world.add(group);
       meshes.set(b.id, { group, spin, body: b });
     }
 
@@ -345,7 +349,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     satGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3));
     satPoints = new THREE.Points(satGeo, new THREE.PointsMaterial({ color: 0xd1b3ff, size: 3, sizeAttenuation: false }));
     satPoints.visible = false;
-    scene.add(satPoints);
+    world.add(satPoints);
 
     // clicks on meshes / satellites
     const ray = new THREE.Raycaster();
@@ -524,13 +528,13 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (!b.orbit) continue;
       let o = orbitLines.get(b.id);
       if (!o || Math.abs(o.at - simTime) > 180 * 86400000) {
-        if (o) scene.remove(o.line);
+        if (o) world.remove(o.line);
         const pts = orbitPath(b.id, simTime).map((v) => toThree(v));
         const line = new THREE.Line(
           new THREE.BufferGeometry().setFromPoints(pts),
           new THREE.LineBasicMaterial({ color: b.color, transparent: true, opacity: 0.35 }),
         );
-        scene.add(line);
+        world.add(line);
         o = { line, at: simTime };
         orbitLines.set(b.id, o);
       }
@@ -550,32 +554,43 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   }
 
   /**
-   * Two depth ranges: a depth buffer cannot resolve a 20 m telescope and 4 000 AU of
-   * space at once, so the far range (planets, orbits) is drawn first and the near range
-   * (whatever is close to the camera, e.g. a spacecraft model) after clearing depth.
+   * Depth precision: scene units are AU, so a spacecraft is ~1e-10 units big – far below what
+   * a (logarithmic) depth buffer can resolve in 32-bit floats (1 + 1e-10 == 1). Each frame the
+   * world is therefore rescaled so the camera sits at distance 1 from the focus, and drawn in
+   * two depth ranges (far: planets/orbits, near: whatever is close, e.g. a model).
    */
   function renderSplit() {
     const r = renderer!;
     const dist = Math.max(1e-14, camera.position.length());
-    const split = dist * 60;
+    const k = 1 / dist;
+    const camPos = camera.position.clone();
+    world.scale.setScalar(k);
+    world.updateMatrixWorld(true);
+    camera.position.multiplyScalar(k);
+    camera.updateMatrixWorld();
+    const SPLIT = 60;
     r.autoClear = false;
     r.clear();
-    camera.near = split;
-    camera.far = 5000;
+    camera.near = SPLIT;
+    camera.far = Math.max(SPLIT * 10, 6000 * k);
     camera.updateProjectionMatrix();
     r.render(scene, camera);
     r.clearDepth();
     const bg = scene.background;
     scene.background = null;
-    camera.near = dist * 1e-4;
-    camera.far = split * 1.001;
+    camera.near = 1e-4;
+    camera.far = SPLIT * 1.001;
     camera.updateProjectionMatrix();
     r.render(scene, camera);
     scene.background = bg;
-    // full range for label projection and picking
+    // back to AU units for label projection, picking and controls
+    world.scale.setScalar(1);
+    world.updateMatrixWorld(true);
+    camera.position.copy(camPos);
     camera.near = dist * 1e-4;
-    camera.far = 5000;
+    camera.far = 6000;
     camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
   }
 
   function updateMoonOrbits() {
@@ -592,7 +607,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       const parent = resolve(b.parent, simTime)!;
       if (!line) {
         line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x8899bb, transparent: true, opacity: 0.4 }));
-        scene.add(line);
+        world.add(line);
         moonLines.set(b.id, line);
       }
       // sample the moon's own motion over one orbit, relative to its planet
@@ -616,7 +631,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (!days) continue;
       let t = trails.get(c.id);
       if (!t || Math.abs(t.at - simTime) > 20 * 86400000) {
-        if (t) scene.remove(t.line);
+        if (t) world.remove(t.line);
         const pts: THREE.Vector3[] = [];
         const span = days * 86400000;
         for (let k = 0; k <= 240; k++) {
@@ -628,7 +643,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
           new THREE.BufferGeometry().setFromPoints(pts),
           new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.55 }),
         );
-        scene.add(line);
+        world.add(line);
         t = { line, at: simTime };
         trails.set(c.id, t);
       }

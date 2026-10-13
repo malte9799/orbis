@@ -32,7 +32,7 @@ import {
 } from '../api/model';
 import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
-import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, SECTIONS, type ExtraId } from '../globe/extras';
+import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
@@ -56,14 +56,24 @@ import { describe, weatherIcon } from '../weather';
 type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
-const LIVE_LAYERS: { id: LiveId; label: string; hint: string }[] = [
-  { id: 'radar', label: 'Regenradar', hint: 'weltweit – RainViewer, letzte 2 h' },
-  { id: 'dwd-radar', label: 'Radar Deutschland', hint: 'DWD, alle 5 min, 1 km Auflösung' },
-  { id: 'sat-ir', label: 'Satellit (Infrarot)', hint: 'Wolken weltweit – EUMETSAT' },
-  { id: 'imerg', label: 'Niederschlag (Satellit)', hint: 'NASA GPM IMERG, 30 min' },
-];
 
-const FIELD_ORDER: FieldId[] = ['wind', 'gusts', 'temp', 'feels', 'humidity', 'dewpoint', 'precip', 'cloud', 'pressure', 'snow', 'cape'];
+type PanelTab = 'weather' | 'events' | 'traffic';
+
+/** Weather layers grouped into families; families with several variants get a switcher. */
+const WX_FAMILIES: { id: string; label: string; hint: string; variants: [OverlayId, string][]; swatch?: string }[] = [
+  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', variants: [['radar', 'Weltweit'], ['dwd-radar', 'Deutschland (DWD)']], swatch: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)' },
+  { id: 'sat', label: 'Satellit', hint: 'Live-Satellitendaten', variants: [['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']], swatch: 'linear-gradient(135deg,#111,#888,#fff)' },
+  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
+  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
+  { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', variants: [['precip', '']] },
+  { id: 'cloud', label: 'Wolken', hint: 'Vorhersage: Bewölkung', variants: [['cloud', '']] },
+  { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', variants: [['pressure', '']] },
+  { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', variants: [['humidity', '']] },
+  { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', variants: [['snow', '']] },
+  { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', variants: [['cape', '']] },
+];
+const familyOf = (o: OverlayId) => WX_FAMILIES.find((f) => f.variants.some(([v]) => v === o));
+
 const isField = (o: string): o is FieldId => o in FIELDS;
 
 const OWM_LAYERS: { id: string; label: string }[] = [
@@ -117,6 +127,9 @@ interface GlobeState {
   center: [number, number];
   zoom: number;
   panelOpen: boolean;
+  panelTab?: PanelTab;
+  /** last chosen variant per weather family (e.g. temp → feels) */
+  variants?: Partial<Record<string, OverlayId>>;
   version?: number;
 }
 
@@ -159,6 +172,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const state: GlobeState = { ...DEFAULT_STATE, ...saved };
   state.groups = { ...state.groups };
   state.extras = { ...state.extras };
+  // "Feuer" combines wildfires and satellite hotspots
+  if (state.groups.fires && state.groups.hotspots === undefined) state.groups.hotspots = true;
   const save = () => store.setGlobeState(state);
 
   const el = document.createElement('main');
@@ -170,8 +185,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
       </button>
       <div class="globe-search"></div>
+      <button class="btn icon-btn settings-btn" aria-label="Einstellungen" title="Einstellungen">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
     </div>
     <aside class="panel" ${state.panelOpen ? '' : 'hidden'}></aside>
+    <div class="base-switch"></div>
+    <dialog class="settings-dialog"></dialog>
     <div class="globe-bottom">
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
@@ -342,155 +362,267 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // ----- panel -------------------------------------------------------------
   function renderPanel() {
     const scrollTop = panel.querySelector('.panel-scroll')?.scrollTop ?? 0;
-    const keysOpen = panel.querySelector<HTMLDetailsElement>('details.keys')?.open ?? false;
+    const tab: PanelTab = state.panelTab ?? 'weather';
     const keys = store.getKeys();
-    const layerBtn = (id: OverlayId, label: string, swatch: string, hint = '') =>
-      `<label class="layer-btn ${state.overlay === id ? 'on' : ''}" title="${escapeHtml(hint || label)}">
-        <input type="radio" name="overlay" value="${id}" ${state.overlay === id ? 'checked' : ''}/>
-        <span class="swatch" style="background:${swatch}"></span><span>${escapeHtml(label)}</span></label>`;
     const fieldSwatch = (f: FieldId) => {
       const { stops, gradient } = FIELDS[f].legend;
       return gradient ?? `linear-gradient(135deg, ${stops.map(([, c]) => c).join(', ')})`;
     };
-    const LIVE_SWATCH: Record<LiveId, string> = {
-      radar: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)',
-      'dwd-radar': 'linear-gradient(135deg,#a0e6ff,#2f6fe0,#2bd46f,#ffe14d,#e8384f)',
-      'sat-ir': 'linear-gradient(135deg,#111,#888,#fff)',
-      imerg: 'linear-gradient(135deg,#9fd8ff,#2f6fe0,#2bd46f,#ffe14d)',
-    };
+    const famSwatch = (f: (typeof WX_FAMILIES)[number]) => f.swatch ?? fieldSwatch(f.variants[0][0] as FieldId);
+    const activeFam = familyOf(state.overlay);
     const loading = (g: (typeof GROUPS)[number]) => g.feeds.some((f) => feedData[f].loading);
-    panel.innerHTML = `
-      <div class="panel-scroll">
-        <h3>Karte</h3>
-        <div class="seg" role="radiogroup" aria-label="Grundkarte">
-          ${BASES.map((b) => `<label class="seg-btn ${state.base === b.id ? 'on' : ''}"><input type="radio" name="base" value="${b.id}" ${state.base === b.id ? 'checked' : ''}/>${b.label}</label>`).join('')}
-        </div>
-        <label class="row"><input type="checkbox" data-opt="labels" ${state.labels ? 'checked' : ''}/> Ortsnamen & Grenzen</label>
-        <label class="row"><input type="checkbox" data-opt="night" ${state.night ? 'checked' : ''}/> Tag/Nacht-Grenze</label>
 
-        <h3>Live</h3>
-        <div class="layer-grid" role="radiogroup" aria-label="Live-Ebene">
-          ${LIVE_LAYERS.map((l) => layerBtn(l.id, l.label, LIVE_SWATCH[l.id], l.hint)).join('')}
-          ${layerBtn('none', 'Keine', 'transparent')}
-        </div>
+    // counts of active layers per tab (shown on the tab buttons)
+    const groupOn = (id: GroupId) => !!state.groups[id];
+    const extraOn = (id: ExtraId) => !!state.extras[id];
+    const evCount = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length + EXTRAS.filter((d) => d.section === 'europe' && extraOn(d.id)).length;
+    const trCount = EXTRAS.filter((d) => d.section !== 'europe' && extraOn(d.id)).length;
+    const wxCount = (state.overlay !== 'none' ? 1 : 0) + (state.wind && !FIELDS[state.overlay as FieldId]?.particles ? 1 : 0) + (state.isobars ? 1 : 0);
 
-        <h3>Vorhersage <small class="h3-note">${modelLoading ? 'lädt …' : globalModel ? 'bis +5 Tage' : ''}</small></h3>
-        ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}
-        <div class="layer-grid" role="radiogroup" aria-label="Vorhersage-Ebene">
-          ${FIELD_ORDER.map((f) => layerBtn(f, FIELDS[f].label, fieldSwatch(f))).join('')}
-          ${keys.owm ? OWM_LAYERS.map((l) => layerBtn(`owm-${l.id}`, l.label, 'linear-gradient(135deg,#556,#99a)')).join('') : ''}
-        </div>
-        <label class="row"><input type="checkbox" data-opt="wind" ${state.wind ? 'checked' : ''}/> Wind-Animation (Partikel)</label>
-        <label class="row"><input type="checkbox" data-opt="isobars" ${state.isobars ? 'checked' : ''}/> Isobaren & Hoch/Tief</label>
+    const tile = (attrs: string, on: boolean, icon: string, label: string, title: string, badge = '') =>
+      `<button type="button" class="ltile ${on ? 'on' : ''}" ${attrs} aria-pressed="${on}" title="${escapeHtml(title)}">
+        ${icon}<span class="ltile-label">${escapeHtml(label)}</span>${badge}</button>`;
 
-        <h3>Ereignisse</h3>
-        ${GROUPS.map((g) => {
-          const count = groupCount(g.id);
-          const color = kindColor(g.icon);
-          return `<label class="row ev-row">
-            <input type="checkbox" data-group="${g.id}" ${state.groups[g.id] ? 'checked' : ''}/>
-            ${glyphSvg(g.icon, color)}
-            <span class="ev-text"><span>${escapeHtml(g.label)}</span><small>${escapeHtml(g.hint)}</small></span>
-            <span class="badge">${state.groups[g.id] && loading(g) ? '…' : count != null ? count : ''}</span>
-          </label>`;
-        }).join('')}
-
-        ${SECTIONS.map(
-          (sec) => `<h3>${sec.title}</h3>
-          ${EXTRAS.filter((d) => d.section === sec.id)
-            .map((d) => {
-              const note = extras?.note(d.id);
-              return `<label class="row ev-row">
-                <input type="checkbox" data-extra="${d.id}" ${state.extras[d.id] ? 'checked' : ''}/>
-                ${glyphSvg(d.glyph, d.color)}
-                <span class="ev-text"><span>${escapeHtml(d.label)}</span><small data-note-for="${d.id}" class="${note ? 'note' : ''}">${escapeHtml(note ?? d.hint)}</small></span>
-                <span class="badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>
-              </label>`;
-            })
-            .join('')}`,
+    // ----- Wetter
+    const weather = `
+      <div class="tile-grid three">
+        ${WX_FAMILIES.map((f) =>
+          tile(`data-fam="${f.id}"`, activeFam?.id === f.id, `<span class="swatch" style="background:${famSwatch(f)}"></span>`, f.label, f.hint),
         ).join('')}
+        ${keys.owm ? tile('data-fam="owm"', state.overlay.startsWith('owm-'), '<span class="swatch" style="background:linear-gradient(135deg,#556,#99a)"></span>', 'OWM', 'OpenWeatherMap-Karten') : ''}
+      </div>
+      ${
+        activeFam && activeFam.variants.length > 1
+          ? `<div class="seg-row" role="radiogroup" aria-label="Variante">${activeFam.variants
+              .map(([v, l]) => `<button type="button" class="seg-chip ${state.overlay === v ? 'on' : ''}" data-variant="${v}">${escapeHtml(l)}</button>`)
+              .join('')}</div>`
+          : state.overlay.startsWith('owm-')
+            ? `<div class="seg-row">${OWM_LAYERS.map((l) => `<button type="button" class="seg-chip ${state.overlay === `owm-${l.id}` ? 'on' : ''}" data-variant="owm-${l.id}">${escapeHtml(l.label.replace(' (OWM)', ''))}</button>`).join('')}</div>`
+            : ''
+      }
+      <div class="seg-row extras-row">
+        <button type="button" class="seg-chip toggle ${state.wind ? 'on' : ''}" data-toggle="wind" aria-pressed="${state.wind}">Windpartikel</button>
+        <button type="button" class="seg-chip toggle ${state.isobars ? 'on' : ''}" data-toggle="isobars" aria-pressed="${state.isobars}">Isobaren</button>
+      </div>
+      <p class="small muted panel-meta">${
+        modelLoading ? 'Vorhersagedaten werden geladen …' : globalModel ? 'Vorhersage bis +5 Tage – Zeitleiste unten' : ''
+      }</p>
+      ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}`;
 
-        <details class="keys">
-          <summary>Erweitert: API-Schlüssel (optional)</summary>
-          <form class="keys-form" autocomplete="off">
-          <p class="small muted">Alle Grundfunktionen laufen ohne Schlüssel. Mit kostenlosen Schlüsseln werden zusätzliche Quellen freigeschaltet.
-          Schlüssel werden nur lokal im Browser gespeichert.</p>
-          <label class="field-label">OpenWeatherMap <small>(hochauflösende Wetterkarten)</small>
-            <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
-          <label class="field-label">NASA FIRMS MAP_KEY <small>(einzelne Feuer-Hotspots als Punkte)</small>
-            <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
-          <button class="btn small" type="submit">Speichern</button>
-          </form>
-        </details>
+    // ----- Ereignisse (incl. Europe)
+    const groupTiles = GROUPS.filter((g) => g.id !== 'hotspots')
+      .map((g) => {
+        const on = groupOn(g.id);
+        const count = groupCount(g.id);
+        const label = g.id === 'fires' ? 'Feuer' : g.label.replace(' & Zyklone', '').replace(' & Unwetter (USA)', ' (USA)').replace(', Dürren & Erdrutsche', ' & Dürren').replace(', Schnee, Staub & Hitze', ' & Staub');
+        const hint = g.id === 'fires' ? 'Waldbrände (EONET, GDACS) und Satelliten-Hotspots (NASA FIRMS)' : `${g.label} – ${g.hint}`;
+        const badge = `<span class="ltile-badge">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
+        return tile(`data-group="${g.id}"`, on, glyphSvg(g.icon, kindColor(g.icon), 20), label, hint, badge);
+      })
+      .join('');
+    const extraTiles = (sec: string) =>
+      EXTRAS.filter((d) => d.section === sec)
+        .map((d) => tile(`data-extra="${d.id}"`, extraOn(d.id), glyphSvg(d.glyph, d.color, 20), d.label, `${d.label} – ${d.hint}`, `<span class="ltile-badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>`))
+        .join('');
+    const events = `
+      <h3>Naturereignisse</h3>
+      <div class="tile-grid">${groupTiles}</div>
+      <h3>Europa & Messwerte</h3>
+      <div class="tile-grid">${extraTiles('europe')}</div>`;
+    const traffic = `
+      <h3>Luftraum & Weltraum</h3>
+      <div class="tile-grid">${extraTiles('air')}</div>
+      <h3>Verkehr & Infrastruktur</h3>
+      <div class="tile-grid">${extraTiles('infra')}</div>`;
 
-        <p class="small muted attribution-note">Klick auf die Karte zeigt das aktuelle Wetter an diesem Ort.
-        Daten: Open-Meteo, RainViewer, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, NOAA/NWS, GDACS, DWD.</p>
+    const tabBtn = (id: PanelTab, label: string, n: number) =>
+      `<button type="button" role="tab" class="ptab ${tab === id ? 'on' : ''}" data-tab="${id}" aria-selected="${tab === id}">${label}${n ? `<span class="ptab-n">${n}</span>` : ''}</button>`;
+
+    panel.innerHTML = `
+      <div class="ptabs" role="tablist">
+        ${tabBtn('weather', 'Wetter', wxCount)}${tabBtn('events', 'Ereignisse', evCount)}${tabBtn('traffic', 'Verkehr', trCount)}
+      </div>
+      <div class="panel-scroll">
+        ${tab === 'weather' ? weather : tab === 'events' ? events : traffic}
+        <div class="panel-notes"></div>
       </div>`;
-
     panel.querySelector('.panel-scroll')!.scrollTop = scrollTop;
-    panel.querySelector<HTMLDetailsElement>('details.keys')!.open = keysOpen;
-    panel.querySelectorAll<HTMLInputElement>('input[data-extra]').forEach((i) =>
-      i.addEventListener('change', () => {
-        const id = i.dataset.extra as ExtraId;
-        state.extras[id] = i.checked;
-        extras?.toggle(id, i.checked);
-        updateBadges();
-        save();
-      }),
-    );
-    panel.querySelectorAll<HTMLInputElement>('input[name=base]').forEach((i) =>
-      i.addEventListener('change', () => {
-        state.base = i.value as BaseId;
-        applyBase();
+    updateBadges();
+
+    panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.panelTab = b.dataset.tab as PanelTab;
+        panel.querySelector('.panel-scroll')!.scrollTop = 0;
         renderPanel();
         save();
       }),
     );
-    panel.querySelectorAll<HTMLInputElement>('input[name=overlay]').forEach((i) =>
-      i.addEventListener('change', () => {
-        const prev = state.overlay;
-        state.overlay = i.value as OverlayId;
-        // Wind layers bring their particles along (like zoom.earth); leaving them removes them again.
-        const windy = (o: OverlayId) => isField(o) && !!FIELDS[o].particles;
-        if (windy(state.overlay) && !windy(prev)) state.wind = true;
-        else if (!windy(state.overlay) && windy(prev)) state.wind = false;
-        applyOverlay();
-        renderPanel();
-        save();
-      }),
-    );
-    panel.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
-      i.addEventListener('change', () => {
-        const opt = i.dataset.opt!;
-        if (opt === 'labels' || opt === 'night' || opt === 'wind' || opt === 'isobars') {
-          state[opt] = i.checked;
-          if (opt === 'labels') applyBase();
-          if (opt === 'night') applyNight();
-          if (opt === 'wind' || opt === 'isobars') applyModelLayers();
+    panel.querySelectorAll<HTMLButtonElement>('[data-fam]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const fam = b.dataset.fam!;
+        if (fam === 'owm') setOverlay(state.overlay.startsWith('owm-') ? 'none' : (`owm-${OWM_LAYERS[0].id}` as OverlayId));
+        else if (activeFam?.id === fam) setOverlay('none');
+        else {
+          const f = WX_FAMILIES.find((x) => x.id === fam)!;
+          setOverlay(state.variants?.[fam] ?? f.variants[0][0]);
         }
+      }),
+    );
+    panel.querySelectorAll<HTMLButtonElement>('[data-variant]').forEach((b) =>
+      b.addEventListener('click', () => setOverlay(b.dataset.variant as OverlayId)),
+    );
+    panel.querySelectorAll<HTMLButtonElement>('[data-toggle]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const opt = b.dataset.toggle as 'wind' | 'isobars';
+        state[opt] = !state[opt];
+        applyModelLayers();
+        renderPanel();
         save();
       }),
     );
-    panel.querySelectorAll<HTMLInputElement>('input[data-group]').forEach((i) =>
-      i.addEventListener('change', () => {
-        state.groups[i.dataset.group as GroupId] = i.checked;
+    panel.querySelectorAll<HTMLButtonElement>('[data-group]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.group as GroupId;
+        const on = !state.groups[id];
+        state.groups[id] = on;
+        if (id === 'fires') state.groups.hotspots = on; // "Feuer" = Waldbrände + Hotspots
         applyGroups();
         ensureFeeds();
+        renderPanel();
         save();
       }),
     );
-    panel.querySelector('.keys-form')!.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const get = (k: string) => panel.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
+    panel.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const id = b.dataset.extra as ExtraId;
+        const on = !state.extras[id];
+        state.extras[id] = on;
+        extras?.toggle(id, on);
+        renderPanel();
+        save();
+      }),
+    );
+  }
+
+  function setOverlay(next: OverlayId) {
+    const prev = state.overlay;
+    state.overlay = next;
+    const fam = familyOf(next);
+    if (fam) state.variants = { ...state.variants, [fam.id]: next };
+    // Wind layers bring their particles along (like zoom.earth); leaving them removes them again.
+    const windy = (o: OverlayId) => isField(o) && !!FIELDS[o].particles;
+    if (windy(next) && !windy(prev)) state.wind = true;
+    else if (!windy(next) && windy(prev)) state.wind = false;
+    applyOverlay();
+    renderPanel();
+    save();
+  }
+
+  // ----- base map switcher (Google-Maps style) ------------------------------
+  const baseSwitch = el.querySelector<HTMLDivElement>('.base-switch')!;
+  const BASE_THUMB: Record<BaseId, string> = {
+    satellite: `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`,
+    nasa: `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`,
+    dark: miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a'),
+    light: miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5'),
+  };
+  function miniMap(land: string, water: string, road: string, border: string) {
+    return `<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" fill="${water}"/>
+      <path d="M0 10 C10 6 18 12 26 9 S40 4 46 12 S56 22 64 18 V64 H34 C30 56 22 58 18 50 S6 46 0 50Z" fill="${land}"/>
+      <path d="M44 40 C50 36 58 40 60 46 S52 58 46 54 S40 44 44 40Z" fill="${water}"/>
+      <path d="M6 30 L24 26 L38 34 L58 30 M20 14 L28 40 L24 62" stroke="${road}" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <path d="M2 40 C14 36 20 42 30 38 S44 24 52 26" stroke="${border}" stroke-width="1" stroke-dasharray="3 2" fill="none"/></svg>`;
+  }
+  function renderBaseSwitch(open = false) {
+    const cur = state.base;
+    baseSwitch.innerHTML = `
+      <button type="button" class="base-current" aria-expanded="${open}" title="Kartentyp wählen">
+        <span class="thumb">${BASE_THUMB[cur]}</span>
+        <span class="base-current-label"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Karte</span>
+      </button>
+      <div class="base-pop" ${open ? '' : 'hidden'}>
+        <div class="base-options">
+          ${BASES.map(
+            (b) => `<button type="button" class="base-opt ${cur === b.id ? 'on' : ''}" data-base="${b.id}" aria-pressed="${cur === b.id}">
+              <span class="thumb">${BASE_THUMB[b.id]}</span><span>${b.label}</span></button>`,
+          ).join('')}
+        </div>
+        <div class="base-toggles">
+          <label><input type="checkbox" data-opt="labels" ${state.labels ? 'checked' : ''}/> Ortsnamen & Grenzen</label>
+          <label><input type="checkbox" data-opt="night" ${state.night ? 'checked' : ''}/> Tag/Nacht</label>
+        </div>
+      </div>`;
+    const pop = baseSwitch.querySelector<HTMLDivElement>('.base-pop')!;
+    const btn = baseSwitch.querySelector<HTMLButtonElement>('.base-current')!;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      pop.hidden = !pop.hidden;
+      btn.setAttribute('aria-expanded', String(!pop.hidden));
+    });
+    baseSwitch.querySelectorAll<HTMLButtonElement>('[data-base]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.base = b.dataset.base as BaseId;
+        applyBase();
+        renderBaseSwitch(true);
+        save();
+      }),
+    );
+    baseSwitch.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
+      i.addEventListener('change', () => {
+        const opt = i.dataset.opt as 'labels' | 'night';
+        state[opt] = i.checked;
+        if (opt === 'labels') applyBase();
+        else applyNight();
+        save();
+      }),
+    );
+  }
+  renderBaseSwitch();
+  document.addEventListener('click', (e) => {
+    if (!baseSwitch.contains(e.target as Node)) {
+      const pop = baseSwitch.querySelector<HTMLDivElement>('.base-pop');
+      if (pop && !pop.hidden) renderBaseSwitch(false);
+    }
+  });
+
+  // ----- settings dialog (API keys, sources) --------------------------------
+  const settings = el.querySelector<HTMLDialogElement>('.settings-dialog')!;
+  el.querySelector('.settings-btn')!.addEventListener('click', () => {
+    const keys = store.getKeys();
+    settings.innerHTML = `
+      <form method="dialog" class="keys-form" autocomplete="off">
+        <h2>Einstellungen</h2>
+        <h3>API-Schlüssel (optional)</h3>
+        <p class="small muted">Alle Grundfunktionen laufen ohne Schlüssel. Mit kostenlosen Schlüsseln werden zusätzliche Quellen
+        freigeschaltet. Schlüssel werden nur lokal in diesem Browser gespeichert.</p>
+        <label class="field-label">OpenWeatherMap <small>(zusätzliche hochauflösende Wetterkarten)</small>
+          <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
+        <label class="field-label">NASA FIRMS MAP_KEY <small>(Feuer-Hotspots als einzelne, anklickbare Punkte)</small>
+          <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
+        <h3>Datenquellen</h3>
+        <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
+        PEGELONLINE, Copernicus CAMS, adsb.lol, SondeHub, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
+        <div class="dialog-actions">
+          <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
+          <button class="btn small primary" value="save">Speichern</button>
+        </div>
+      </form>`;
+    settings.showModal();
+    settings.querySelector('form')!.addEventListener('submit', (e) => {
+      const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
+      if (submitter?.value !== 'save') return;
+      const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       store.setKeys({ owm: get('owm'), firms: get('firms') });
       feedData.firms.at = 0;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
       applyOverlay();
       applyGroups();
       ensureFeeds();
-      toast('Schlüssel gespeichert');
+      renderPanel();
+      toast('Einstellungen gespeichert');
     });
-  }
+  });
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
@@ -524,13 +656,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     for (const d of EXTRAS) {
       const badge = panel.querySelector(`[data-badge-for="${d.id}"]`);
       if (badge) badge.textContent = extras.badge(d.id);
-      const note = panel.querySelector(`[data-note-for="${d.id}"]`);
-      if (note) {
-        const n = extras.note(d.id);
-        note.textContent = n ?? d.hint;
-        note.classList.toggle('note', !!n);
-      }
     }
+    // hints like "zoom in to see aircraft" for the layers on the current tab
+    const tab = state.panelTab ?? 'weather';
+    const notes = EXTRAS.filter((d) => (tab === 'events' ? d.section === 'europe' : tab === 'traffic' ? d.section !== 'europe' : false))
+      .map((d) => [d.label, extras!.note(d.id)] as const)
+      .filter(([, n]) => n);
+    const box = panel.querySelector('.panel-notes');
+    if (box) box.innerHTML = notes.map(([l, n]) => `<p class="small note">${escapeHtml(l)}: ${escapeHtml(n!)}</p>`).join('');
   }
 
   function applyBase() {
