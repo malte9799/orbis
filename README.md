@@ -38,6 +38,8 @@ Drei Ansichten:
     Fahrspuren von Perseverance/Curiosity, die 72 Ingenuity-Flüge; die Rover erscheinen beim Heranzoomen als
     3D-Modell in Originalgröße. In der Weltall-Ansicht haben die Planeten nur ihre feste Textur, die Detailkacheln
     gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit Erde und Mars, Mond/Merkur/Venus vorbereitet).
+    Über den globalen Mosaiken liegen automatisch die regionalen HiRISE-/CTX-Mosaike von Mars Trek (Jezero, Gale,
+    Landestellen, Rover-Gebiete – bis 25 cm/px; Liste aus `scripts/mars-mosaics.mjs` → `src/space/mars-mosaics.ts`).
     Die Quellen sind Äquirektangular-Kacheln und werden per `planet://`-Protokoll in Mercator-Kacheln umgerechnet.
     Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall `public/data/mars-traverse.json`)
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)

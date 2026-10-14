@@ -5,6 +5,8 @@
 // All sources are equirectangular tile pyramids (level 0 = 2 × 1 tiles, level z spans
 // 180 / 2^z degrees per tile, rows counted from the north pole).
 
+import { MARS_MOSAICS } from './mars-mosaics';
+
 export interface TileLayer {
   id: string;
   label: string;
@@ -64,6 +66,16 @@ export interface PlanetMapConfig {
   detail3d: (z: number) => TileLayer;
   /** level the global base texture of the 3D body already corresponds to (256 px tiles) */
   baseLevel: number;
+  /** sharper regional mosaics drawn on top in the map ('auto' type), finest last */
+  regional?: RegionalLayer[];
+}
+
+export interface RegionalLayer {
+  id: string;
+  title: string;
+  /** west, south, east, north */
+  bbox: [number, number, number, number];
+  layer: TileLayer;
 }
 
 const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'Farbmosaik (Viking, 232 m)', 'NASA/USGS Viking MDIM 2.1 · NASA Mars Trek', 7);
@@ -78,6 +90,14 @@ const MARS_CTX: TileLayer = {
 };
 const MARS_MOLA = trek('Mars', 'Mars_MGS_MOLA_ClrShade_merge_global_463m', 'Höhenrelief (MOLA, 463 m)', 'NASA MGS MOLA · NASA Mars Trek', 7);
 const MARS_THEMIS = usgsWms('mars/mars_simp_cyl.map', 'THEMIS', 'themis', 'Infrarot (THEMIS, 100 m)', 'NASA/ASU THEMIS · USGS Astrogeology', 9);
+
+/** NASA Mars Trek regional HiRISE / CTX mosaics (generated list, see scripts/mars-mosaics.mjs). */
+const MARS_REGIONAL: RegionalLayer[] = MARS_MOSAICS.map(([label, title, fmt, bbox, maxZ]) => ({
+  id: label,
+  title,
+  bbox,
+  layer: trek('Mars', label, title, 'NASA/JPL/University of Arizona (HiRISE), NASA/JPL/MSSS (CTX) · NASA Mars Trek', maxZ, fmt),
+}));
 
 const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
 const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'MESSENGER-Mosaik (166 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
@@ -96,6 +116,7 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     // colour mosaic as far as it goes, then the 5 m CTX mosaic (≥ 2× finer from level 7 on)
     detail3d: (z) => (z <= 6 ? MARS_COLOR : MARS_CTX),
     baseLevel: 4, // 8k texture
+    regional: MARS_REGIONAL,
   },
   // prepared, switched on later
   moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: false, openAt: 1.1, layers: [MOON_WAC], detail3d: () => MOON_WAC, baseLevel: 4 },

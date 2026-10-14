@@ -55,7 +55,7 @@ function loadImg(url: string): Promise<ImageBitmap | null> {
 const tile2lat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
 
 /** Draw one source layer into the 256 px mercator tile (z/x/y). */
-async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer, z: number, x: number, y: number) {
+async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer, z: number, x: number, y: number, bbox?: [number, number, number, number]) {
   // a source level with about the output resolution (1 source tile ≈ 1 output tile)
   const L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
   const span = 180 / 2 ** L;
@@ -71,6 +71,12 @@ async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer,
   const jobs: Promise<void>[] = [];
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
+      if (bbox) {
+        // regional mosaics: only the source tiles that touch their footprint exist
+        const w = -180 + c * span;
+        const n = 90 - r * span;
+        if (w > bbox[2] || w + span < bbox[0] || n < bbox[1] || n - span > bbox[3]) continue;
+      }
       jobs.push(
         loadImg(layer.url(L, r, ((c % nCols) + nCols) % nCols)).then((img) => {
           if (!img) return;
@@ -105,12 +111,24 @@ function registerPlanetProtocol() {
     const g = canvas.getContext('2d')!;
     g.fillStyle = '#10131c';
     g.fillRect(0, 0, 256, 256);
-    if (m[2] === 'auto') {
-      // colour mosaic underneath, the sharp detail mosaic (which has holes) on top
+    if (m[2] === 'auto' || m[2] === 'global') {
+      // colour mosaic underneath, the sharp global mosaic (which has holes) on top …
       const under = cfg.detail3d(0);
       await drawLayer(g, under, z, x, y);
       const top = cfg.detail3d(99);
       if (top !== under && z + Math.ceil(Math.log2(128 / under.px)) > under.maxZ) await drawLayer(g, top, z, x, y);
+      // … and the regional HiRISE / CTX mosaics over their footprints (finest last)
+      if (m[2] === 'auto' && z >= 8) {
+        const lon0 = (x / 2 ** z) * 360 - 180;
+        const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
+        const latN = tile2lat(y, z);
+        const latS = tile2lat(y + 1, z);
+        for (const r of cfg.regional ?? []) {
+          const [w, s, e, n] = r.bbox;
+          if (e < lon0 || w > lon1 || n < latS || s > latN) continue;
+          await drawLayer(g, r.layer, z, x, y, r.bbox);
+        }
+      }
     } else {
       await drawLayer(g, cfg.layers.find((l) => l.id === m[2]) ?? cfg.layers[0], z, x, y);
     }
@@ -377,7 +395,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
           type: 'raster' as const,
           tiles: [tileUrl()],
           tileSize: 256,
-          maxzoom: 14,
+          maxzoom: 18, // regional HiRISE mosaics reach 25 cm/px
           attribution: [...new Set(cfg().layers.map((l) => l.credit))].join(' · '),
         },
         tracks: { type: 'geojson' as const, data: EMPTY },
@@ -611,7 +629,11 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
 
   const thumb = (l: TileLayer) => l.url(2, 1, 4);
   function renderBase(open = false) {
-    const opts = [{ id: 'auto', label: 'Automatisch', img: thumb(cfg().detail3d(0)) }, ...cfg().layers.map((l) => ({ id: l.id, label: l.label, img: thumb(l) }))];
+    const opts = [
+      { id: 'auto', label: cfg().regional?.length ? 'Automatisch (mit HiRISE-Mosaiken)' : 'Automatisch', img: thumb(cfg().detail3d(0)) },
+      ...(cfg().regional?.length ? [{ id: 'global', label: 'Nur globale Mosaike', img: thumb(cfg().detail3d(0)) }] : []),
+      ...cfg().layers.map((l) => ({ id: l.id, label: l.label, img: thumb(l) })),
+    ];
     const cur = opts.find((o) => o.id === layerId) ?? opts[0];
     baseSwitch.innerHTML = `
       <button type="button" class="base-current" aria-expanded="${open}" title="Kartentyp wählen">
