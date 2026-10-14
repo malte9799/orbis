@@ -196,3 +196,62 @@ export async function loadWaves(v: WaveView): Promise<{ fc: FeatureCollection<Po
   });
   return { fc: { type: 'FeatureCollection', features }, step };
 }
+
+// ---------------------------------------------------------------------------
+// Open-Meteo Flood (GloFAS) – river discharge. Query points snap to the nearest modelled
+// river, so a grid over the viewport yields river points (duplicates are merged).
+
+const RIVER_STOPS: [number, string][] = [
+  [10, '#90caf9'],
+  [100, '#42a5f5'],
+  [1000, '#1e88e5'],
+  [5000, '#7e57c2'],
+  [20000, '#d81b60'],
+];
+
+export async function loadRivers(v: WaveView): Promise<{ fc: FeatureCollection<Point>; step: number }> {
+  const west = Math.max(-180, v.west);
+  const east = Math.min(180, v.east);
+  const south = Math.max(-60, v.south);
+  const north = Math.min(80, v.north);
+  const step = STEPS.find((s) => (Math.ceil((east - west) / s) + 1) * (Math.ceil((north - south) / s) + 1) <= 90) ?? 20;
+  const lats: number[] = [];
+  const lons: number[] = [];
+  for (let la = Math.ceil(south / step) * step; la <= north; la += step) {
+    for (let lo = Math.ceil(west / step) * step; lo <= east; lo += step) {
+      lats.push(+la.toFixed(2));
+      lons.push(+lo.toFixed(2));
+    }
+  }
+  if (!lats.length) return { fc: { type: 'FeatureCollection', features: [] }, step };
+  const q = new URLSearchParams({ latitude: lats.join(','), longitude: lons.join(','), daily: 'river_discharge', forecast_days: '7', timezone: 'GMT' });
+  type Row = { latitude: number; longitude: number; daily?: { time: string[]; river_discharge: (number | null)[] } };
+  const json = await omFetch<Row | Row[]>(`https://flood-api.open-meteo.com/v1/flood?${q}`, lats.length, true);
+  const seen = new Set<string>();
+  const features: Feature<Point>[] = [];
+  for (const r of Array.isArray(json) ? json : [json]) {
+    const d = r.daily?.river_discharge;
+    const now = d?.[0];
+    if (!d || typeof now !== 'number' || now < 1) continue;
+    const key = `${r.latitude.toFixed(3)},${r.longitude.toFixed(3)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const peak = Math.max(...d.filter((x): x is number => typeof x === 'number'));
+    const change = (peak - now) / now;
+    const trend = change > 0.25 ? 'steigend ↑' : change < -0.25 ? 'fallend ↓' : 'gleichbleibend →';
+    const fmtQ = (x: number) => Math.round(x).toLocaleString('de-DE');
+    features.push(
+      point(r.longitude, r.latitude, {
+        title: 'Flussabfluss',
+        subtitle: `${fmtQ(now)} m³/s heute · ${trend} · Höchstwert in 7 Tagen ${fmtQ(peak)} m³/s`,
+        date: r.daily!.time[0],
+        color: rgb(rampColor(RIVER_STOPS, now)),
+        label: now >= 1000 ? `${(now / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })}k` : fmtQ(now),
+        q: now,
+        source: 'Open-Meteo Flood / GloFAS (CC BY 4.0)',
+        url: 'https://open-meteo.com/en/docs/flood-api',
+      }),
+    );
+  }
+  return { fc: { type: 'FeatureCollection', features }, step };
+}

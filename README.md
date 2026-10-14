@@ -92,6 +92,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Infrastruktur | Seekabel mit Anlandepunkten, Internetknoten (IXPs) | TeleGeography, PeeringDB |
 | Infrastruktur | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke u. a.; beim Zoomen einzelne Windräder | WRI Global Power Plant Database, OSM (Overpass) |
 | Meer | Seegang (Wellenhöhe, Dünung) und Meeresströmung im Kartenausschnitt | Open-Meteo Marine (CC BY 4.0, nicht-kommerziell) |
+| Meer | Flussabfluss mit 7-Tage-Trend im Kartenausschnitt (Punkte auf den nächsten Fluss gerastet) | GloFAS via Open-Meteo Flood (CC BY 4.0, nicht-kommerziell) |
 | Meer | Messbojen live (Wellen, Wind, Luftdruck, Wassertemperatur) | NOAA NDBC (über den Daten-Proxy) |
 | Meer | Gezeitenpegel USA mit Wasserstand und nächsten Hoch-/Niedrigwassern | NOAA CO-OPS (über den Daten-Proxy) |
 | Meer | Meerestiefe weltweit, Europa detaillierter | GEBCO, EMODnet Bathymetry (CC BY 4.0) – nicht zur Navigation |

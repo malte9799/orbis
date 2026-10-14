@@ -6,7 +6,7 @@ import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatel
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
-import { loadBuoys, loadTideDetails, loadTideStations, loadWaves } from '../api/ocean';
+import { loadBuoys, loadRivers, loadTideDetails, loadTideStations, loadWaves } from '../api/ocean';
 import {
   AisStream,
   countdown,
@@ -89,6 +89,7 @@ export type ExtraId =
   | 'buoys'
   | 'tides'
   | 'waves'
+  | 'rivers'
   | 'terrain'
   | 'bathymetry'
   | 'chlorophyll'
@@ -137,6 +138,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'aerosol', section: 'earth', label: 'Aerosole & Staub', hint: 'Dunst, Rauch, Saharastaub (AOD) – NASA MODIS', glyph: 'dust', color: '#bcaaa4' },
   { id: 'landcover', section: 'earth', label: 'Landbedeckung', hint: 'Wald, Acker, Siedlung, Wasser (10 m) – ESA WorldCover', glyph: 'city', color: '#4caf50' },
   { id: 'waves', section: 'ocean', label: 'Seegang & Strömung', hint: 'Wellenhöhe, Dünung und Meeresströmung im Kartenausschnitt – Open-Meteo Marine', glyph: 'tsunami', color: '#26c6da' },
+  { id: 'rivers', section: 'ocean', label: 'Flussabfluss & Hochwasser', hint: 'Abfluss in m³/s mit 7-Tage-Trend an Flüssen im Kartenausschnitt – GloFAS via Open-Meteo', glyph: 'flood', color: '#1e88e5' },
   { id: 'buoys', section: 'ocean', label: 'Messbojen', hint: 'Wellen, Wind, Luftdruck, Wassertemperatur live – NOAA NDBC (~900 Stationen)', glyph: 'gauge', color: '#4fc3f7' },
   { id: 'tides', section: 'ocean', label: 'Gezeitenpegel USA', hint: 'Wasserstand und nächste Hoch-/Niedrigwasser per Klick – NOAA CO-OPS', glyph: 'gauge', color: '#42a5f5' },
   { id: 'bathymetry', section: 'ocean', label: 'Meerestiefe', hint: 'Bathymetrie weltweit – GEBCO; Europa genauer – EMODnet', glyph: 'tsunami', color: '#1565c0' },
@@ -216,6 +218,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   aerosol: ['aerosol'],
   landcover: ['landcover'],
   waves: ['waves', 'waves-label'],
+  rivers: ['rivers', 'rivers-label'],
   buoys: ['buoys', 'buoys-label'],
   tides: ['tides'],
   bathymetry: ['emodnet', 'gebco'],
@@ -231,7 +234,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -346,11 +349,12 @@ export class ExtraLayers {
       resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
       waves: 'Seegang: <a href="https://open-meteo.com/en/docs/marine-weather-api">Open-Meteo Marine</a> (CC BY 4.0)',
+      rivers: 'Flüsse: <a href="https://open-meteo.com/en/docs/flood-api">Open-Meteo Flood</a> / GloFAS (CC BY 4.0)',
       buoys: 'Bojen: <a href="https://www.ndbc.noaa.gov/">NOAA NDBC</a>',
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'buoys', 'tides']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -750,6 +754,17 @@ export class ExtraLayers {
       'gauges',
     );
     add(waveLabel('waves-label', 'waves'), 'marker');
+    add(
+      {
+        id: 'rivers',
+        type: 'circle',
+        source: 'rivers',
+        layout: { ...hidden, 'circle-sort-key': ['get', 'q'] },
+        paint: { 'circle-color': ['get', 'color'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 4, 9, 11], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
+      },
+      'gauges',
+    );
+    add({ ...waveLabel('rivers-label', 'rivers'), minzoom: 5 }, 'marker');
     add(
       {
         id: 'buoys',
@@ -1233,6 +1248,7 @@ export class ExtraLayers {
     if (this.on.has('webcams')) this.loadWebcamsNow();
     if (this.on.has('alpr')) this.loadAlprNow();
     if (this.on.has('waves')) this.loadWavesNow();
+    if (this.on.has('rivers')) this.loadRiversNow();
     if (this.on.has('wind') || this.on.has('solar') || this.on.has('plants')) this.loadOsmPowerNow();
   }
 
@@ -1407,6 +1423,9 @@ export class ExtraLayers {
         case 'waves':
           this.loadWavesNow();
           break;
+        case 'rivers':
+          this.loadRiversNow();
+          break;
         case 'terrain':
           this.setTerrain(true);
           break;
@@ -1497,6 +1516,7 @@ export class ExtraLayers {
     }
     if (!this.on.has('terrain')) this.setTerrain(false);
     if (!this.on.has('waves')) this.waveKey = '';
+    if (!this.on.has('rivers')) this.riverKey = '';
     if (!this.on.has('lightning')) {
       this.clear('lightning');
       this.lightning?.stop();
@@ -2035,6 +2055,28 @@ export class ExtraLayers {
       });
   }
 
+  private riverKey = '';
+
+  private loadRiversNow() {
+    const b = this.map.getBounds();
+    const q = (v: number) => Math.round(v / 2) * 2;
+    const key = [q(b.getWest()), q(b.getSouth()), q(b.getEast()), q(b.getNorth())].join(',');
+    if (key === this.riverKey) return;
+    this.riverKey = key;
+    this.set('rivers', { loading: true });
+    loadRivers({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(), zoom: this.map.getZoom() })
+      .then((r) => {
+        if (this.riverKey !== key) return;
+        this.setData('rivers', r.fc);
+        this.set('rivers', { loading: false, count: r.fc.features.length, note: r.fc.features.length ? `Raster ${r.step}° – zoomen für mehr Flüsse · Farbe = Abfluss (blau klein → lila/rot sehr groß)` : 'hier keine Flüsse im Modell – anderen Ausschnitt wählen' });
+      })
+      .catch((e) => {
+        console.warn('Open-Meteo Flood', e);
+        this.riverKey = '';
+        this.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Flood nicht erreichbar' });
+      });
+  }
+
   private setTerrain(on: boolean) {
     const has = !!this.map.getTerrain();
     if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
@@ -2366,6 +2408,8 @@ export class ExtraLayers {
         return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'buoys':
         return { type: 'html', html: html('gauge', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'rivers':
+        return { type: 'html', html: html('flood', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'waves':
         return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'tides': {
