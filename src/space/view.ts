@@ -522,6 +522,16 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       { passive: true },
     );
 
+    // labels sit above the canvas and would swallow the wheel: hand it on so zooming works while hovering one
+    labelHost.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        renderer?.domElement.dispatchEvent(new WheelEvent('wheel', e));
+      },
+      { passive: false },
+    );
+
     // the user takes over: stop any automatic camera swing
     controls.addEventListener('start', () => (aim = null));
 
