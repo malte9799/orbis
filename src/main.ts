@@ -5,7 +5,6 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { store, type Place } from './store';
 import { createForecastView } from './views/forecast';
 import { createGlobeView } from './views/globe';
-type PlanetMapView = import('./views/planetmap').PlanetMapView;
 
 // Bundlers move the library, so tell MapLibre explicitly where its worker lives.
 setWorkerUrl(workerUrl);
@@ -28,6 +27,7 @@ app.append(forecast.el, globe.el);
 
 // The 3D solar system (three.js) is loaded on demand.
 type SpaceView = import('./space/view').SpaceView;
+type PlanetMapView = import('./views/planetmap').PlanetMapView;
 let space: SpaceView | null = null;
 let spaceLoading: Promise<SpaceView> | null = null;
 function loadSpace(): Promise<SpaceView> {
@@ -36,8 +36,9 @@ function loadSpace(): Promise<SpaceView> {
       (lat, lon) => {
         location.hash = `#/karte?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&proj=globe&from=space`;
       },
-      (body, lat, lon) => {
-        location.hash = `#/planet?body=${body}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&zoom=5.5`;
+      // a planet / rover / landing site was picked: its map (3D globe by default)
+      (body, lat, lon, o) => {
+        location.hash = `#/planet?body=${body}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&from=space${o?.focus ? `&focus=${o.focus}` : ''}${o?.site ? `&site=${o.site}` : ''}`;
       },
     );
     app.append(space.el);
@@ -46,14 +47,15 @@ function loadSpace(): Promise<SpaceView> {
   return spaceLoading;
 }
 
-// 2D maps of the other planets (equirectangular tile pyramids), loaded on demand
+// Maps of the other planets (MapLibre, like the Earth map), loaded on demand
 let planet: PlanetMapView | null = null;
 let planetLoading: Promise<PlanetMapView> | null = null;
 function loadPlanet(): Promise<PlanetMapView> {
   planetLoading ??= import('./views/planetmap').then(({ createPlanetMapView }) => {
-    planet = createPlanetMapView((body, lat, lon, focus, site) => {
-      const q = site ? `&site=${site}` : '';
-      location.hash = `#/weltall?focus=${focus ?? body}&from=${body}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}${q}`;
+    planet = createPlanetMapView({
+      onOpenSpace(body, lat, lon) {
+        location.hash = `#/weltall?focus=${body}&from=${body}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`;
+      },
     });
     app.append(planet.el);
     return planet;
@@ -97,7 +99,16 @@ function route() {
     const z = parseFloat(params.get('zoom') ?? '');
     loadPlanet().then((v) => {
       if (active !== 'planet') return;
-      v.activate({ body: params.get('body') ?? 'mars', lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, zoom: Number.isFinite(z) ? z : undefined, focus: params.get('focus') ?? undefined });
+      v.activate({
+        body: params.get('body') ?? 'mars',
+        projection: params.get('view') === '2d' ? 'mercator' : 'globe',
+        lat: hasPos ? lat : undefined,
+        lon: hasPos ? lon : undefined,
+        zoom: Number.isFinite(z) ? z : undefined,
+        focus: params.get('focus') ?? undefined,
+        site: params.get('site') ?? undefined,
+        fromSpace: params.get('from') === 'space',
+      });
     });
   } else if (next === 'globe') {
     const fromSpace = params.get('from') === 'space';

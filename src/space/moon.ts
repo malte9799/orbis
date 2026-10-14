@@ -609,6 +609,7 @@ export class BodyDetail {
       src.url(z, row, col),
       (t) => {
         this.loads--;
+        if (this.tiles.get(key) !== tile) return t.dispose(); // reset meanwhile
         this.tileOk++;
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = this.o.anisotropy;
@@ -719,6 +720,21 @@ export class BodyDetail {
       if (!this.tiles.has(`${z}/${row}/${col}`)) this.requestTile(z, row, col);
     }
     this.evict(show);
+  }
+
+  /** Drop all loaded tiles (the tile source changed). */
+  resetTiles() {
+    for (const t of this.tiles.values()) {
+      if (!t.mesh) continue;
+      this.tileGroup.remove(t.mesh);
+      t.mesh.geometry.dispose();
+      const mat = t.mesh.material as THREE.MeshStandardMaterial;
+      mat.map?.dispose();
+      mat.dispose();
+    }
+    this.tiles.clear();
+    this.tileOk = 0;
+    this.tileFail = 0;
   }
 
   private evict(keep: Set<Tile>) {

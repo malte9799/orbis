@@ -8,7 +8,7 @@ import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
 import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
-import { MARS_SITES, getMarsTracks, loadMarsTracks, solAt, trackCount, trackKm, SOL_MS, type Track } from './mars';
+import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm } from './mars';
 import { PLANET_MAPS, mapEnabled } from './planets';
 import {
   AU_KM,
@@ -80,7 +80,10 @@ const TRAIL_DAYS: Record<string, number> = {
   parker: 88,
 };
 
-export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => void, onOpenPlanetMap: (body: string, lat: number, lon: number) => void): SpaceView {
+export function createSpaceView(
+  onOpenEarthMap: (lat: number, lon: number) => void,
+  onOpenPlanetMap: (body: string, lat: number, lon: number, o?: { focus?: string; site?: string }) => void,
+): SpaceView {
   const el = document.createElement('main');
   el.className = 'view space-view';
   el.innerHTML = `
@@ -336,7 +339,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (!b.model) continue;
       const p = resolve(b.id, simTime);
       const c = crafts.get(b.id);
-      if (!p || (b.kind === 'craft' && !opts.craft)) {
+      // rover models (b.surface) are drawn only in the planet map; asteroids are not switched by the spacecraft option
+      if (!p || (b.kind === 'craft' && !opts.craft) || b.surface) {
         if (c) c.group.visible = false;
         continue;
       }
@@ -388,6 +392,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     // soft studio reflections for the metal/foil surfaces of the spacecraft models only
     envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     ensureSats();
+    void loadMarsTracks(); // rover positions
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     world.add(sunLight);
     viewLight = new THREE.DirectionalLight(0xffffff, 0);
@@ -438,7 +443,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       }
       world.add(group);
       meshes.set(b.id, { group, spin, body: b });
-      if (b.id === 'moon' || b.id === 'mars') {
+      if (b.id === 'moon') {
         const cfg = PLANET_MAPS[b.id];
         details.set(
           b.id,
@@ -584,13 +589,13 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   function focus(id: string, dist?: number) {
     const b = byId.get(id);
     if (!b) return;
+    if (b.surface) return openSurfaceCraft(b);
     const p = resolve(id, simTime);
     if (!p) {
       toast(`${b.name} existiert zum gewählten Zeitpunkt noch nicht (oder die Position ist unbekannt).`);
       return;
     }
     const from = origin;
-    if (b.surface) lookDownAt(b);
     trans = { from, to: id, t0: performance.now(), dur: 1600, d0: camera.position.length(), d1: dist ?? viewDistance(b) };
     focusId = id;
     siteId = null;
@@ -602,11 +607,21 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     updateHash();
   }
 
-  /** Fly to a landing site on the Moon or Mars and show its info. */
+  /** Rovers and the helicopter only exist on the planet map (3D there). */
+  function openSurfaceCraft(b: Body) {
+    const t = getMarsTracks();
+    // lon/lat of the craft from the tracks, else from the landing site
+    const ll = b.id === 'perseverance' ? roverAt(t?.m20, simTime) : b.id === 'curiosity' ? roverAt(t?.msl, simTime) : heliAt(simTime);
+    const site = SITES.find((s) => s.id === b.id);
+    onOpenPlanetMap(b.surface!, ll?.[1] ?? site?.lat ?? 0, ll?.[0] ?? site?.lon ?? 0, { focus: b.id });
+  }
+
+  /** Fly to a landing site on the Moon and show its info (Mars: its planet map). */
   function selectSite(id: string) {
     const s = SITES.find((x) => x.id === id);
     if (!s) return;
     const bodyId = siteBody(s);
+    if (bodyId !== 'moon') return onOpenPlanetMap(bodyId, s.lat, s.lon, { site: id });
     const R = radiusAU(byId.get(bodyId)!);
     const far = focusId !== bodyId;
     if (far) focus(bodyId, R * 1.6);
@@ -617,19 +632,6 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     aim = { body: bodyId, from: camera.position.clone().normalize(), lat: s.lat, lon: s.lon, t0: performance.now(), dur: 1800, d0: d, d1: Math.min(d, R * 1.6) };
     renderInfo();
     updateHash();
-  }
-
-  /** Put the camera above a craft that stands on a surface (otherwise it may end up underground). */
-  function lookDownAt(b: Body) {
-    const p = resolve(b.id, simTime);
-    const host = resolve(b.surface!, simTime);
-    if (!p || !host) return;
-    const up = toThree(sub(p, host), new THREE.Vector3()).normalize();
-    const side = new THREE.Vector3().crossVectors(up, new THREE.Vector3(0, 1, 0));
-    if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
-    side.normalize();
-    const len = camera.position.length() || 1;
-    camera.position.copy(up.multiplyScalar(0.7).addScaledVector(side, 0.7).normalize().multiplyScalar(len));
   }
 
   function overview() {
@@ -779,7 +781,6 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     adaptControls();
     controls.update();
     for (const d of details.values()) d.update(camera, simTime, pxPerRad(), opts.sites);
-    updateTraverses(now);
     renderSplit();
     updateLabels();
     for (const d of details.values()) d.updateLabels(camera, el.clientWidth, el.clientHeight, opts.labels);
@@ -871,85 +872,6 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       line.geometry.setFromPoints(pts);
       line.visible = true;
       toThree(sub(parent, origin), line.position);
-    }
-  }
-
-  // ----- Mars: rover traverses and Ingenuity flights, drawn on the surface ---------------
-  interface TraverseLine {
-    line: THREE.Line;
-    kind: 'rover' | 'heli';
-    track?: Track;
-    /** flights: start time (ms) of every segment, in order */
-    count: number;
-  }
-  const traverseLines: TraverseLine[] = [];
-  let traversesBuilt = false;
-  let traverseAt = 0;
-
-  /** unit direction on the mesh sphere for lon/lat pairs */
-  function llToPositions(ll: ArrayLike<number>) {
-    const arr = new Float32Array((ll.length / 2) * 3);
-    const v = new THREE.Vector3();
-    for (let i = 0; i < ll.length / 2; i++) {
-      surfaceDir(ll[i * 2 + 1], ll[i * 2], v);
-      arr.set([v.x, v.y, v.z], i * 3);
-    }
-    return arr;
-  }
-
-  function buildTraverses(group: THREE.Group) {
-    const t = getMarsTracks();
-    if (!t) return;
-    traversesBuilt = true;
-    const mk = (positions: Float32Array, color: number) => {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95 }));
-      line.frustumCulled = false;
-      group.add(line);
-      return line;
-    };
-    for (const [track, color] of [[t.m20, 0xffb347], [t.msl, 0x5ad1ff]] as [Track, number][]) {
-      traverseLines.push({ line: mk(llToPositions(track.ll), color), kind: 'rover', track, count: -1 });
-    }
-    // all flights as one strip (consecutive flights start where the last one ended)
-    const segs: number[] = [];
-    for (const f of t.heli.flights) segs.push(...f.pts);
-    traverseLines.push({ line: mk(llToPositions(segs), 0xff5ad1), kind: 'heli', count: -1 });
-  }
-
-  function updateTraverses(now: number) {
-    const d = details.get('mars');
-    if (!d) return;
-    const show = opts.tracks && d.screen > 120;
-    for (const l of traverseLines) l.line.visible = show;
-    if (!show && traversesBuilt) return;
-    if (now - traverseAt < 250) return;
-    traverseAt = now;
-    if (!traversesBuilt) {
-      if (d.screen < 120) return;
-      void loadMarsTracks().then(() => {
-        if (!traversesBuilt) {
-          buildTraverses(d.lineGroup);
-          traverseAt = 0;
-        }
-      });
-      return;
-    }
-    const t = getMarsTracks()!;
-    for (const l of traverseLines) {
-      let n: number;
-      if (l.kind === 'rover') n = trackCount(l.track!, simTime);
-      else {
-        // points of all flights started by now
-        const t0 = Date.parse(t.heli.sol0);
-        n = 0;
-        for (const f of t.heli.flights) if (t0 + f.sol * SOL_MS <= simTime) n += f.pts.length / 2;
-      }
-      if (n !== l.count) {
-        l.count = n;
-        l.line.geometry.setDrawRange(0, n);
-      }
     }
   }
 
@@ -1214,7 +1136,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       ${simTime < dt.getTime() ? '<p class="small note">Zum gewählten Zeitpunkt ist hier noch niemand gelandet.</p>' : years >= 1 ? `<p class="small muted">Vor ${fmt.num(years, 0)} Jahren.</p>` : ''}
       <div class="sp-actions">
         <button class="btn small" data-a="moon">← ${BODY_NAME_DE[bodyId] ?? 'Zurück'}</button>
-        ${mapEnabled(bodyId) ? `<button class="btn small" data-a="map">Karte (2D)</button>` : ''}
+        ${mapEnabled(bodyId) ? `<button class="btn small" data-a="map">Planetenkarte</button>` : ''}
         <a class="btn small" href="https://de.wikipedia.org/w/index.php?search=${encodeURIComponent(s.name.replace(/ \(.*\)$/, ''))}" target="_blank" rel="noopener">Wikipedia ↗</a>
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1226,7 +1148,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     });
     info.querySelector('[data-a=map]')?.addEventListener('click', () => {
       const site = SITES.find((x) => x.id === id)!;
-      onOpenPlanetMap(bodyId, site.lat, site.lon);
+      onOpenPlanetMap(bodyId, site.lat, site.lon, { site: id });
     });
   }
 
@@ -1269,7 +1191,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : crafts.get(b.id)?.detail === 'loading' ? ' · Detailmodell wird geladen …' : ''
       }</p>` : ''}
       <div class="sp-actions">
-        ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : mapEnabled(b.id) ? '<button class="btn small" data-a="map">Karte öffnen (2D)</button>' : ''}
+        ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : mapEnabled(b.id) ? '<button class="btn small" data-a="map">Planetenkarte öffnen</button>' : ''}
         ${extLink}
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1323,7 +1245,11 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       frameCache = new Map();
       origin = resolve(id, simTime) ?? [0, 0, 0];
       const b = byId.get(id)!;
-      if ((id === 'earth' || details.has(id)) && o.lat != null && o.lon != null && !site) {
+      if (b.surface) {
+        openSurfaceCraft(b);
+        return;
+      }
+      if ((id === 'earth' || b.kind === 'planet' || details.has(id)) && o.lat != null && o.lon != null && !site) {
         // coming from a map: start close above that spot and pull back
         update(performance.now());
         const dir = surfaceDirOf(id, o.lat, o.lon);
@@ -1336,12 +1262,6 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       } else if (o.focus && byId.has(o.focus) && !site) {
         // linked to a specific object: look at it from its default distance
         camera.position.setLength(viewDistance(b));
-        controls.minDistance = minDistance(b);
-      }
-      if (b.surface) {
-        // standing on a surface: look from above, not from underground
-        camera.position.setLength(viewDistance(b));
-        lookDownAt(b);
         controls.minDistance = minDistance(b);
       }
       if (site) {

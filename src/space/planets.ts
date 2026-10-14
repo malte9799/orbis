@@ -5,6 +5,8 @@
 // All sources are equirectangular tile pyramids (level 0 = 2 × 1 tiles, level z spans
 // 180 / 2^z degrees per tile, rows counted from the north pole).
 
+import { MARS_PRODUCTS } from './mars-products';
+
 export interface TileLayer {
   id: string;
   label: string;
@@ -17,6 +19,8 @@ export interface TileLayer {
   maxZ: number;
   /** grey-scale mosaics are tinted in the 3D view so they blend with the colour base */
   tint?: number;
+  /** levels the server fills with the wrong picture (the same scene repeated) – the next finer level is used instead */
+  skipLevels?: number[];
 }
 
 const trek = (body: string, layer: string, label: string, credit: string, maxZ: number, ext = 'jpg'): TileLayer => ({
@@ -26,21 +30,6 @@ const trek = (body: string, layer: string, label: string, credit: string, maxZ: 
   px: 256,
   maxZ,
   url: (z, r, c) => `https://trek.nasa.gov/tiles/${body}/EQ/${layer}/1.0.0/default/default028mm/${z}/${r}/${c}.${ext}`,
-});
-
-/** USGS Astrogeology planetary WMS (CORS enabled) as a tile layer. */
-const usgsWms = (map: string, layer: string, id: string, label: string, credit: string, maxZ: number): TileLayer => ({
-  id,
-  label,
-  credit,
-  px: 256,
-  maxZ,
-  url: (z, r, c) => {
-    const span = 180 / 2 ** z;
-    const lon0 = -180 + c * span;
-    const lat1 = 90 - r * span;
-    return `https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/${map}&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${layer}&STYLES=&SRS=EPSG:4326&BBOX=${lon0},${lat1 - span},${lon0 + span},${lat1}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg`;
-  },
 });
 
 export interface MapSite {
@@ -64,20 +53,52 @@ export interface PlanetMapConfig {
   detail3d: (z: number) => TileLayer;
   /** level the global base texture of the 3D body already corresponds to (256 px tiles) */
   baseLevel: number;
+  /** more map products (NASA Mars Trek): global maps, regional mosaics, thematic overlays */
+  products?: MapProduct[];
+}
+
+export interface MapProduct {
+  id: string;
+  title: string;
+  /** base: global map · mosaic: composited into "auto" · region: regional map · overlay: transparent thematic layer */
+  group: 'base' | 'mosaic' | 'region' | 'overlay';
+  /** west, south, east, north */
+  bbox: [number, number, number, number];
+  layer: TileLayer;
 }
 
 const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'Farbmosaik (Viking, 232 m)', 'NASA/USGS Viking MDIM 2.1 · NASA Mars Trek', 7);
 const MARS_CTX: TileLayer = {
   id: 'ctx',
-  label: 'Kontextkamera CTX (≈ 5 m)',
+  label: 'Kontextkamera (CTX, ≈ 5 m)',
   credit: 'NASA/JPL/MSSS/Caltech Murray Lab · Esri',
   px: 512,
   maxZ: 12,
   tint: 0xe3b79c,
+  // Esri's level 7 is broken in places: tiles show one and the same crater scene (e.g. 7/49/186, 7/50/186, 7/70/200)
+  skipLevels: [7],
   url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
 };
-const MARS_MOLA = trek('Mars', 'Mars_MGS_MOLA_ClrShade_merge_global_463m', 'Höhenrelief (MOLA, 463 m)', 'NASA MGS MOLA · NASA Mars Trek', 7);
-const MARS_THEMIS = usgsWms('mars/mars_simp_cyl.map', 'THEMIS', 'themis', 'Infrarot (THEMIS, 100 m)', 'NASA/ASU THEMIS · USGS Astrogeology', 9);
+
+/** NASA Mars Trek products (generated list, see scripts/mars-products.mjs). */
+const MARS_TREK_PRODUCTS: MapProduct[] = MARS_PRODUCTS.map(([id, title, group, tpl, px, bbox, maxZ]) => {
+  const base = tpl.replace(/^~\//, 'https://trek.nasa.gov/');
+  const esri = base.includes('arcgis.com');
+  return {
+    id,
+    title,
+    group,
+    bbox,
+    layer: {
+      id,
+      label: title,
+      credit: esri ? 'NASA/JPL/University of Arizona (HiRISE) · Esri' : 'NASA/JPL/USGS/ASU/ESA/University of Arizona · NASA Mars Trek',
+      px,
+      maxZ,
+      url: (z, r, c) => base.replace('{z}', String(z)).replace('{r}', String(r)).replace('{c}', String(c)),
+    },
+  };
+});
 
 const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
 const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'MESSENGER-Mosaik (166 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
@@ -92,10 +113,12 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     radiusKm: 3389.5,
     enabled: true,
     openAt: 1.1,
-    layers: [MARS_CTX, MARS_COLOR, MARS_MOLA, MARS_THEMIS],
+    // colour mosaic = "global only", relief and infrared come from the Trek products (higher resolution)
+    layers: [MARS_CTX],
     // colour mosaic as far as it goes, then the 5 m CTX mosaic (≥ 2× finer from level 7 on)
     detail3d: (z) => (z <= 6 ? MARS_COLOR : MARS_CTX),
     baseLevel: 4, // 8k texture
+    products: MARS_TREK_PRODUCTS,
   },
   // prepared, switched on later
   moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: false, openAt: 1.1, layers: [MOON_WAC], detail3d: () => MOON_WAC, baseLevel: 4 },
