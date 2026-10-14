@@ -44,22 +44,31 @@ const byId = new Map(ALL.map((b) => [b.id, b]));
 /** ecliptic (x, y, z) → three.js (x, z, -y) with y up = ecliptic north */
 const toThree = (v: Vec3, out = new THREE.Vector3()) => out.set(v[0], v[2], -v[1]);
 
-const SPEEDS: { label: string; f: number }[] = [
-  { label: '−1 Jahr/s', f: -365.25 * 86400 },
-  { label: '−1 Monat/s', f: -30 * 86400 },
-  { label: '−1 Woche/s', f: -7 * 86400 },
-  { label: '−1 Tag/s', f: -86400 },
-  { label: '−1 Std/s', f: -3600 },
-  { label: '−1 min/s', f: -60 },
-  { label: 'Echtzeit', f: 1 },
-  { label: '1 min/s', f: 60 },
-  { label: '1 Std/s', f: 3600 },
-  { label: '1 Tag/s', f: 86400 },
-  { label: '1 Woche/s', f: 7 * 86400 },
-  { label: '1 Monat/s', f: 30 * 86400 },
-  { label: '1 Jahr/s', f: 365.25 * 86400 },
+// simulated seconds per real second: 5 s … 3 years, mirrored for backwards, real time in the middle
+const STEP_S = [5, 30, 60, 300, 600, 1800, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 3 * 86400, 7 * 86400, 14 * 86400, 30 * 86400, 91 * 86400, 182 * 86400, 365.25 * 86400, 730.5 * 86400, 3 * 365.25 * 86400];
+const UNITS: [number, string, string][] = [
+  [365.25 * 86400, 'YR', 'YRS'],
+  [30 * 86400, 'MO', 'MOS'],
+  [7 * 86400, 'WK', 'WKS'],
+  [86400, 'DAY', 'DAYS'],
+  [3600, 'HR', 'HRS'],
+  [60, 'MIN', 'MIN'],
+  [1, 'SEC', 'SEC'],
 ];
-const REALTIME = 6;
+function rateLabel(f: number) {
+  if (f === 1) return 'REAL RATE';
+  const a = Math.abs(f);
+  // whole numbers of the largest fitting unit (91 d → 3 MOS, 14 d → 2 WKS)
+  const [size, one, many] = UNITS.find(([u]) => a >= u * 0.99) ?? UNITS[UNITS.length - 1];
+  const n = Math.round(a / size);
+  return `${f < 0 ? '-' : ''}${n} ${n === 1 ? one : many}/S`;
+}
+const SPEEDS: { label: string; f: number }[] = [
+  ...[...STEP_S].reverse().map((v) => ({ label: rateLabel(-v), f: -v })),
+  { label: 'REAL RATE', f: 1 },
+  ...STEP_S.map((v) => ({ label: rateLabel(v), f: v })),
+];
+const REALTIME = STEP_S.length;
 
 const KIND_LABEL: Record<string, string> = {
   star: 'Stern',
@@ -151,7 +160,7 @@ export function createSpaceView(
             <svg viewBox="0 0 24 24"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
           <button class="sp-overview" data-t="overview" title="Whole solar system">OVERVIEW</button>
         </div>
-        <div class="sp-arc" aria-label="Time of day">
+        <div class="sp-arc" aria-label="Speed">
           <svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 19 Q50 -9 100 19"/></svg>
           <i class="sp-knob"></i>
         </div>
@@ -1165,21 +1174,6 @@ export function createSpaceView(
   }
 
   // ----- UI ----------------------------------------------------------------
-  const RATE_EN: Record<number, string> = {
-    [-365.25 * 86400]: '-1 YR/S',
-    [-30 * 86400]: '-1 MO/S',
-    [-7 * 86400]: '-1 WK/S',
-    [-86400]: '-1 DAY/S',
-    [-3600]: '-1 HR/S',
-    [-60]: '-1 MIN/S',
-    [1]: 'REAL RATE',
-    [60]: '1 MIN/S',
-    [3600]: '1 HR/S',
-    [86400]: '1 DAY/S',
-    [7 * 86400]: '1 WK/S',
-    [30 * 86400]: '1 MO/S',
-    [365.25 * 86400]: '1 YR/S',
-  };
   const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const pad2 = (n: number) => String(n).padStart(2, '0');
   let clockText = '';
@@ -1192,7 +1186,7 @@ export function createSpaceView(
     const h = d.getHours();
     const time = `${h % 12 || 12}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())} ${h < 12 ? 'AM' : 'PM'}`;
     const live = playing && speedIdx === REALTIME && !shifted;
-    const rate = playing ? (RATE_EN[SPEEDS[speedIdx].f] ?? SPEEDS[speedIdx].label) : 'PAUSED';
+    const rate = playing ? SPEEDS[speedIdx].label : 'PAUSED';
     const key = `${date}|${time}|${live}|${rate}`;
     if (key !== clockText) {
       clockText = key;
@@ -1204,7 +1198,7 @@ export function createSpaceView(
       liveBtn.disabled = live;
     }
     // knob rides on the arc according to the time of day
-    const f = (h * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 86400;
+    const f = speedIdx / (SPEEDS.length - 1);
     knobEl.style.left = `${f * 100}%`;
     knobEl.style.top = `${(95 - 4 * 70 * f * (1 - f)).toFixed(1)}%`;
   }
@@ -1253,17 +1247,22 @@ export function createSpaceView(
       setPlaying(false);
     }
   });
-  // drag the knob along the arc: sets the time of day, keeps the date
+  // the arc is the speed slider: far left = fastest backwards, middle = real time, far right = fastest forwards
   const dragArc = (e: PointerEvent) => {
     const r = arcEl.getBoundingClientRect();
     const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    const d = new Date(simTime);
-    d.setHours(0, 0, 0, 0);
-    simTime = d.getTime() + Math.min(f, 0.99999) * 86400000;
-    setPlaying(false);
+    const idx = Math.round(f * (SPEEDS.length - 1));
+    if (idx !== speedIdx) shifted = true;
+    speedIdx = idx;
+    if (!playing) setPlaying(true);
+    clockText = '';
   };
   arcEl.addEventListener('pointerdown', (e) => {
-    arcEl.setPointerCapture(e.pointerId);
+    try {
+      arcEl.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic pointer */
+    }
     dragArc(e);
     const move = (ev: PointerEvent) => dragArc(ev);
     const up = () => {
