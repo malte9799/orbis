@@ -31,14 +31,15 @@ Drei Ansichten:
     Perseverance, Curiosity und Ingenuity stehen auf der Oberfläche (aufrecht, mit dem Planeten mitdrehend);
     ihre Fahrspuren und die 72 Ingenuity-Flüge aus den NASA-MMGIS-Daten sind auf dem Boden eingezeichnet
     und folgen der Zeitleiste (Sol, gefahrene Strecke im Steckbrief)
-  - **Planetenkarte** (`#/planet?body=mars&view=3d|2d`) wie bei der Erde mit 2D / 3D / Weltall-Schalter:
-    Weit in den Mars hineinzoomen oder in der Weltall-Ansicht einen Rover anklicken öffnet sie (Standard: 3D).
-    3D zeigt nur diesen Planeten mit Detailkacheln und den Rover-Modellen (die gibt es nur hier), 2D ist eine
-    flache Karte mit Kartentyp-Umschalter (Farbe, CTX 5 m, MOLA, THEMIS), Ebenen (Landestellen, Fahrspuren,
-    Ingenuity-Flüge, Namen), Suche und Maßstab. Herauszoomen bzw. das Weltall-Symbol führt zurück ins Sonnensystem.
-    Die Quellen je Himmelskörper stehen in `src/space/planets.ts` (`enabled`): derzeit Erde (Wetterkarte) und Mars;
-    Mond, Merkur und Venus sind vorbereitet. Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall
-    `public/data/mars-traverse.json`)
+  - **Planetenkarte** (`#/planet?body=mars`) – bedient sich wie die Erdkarte (MapLibre): 2D-Karte oder 3D-Globus,
+    Ziehen verschiebt die Karte, Zoom zum Mauszeiger, Ebenen-Panel, Kartentyp-Wechsler (Farbe, CTX 5 m, MOLA,
+    THEMIS), Suche und Maßstab. Herauszoomen aus dem Globus bzw. das Weltall-Symbol führt ins Sonnensystem,
+    Hineinzoomen auf den Mars (oder ein Klick auf Rover/Landestelle) von dort auf die Karte. Landestellen,
+    Fahrspuren von Perseverance/Curiosity, die 72 Ingenuity-Flüge; die Rover erscheinen beim Heranzoomen als
+    3D-Modell in Originalgröße. In der Weltall-Ansicht haben die Planeten nur ihre feste Textur, die Detailkacheln
+    gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit Erde und Mars, Mond/Merkur/Venus vorbereitet).
+    Die Quellen sind Äquirektangular-Kacheln und werden per `planet://`-Protokoll in Mercator-Kacheln umgerechnet.
+    Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall `public/data/mars-traverse.json`)
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
