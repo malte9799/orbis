@@ -19,6 +19,8 @@ export interface TileLayer {
   maxZ: number;
   /** grey-scale mosaics are tinted in the 3D view so they blend with the colour base */
   tint?: number;
+  /** levels the server fills with the wrong picture (the same scene repeated) – the next finer level is used instead */
+  skipLevels?: number[];
 }
 
 const trek = (body: string, layer: string, label: string, credit: string, maxZ: number, ext = 'jpg'): TileLayer => ({
@@ -73,6 +75,8 @@ const MARS_CTX: TileLayer = {
   px: 512,
   maxZ: 12,
   tint: 0xe3b79c,
+  // Esri's level 7 is broken in places: tiles show one and the same crater scene (e.g. 7/49/186, 7/50/186, 7/70/200)
+  skipLevels: [7],
   url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
 };
 

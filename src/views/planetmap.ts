@@ -39,12 +39,34 @@ export interface PlanetDeps {
 
 const imgCache = new Map<string, Promise<ImageBitmap | null>>();
 
+/**
+ * createImageBitmap is stricter than <img>: many Esri CTX tiles (valid for <img>) are rejected with
+ * "source image could not be decoded" and would leave holes in the map, so fall back to an <img>.
+ */
+async function decodeBlob(b: Blob): Promise<ImageBitmap | null> {
+  try {
+    return await createImageBitmap(b);
+  } catch {
+    const url = URL.createObjectURL(b);
+    try {
+      const im = new Image();
+      im.src = url;
+      await im.decode();
+      return await createImageBitmap(im);
+    } catch {
+      return null;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+}
+
 function loadImg(url: string): Promise<ImageBitmap | null> {
   let p = imgCache.get(url);
   if (!p) {
     p = fetch(url)
       .then((r) => (r.ok ? r.blob() : null))
-      .then((b) => (b ? createImageBitmap(b) : null))
+      .then((b) => (b ? decodeBlob(b) : null))
       .catch(() => null);
     imgCache.set(url, p);
     if (imgCache.size > 600) imgCache.delete(imgCache.keys().next().value!);
@@ -52,11 +74,18 @@ function loadImg(url: string): Promise<ImageBitmap | null> {
   return p;
 }
 
+/** source level with about one source tile per output tile; levels a server serves broken are skipped (see TileLayer.skipLevels) */
+function sourceLevel(layer: TileLayer, z: number) {
+  let L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
+  while (layer.skipLevels?.includes(L) && L < layer.maxZ) L++;
+  return L;
+}
+
 const tile2lat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
 
 /** Source tiles (urls) a layer needs for the mercator tile z/x/y – to fetch all layers in parallel. */
 function sourceUrls(layer: TileLayer, z: number, x: number, y: number, bbox?: [number, number, number, number]): string[] {
-  const L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
+  const L = sourceLevel(layer, z);
   const span = 180 / 2 ** L;
   const lon0 = (x / 2 ** z) * 360 - 180;
   const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
@@ -79,7 +108,7 @@ function sourceUrls(layer: TileLayer, z: number, x: number, y: number, bbox?: [n
 /** Draw one source layer into the 256 px mercator tile (z/x/y). */
 async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer, z: number, x: number, y: number, bbox?: [number, number, number, number]) {
   // a source level with about the output resolution (1 source tile ≈ 1 output tile)
-  const L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
+  const L = sourceLevel(layer, z);
   const span = 180 / 2 ** L;
   const lon0 = (x / 2 ** z) * 360 - 180;
   const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
