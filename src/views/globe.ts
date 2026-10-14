@@ -247,7 +247,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
     </div>
-    <div class="active-strip" hidden></div>
     <aside class="panel" ${state.panelOpen ? '' : 'hidden'}></aside>
     <div class="base-switch"></div>
     <dialog class="settings-dialog"></dialog>
@@ -568,7 +567,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     panel.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach((b) =>
       b.addEventListener('click', () => toggleExtra(b.dataset.extra as ExtraId)),
     );
-    renderStrip();
   }
 
   function toggleGroup(id: GroupId) {
@@ -587,37 +585,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     extras?.toggle(id, on);
     renderPanel();
     save();
-  }
-
-  /** Subtle strip of the active layers (click to switch one off) – visible while the panel is closed or beside it. */
-  const strip = el.querySelector<HTMLElement>('.active-strip')!;
-  function renderStrip() {
-    const items: { label: string; color: string; off: () => void }[] = [];
-    const fam = familyOf(state.overlay);
-    if (state.overlay !== 'none') {
-      const variant = fam?.variants.find(([v]) => v === state.overlay)?.[1];
-      const label = state.overlay.startsWith('owm-')
-        ? OWM_LAYERS.find((l) => `owm-${l.id}` === state.overlay)?.label ?? 'OWM'
-        : fam
-          ? variant && fam.variants.length > 1 ? `${fam.label}: ${variant}` : fam.label
-          : String(state.overlay);
-      items.push({ label, color: '#5b9dff', off: () => setOverlay('none') });
-    }
-    for (const g of GROUPS) {
-      if (g.id === 'hotspots' || !state.groups[g.id]) continue;
-      items.push({ label: g.id === 'fires' ? 'Feuer' : g.label.split(/ [&(,]/)[0], color: kindColor(g.icon), off: () => toggleGroup(g.id) });
-    }
-    for (const d of EXTRAS) if (state.extras[d.id]) items.push({ label: d.label, color: d.color, off: () => toggleExtra(d.id) });
-    const MAX = 6;
-    const shown = items.slice(0, MAX);
-    strip.hidden = !items.length;
-    strip.innerHTML =
-      shown.map((it, i) => `<button type="button" class="strip-chip" data-i="${i}" title="Ausblenden"><i style="background:${it.color}"></i>${escapeHtml(it.label)}<b>×</b></button>`).join('') +
-      (items.length > MAX ? `<button type="button" class="strip-chip more" data-more title="Alle Ebenen anzeigen">+${items.length - MAX}</button>` : '');
-    strip.querySelectorAll<HTMLButtonElement>('[data-i]').forEach((b) => b.addEventListener('click', () => shown[Number(b.dataset.i)].off()));
-    strip.querySelector('[data-more]')?.addEventListener('click', () => {
-      if (panel.hidden) panelToggle.click();
-    });
   }
 
   function setOverlay(next: OverlayId) {
