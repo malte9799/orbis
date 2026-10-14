@@ -8,7 +8,7 @@ import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
 import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
-import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm } from './mars';
+import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt } from './mars';
 import { PLANET_MAPS, mapEnabled } from './planets';
 import { loadTrajectories, trajectoryTimes } from './trajectories';
 import {
@@ -128,7 +128,6 @@ export function createSpaceView(
         <label class="row"><input type="checkbox" data-opt="craft" checked/> Raumsonden</label>
         <label class="row"><input type="checkbox" data-opt="sats" checked/> Erdsatelliten (in Erdnähe)</label>
         <label class="row"><input type="checkbox" data-opt="sites" checked/> Landestellen (Mond, Mars)</label>
-        <label class="row"><input type="checkbox" data-opt="tracks" checked/> Fahrspuren &amp; Flüge auf dem Mars</label>
         <p class="small muted">Texturen: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) ·
         Mond: NASA <a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noopener">CGI Moon Kit</a> (LRO LROC/LOLA) und
         <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">Moon Trek</a> ·
@@ -194,7 +193,7 @@ export function createSpaceView(
   let playing = true;
   let focusId = 'earth';
   let listTab: 'planets' | 'other' = 'planets';
-  const opts = { orbPlanets: true, orbCraft: true, orbAsteroids: true, orbDwarf: true, labels: true, craft: true, sats: true, sites: true, tracks: true };
+  const opts = { orbPlanets: true, orbCraft: true, orbAsteroids: true, orbDwarf: true, labels: true, craft: true, sats: true, sites: true };
   /** selected landing site on the Moon (info panel) */
   let siteId: string | null = null;
 
@@ -1481,11 +1480,6 @@ export function createSpaceView(
     if (b.id !== 'earth') {
       const d = len(sub(p, earth));
       rows.push(['Abstand zur Erde', distanceText(d)], ['Lichtlaufzeit von der Erde', lightTime(d)]);
-    }
-    const rover = b.id === 'perseverance' ? getMarsTracks()?.m20 : b.id === 'curiosity' ? getMarsTracks()?.msl : undefined;
-    if (rover) {
-      const n = trackCount(rover, simTime);
-      rows.unshift(['Marstag (Sol)', fmt.num(Math.max(0, solAt(simTime, rover.sol0)), 0)], ['Gefahrene Strecke', `${fmt.num(trackKm(rover, n), 1)} km`]);
     }
     dl.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   }
