@@ -185,6 +185,14 @@ await task('radio', DAY, async () => {
   console.log(`  ${slim.length} stations in ${cells.size} cells`);
 });
 
+await task('mars', 6 * 3600 * 1000, async () => {
+  // @ts-expect-error plain JS module shared with the local generator
+  const { buildMarsTraverse } = await import('./mars-traverse.mjs');
+  const data = await buildMarsTraverse();
+  write('mars/traverse.json', data);
+  console.log(`  Perseverance ${data.m20.km} km, Curiosity ${data.msl.km} km, ${data.heli.flights.length} Ingenuity flights`);
+});
+
 await task('cams', DAY, async () => {
   const { CAM_FEEDS, SNAPSHOT_CAMS } = await import('../src/api/camfeeds');
   let ok = 0;

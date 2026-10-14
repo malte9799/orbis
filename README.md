@@ -25,6 +25,18 @@ Drei Ansichten:
   - Flaggen an allen Landestellen (Apollo 11–17, Luna, Surveyor, Chang’e, Chandrayaan-3, SLIM, Odysseus,
     Blue Ghost, Athena) mit Steckbrief; sie erscheinen erst ab dem Landedatum. Direktlink z. B.
     `#/weltall?focus=moon&site=apollo11`
+  - Mars wie der Mond: Landestellen (Viking, Pathfinder, Spirit, Opportunity, Phoenix, Curiosity, InSight,
+    Perseverance, Zhurong) mit Steckbrief, beim Heranzoomen nachgeladene Kacheln – Farbmosaik
+    ([NASA Mars Trek](https://trek.nasa.gov/mars/)) und das 5-m-CTX-Mosaik (NASA/JPL/MSSS/Caltech Murray Lab, via Esri).
+    Perseverance, Curiosity und Ingenuity stehen auf der Oberfläche (aufrecht, mit dem Planeten mitdrehend);
+    ihre Fahrspuren und die 72 Ingenuity-Flüge aus den NASA-MMGIS-Daten sind auf dem Boden eingezeichnet
+    und folgen der Zeitleiste (Sol, gefahrene Strecke im Steckbrief)
+  - Weit in einen Planeten hineinzoomen öffnet dessen **Karte** (`#/planet?body=mars`) – wie bei der Erde:
+    2D-Karte mit Ebenenwahl (Farbe, CTX, MOLA-Höhenrelief, THEMIS-Infrarot), Landestellen, Fahrspuren der Rover,
+    Ingenuity-Flügen und Maßstab; „3D“ führt zurück zur Kugel. Die Quellen je Himmelskörper stehen in
+    `src/space/planets.ts` (`enabled`): derzeit Erde (Wetterkarte) und Mars; Mond, Merkur und Venus sind
+    vorbereitet und werden dort nur eingeschaltet. Die Fahrspuren werden von `scripts/mars-traverse.mjs`
+    verdichtet (Daten-Branch, Rückfall: `public/data/mars-traverse.json`)
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
