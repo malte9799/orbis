@@ -1680,6 +1680,40 @@ svg.hourly {
   place-items: center;
 }
 
+.sp-thumb-wrap {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+.sp-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  border: 2px solid #0f1530;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+.sp-badge svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.sp-row.on .sp-badge {
+  border-color: #1b2a50;
+}
+
 .sp-row.child .sp-thumb {
   width: 32px;
   height: 32px;
