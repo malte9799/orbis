@@ -48,7 +48,11 @@ Drei Ansichten:
   Planetenpositionen stammen aus den JPL-Näherungsformeln (Standish, ±wenige Bogenminuten 1800–2050),
   der Mond aus der Näherung des Astronomical Almanac. Bahnen der Raumsonden sind vereinfacht und als
   „angenähert“ gekennzeichnet, da es keine kostenlose, browsertaugliche Bahndaten-API gibt.
-  Texturen: [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0).
+  Texturen: [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0); Monde, Pluto, Ceres, Vesta aus
+  den globalen Mosaiken des [USGS Astrogeology Science Center](https://astrogeology.usgs.gov/) (Voyager, Galileo, Cassini,
+  New Horizons, Dawn; gemeinfrei) bzw. [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources).
+  Asteroiden (Eros, Bennu, Itokawa, Kleopatra, …) mit Formmodellen von NASA 3D Resources und Bahnelementen aus der
+  [JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html), Zweikörper-Näherung.
 
 ## Ebenen der Karte
 
