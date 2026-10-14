@@ -2475,6 +2475,139 @@ svg.hourly {
   color: #fff;
 }
 
+.pm-maps {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.pm-map {
+  display: block;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.pm-map small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pm-map.on {
+  border-color: var(--accent);
+  background: rgba(90, 140, 255, 0.18);
+}
+
+/* what is drawn on the map right now: base map + overlay chips */
+.pm-layers {
+  position: absolute;
+  z-index: 3;
+  left: 324px;
+  bottom: 12px;
+  width: fit-content;
+  max-width: calc(100% - 324px - 190px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(13, 18, 38, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.pm-now {
+  padding: 4px 8px;
+  color: var(--muted);
+}
+
+.pm-now::before {
+  content: 'Karte: ';
+}
+
+.pm-chips {
+  display: contents;
+}
+
+.pm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.pm-chip.on {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.pm-chip b {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.pm-chip .sw {
+  display: inline-block;
+  background: var(--c);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+
+.pm-chip .sw.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.pm-chip .sw.line {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.pm-jump {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font: inherit;
+}
+
+/* panel closed: the layer card moves to the left edge */
+.pm-panel[hidden] ~ .pm-layers {
+  left: 12px;
+  max-width: calc(100% - 12px - 190px);
+}
+
+@media (max-width: 720px) {
+  .pm-layers {
+    left: 8px;
+    right: 8px;
+    bottom: 52px;
+    max-width: none;
+  }
+}
+
 .pm-field {
   display: block;
   margin-bottom: 10px;

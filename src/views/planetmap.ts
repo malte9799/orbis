@@ -50,16 +50,17 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
           <button class="btn small on" data-v="2d">2D</button>
           <button class="btn small" data-v="3d">3D</button>
         </div>
-        <label class="pm-field">Karte <select class="pm-layer"></select></label>
-        <label class="row"><input type="checkbox" data-opt="sites" checked/> Landestellen</label>
-        <label class="row"><input type="checkbox" data-opt="tracks" checked/> Fahrspuren der Rover</label>
-        <label class="row"><input type="checkbox" data-opt="heli" checked/> Flüge von Ingenuity</label>
-        <h3 class="sp-sub">Springen zu</h3>
-        <div class="sp-sites pm-jump"></div>
+        <h3 class="sp-sub">Karte</h3>
+        <div class="pm-maps" role="radiogroup" aria-label="Karte"></div>
         <p class="small muted pm-credit"></p>
       </div>
     </aside>
-    <button class="btn icon-btn space-list-toggle pm-toggle" aria-label="Ebenen" title="Ebenen">
+    <div class="pm-layers" aria-label="Angezeigte Ebenen">
+      <div class="pm-now" title="Aktuell dargestellte Karte"></div>
+      <div class="pm-chips"></div>
+      <select class="pm-jump" aria-label="Springen zu"></select>
+    </div>
+    <button class="btn icon-btn space-list-toggle pm-toggle" aria-label="Karte wählen" title="Karte wählen">
       <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
     </button>
     <section class="space-info pm-info" hidden></section>
@@ -69,8 +70,10 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
   const ctx = canvas.getContext('2d')!;
   const panel = el.querySelector<HTMLElement>('.pm-panel')!;
   const titleEl = el.querySelector<HTMLElement>('.pm-title')!;
-  const layerSel = el.querySelector<HTMLSelectElement>('.pm-layer')!;
-  const jumpEl = el.querySelector<HTMLElement>('.pm-jump')!;
+  const mapsEl = el.querySelector<HTMLElement>('.pm-maps')!;
+  const nowEl = el.querySelector<HTMLElement>('.pm-now')!;
+  const chipsEl = el.querySelector<HTMLElement>('.pm-chips')!;
+  const jumpEl = el.querySelector<HTMLSelectElement>('.pm-jump')!;
   const creditEl = el.querySelector<HTMLElement>('.pm-credit')!;
   const info = el.querySelector<HTMLElement>('.pm-info')!;
   const coordEl = el.querySelector<HTMLElement>('.pm-coord')!;
@@ -93,7 +96,10 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
   let active = false;
   let raf = 0;
   let dirty = true;
-  const show = { sites: true, tracks: true, heli: true };
+  /** overlay visibility (each overlay is one chip in the layer indicator) */
+  const show: Record<string, boolean> = { sites: true, m20: true, msl: true, heli: true };
+  const roverKey = (craft?: string) => (craft === 'curiosity' ? 'msl' : 'm20');
+  const markerShown = (m: Marker) => (m.kind === 'site' ? show.sites : m.kind === 'heli' ? show.heli : show[roverKey(m.craft)]);
   let markers: Marker[] = [];
   let selected: string | null = null;
 
@@ -152,6 +158,11 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     const wantFor = (px: number) => Math.ceil(Math.log2((ppd * dpr * 180) / px));
     let z = Math.max(0, Math.min(maxZOf(), wantFor(layerFor(wantFor(256)).px)));
     z = Math.max(0, Math.min(maxZOf(), wantFor(layerFor(z).px)));
+    const lyr = layerFor(z);
+    if (nowEl.dataset.id !== lyr.id) {
+      nowEl.dataset.id = lyr.id;
+      nowEl.textContent = lyr.label;
+    }
     const span = 180 / 2 ** z;
     const lat0 = cLat + H / 2 / ppd;
     const lat1 = cLat - H / 2 / ppd;
@@ -236,12 +247,14 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     const t = getMarsTracks();
     if (bodyId !== 'mars' || !t) return;
     const now = Date.now();
-    if (show.tracks)
-      for (const tr of TRACKS) {
+    for (const tr of TRACKS) {
+      if (!show[tr.id]) continue;
+      {
         const track: Track = t[tr.id];
         strokeTrack(track.ll, trackCount(track, now), 'rgba(0,0,0,0.55)', 4.5);
         strokeTrack(track.ll, trackCount(track, now), tr.color, 2.5);
       }
+    }
     if (show.heli) {
       const t0 = Date.parse(t.heli.sol0);
       for (const f of t.heli.flights) {
@@ -252,9 +265,7 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     ctx.font = '600 12px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
     for (const m of markers) {
-      if (m.kind === 'site' && !show.sites) continue;
-      if (m.kind === 'heli' && !show.heli) continue;
-      if (m.kind === 'rover' && !show.tracks) continue;
+      if (!markerShown(m)) continue;
       const x = sx(m.lon);
       const y = sy(m.lat);
       if (x < -40 || x > W + 40 || y < -20 || y > H + 20) continue;
@@ -395,7 +406,7 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     let best: Marker | null = null;
     let bd = 16;
     for (const m of markers) {
-      if ((m.kind === 'site' && !show.sites) || (m.kind === 'heli' && !show.heli) || (m.kind === 'rover' && !show.tracks)) continue;
+      if (!markerShown(m)) continue;
       const d = Math.hypot(sx(m.lon) - x, sy(m.lat) - y);
       if (d < bd) {
         bd = d;
@@ -466,57 +477,91 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     if (v === '3d') onOpenSpace(bodyId, cLat, cLon);
   });
   el.querySelector('.pm-toggle')!.addEventListener('click', () => (panel.hidden = !panel.hidden));
-  el.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
-    i.addEventListener('change', () => {
-      show[i.dataset.opt as keyof typeof show] = i.checked;
-      invalidate();
-    }),
-  );
-  layerSel.addEventListener('change', () => {
-    const l = layerSel.value === 'auto' ? PLANET_MAPS[bodyId].detail3d(99) : PLANET_MAPS[bodyId].layers.find((x) => x.id === layerSel.value);
+  function setLayer(id: string) {
+    const cfg = PLANET_MAPS[bodyId];
+    const l = id === 'auto' ? cfg.detail3d(99) : cfg.layers.find((x) => x.id === id);
     if (!l) return;
-    layerId = layerSel.value;
-    creditEl.textContent = `Karte: ${layerSel.value === 'auto' ? PLANET_MAPS[bodyId].layers.map((x) => x.credit).filter((v, i, a) => a.indexOf(v) === i).join(' · ') : l.credit}`;
+    layerId = id;
+    mapsEl.querySelectorAll<HTMLElement>('.pm-map').forEach((b) => b.classList.toggle('on', b.dataset.id === id));
+    creditEl.textContent = `Karte: ${id === 'auto' ? [cfg.detail3d(0), cfg.detail3d(99)].map((x) => x.credit).filter((v, i, a) => a.indexOf(v) === i).join(' · ') : l.credit}`;
+    nowEl.dataset.id = '';
     clampView();
+    invalidate();
+  }
+  mapsEl.addEventListener('click', (e) => {
+    const id = (e.target as HTMLElement).closest<HTMLElement>('.pm-map')?.dataset.id;
+    if (id) setLayer(id);
+  });
+
+  /** overlay chips: colour swatch + name, filled = shown */
+  function renderChips() {
+    const mars = bodyId === 'mars';
+    const items: { key: string; label: string; color: string; shape: 'dot' | 'line'; n?: number }[] = [];
+    if (mars) {
+      items.push({ key: 'sites', label: 'Landestellen', color: '#ffffff', shape: 'dot', n: MARS_SITES.filter((x) => !x.hideFlag).length });
+      for (const t of TRACKS) items.push({ key: t.id, label: t.name, color: t.color, shape: 'line' });
+      items.push({ key: 'heli', label: 'Ingenuity-Flüge', color: '#ff5ad1', shape: 'line' });
+    }
+    chipsEl.innerHTML = items
+      .map(
+        (i) =>
+          `<button class="pm-chip ${show[i.key] ? 'on' : ''}" data-l="${i.key}" aria-pressed="${show[i.key]}" title="${show[i.key] ? 'Ausblenden' : 'Einblenden'}"><i class="sw ${i.shape}" style="--c:${i.color}"></i>${escapeHtml(i.label)}${i.n != null ? `<b>${i.n}</b>` : ''}</button>`,
+      )
+      .join('');
+    chipsEl.hidden = !items.length;
+  }
+  chipsEl.addEventListener('click', (e) => {
+    const k = (e.target as HTMLElement).closest<HTMLElement>('.pm-chip')?.dataset.l;
+    if (!k) return;
+    show[k] = !show[k];
+    renderChips();
     invalidate();
   });
 
   function setupBody() {
     const cfg = PLANET_MAPS[bodyId];
     titleEl.textContent = cfg.name;
-    layerId = 'auto';
-    layerSel.innerHTML = [`<option value="auto">Automatisch (Farbe → Detail)</option>`, ...cfg.layers.map((l) => `<option value="${l.id}">${escapeHtml(l.label)}</option>`)].join('');
-    creditEl.textContent = `Karte: ${cfg.layers.map((x) => x.credit).filter((v, i, a) => a.indexOf(v) === i).join(' · ')}`;
+    const maps = [{ id: 'auto', label: 'Automatisch', sub: 'Farbe, beim Hineinzoomen bis ≈ 5 m' }, ...cfg.layers.map((l) => ({ id: l.id, label: l.label, sub: '' }))];
+    mapsEl.innerHTML = maps
+      .map((m) => `<button class="pm-map" role="radio" data-id="${m.id}"><span>${escapeHtml(m.label)}</span>${m.sub ? `<small>${escapeHtml(m.sub)}</small>` : ''}</button>`)
+      .join('');
+    setLayer('auto');
+    renderChips();
     const mars = bodyId === 'mars';
-    el.querySelectorAll<HTMLElement>('[data-opt=tracks],[data-opt=heli]').forEach((i) => ((i.closest('label') as HTMLElement).hidden = !mars));
+    jumpEl.hidden = !mars;
     jumpEl.innerHTML = mars
-      ? [
-          ...TRACKS.map((t) => `<button class="sp-site" data-go="${t.id}">${t.name}</button>`),
-          ...MARS_SITES.filter((s) => !s.hideFlag).map((s) => `<button class="sp-site" data-site="${s.id}">${escapeHtml(s.name)}</button>`),
-          '<button class="sp-site" data-go="olympus">Olympus Mons</button>',
-          '<button class="sp-site" data-go="valles">Valles Marineris</button>',
-        ].join('')
+      ? `<option value="">Springen zu …</option>
+         <optgroup label="Rover">${TRACKS.map((t) => `<option value="go:${t.id}">${t.name}</option>`).join('')}</optgroup>
+         <optgroup label="Landestellen">${MARS_SITES.filter((s) => !s.hideFlag)
+           .map((s) => `<option value="site:${s.id}">${escapeHtml(s.name)}</option>`)
+           .join('')}</optgroup>
+         <optgroup label="Landschaften"><option value="go:olympus">Olympus Mons</option><option value="go:valles">Valles Marineris</option></optgroup>`
       : '';
   }
-  jumpEl.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
-    if (!b) return;
+  jumpEl.addEventListener('change', () => {
+    const v = jumpEl.value;
+    jumpEl.value = '';
+    if (!v) return;
+    const [kind, id] = v.split(':');
     const t = getMarsTracks();
-    const go = b.dataset.go;
-    if (go === 'olympus') return flyTo(18.65, -133.8, 5.5);
-    if (go === 'valles') return flyTo(-13.9, -59.2, 5);
-    if (go === 'm20' || go === 'msl') {
-      const p = roverAt(t?.[go], Date.now());
-      const tr = TRACKS.find((x) => x.id === go)!;
+    if (kind === 'go' && id === 'olympus') return flyTo(18.65, -133.8, 5.5);
+    if (kind === 'go' && id === 'valles') return flyTo(-13.9, -59.2, 5);
+    if (kind === 'go' && (id === 'm20' || id === 'msl')) {
+      const p = roverAt(t?.[id], Date.now());
+      const tr = TRACKS.find((x) => x.id === id)!;
       if (p) flyTo(p[1], p[0], 11);
-      else flyTo(go === 'm20' ? 18.44 : -4.59, go === 'm20' ? 77.45 : 137.44, 10);
+      else flyTo(id === 'm20' ? 18.44 : -4.59, id === 'm20' ? 77.45 : 137.44, 10);
+      show[id] = true;
+      renderChips();
       const m = markers.find((x) => x.craft === tr.craft);
       if (m) select(m);
       return;
     }
-    const s = MARS_SITES.find((x) => x.id === b.dataset.site);
+    const s = MARS_SITES.find((x) => x.id === id);
     if (s) {
       flyTo(s.lat, s.lon, 10);
+      show.sites = true;
+      renderChips();
       const m = markers.find((x) => x.siteId === s.id);
       if (m) select(m);
     }
