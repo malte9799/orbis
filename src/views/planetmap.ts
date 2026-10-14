@@ -97,40 +97,52 @@ async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer,
   await Promise.all(jobs);
 }
 
+const isGlobal = (b: [number, number, number, number]) => b[2] - b[0] >= 300;
+
 let protocolReady = false;
 function registerPlanetProtocol() {
   if (protocolReady) return;
   protocolReady = true;
-  // planet://<body>/<layer|auto>/<z>/<x>/<y>
+  // planet://<body>/<auto | global | product label | ov~product label>/<z>/<x>/<y>
   addProtocol('planet', async (params) => {
-    const m = /^planet:\/\/(\w+)\/([\w-]+)\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+    const m = /^planet:\/\/(\w+)\/([^/]+)\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
     const cfg = m ? PLANET_MAPS[m[1]] : undefined;
     if (!m || !cfg) throw new Error('unknown planet tile');
+    const id = decodeURIComponent(m[2]);
     const [z, x, y] = [+m[3], +m[4], +m[5]];
     const canvas = new OffscreenCanvas(256, 256);
     const g = canvas.getContext('2d')!;
+    const lon0 = (x / 2 ** z) * 360 - 180;
+    const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
+    const latN = tile2lat(y, z);
+    const latS = tile2lat(y + 1, z);
+    const touches = (b: [number, number, number, number]) => !(b[2] < lon0 || b[0] > lon1 || b[3] < latS || b[1] > latN);
+    const products = cfg.products ?? [];
+
+    // thematic overlay: transparent, only inside its footprint
+    if (id.startsWith('ov~')) {
+      const p = products.find((q) => q.id === id.slice(3));
+      if (p && touches(p.bbox)) await drawLayer(g, p.layer, z, x, y, p.bbox);
+      const blob = await canvas.convertToBlob({ type: 'image/png' });
+      return { data: await blob.arrayBuffer() };
+    }
+
     g.fillStyle = '#10131c';
     g.fillRect(0, 0, 256, 256);
-    if (m[2] === 'auto' || m[2] === 'global') {
-      // colour mosaic underneath, the sharp global mosaic (which has holes) on top …
-      const under = cfg.detail3d(0);
-      await drawLayer(g, under, z, x, y);
-      const top = cfg.detail3d(99);
-      if (top !== under && z + Math.ceil(Math.log2(128 / under.px)) > under.maxZ) await drawLayer(g, top, z, x, y);
-      // … and the regional HiRISE / CTX mosaics over their footprints (finest last)
-      if (m[2] === 'auto' && z >= 8) {
-        const lon0 = (x / 2 ** z) * 360 - 180;
-        const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
-        const latN = tile2lat(y, z);
-        const latS = tile2lat(y + 1, z);
-        for (const r of cfg.regional ?? []) {
-          const [w, s, e, n] = r.bbox;
-          if (e < lon0 || w > lon1 || n < latS || s > latN) continue;
-          await drawLayer(g, r.layer, z, x, y, r.bbox);
-        }
-      }
-    } else {
-      await drawLayer(g, cfg.layers.find((l) => l.id === m[2]) ?? cfg.layers[0], z, x, y);
+    // base: colour mosaic, the sharp global mosaic (which has holes) on top …
+    const under = cfg.detail3d(0);
+    const sharp = cfg.detail3d(99);
+    const product = products.find((q) => q.id === id);
+    const globalProduct = !!product && isGlobal(product.bbox);
+    await drawLayer(g, under, z, x, y);
+    if (!globalProduct && sharp !== under && z + Math.ceil(Math.log2(128 / under.px)) > under.maxZ) await drawLayer(g, sharp, z, x, y);
+    if (product) {
+      if (touches(product.bbox)) await drawLayer(g, product.layer, z, x, y, globalProduct ? undefined : product.bbox);
+    } else if (id === 'auto' && z >= 8) {
+      // … then the regional HiRISE mosaics over their footprints (finest last)
+      for (const p of products) if (p.group === 'mosaic' && touches(p.bbox)) await drawLayer(g, p.layer, z, x, y, p.bbox);
+    } else if (id !== 'auto' && id !== 'global') {
+      await drawLayer(g, cfg.layers.find((l) => l.id === id) ?? cfg.layers[0], z, x, y);
     }
     const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
     return { data: await blob.arrayBuffer() };
@@ -276,10 +288,12 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   /** camera at the first open (no flight from a default view) */
   let initial: { lat: number; lon: number; zoom: number; fromSpace?: boolean } | null = null;
   let tracksLoaded = false;
+  /** active thematic overlays (product ids) */
+  const overlays = new Set<string>();
 
   const cfg = () => PLANET_MAPS[bodyId];
   const places = () => (bodyId === 'mars' ? [...TRACKS.map((t) => ({ id: t.id as string, name: t.name })), ...MARS_SITES.filter((x) => !x.hideFlag).map((x) => ({ id: x.id, name: x.name }))] : []);
-  const tileUrl = () => `planet://${bodyId}/${layerId}/{z}/{x}/{y}`;
+  const tileUrl = () => `planet://${bodyId}/${encodeURIComponent(layerId)}/{z}/{x}/{y}`;
   const setTiles = () => (map?.getSource('base') as { setTiles?: (t: string[]) => void } | undefined)?.setTiles?.([tileUrl()]);
 
   // ----- data on the map -------------------------------------------------------
@@ -437,6 +451,32 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         },
       ],
     };
+  }
+
+  const ovSource = (id: string) => `ov-${id.replace(/[^\w-]/g, '_')}`;
+
+  function setOverlay(id: string, on: boolean) {
+    const p = cfg().products?.find((q) => q.id === id);
+    if (!p || !map || !ready) return;
+    const sid = ovSource(id);
+    if (on) {
+      overlays.add(id);
+      if (!map.getSource(sid)) {
+        map.addSource(sid, {
+          type: 'raster',
+          tiles: [`planet://${bodyId}/${encodeURIComponent('ov~' + id)}/{z}/{x}/{y}`],
+          tileSize: 256,
+          maxzoom: 18,
+          ...(isGlobal(p.bbox) ? {} : { bounds: p.bbox }),
+          attribution: p.layer.credit,
+        });
+        map.addLayer({ id: sid, type: 'raster', source: sid, paint: { 'raster-opacity': 0.6 } }, 'tracks-casing');
+      }
+    } else {
+      overlays.delete(id);
+      if (map.getLayer(sid)) map.removeLayer(sid);
+      if (map.getSource(sid)) map.removeSource(sid);
+    }
   }
 
   function initMap() {
@@ -629,12 +669,21 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
 
   const thumb = (l: TileLayer) => l.url(2, 1, 4);
   function renderBase(open = false) {
-    const opts = [
-      { id: 'auto', label: cfg().regional?.length ? 'Automatisch (mit HiRISE-Mosaiken)' : 'Automatisch', img: thumb(cfg().detail3d(0)) },
-      ...(cfg().regional?.length ? [{ id: 'global', label: 'Nur globale Mosaike', img: thumb(cfg().detail3d(0)) }] : []),
-      ...cfg().layers.map((l) => ({ id: l.id, label: l.label, img: thumb(l) })),
+    const c = cfg();
+    const center = map?.getCenter();
+    const here = (b: [number, number, number, number]) => !center || (center.lng >= b[0] && center.lng <= b[2] && center.lat >= b[1] && center.lat <= b[3]);
+    const products = c.products ?? [];
+    const hasMosaics = products.some((p) => p.group === 'mosaic');
+    const std = [
+      { id: 'auto', label: hasMosaics ? 'Automatisch (mit HiRISE-Mosaiken)' : 'Automatisch', img: thumb(c.detail3d(0)) },
+      ...(hasMosaics ? [{ id: 'global', label: 'Nur globale Mosaike', img: thumb(c.detail3d(0)) }] : []),
+      ...c.layers.map((l) => ({ id: l.id, label: l.label, img: thumb(l) })),
+      ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: p.title, img: thumb(p.layer) })),
     ];
-    const cur = opts.find((o) => o.id === layerId) ?? opts[0];
+    const regional = products.filter((p) => (p.group === 'region' || p.group === 'mosaic') && here(p.bbox));
+    const ovs = products.filter((p) => p.group === 'overlay' && (isGlobal(p.bbox) || here(p.bbox)));
+    const cur = std.find((o) => o.id === layerId) ?? std[0];
+    const chip = (attr: string, on: boolean, text: string) => `<button type="button" class="sp-site ${on ? 'on' : ''}" ${attr} aria-pressed="${on}">${escapeHtml(text)}</button>`;
     baseSwitch.innerHTML = `
       <button type="button" class="base-current" aria-expanded="${open}" title="Kartentyp wählen">
         <span class="thumb"><img alt="" src="${cur.img}"/></span>
@@ -642,21 +691,28 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       </button>
       <div class="base-pop" ${open ? '' : 'hidden'}>
         <div class="base-options">
-          ${opts.map((o) => `<button type="button" class="base-opt ${o.id === cur.id ? 'on' : ''}" data-base="${o.id}" aria-pressed="${o.id === cur.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
+          ${std.map((o) => `<button type="button" class="base-opt ${o.id === layerId || (o === cur && !std.some((x) => x.id === layerId)) ? 'on' : ''}" data-base="${o.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
         </div>
+        ${regional.length ? `<h3 class="sp-sub">Hier verfügbar (${regional.length})</h3><div class="sp-sites">${regional.map((p) => chip(`data-base="${escapeHtml(p.id)}"`, p.id === layerId, p.title.replace(/^MRO |^Mars Express /, ''))).join('')}</div>` : ''}
+        ${ovs.length ? `<h3 class="sp-sub">Überlagerungen</h3><div class="sp-sites">${ovs.map((p) => chip(`data-ov="${escapeHtml(p.id)}"`, overlays.has(p.id), p.title.replace(/^MRO |^MGS /, ''))).join('')}</div>` : ''}
       </div>`;
     const pop = baseSwitch.querySelector<HTMLElement>('.base-pop')!;
     const btn = baseSwitch.querySelector<HTMLButtonElement>('.base-current')!;
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      pop.hidden = !pop.hidden;
-      btn.setAttribute('aria-expanded', String(!pop.hidden));
+      renderBase(pop.hidden); // re-render: the regional entries depend on the map centre
     });
     baseSwitch.querySelectorAll<HTMLButtonElement>('[data-base]').forEach((b) =>
       b.addEventListener('click', () => {
         layerId = b.dataset.base!;
         setTiles();
-        renderBase(false);
+        renderBase(true);
+      }),
+    );
+    baseSwitch.querySelectorAll<HTMLButtonElement>('[data-ov]').forEach((b) =>
+      b.addEventListener('click', () => {
+        setOverlay(b.dataset.ov!, !overlays.has(b.dataset.ov!));
+        renderBase(true);
       }),
     );
   }

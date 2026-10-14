@@ -2449,3 +2449,20 @@ svg.hourly {
   top: 140px;
   z-index: 6;
 }
+
+.planet-view .base-pop {
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  width: min(360px, calc(100vw - 24px));
+}
+
+.sp-site.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.planet-view .base-options {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
