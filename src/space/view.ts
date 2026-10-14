@@ -6,7 +6,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { propagate } from 'satellite.js';
 import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
-import { BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
+import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm } from './mars';
 import { PLANET_MAPS, mapEnabled } from './planets';
@@ -30,7 +30,10 @@ export interface SpaceView {
   deactivate(): void;
 }
 
-const ALL: Body[] = [...BODIES, ...CRAFT];
+const ALL: Body[] = [...BODIES, ...ASTEROIDS, ...CRAFT];
+/** drawn as glTF models instead of spheres */
+const MODELLED: Body[] = [...ASTEROIDS, ...CRAFT];
+const isPointModel = (b: Body) => b.kind === 'craft' || b.kind === 'asteroid';
 const SITES: LandingSite[] = [...LANDING_SITES.map((s) => ({ ...s, body: 'moon' })), ...MARS_SITES];
 const siteBody = (s: LandingSite) => s.body ?? 'moon';
 const BODY_NAME_DE: Record<string, string> = { moon: 'Mond', mars: 'Mars' };
@@ -61,6 +64,7 @@ const KIND_LABEL: Record<string, string> = {
   planet: 'Planet',
   dwarf: 'Zwergplanet',
   moon: 'Mond',
+  asteroid: 'Asteroid',
   craft: 'Raumsonde',
 };
 
@@ -99,6 +103,8 @@ export function createSpaceView(
         <p class="small muted">Texturen: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) ·
         Mond: NASA <a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noopener">CGI Moon Kit</a> (LRO LROC/LOLA) und
         <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">Moon Trek</a> ·
+        Monde &amp; Kleinkörper: <a href="https://astrogeology.usgs.gov/" target="_blank" rel="noopener">USGS Astrogeology</a> (Voyager, Galileo, Cassini, New Horizons, Dawn), NASA 3D Resources ·
+        Bahnelemente: <a href="https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html" target="_blank" rel="noopener">JPL SBDB</a> ·
         Mars: <a href="https://trek.nasa.gov/mars/" target="_blank" rel="noopener">NASA Mars Trek</a> (Viking, MOLA),
         CTX-Mosaik (NASA/JPL/MSSS/Caltech Murray Lab, Esri), Fahrspuren: NASA MMGIS ·
         Bahnen: JPL-Näherungsformeln · Satelliten: CelesTrak</p>
@@ -329,11 +335,12 @@ export function createSpaceView(
 
   function updateCraftModels() {
     const pxPerRad = el.clientHeight / 2 / Math.tan((camera.fov * Math.PI) / 360);
-    for (const b of CRAFT) {
+    for (const b of MODELLED) {
       if (!b.model) continue;
       const p = resolve(b.id, simTime);
       const c = crafts.get(b.id);
-      if (!p || !opts.craft || b.surface) {
+      // rover models (b.surface) are drawn only in the planet map; asteroids are not switched by the spacecraft option
+      if (!p || (b.kind === 'craft' && !opts.craft) || b.surface) {
         if (c) c.group.visible = false;
         continue;
       }
@@ -520,6 +527,16 @@ export function createSpaceView(
       { passive: true },
     );
 
+    // labels sit above the canvas and would swallow the wheel: hand it on so zooming works while hovering one
+    labelHost.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        renderer?.domElement.dispatchEvent(new WheelEvent('wheel', e));
+      },
+      { passive: false },
+    );
+
     // the user takes over: stop any automatic camera swing
     controls.addEventListener('start', () => (aim = null));
 
@@ -559,12 +576,12 @@ export function createSpaceView(
   // ----- focus & camera ----------------------------------------------------
   function viewDistance(b: Body) {
     if (b.kind === 'star') return radiusAU(b) * 8;
-    if (b.kind === 'craft') return b.model ? radiusAU(b) * 5 : b.surface ? 0.04 / AU_KM : 0.002;
+    if (isPointModel(b)) return b.model ? radiusAU(b) * 5 : b.surface ? 0.04 / AU_KM : 0.002;
     return radiusAU(b) * 4;
   }
 
   function minDistance(b: Body) {
-    if (b.kind === 'craft') return b.model ? radiusAU(b) * 1.3 : b.surface ? 0.003 / AU_KM : 1e-6;
+    if (isPointModel(b)) return b.model ? radiusAU(b) * 1.3 : b.surface ? 0.003 / AU_KM : 1e-6;
     // the Moon and Mars have close-up tiles, so they may be approached to ≈ 20 km altitude
     return radiusAU(b) * (b.id === 'earth' ? 1.3 : b.id === 'moon' ? 1.012 : b.id === 'mars' ? 1.004 : 1.15);
   }
@@ -739,7 +756,7 @@ export function createSpaceView(
     }
 
     // orbit lines (rebuilt when time moved far)
-    for (const b of BODIES) {
+    for (const b of [...BODIES, ...ASTEROIDS]) {
       if (!b.orbit) continue;
       let o = orbitLines.get(b.id);
       if (!o || Math.abs(o.at - simTime) > 180 * 86400000) {
@@ -774,7 +791,7 @@ export function createSpaceView(
   /** Near a surface, zoom and rotate in proportion to the altitude instead of the distance. */
   function adaptControls() {
     const b = byId.get(focusId)!;
-    if (b.kind === 'craft' || trans) {
+    if (isPointModel(b) || trans) {
       controls.zoomSpeed = 1.6;
       controls.rotateSpeed = 0.6;
       return;
@@ -968,7 +985,7 @@ export function createSpaceView(
     const fb = byId.get(focusId)!;
     const fs = screen.get(focusId);
     const camDist = camera.position.length();
-    const fr = fb.kind === 'craft' ? 0 : camDist > radiusAU(fb) ? (Math.tan(Math.asin(radiusAU(fb) / camDist)) * el.clientHeight) / 2 / Math.tan((camera.fov * Math.PI) / 360) : Infinity;
+    const fr = isPointModel(fb) ? 0 : camDist > radiusAU(fb) ? (Math.tan(Math.asin(radiusAU(fb) / camDist)) * el.clientHeight) / 2 / Math.tan((camera.fov * Math.PI) / 360) : Infinity;
     for (const b of ALL) {
       const d = labels.get(b.id)!;
       const s = screen.get(b.id);
@@ -978,6 +995,11 @@ export function createSpaceView(
         if (toThree(sub(p, origin), v3b).distanceTo(camera.position) > camDist) show = false;
       }
       if (b.kind === 'craft' && !opts.craft) show = false;
+      // asteroid labels only when focused or close by (otherwise the inner system drowns in them)
+      if (show && b.kind === 'asteroid' && b.id !== focusId) {
+        const p = resolve(b.id, simTime)!;
+        if (toThree(sub(p, origin), v3b).distanceTo(camera.position) > 0.35) show = false;
+      }
       if (show && b.parent) {
         // hide moons (and craft at planets) until they separate from their planet on screen
         const ps = screen.get(b.parent);
@@ -990,7 +1012,7 @@ export function createSpaceView(
       }
       if (b.id === focusId) show = !!s;
       // no label on top of a body that already fills part of the screen
-      if (show && (b.kind !== 'craft' || b.model)) {
+      if (show && (!isPointModel(b) || b.model)) {
         const p = resolve(b.id, simTime)!;
         const dist = toThree(sub(p, origin), v3b).distanceTo(camera.position);
         const px = (radiusAU(b) / dist) * (el.clientHeight / 2) / Math.tan((camera.fov * Math.PI) / 360);
@@ -1055,6 +1077,7 @@ export function createSpaceView(
     const groups: [string, Body[]][] = [
       ['Sonne & Planeten', ALL.filter((b) => b.kind === 'star' || b.kind === 'planet' || b.kind === 'dwarf')],
       ['Monde', ALL.filter((b) => b.kind === 'moon')],
+      ['Asteroiden', ALL.filter((b) => b.kind === 'asteroid')],
       ['Raumsonden', ALL.filter((b) => b.kind === 'craft')],
     ];
     listEl.innerHTML = groups
