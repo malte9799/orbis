@@ -45,7 +45,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EOX_S2, EUMETSAT_IR, OPENTOPO, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
@@ -79,7 +79,7 @@ const familyOf = (o: OverlayId) => WX_FAMILIES.find((f) => f.variants.some(([v])
 
 const isField = (o: string): o is FieldId => o in FIELDS;
 /** extra-layer sections shown on the "Ereignisse" tab (the others are on "Verkehr") */
-const isEventSection = (s: string) => s === 'europe' || s === 'earth';
+const isEventSection = (s: string) => s === 'europe' || s === 'earth' || s === 'ocean';
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -536,6 +536,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const baseSwitch = el.querySelector<HTMLDivElement>('.base-switch')!;
   const BASE_THUMB: Record<BaseId, string> = {
     satellite: `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`,
+    sentinel: `<img alt="" loading="lazy" src="${EOX_S2.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
+    topo: `<img alt="" loading="lazy" src="${OPENTOPO.replace('{z}/{x}/{y}', '3/4/2')}"/>`,
     nasa: `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`,
     blue: `<img alt="" loading="lazy" src="${BLUE_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
     night: `<img alt="" loading="lazy" src="${BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
@@ -630,9 +632,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="trafiklab" value="${escapeHtml(keys.trafiklab ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">Daten-Proxy <small>(Cloudflare Worker für Flugdaten & OpenStreetMap – Anleitung im README${builtInProxy() ? '; leer lassen = eingebauter Proxy' : ''})</small>
           <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="${escapeHtml(builtInProxy() || 'https://mein-proxy.workers.dev/')}" autocomplete="off"/></label>
+        <label class="field-label">Radar-Server <small>(optional: eigener RainViewer-kompatibler Server, z. B. selbst gehostetes LibreWXR – ersetzt das eingeschränkte kostenlose RainViewer)</small>
+          <input type="url" data-key="radarHost" value="${escapeHtml(keys.radarHost ?? '')}" placeholder="https://radar.example.org" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-        PEGELONLINE, Copernicus CAMS, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
+        PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
         The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
@@ -646,7 +650,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       const proxy = get('adsbProxy');
-      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
+      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), radarHost: /^https:\/\//.test(get('radarHost') ?? '') ? get('radarHost') : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       firmsOk = false;
       if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
@@ -940,8 +944,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         type: 'raster',
         tiles: [`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`],
         tileSize: 256,
-        maxzoom: 7,
-        attribution: 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',
+        maxzoom: store.getKeys().radarHost ? 10 : 7,
+        attribution: store.getKeys().radarHost ? 'Radar: eigener Radar-Server (LibreWXR / RainViewer-kompatibel)' : 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',
       });
       map.addLayer(
         { id, type: 'raster', source: id, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } },

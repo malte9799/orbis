@@ -3,6 +3,8 @@ export interface ApiKeys {
   firms?: string;
   /** own CORS proxy for the live flight data */
   adsbProxy?: string;
+  /** own RainViewer-compatible radar server (e.g. self-hosted LibreWXR) */
+  radarHost?: string;
   /** Windy Webcams API (free tier) */
   windy?: string;
   /** aisstream.io live AIS (free) */

@@ -2,6 +2,7 @@
 //
 // - Live flight data: adsb.lol, adsb.fi, airplanes.live and OpenSky block browser requests
 //   from other sites (no CORS) – the proxy adds the CORS headers.
+// - NOAA NDBC buoys and CO-OPS tide gauges (no CORS headers).
 // - Overpass (OpenStreetMap): answers are cached, so many visitors looking at the same area
 //   cost the public servers only one request.
 //
@@ -26,6 +27,9 @@ const HOSTS = {
   'maps2.dcgis.dc.gov': 600,
   'verkehr.autobahn.de': 600,
   'www3.septa.org': 30,
+  // ocean layers
+  'www.ndbc.noaa.gov': 300,
+  'api.tidesandcurrents.noaa.gov': 120,
 };
 // the worldwide OpenSky overview is large and changes slowly
 const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchParams.has('lamin') ? 90 : HOSTS[url.hostname]);

@@ -91,6 +91,16 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar.
 | Verkehr | Schiffsrouten, Fährlinien | Global Shipping Lanes (CC BY 4.0), OSM |
 | Infrastruktur | Seekabel mit Anlandepunkten, Internetknoten (IXPs) | TeleGeography, PeeringDB |
 | Infrastruktur | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke u. a.; beim Zoomen einzelne Windräder | WRI Global Power Plant Database, OSM (Overpass) |
+| Meer | Seegang (Wellenhöhe, Dünung) und Meeresströmung im Kartenausschnitt | Open-Meteo Marine (CC BY 4.0, nicht-kommerziell) |
+| Meer | Flussabfluss mit 7-Tage-Trend im Kartenausschnitt (Punkte auf den nächsten Fluss gerastet) | GloFAS via Open-Meteo Flood (CC BY 4.0, nicht-kommerziell) |
+| Meer | Messbojen live (Wellen, Wind, Luftdruck, Wassertemperatur) | NOAA NDBC (über den Daten-Proxy) |
+| Meer | Gezeitenpegel USA mit Wasserstand und nächsten Hoch-/Niedrigwassern | NOAA CO-OPS (über den Daten-Proxy) |
+| Meer | Meerestiefe weltweit, Europa detaillierter | GEBCO, EMODnet Bathymetry (CC BY 4.0) – nicht zur Navigation |
+| Meer | Chlorophyll (Algenblüte) | NASA VIIRS über GIBS |
+| Radar | Regenradar USA (NEXRAD-Mosaik), Kanada (1 km) | NOAA via Iowa Environmental Mesonet, Environment Canada (Open Government Licence) |
+| Gelände | 3D-Gelände mit Schummerung (Globus und 2D) | AWS Terrain Tiles (USGS 3DEP, SRTM, GMTED, ETOPO1) |
+| Karte | Basiskarten Sentinel-2 (wolkenlos) und Topografie | EOX Sentinel-2 cloudless 2024 (CC BY-NC-SA 4.0, nur nicht-kommerziell), OpenTopoMap (CC-BY-SA) |
+| Erde & Umwelt | Polarlicht-Ebene zeigt zusätzlich Sonnenwind, Bz und GOES-Röntgenklasse | NOAA SWPC |
 
 Nicht enthalten, weil es dafür keine kostenlose, frei nutzbare Quelle gibt: Live-Schiffspositionen (AIS)
 und Blitzortung.
@@ -99,6 +109,8 @@ Optional (im Ebenen-Panel unter „Erweitert“):
 
 - **OpenWeatherMap**-Key → zusätzliche hochauflösende Wetterkarten
 - **NASA FIRMS** MAP_KEY → einzelne Feuer-Hotspots als anklickbare Punkte
+
+Der kostenlose RainViewer-Zugang ist seit 2026 auf Zoom 7 beschränkt. Unter „Erweitert“ kann ein eigener RainViewer-kompatibler Radar-Server (z. B. selbst gehostetes [LibreWXR](https://github.com/JoshuaKimsey/LibreWXR)) eingetragen werden.
 
 Schlüssel werden nur im `localStorage` des Browsers gespeichert.
 
@@ -127,7 +139,7 @@ adsb.fi, airplanes.live und OpenSky erlauben keine Abrufe direkt aus dem Browser
 drosselt schnell, und die öffentlichen Overpass-Server (OpenStreetMap-Ebenen) lassen pro Nutzer nur
 wenige Anfragen zu. `proxy/cloudflare-worker.js` löst das: Er ergänzt die CORS-Header und speichert
 Antworten zwischen (Flugdaten ~8 s, Overpass 15 min), sodass viele Besucher am selben Ort nur eine
-Anfrage auslösen. Der kostenlose Cloudflare-Tarif erlaubt 100.000 Anfragen pro Tag.
+Anfrage auslösen. Auch NOAA NDBC (Messbojen) und NOAA CO-OPS (Gezeitenpegel) laufen über den Proxy; nach einem Update des Proxy-Codes muss der Worker neu deployt werden. Der kostenlose Cloudflare-Tarif erlaubt 100.000 Anfragen pro Tag.
 
 Einrichten:
 

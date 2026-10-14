@@ -1,10 +1,12 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
-export type BaseId = 'satellite' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
+export type BaseId = 'satellite' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
 
 export const BASES: { id: BaseId; label: string }[] = [
   { id: 'satellite', label: 'Satellit' },
+  { id: 'sentinel', label: 'Sentinel-2' },
+  { id: 'topo', label: 'Topografie' },
   { id: 'nasa', label: 'NASA Tagesbild' },
   { id: 'blue', label: 'NASA Blue Marble' },
   { id: 'night', label: 'Nachtlichter' },
@@ -12,6 +14,10 @@ export const BASES: { id: BaseId; label: string }[] = [
   { id: 'light', label: 'Hell' },
 ];
 
+
+/** Sentinel-2 cloudless mosaic (EOX, CC BY-NC-SA 4.0 – non-commercial use). */
+export const EOX_S2 = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg';
+export const OPENTOPO = 'https://tile.opentopomap.org/{z}/{x}/{y}.png';
 
 export function gibsDate(daysAgo = 1): string {
   return new Date(Date.now() - daysAgo * 86400000).toISOString().slice(0, 10);
@@ -73,6 +79,21 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tileSize: 256,
         maxzoom: 18,
         attribution: 'Bilder © Esri, Maxar, Earthstar Geographics',
+      },
+      sentinel: {
+        type: 'raster',
+        tiles: [EOX_S2],
+        tileSize: 256,
+        maxzoom: 14,
+        attribution:
+          '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by <a href="https://eox.at">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2024, CC BY-NC-SA 4.0)',
+      },
+      opentopo: {
+        type: 'raster',
+        tiles: [OPENTOPO],
+        tileSize: 256,
+        maxzoom: 17,
+        attribution: 'Karte © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA), Daten © OpenStreetMap-Mitwirkende, SRTM',
       },
       bluemarble: {
         type: 'raster',
@@ -175,6 +196,8 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         layout: { visibility: 'none' as const },
         paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
       },
+      { id: 'base-sentinel', type: 'raster' as const, source: 'sentinel', layout: { visibility: 'none' as const } },
+      { id: 'base-topo', type: 'raster' as const, source: 'opentopo', layout: { visibility: 'none' as const } },
       { id: 'base-nasa', type: 'raster' as const, source: 'nasa', layout: { visibility: 'none' as const } },
       { id: 'base-blue', type: 'raster' as const, source: 'bluemarble', layout: { visibility: 'none' as const } },
       { id: 'base-night', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
