@@ -24,6 +24,12 @@ jobs:
     # `data` only holds snapshots, no app
     if: github.event_name != 'pull_request' && github.ref_name != 'data'
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.ref_name }}
+      SHA: ${{ github.sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Names
         id: n
@@ -33,12 +39,21 @@ jobs:
           slug=$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')
           echo "slug=$slug" >> "$GITHUB_OUTPUT"
           if [ "$BRANCH" = "main" ]; then echo "dir=." >> "$GITHUB_OUTPUT"; else echo "dir=preview/$slug" >> "$GITHUB_OUTPUT"; fi
+          if [ "$BRANCH" != "main" ]; then
+            echo "URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/$slug/" >> "$GITHUB_ENV"
+          fi
       - uses: actions/checkout@v4
+      - name: 'Status: Abhängigkeiten installieren'
+        if: steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "Abhängigkeiten installieren"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: 'Status: Texturen & Modelle'
+        if: steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "Texturen & Modelle"
       # Sharper Moon textures (NASA CGI Moon Kit, ~150 MB download), cached between deploys.
       # Optional: if NASA is unreachable the app keeps its bundled 2k map.
       - name: Cache Moon textures
@@ -71,10 +86,16 @@ jobs:
         continue-on-error: true
         timeout-minutes: 10
         run: bash scripts/iss-model.sh public/models/iss-detail.glb
+      - name: 'Status: Build'
+        if: steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "Build"
       - run: npm run build
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
+      - name: 'Status: Veröffentlichen'
+        if: steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "Veröffentlichen"
       - name: Publish to gh-pages
         env:
           DIR: ${{ steps.n.outputs.dir }}
@@ -99,14 +120,15 @@ jobs:
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit 2>/dev/null \
             || git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Deploy ${{ github.sha }}"
           git push -f "$repo" gh-pages
-      - name: Comment preview link on the PR
-        if: github.event_name == 'push' && steps.n.outputs.dir != '.'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          url="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ steps.n.outputs.dir }}/"
-          pr=$(gh pr list --head "${{ github.ref_name }}" --json number -q '.[0].number' || true)
-          [ -n "$pr" ] && gh pr comment "$pr" --body "Preview: $url" || true
+      - name: 'Status: fertig'
+        if: success() && steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "" done
+      - name: 'Status: fehlgeschlagen'
+        if: failure() && steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "" failed
+      - name: 'Status: abgebrochen'
+        if: cancelled() && steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "" cancelled
 
   cleanup:
     # PR closed (merged or not) → remove its preview
