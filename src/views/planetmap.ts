@@ -54,8 +54,6 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
         <label class="row"><input type="checkbox" data-opt="sites" checked/> Landestellen</label>
         <label class="row"><input type="checkbox" data-opt="tracks" checked/> Fahrspuren der Rover</label>
         <label class="row"><input type="checkbox" data-opt="heli" checked/> Flüge von Ingenuity</label>
-        <h3 class="sp-sub">Springen zu</h3>
-        <div class="sp-sites pm-jump"></div>
         <p class="small muted pm-credit"></p>
       </div>
     </aside>
@@ -70,7 +68,6 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
   const panel = el.querySelector<HTMLElement>('.pm-panel')!;
   const titleEl = el.querySelector<HTMLElement>('.pm-title')!;
   const layerSel = el.querySelector<HTMLSelectElement>('.pm-layer')!;
-  const jumpEl = el.querySelector<HTMLElement>('.pm-jump')!;
   const creditEl = el.querySelector<HTMLElement>('.pm-credit')!;
   const info = el.querySelector<HTMLElement>('.pm-info')!;
   const coordEl = el.querySelector<HTMLElement>('.pm-coord')!;
@@ -451,15 +448,6 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     info.querySelector('[data-a=3d]')!.addEventListener('click', () => onOpenSpace(bodyId, m.lat, m.lon, m.craft, m.siteId));
   }
 
-  function flyTo(lat: number, lon: number, z = 9) {
-    cLat = lat;
-    cLon = lon;
-    ppd = Math.min(ppdMax(), Math.max(ppdMin(), 1.4222 * 2 ** z));
-    clampView();
-    invalidate();
-    persist();
-  }
-
   // ----- panel -------------------------------------------------------------
   el.querySelector('.pm-switch')!.addEventListener('click', (e) => {
     const v = (e.target as HTMLElement).closest<HTMLElement>('[data-v]')?.dataset.v;
@@ -489,39 +477,7 @@ export function createPlanetMapView(onOpenSpace: (body: string, lat: number, lon
     creditEl.textContent = `Karte: ${cfg.layers.map((x) => x.credit).filter((v, i, a) => a.indexOf(v) === i).join(' · ')}`;
     const mars = bodyId === 'mars';
     el.querySelectorAll<HTMLElement>('[data-opt=tracks],[data-opt=heli]').forEach((i) => ((i.closest('label') as HTMLElement).hidden = !mars));
-    jumpEl.innerHTML = mars
-      ? [
-          ...TRACKS.map((t) => `<button class="sp-site" data-go="${t.id}">${t.name}</button>`),
-          ...MARS_SITES.filter((s) => !s.hideFlag).map((s) => `<button class="sp-site" data-site="${s.id}">${escapeHtml(s.name)}</button>`),
-          '<button class="sp-site" data-go="olympus">Olympus Mons</button>',
-          '<button class="sp-site" data-go="valles">Valles Marineris</button>',
-        ].join('')
-      : '';
   }
-  jumpEl.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
-    if (!b) return;
-    const t = getMarsTracks();
-    const go = b.dataset.go;
-    if (go === 'olympus') return flyTo(18.65, -133.8, 5.5);
-    if (go === 'valles') return flyTo(-13.9, -59.2, 5);
-    if (go === 'm20' || go === 'msl') {
-      const p = roverAt(t?.[go], Date.now());
-      const tr = TRACKS.find((x) => x.id === go)!;
-      if (p) flyTo(p[1], p[0], 11);
-      else flyTo(go === 'm20' ? 18.44 : -4.59, go === 'm20' ? 77.45 : 137.44, 10);
-      const m = markers.find((x) => x.craft === tr.craft);
-      if (m) select(m);
-      return;
-    }
-    const s = MARS_SITES.find((x) => x.id === b.dataset.site);
-    if (s) {
-      flyTo(s.lat, s.lon, 10);
-      const m = markers.find((x) => x.siteId === s.id);
-      if (m) select(m);
-    }
-  });
-
   // ----- lifecycle ---------------------------------------------------------
   return {
     el,
