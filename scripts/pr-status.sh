@@ -12,7 +12,7 @@ fi
 pr=$(cat "$state/pr")
 [ -n "$pr" ] || exit 0   # no open PR for this branch
 
-steps=("Abhängigkeiten installieren" "Texturen & Modelle" "Build" "Veröffentlichen")
+steps=("Abhängigkeiten installieren" "Texturen & Modelle" "Build" "Veröffentlichen" "Online prüfen")
 if [ -z "$final" ]; then echo "$stage" > "$state/stage"; fi
 cur=$(cat "$state/stage" 2>/dev/null || echo "")
 

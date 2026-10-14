@@ -115,11 +115,28 @@ jobs:
             rm -rf "$DIR"; mkdir -p "$DIR"
           fi
           cp -a "$GITHUB_WORKSPACE/dist/." "$DIR/"
+          # marker so the online check can tell this deploy from a previous one
+          echo "$GITHUB_SHA" > "$DIR/deploy.txt"
           touch .nojekyll
           git add -A
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit 2>/dev/null \
             || git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Deploy ${{ github.sha }}"
           git push -f "$repo" gh-pages
+      - name: 'Status: Online prüfen'
+        if: steps.n.outputs.dir != '.'
+        run: bash scripts/pr-status.sh "Online prüfen"
+      - name: Wait until the page is live
+        if: steps.n.outputs.dir != '.'
+        run: |
+          # GitHub Pages serves 404 (or the previous deploy) until its build finishes
+          for i in $(seq 1 40); do
+            got=$(curl -fsS --max-time 10 "${URL}deploy.txt?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+            if [ "$got" = "$GITHUB_SHA" ]; then echo "live after attempt $i"; exit 0; fi
+            echo "attempt $i: not live yet (${got:-404/unreachable})"
+            sleep 10
+          done
+          echo "::error::$URL did not serve this commit within ~7 min"
+          exit 1
       - name: 'Status: fertig'
         if: success() && steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "" done
