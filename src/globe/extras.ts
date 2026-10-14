@@ -5,7 +5,8 @@ import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, 
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
-import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadTsunami } from '../api/earth';
+import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
+import { loadBuoys, loadTideDetails, loadTideStations, loadWaves } from '../api/ocean';
 import {
   AisStream,
   countdown,
@@ -84,9 +85,17 @@ export type ExtraId =
   | 'lst'
   | 'snowcover'
   | 'aerosol'
-  | 'landcover';
+  | 'landcover'
+  | 'buoys'
+  | 'tides'
+  | 'waves'
+  | 'terrain'
+  | 'bathymetry'
+  | 'chlorophyll'
+  | 'ecradar'
+  | 'nexrad';
 
-export type SectionId = 'europe' | 'earth' | 'air' | 'infra' | 'networks' | 'cams';
+export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams';
 
 export interface ExtraDef {
   id: ExtraId;
@@ -100,6 +109,7 @@ export interface ExtraDef {
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
   { id: 'earth', title: 'Erde & Umwelt' },
+  { id: 'ocean', title: 'Meer, Radar & Gelände' },
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
   { id: 'networks', title: 'Verkehrsnetze' },
@@ -126,6 +136,14 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'snowcover', section: 'earth', label: 'Schneedecke (Satellit)', hint: 'Schneebedeckung – NASA MODIS', glyph: 'ice', color: '#e1f5fe' },
   { id: 'aerosol', section: 'earth', label: 'Aerosole & Staub', hint: 'Dunst, Rauch, Saharastaub (AOD) – NASA MODIS', glyph: 'dust', color: '#bcaaa4' },
   { id: 'landcover', section: 'earth', label: 'Landbedeckung', hint: 'Wald, Acker, Siedlung, Wasser (10 m) – ESA WorldCover', glyph: 'city', color: '#4caf50' },
+  { id: 'waves', section: 'ocean', label: 'Seegang & Strömung', hint: 'Wellenhöhe, Dünung und Meeresströmung im Kartenausschnitt – Open-Meteo Marine', glyph: 'tsunami', color: '#26c6da' },
+  { id: 'buoys', section: 'ocean', label: 'Messbojen', hint: 'Wellen, Wind, Luftdruck, Wassertemperatur live – NOAA NDBC (~900 Stationen)', glyph: 'gauge', color: '#4fc3f7' },
+  { id: 'tides', section: 'ocean', label: 'Gezeitenpegel USA', hint: 'Wasserstand und nächste Hoch-/Niedrigwasser per Klick – NOAA CO-OPS', glyph: 'gauge', color: '#42a5f5' },
+  { id: 'bathymetry', section: 'ocean', label: 'Meerestiefe', hint: 'Bathymetrie weltweit – GEBCO; Europa genauer – EMODnet', glyph: 'tsunami', color: '#1565c0' },
+  { id: 'chlorophyll', section: 'ocean', label: 'Chlorophyll (Algen)', hint: 'Algenblüte im Meer, Satellit – NASA VIIRS', glyph: 'wind', color: '#2e7d32' },
+  { id: 'nexrad', section: 'ocean', label: 'Radar USA (NEXRAD)', hint: 'Regenradar Mosaik der USA, ~5 min – NOAA via Iowa Environmental Mesonet', glyph: 'storm', color: '#ef5350' },
+  { id: 'ecradar', section: 'ocean', label: 'Radar Kanada', hint: 'Regenradar Kanada, 1 km, ~6 min – Environment Canada', glyph: 'storm', color: '#e53935' },
+  { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
@@ -197,6 +215,14 @@ const LAYERS: Record<ExtraId, string[]> = {
   snowcover: ['snowcover'],
   aerosol: ['aerosol'],
   landcover: ['landcover'],
+  waves: ['waves', 'waves-label'],
+  buoys: ['buoys', 'buoys-label'],
+  tides: ['tides'],
+  bathymetry: ['emodnet', 'gebco'],
+  chlorophyll: ['chlorophyll'],
+  nexrad: ['nexrad'],
+  ecradar: ['ecradar'],
+  terrain: ['hillshade'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
@@ -205,7 +231,7 @@ const LAYERS: Record<ExtraId, string[]> = {
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -319,9 +345,12 @@ export class ExtraLayers {
       radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
       resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
+      waves: 'Seegang: <a href="https://open-meteo.com/en/docs/marine-weather-api">Open-Meteo Marine</a> (CC BY 4.0)',
+      buoys: 'Bojen: <a href="https://www.ndbc.noaa.gov/">NOAA NDBC</a>',
+      tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -450,6 +479,26 @@ export class ExtraLayers {
       // asking the (slow, on-demand rendering) WMS for ever more tiles
       14,
       0.75,
+    );
+    overlay('gebco', ['https://wms.gebco.net/mapserv?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GEBCO_LATEST&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Meerestiefe: <a href="https://www.gebco.net/">GEBCO</a> (nicht zur Navigation)', 10, 0.8);
+    overlay('emodnet', ['https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png'], 'Europa: <a href="https://emodnet.ec.europa.eu/">EMODnet Bathymetry</a> (CC BY 4.0, nicht zur Navigation)', 11, 0.85, { bounds: [-36, 15, 43, 74] });
+    overlay('chlorophyll', [gibsWms('VIIRS_SNPP_L2_Chlorophyll_A')], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
+    overlay('nexrad', ['https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'], 'Radar USA: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/">Iowa Environmental Mesonet</a>', 9, 0.8, { bounds: [-130, 20, -60, 52] });
+    overlay('ecradar', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RRAI&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.8, { bounds: [-141, 41, -52, 70] });
+    // 3D terrain: AWS Terrarium tiles (also used for the hillshade below)
+    if (!m.getSource('terrain-dem')) {
+      m.addSource('terrain-dem', {
+        type: 'raster-dem',
+        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        maxzoom: 14,
+        encoding: 'terrarium',
+        attribution: 'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (USGS 3DEP, SRTM, GMTED, ETOPO1)',
+      });
+    }
+    add(
+      { id: 'hillshade', type: 'hillshade', source: 'terrain-dem', layout: hidden, paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#1a1a2e' } },
+      'lbl-border-country',
     );
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
     overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
@@ -680,6 +729,48 @@ export class ExtraLayers {
         paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
       },
       'marker',
+    );
+    // ocean: wave grid, buoys, tide gauges
+    const waveLabel = (id: string, source: string): LayerSpecification => ({
+      id,
+      type: 'symbol',
+      source,
+      minzoom: 2,
+      layout: { ...hidden, 'text-field': ['get', 'label'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false, 'text-optional': true },
+      paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.75)', 'text-halo-width': 1.2 },
+    });
+    add(
+      {
+        id: 'waves',
+        type: 'circle',
+        source: 'waves',
+        layout: hidden,
+        paint: { 'circle-color': ['get', 'color'], 'circle-opacity': 0.8, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 7, 8, 16], 'circle-stroke-color': 'rgba(0,0,0,0.4)', 'circle-stroke-width': 1 },
+      },
+      'gauges',
+    );
+    add(waveLabel('waves-label', 'waves'), 'marker');
+    add(
+      {
+        id: 'buoys',
+        type: 'circle',
+        source: 'buoys',
+        layout: { ...hidden, 'circle-sort-key': ['get', 'wave'] },
+        paint: { 'circle-color': ['get', 'color'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 3, 9, 8], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
+      },
+      'gauges',
+    );
+    add({ ...waveLabel('buoys-label', 'buoys'), minzoom: 5 }, 'marker');
+    add(
+      {
+        id: 'tides',
+        type: 'circle',
+        source: 'tides',
+        minzoom: 3,
+        layout: hidden,
+        paint: { 'circle-color': '#42a5f5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 2.5, 9, 6], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
+      },
+      'gauges',
     );
     add(
       {
@@ -1141,6 +1232,7 @@ export class ExtraLayers {
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
     if (this.on.has('webcams')) this.loadWebcamsNow();
     if (this.on.has('alpr')) this.loadAlprNow();
+    if (this.on.has('waves')) this.loadWavesNow();
     if (this.on.has('wind') || this.on.has('solar') || this.on.has('plants')) this.loadOsmPowerNow();
   }
 
@@ -1259,11 +1351,14 @@ export class ExtraLayers {
           break;
         case 'aurora':
           this.loadOnce('aurora', 15 * 60000, async () => {
-            const r = await loadAurora();
+            const [r, sw] = await Promise.all([loadAurora(), loadSpaceWeather().catch(() => null)]);
             this.setData('aurora', r.fc);
             const t = new Date(r.forecastTime);
             const kp = r.kp != null ? `Kp ${fmt.num(r.kp, 1)}${r.kp >= 5 ? ' – geomagnetischer Sturm!' : ''} · ` : '';
-            return { count: undefined, note: `${kp}Vorhersage für ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr` };
+            const sun = sw
+              ? ` · Sonnenwind ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? ' (günstig)' : ''}` : ''}${sw.xray ? `, Röntgen ${sw.xray}` : ''}`
+              : '';
+            return { count: undefined, note: `${kp}Vorhersage für ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr${sun}` };
           });
           break;
         case 'gvp':
@@ -1294,6 +1389,26 @@ export class ExtraLayers {
           this.lightning.start();
           this.every('lightning', 3000, () => this.updateLightning());
           this.updateLightning();
+          break;
+        case 'buoys':
+          this.loadOnce('buoys', 10 * 60000, async () => {
+            const fc = await loadBuoys();
+            this.setData('buoys', fc);
+            return { count: fc.features.length, note: 'Farbe = Wellenhöhe, Zahl = Wellenhöhe in m (sonst Wind in kn)' };
+          });
+          break;
+        case 'tides':
+          this.loadOnce('tides', Infinity, async () => {
+            const fc = await loadTideStations();
+            this.setData('tides', fc);
+            return { count: fc.features.length, note: 'Klick auf einen Pegel zeigt Wasserstand & Gezeiten' };
+          });
+          break;
+        case 'waves':
+          this.loadWavesNow();
+          break;
+        case 'terrain':
+          this.setTerrain(true);
           break;
         case 'radiation':
           this.loadOnce('radiation', 60 * 60000, async () => {
@@ -1380,6 +1495,8 @@ export class ExtraLayers {
       this.clear('veh-fetch');
       this.clear('veh-feeds');
     }
+    if (!this.on.has('terrain')) this.setTerrain(false);
+    if (!this.on.has('waves')) this.waveKey = '';
     if (!this.on.has('lightning')) {
       this.clear('lightning');
       this.lightning?.stop();
@@ -1895,6 +2012,35 @@ export class ExtraLayers {
     return { note: note ?? this.info.ships?.note };
   }
 
+  private waveKey = '';
+
+  private loadWavesNow() {
+    const b = this.map.getBounds();
+    const z = this.map.getZoom();
+    const q = (v: number) => Math.round(v / 2) * 2;
+    const key = [q(b.getWest()), q(b.getSouth()), q(b.getEast()), q(b.getNorth())].join(',');
+    if (key === this.waveKey) return;
+    this.waveKey = key;
+    this.set('waves', { loading: true });
+    loadWaves({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(), zoom: z })
+      .then((r) => {
+        if (this.waveKey !== key) return;
+        this.setData('waves', r.fc);
+        this.set('waves', { loading: false, count: r.fc.features.length, note: `Raster ${r.step}° · Zahl = Wellenhöhe in m – zoomen für feineres Raster` });
+      })
+      .catch((e) => {
+        console.warn('Open-Meteo Marine', e);
+        this.waveKey = '';
+        this.set('waves', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Marine nicht erreichbar' });
+      });
+  }
+
+  private setTerrain(on: boolean) {
+    const has = !!this.map.getTerrain();
+    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
+    else if (!on && has) this.map.setTerrain(null);
+  }
+
   private updateLightning() {
     const l = this.lightning;
     if (!l) return;
@@ -2218,6 +2364,34 @@ export class ExtraLayers {
         return { type: 'html', html: html('fire', '#ff5722'), lng: at.lng, lat: at.lat };
       case 'tsunami':
         return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'buoys':
+        return { type: 'html', html: html('gauge', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'waves':
+        return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
+      case 'tides': {
+        const id = String(p.id);
+        return {
+          type: 'html',
+          html: cardHtml({ glyph: 'gauge', color: '#42a5f5', title: p.title, subtitle: p.subtitle, source: p.source, url: p.url, extra: '<div class="pop-loading small">Pegeldaten werden geladen …</div>' }),
+          lng: pt[0],
+          lat: pt[1],
+          after: (node) => {
+            loadTideDetails(id)
+              .then((d) => {
+                const t = (iso: string) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                const rows: [string, string][] = [];
+                if (d.level) rows.push(['Wasserstand', `${fmt.num(d.level.v, 2)} m (über MLLW) · ${t(d.level.t)}`]);
+                for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${fmt.num(n.v, 2)} m`]);
+                const el = node.querySelector('.pop-loading');
+                if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
+              })
+              .catch(() => {
+                const el = node.querySelector('.pop-loading');
+                if (el) el.textContent = 'keine aktuellen Messwerte';
+              });
+          },
+        };
+      }
       case 'radiation':
         return { type: 'html', html: html('radiation', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'lightning': {

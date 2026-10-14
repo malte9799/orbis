@@ -41,6 +41,40 @@ export async function loadAurora(): Promise<AuroraResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Space weather – NOAA SWPC solar wind (DSCOVR/ACE) and GOES X-ray flux, shown with the aurora layer.
+
+export interface SpaceWeather {
+  windKmS: number | null;
+  bz: number | null;
+  xray: string | null;
+}
+
+const xrayClass = (flux: number) => {
+  const c = flux >= 1e-4 ? 'X' : flux >= 1e-5 ? 'M' : flux >= 1e-6 ? 'C' : flux >= 1e-7 ? 'B' : 'A';
+  const base = { X: 1e-4, M: 1e-5, C: 1e-6, B: 1e-7, A: 1e-8 }[c]!;
+  return `${c}${(flux / base).toFixed(1)}`;
+};
+
+export async function loadSpaceWeather(): Promise<SpaceWeather> {
+  const last = (rows: unknown) => (Array.isArray(rows) && rows.length > 1 ? (rows[rows.length - 1] as unknown[]) : null);
+  const [plasma, mag, xr] = await Promise.allSettled([
+    fetchJson<unknown>('https://services.swpc.noaa.gov/products/solar-wind/plasma-2-hour.json'),
+    fetchJson<unknown>('https://services.swpc.noaa.gov/products/solar-wind/mag-2-hour.json'),
+    fetchJson<{ flux?: number; energy?: string }[]>('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json'),
+  ]);
+  const pRow = plasma.status === 'fulfilled' ? last(plasma.value) : null;
+  const mRow = mag.status === 'fulfilled' ? last(mag.value) : null;
+  const speed = pRow ? parseFloat(String(pRow[2])) : NaN;
+  const bz = mRow ? parseFloat(String(mRow[3])) : NaN;
+  let xray: string | null = null;
+  if (xr.status === 'fulfilled') {
+    const long = xr.value.filter((x) => x.energy === '0.1-0.8nm' && Number(x.flux) > 0);
+    if (long.length) xray = xrayClass(Number(long[long.length - 1].flux));
+  }
+  return { windKmS: Number.isFinite(speed) ? speed : null, bz: Number.isFinite(bz) ? bz : null, xray };
+}
+
+// ---------------------------------------------------------------------------
 // Volcanoes – Smithsonian Global Volcanism Program, Holocene volcano list (~1,300).
 
 export async function loadGvpVolcanoes(): Promise<FeatureCollection<Point>> {

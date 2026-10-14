@@ -1,3 +1,4 @@
+import { store } from '../store';
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon, MultiPolygon, Position } from 'geojson';
 import { fetchJson } from '../util';
 import { snapshotJson } from './data';
@@ -420,11 +421,14 @@ export interface RadarFrames {
   frames: { time: number; path: string; nowcast: boolean }[];
 }
 
+/** RainViewer by default; a self-hosted, API-compatible server (LibreWXR) can be set in the settings. */
+export const radarHost = () => (store.getKeys().radarHost || 'https://api.rainviewer.com').replace(/\/+$/, '');
+
 export async function loadRadarFrames(): Promise<RadarFrames> {
   const data = await fetchJson<{
     host: string;
     radar: { past: { time: number; path: string }[]; nowcast?: { time: number; path: string }[] };
-  }>('https://api.rainviewer.com/public/weather-maps.json');
+  }>(`${radarHost()}/public/weather-maps.json`);
   return {
     host: data.host,
     frames: [
