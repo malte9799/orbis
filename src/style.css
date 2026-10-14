@@ -1847,43 +1847,125 @@ svg.hourly {
 
 .ptabs {
   display: flex;
-  gap: 4px;
-  margin: 0 10px 4px;
-  padding: 4px;
+  gap: 2px;
+  margin: 0 10px 2px;
+  padding: 3px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
 }
 
 .ptab {
-  flex: 1;
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 6px;
   height: 32px;
+  padding: 0;
   border: 0;
   border-radius: 9px;
   background: none;
   color: var(--text-2);
   font: inherit;
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
+  transition: flex-grow 0.18s ease, background 0.15s;
+}
+
+.ptab svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ptab:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .ptab.on {
+  flex-grow: 2.6;
   background: var(--accent);
   color: #fff;
 }
 
+/* only the active tab shows its name; the others are icons with a count dot */
+.ptab-label {
+  display: none;
+  white-space: nowrap;
+}
+
+.ptab.on .ptab-label {
+  display: inline;
+}
+
 .ptab-n {
-  min-width: 17px;
-  height: 17px;
+  min-width: 16px;
+  height: 16px;
   padding: 0 4px;
-  border-radius: 9px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.18);
-  font-size: 0.7rem;
-  line-height: 17px;
+  font-size: 0.68rem;
+  line-height: 16px;
+}
+
+.ptab:not(.on) .ptab-n {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  line-height: 14px;
+  padding: 0 3px;
+  font-size: 0.62rem;
+  background: var(--accent);
+  color: #fff;
+}
+
+/* sub-groups: quiet text chips with an underline for the active one */
+.subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 6px 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.subtab {
+  padding: 4px 0 6px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subtab:hover {
+  color: var(--text);
+}
+
+.subtab.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.subtab i {
+  margin-left: 5px;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .tile-grid {
@@ -2529,4 +2611,71 @@ svg.hourly {
     left: 8px;
     bottom: 124px;
   }
+}
+
+/* ---------- bottom dock: legend and time controls share one card ---------- */
+.globe-bottom {
+  gap: 0;
+  padding: 0;
+  background: rgba(13, 18, 38, 0.88);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.globe-bottom:not(:has(.legend:not([hidden]), .timeline:not([hidden]))) {
+  display: none;
+}
+
+.globe-bottom .legend,
+.globe-bottom .timeline {
+  background: none;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 14px 9px;
+}
+
+.globe-bottom .legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.globe-bottom .legend-title {
+  margin-bottom: 5px;
+  font-size: 0.76rem;
+}
+
+.globe-bottom .legend-bar {
+  height: 6px;
+}
+
+.globe-bottom .legend-ticks {
+  height: 14px;
+  font-size: 0.68rem;
+}
+
+.globe-bottom .legend:not([hidden]) + .timeline:not([hidden]) {
+  border-top: 1px solid var(--border);
+}
+
+/* three main tabs: all labels visible */
+.ptab-label,
+.ptab.on .ptab-label {
+  display: inline;
+}
+
+.ptab.on {
+  flex-grow: 1;
+}
+
+.ptab:not(.on) .ptab-n {
+  position: static;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.14);
 }
