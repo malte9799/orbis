@@ -96,7 +96,7 @@ export function createSpaceView(
         <input class="space-filter" type="search" placeholder="Objekt suchen …" aria-label="Objekt suchen"/>
         <div class="sp-tabs" role="tablist">
           <button class="sp-tab on" role="tab" data-tab="planets">Planeten</button>
-          <button class="sp-tab" role="tab" data-tab="other">Sonden / Asteroiden / etc.</button>
+          <button class="sp-tab" role="tab" data-tab="other">Sonden &amp; Kleinkörper</button>
         </div>
       </div>
       <div class="sp-list-scroll"><div class="space-list-items"></div></div>
