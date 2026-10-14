@@ -1,0 +1,1049 @@
+{
+ "built": "2026-11-01",
+ "source": "archivegenocide.com/sources.html + geolocation-Daten (Schwerpunkte)",
+ "sources": [
+  {
+   "name": "Evidence Task",
+   "platform": "Telegram",
+   "count": "66,220 items",
+   "note": "War-crimes documentation channel",
+   "url": ""
+  },
+  {
+   "name": "Quds News Network",
+   "platform": "Telegram",
+   "count": "16,820 items",
+   "note": "Palestinian news agency · footage & casualty reports",
+   "url": "https://t.me/QudsNen"
+  },
+  {
+   "name": "Israel Exposed",
+   "platform": "Telegram + Discord",
+   "count": "14,247 items",
+   "note": "Our own collection · Oct 2023–2026",
+   "url": ""
+  },
+  {
+   "name": "TikTok Genocide",
+   "platform": "Website",
+   "count": "17,843 items",
+   "note": "ICC-format documented incidents",
+   "url": "https://genocide.live"
+  },
+  {
+   "name": "Tracking Israel Genocide",
+   "platform": "Telegram",
+   "count": "1,100 items",
+   "note": "Perpetrator-posted footage and IOF documentation",
+   "url": ""
+  },
+  {
+   "name": "Daily updates on Palestine",
+   "platform": "Telegram",
+   "count": "",
+   "note": "The day-by-day war log powering our Reports tab (Day 126–present), by Sara A. D",
+   "url": ""
+  },
+  {
+   "name": "Children of Gaza",
+   "platform": "Telegram",
+   "count": "9,000 items",
+   "note": "Oct 2023–2025",
+   "url": ""
+  },
+  {
+   "name": "Eye on Palestine",
+   "platform": "Telegram",
+   "count": "6,860 items",
+   "note": "Footage & news",
+   "url": "https://t.me/eyeonpal"
+  },
+  {
+   "name": "Journalist Moad Al Hams",
+   "platform": "Telegram",
+   "count": "3,564 items",
+   "note": "Field journalist, Gaza",
+   "url": ""
+  },
+  {
+   "name": "Anas Al Sharif",
+   "platform": "Telegram + X",
+   "count": "3,257 items",
+   "note": "Martyred journalist, Gaza",
+   "url": ""
+  },
+  {
+   "name": "Gaza Now",
+   "platform": "Telegram",
+   "count": "3,246 items",
+   "note": "Arabic & English channels",
+   "url": "https://t.me/gazaalannet"
+  },
+  {
+   "name": "Times of Gaza",
+   "platform": "Twitter / X",
+   "count": "2,779 items",
+   "note": "News & footage aggregator",
+   "url": ""
+  },
+  {
+   "name": "Dr Hashem Al Shehari",
+   "platform": "Telegram",
+   "count": "2,666 items",
+   "note": "Field documentation",
+   "url": ""
+  },
+  {
+   "name": "Suppressed News",
+   "platform": "Telegram",
+   "count": "6,315 items",
+   "note": "Underreported incidents",
+   "url": ""
+  },
+  {
+   "name": "Gaza Notification",
+   "platform": "Twitter / X",
+   "count": "1,660 items",
+   "note": "News & footage aggregator",
+   "url": ""
+  },
+  {
+   "name": "Alnasht",
+   "platform": "Telegram",
+   "count": "1,050 items",
+   "note": "Field documentation · early-war footage",
+   "url": ""
+  },
+  {
+   "name": "Israel Genocide Tracker",
+   "platform": "Telegram",
+   "count": "288 items",
+   "note": "IOF / perpetrator documentation",
+   "url": ""
+  }
+ ],
+ "websites": [
+  {
+   "tag": "",
+   "domain": "databasesforpalestine.org",
+   "desc": "Central evidence & data hub",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "archivegenocide.com",
+   "desc": "War-crimes archive & downloadable evidence",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "decolonizepalestine.com",
+   "desc": "Myth-busting & educational resource",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "palianswers.com",
+   "desc": "Sourced answers to common questions",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "adalah.org",
+   "desc": "Legal Center for Arab Minority Rights",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "genocidemonitor.com",
+   "desc": "Genocide Monitor",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "phr.org.il",
+   "desc": "Physicians for Human Rights – Israel",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "stopmurderingjournalists.com",
+   "desc": "Database of journalists killed by Israel",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "palestineremembered.com",
+   "desc": "Oral history & pre-Nakba villages",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "zionism.observer",
+   "desc": "Archive of crimes, quotes & maps",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "paldocs.net",
+   "desc": "Palestine documents archive",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "awesome-palestine (GitHub)",
+   "desc": "Curated index of Palestine resources",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "tiktokgenocide.com",
+   "desc": "The entire",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "israelquotes.com",
+   "desc": "1,100+ sourced quotes from Israeli officials",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "findidfsoldiers.net",
+   "desc": "Database documenting IDF soldiers",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "zochrot.org — Nakba Map",
+   "desc": "Destroyed villages & Nakba mapping",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "liveuamap.com",
+   "desc": "Live war map",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "institute.aljazeera.net",
+   "desc": "Al Jazeera Media Institute — research",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "bearing-witness.com",
+   "desc": "Bearing Witness — starvation documentation",
+   "url": ""
+  },
+  {
+   "tag": "",
+   "domain": "israelitechalternatives.com",
+   "desc": "Ethical tech alternatives (BDS)",
+   "url": ""
+  }
+ ],
+ "placed": [
+  {
+   "name": "Evidence Task",
+   "platform": "Telegram",
+   "url": "",
+   "note": "War-crimes documentation channel",
+   "items": "66,220 items",
+   "lon": 34.3881,
+   "lat": 31.4419,
+   "exact": 115,
+   "approx": 12021,
+   "last": "2026-07-11",
+   "latest": [
+    {
+     "d": "2026-07-11",
+     "t": "https://www.instagram.com/reel/DaprKTvO9y5/?igsh=MTFzdW16amhzZWo2dA==",
+     "id": 1000003009,
+     "cat": "detention"
+    },
+    {
+     "d": "2026-07-11",
+     "t": "Footage documents the arrival of 22-year-old Fayez Majdi Ashour at Nasser Hospit",
+     "id": 131340,
+     "cat": "detention"
+    },
+    {
+     "d": "2026-07-11",
+     "t": "Breaking | A Palestinian was reportedly killed by Israeli gunfire in Khan Younis",
+     "id": 131338,
+     "cat": "execution"
+    },
+    {
+     "d": "2026-07-11",
+     "t": "An Israeli drone targeted a civilian vehicle in Al-Nusierat refugee camp, centra",
+     "id": 131331,
+     "cat": "strike"
+    },
+    {
+     "d": "2026-07-11",
+     "t": "At least one was killed and several Palestinians were injured today after Israel",
+     "id": 131330,
+     "cat": "strike"
+    },
+    {
+     "d": "2026-07-11",
+     "t": "Update | At least four Palestinians were injured, after Israeli drone targeted a",
+     "id": 131329,
+     "cat": "strike"
+    }
+   ]
+  },
+  {
+   "name": "Quds News Network",
+   "platform": "Telegram",
+   "url": "https://t.me/QudsNen",
+   "note": "Palestinian news agency · footage & casualty reports",
+   "items": "16,820 items",
+   "lon": 34.3822,
+   "lat": 31.4346,
+   "exact": 25,
+   "approx": 3939,
+   "last": "2024-11-20",
+   "latest": [
+    {
+     "d": "2024-11-20",
+     "t": "A new video captures the moment Israeli forces targeted rescue teams and journal",
+     "id": 165695,
+     "cat": "press"
+    },
+    {
+     "d": "2024-11-20",
+     "t": "Israeli warplanes bombard the Jabalia refugee camp, northern Gaza.",
+     "id": 165692,
+     "cat": "strike"
+    },
+    {
+     "d": "2024-11-20",
+     "t": "Dr. Hussam Abu Safia, director of Kamal Adwan hospital who accused Israel of blo",
+     "id": 165689,
+     "cat": "siege"
+    },
+    {
+     "d": "2024-11-19",
+     "t": "A bereaved mother sends off her slain son, Ali Muhammad Omar, one of the civil d",
+     "id": 165674,
+     "cat": "strike"
+    },
+    {
+     "d": "2024-11-19",
+     "t": "Footage captures the moment an Israeli airstrike targeted civil defense staff wh",
+     "id": 165672,
+     "cat": "strike"
+    },
+    {
+     "d": "2024-11-19",
+     "t": "Scenes after the Israeli occupation committed a massacre against the Jouda famil",
+     "id": 165671,
+     "cat": "massacre"
+    }
+   ]
+  },
+  {
+   "name": "Israel Exposed",
+   "platform": "Telegram + Discord",
+   "url": "",
+   "note": "Our own collection · Oct 2023–2026",
+   "items": "14,247 items",
+   "lon": 34.4117,
+   "lat": 31.4686,
+   "exact": 81,
+   "approx": 2723,
+   "last": "2026-10-28",
+   "latest": [
+    {
+     "d": "2026-10-28",
+     "t": "🔴",
+     "id": 1000048936,
+     "cat": "execution"
+    },
+    {
+     "d": "2026-10-28",
+     "t": "🇮🇱",
+     "id": 1000048933,
+     "cat": "execution"
+    },
+    {
+     "d": "2026-10-28",
+     "t": "Israel shot and killed Mahmoud Samih al-Hirish in Jabalia Camp an hour ago.",
+     "id": 1000048915,
+     "cat": "execution"
+    },
+    {
+     "d": "2026-10-28",
+     "t": "Press TV’s Motee Abu Musabeh reports three new civilian deaths in Gaza, includin",
+     "id": 1000048899,
+     "cat": "strike"
+    },
+    {
+     "d": "2026-10-27",
+     "t": "👤 Mohamed Abu Nahel",
+     "id": 1000048872,
+     "cat": "casualty"
+    },
+    {
+     "d": "2026-10-27",
+     "t": "In a new violation of the ceasefire agreement. Martyrs and wounded in the bombin",
+     "id": 1000048865,
+     "cat": "strike"
+    }
+   ]
+  },
+  {
+   "name": "TikTok Genocide",
+   "platform": "Website",
+   "url": "https://genocide.live",
+   "note": "ICC-format documented incidents",
+   "items": "17,843 items",
+   "lon": 34.4007,
+   "lat": 31.4541,
+   "exact": 1735,
+   "approx": 3476,
+   "last": "2026-08-18",
+   "latest": [
+    {
+     "d": "2026-08-18",
+     "t": "Eyewitness recounts Gaza Port massacre amid exhausting inhuman living conditions",
+     "id": 212147,
+     "cat": "massacre"
+    },
+    {
+     "d": "2026-08-18",
+     "t": "Aftermath of Israel's massacre of Palestinian at Gaza Port cafe",
+     "id": 212143,
+     "cat": "massacre"
+    },
+    {
+     "d": "2026-08-18",
+     "t": "Body of child killed along with his father and 6 other men by Israel at Gaza Por",
+     "id": 212139,
+     "cat": "massacre"
+    },
+    {
+     "d": "2026-08-18",
+     "t": "Recovery of bodies of Palestinians killed by Israel at busy Gaza Port cafe",
+     "id": 212140,
+     "cat": "massacre"
+    },
+    {
+     "d": "2026-08-18",
+     "t": "Recovery of bodies of Palestinians killed by Israel at busy Gaza Port cafe",
+     "id": 212138,
+     "cat": "massacre"
+    },
+    {
+     "d": "2026-08-18",
+     "t": "Rush to hospital following Israeli massacre at Gaza Port cafe",
+     "id": 212141,
+     "cat": "massacre"
+    }
+   ]
+  },
+  {
+   "name": "Tracking Israel Genocide",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Perpetrator-posted footage and IOF documentation",
+   "items": "1,100 items",
+   "lon": 34.3383,
+   "lat": 31.3852,
+   "exact": 0,
+   "approx": 12,
+   "last": "2024-12-30",
+   "latest": [
+    {
+     "d": "2024-12-30",
+     "t": "Israeli soldiers from the 52nd Armored Battalion posed in front of shops and res",
+     "id": 200076,
+     "cat": "looting"
+    },
+    {
+     "d": "2024-12-30",
+     "t": "An Israeli soldier's Instagram story celebrates raising their flag on a UN schoo",
+     "id": 200068,
+     "cat": "shelter"
+    },
+    {
+     "d": "2024-12-27",
+     "t": "Rafah | Israeli Nahal soldiers set fire to the homes of displaced Palestinians i",
+     "id": 200049,
+     "cat": "looting"
+    },
+    {
+     "d": "2024-12-23",
+     "t": "Following the ethnic cleansing of its Palestinian residents, the Israeli occupat",
+     "id": 200031,
+     "cat": "urbicide"
+    },
+    {
+     "d": "2024-12-21",
+     "t": "Israeli soldiers from the 97th Netzah Yehuda Battalion placed Israeli flags on t",
+     "id": 200025,
+     "cat": "military"
+    },
+    {
+     "d": "2024-11-22",
+     "t": "During their invasion of displaced Palestinians' homes in Rafah, he posted image",
+     "id": 199790,
+     "cat": "looting"
+    }
+   ]
+  },
+  {
+   "name": "Children of Gaza",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Oct 2023–2025",
+   "items": "9,000 items",
+   "lon": 34.3646,
+   "lat": 31.4186,
+   "exact": 5,
+   "approx": 3300,
+   "last": "2025-09-23",
+   "latest": [
+    {
+     "d": "2025-09-23",
+     "t": "💔🇵🇸",
+     "id": 35378,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-09-23",
+     "t": "💔🇵🇸",
+     "id": 35366,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-09-23",
+     "t": "💔🇵🇸",
+     "id": 35357,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-09-22",
+     "t": "💔🇵🇸",
+     "id": 35375,
+     "cat": "medical"
+    },
+    {
+     "d": "2025-09-22",
+     "t": "💔🇵🇸",
+     "id": 35373,
+     "cat": "press"
+    },
+    {
+     "d": "2025-09-22",
+     "t": "💔🇵🇸",
+     "id": 35361,
+     "cat": "medical"
+    }
+   ]
+  },
+  {
+   "name": "Eye on Palestine",
+   "platform": "Telegram",
+   "url": "https://t.me/eyeonpal",
+   "note": "Footage & news",
+   "items": "6,860 items",
+   "lon": 34.399,
+   "lat": 31.4537,
+   "exact": 3,
+   "approx": 961,
+   "last": "2025-11-28",
+   "latest": [
+    {
+     "d": "2025-11-28",
+     "t": "Tal Al-Hawa, Gaza City - November 28, 2025:",
+     "id": 95268,
+     "cat": "other"
+    },
+    {
+     "d": "2025-11-28",
+     "t": "Save Ahmad before it's too late...",
+     "id": 95254,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-11-27",
+     "t": "Dawoud Eid Eid, an 18-year-old from Jabalia and displaced in Al-Bureij camp, los",
+     "id": 95250,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-11-25",
+     "t": "زيارة لمدينة غزة...",
+     "id": 95153,
+     "cat": "other"
+    },
+    {
+     "d": "2025-11-24",
+     "t": "A little girl hugs her uncle after being injured in a suspicious explosion in th",
+     "id": 95132,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-11-24",
+     "t": "Behind the numbers are small faces still trying to survive...",
+     "id": 95127,
+     "cat": "strike"
+    }
+   ]
+  },
+  {
+   "name": "Journalist Moad Al Hams",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Field journalist, Gaza",
+   "items": "3,564 items",
+   "lon": 34.3464,
+   "lat": 31.3924,
+   "exact": 3,
+   "approx": 1118,
+   "last": "2024-09-02",
+   "latest": [
+    {
+     "d": "2024-09-02",
+     "t": "3شهداءوعدد من الجرحى في استهداف بصاروخ استطلاع على سيارة تابعة للبلدية قرب مدرسة",
+     "id": 141948,
+     "cat": "strike"
+    },
+    {
+     "d": "2024-09-01",
+     "t": "اللحظات الأولى لقصف طيران الاحتلال مدرسة صفد في حي الزيتون بغزة، ما أدى لاستشهاد",
+     "id": 141943,
+     "cat": "shelter"
+    },
+    {
+     "d": "2024-09-01",
+     "t": "وصول الشهيد رامي رشاد نوفل إلى مستشفى شهداء الأقصى جراء استهداف بمخيم البريج",
+     "id": 141930,
+     "cat": "strike"
+    },
+    {
+     "d": "2024-08-31",
+     "t": "قناة كان:",
+     "id": 1000003509,
+     "cat": "military"
+    },
+    {
+     "d": "2024-08-31",
+     "t": "لحظة الإعلان عن استشهاد الشاب محمود إبراهيم الحروب في المستشفى الأهلي بالخليل",
+     "id": 141658,
+     "cat": "medical"
+    },
+    {
+     "d": "2024-08-31",
+     "t": "شهيد لم يتم التعرف عليه الى هذه اللحظة تم انتشاله من شارع 5 موجود في مشرحة مشفى ",
+     "id": 141917,
+     "cat": "casualty"
+    }
+   ]
+  },
+  {
+   "name": "Anas Al Sharif",
+   "platform": "Telegram + X",
+   "url": "",
+   "note": "Martyred journalist, Gaza",
+   "items": "3,257 items",
+   "lon": 34.4386,
+   "lat": 31.49,
+   "exact": 20,
+   "approx": 896,
+   "last": "2025-10-14",
+   "latest": [
+    {
+     "d": "2025-10-14",
+     "t": "الأسير المحرر مدير مستشفى العودة، الدكتور أحمد مهنا يصل إلى قطاع غزة عقب تحرره ب",
+     "id": 96961,
+     "cat": "detention"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "احتفالات شعبية في غزة بوصول الأسرى الفلسطينيين المحررين عبر معبر كرم أبو سالم إل",
+     "id": 96950,
+     "cat": "other"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "⭕️ اليوم سيتحرر ناجي الجعفراوي من سجون الاحتلال، وهو شقيق الشهيد الصحفي صالح الج",
+     "id": 96897,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "سيارات الصليب الأحمر تغادر مدينة غزة لنقل الرهائن",
+     "id": 96886,
+     "cat": "other"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "فلسطينيون ينتظرون وصول الأسرى المحررين في خان يونس",
+     "id": 96882,
+     "cat": "other"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "عناصر الأمن الفلسطيني ينتشرون داخل مجمع ناصر الطبي في مدينة خان يونس لتأمين استق",
+     "id": 96877,
+     "cat": "other"
+    }
+   ]
+  },
+  {
+   "name": "Gaza Now",
+   "platform": "Telegram",
+   "url": "https://t.me/gazaalannet",
+   "note": "Arabic & English channels",
+   "items": "3,246 items",
+   "lon": 34.3745,
+   "lat": 31.4279,
+   "exact": 0,
+   "approx": 498,
+   "last": "2025-10-15",
+   "latest": [
+    {
+     "d": "2025-10-15",
+     "t": "الصحفي الفلسطيني مصطفى عياش",
+     "id": 98473,
+     "cat": "press"
+    },
+    {
+     "d": "2025-10-14",
+     "t": "#صور",
+     "id": 98471,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "🔴 مشهد مهيب لجموع الفلسطينيين أثناء استقبال الأسرى المحررين من سجون الاحتلال في",
+     "id": 1000033500,
+     "cat": "other"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "وزارة الصحة تنهي استعداداتها لتقديم الرعاية الطبية للأسرى المحررين فور وصولهم ال",
+     "id": 1000033501,
+     "cat": "other"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "📸 تجهيزات في مستشفى ناصر بخانيونس لاستقبال الأسرى الفلسطينيين المقرر لإفراج عنه",
+     "id": 1000033502,
+     "cat": "medical"
+    },
+    {
+     "d": "2025-10-13",
+     "t": "#صور",
+     "id": 98456,
+     "cat": "medical"
+    }
+   ]
+  },
+  {
+   "name": "Times of Gaza",
+   "platform": "Twitter / X",
+   "url": "",
+   "note": "News & footage aggregator",
+   "items": "2,779 items",
+   "lon": 34.3917,
+   "lat": 31.4472,
+   "exact": 12,
+   "approx": 780,
+   "last": "2025-09-09",
+   "latest": [
+    {
+     "d": "2025-09-09",
+     "t": "Footage from the site where more than 40 Palestinians were killed in a mass lsra",
+     "id": 122967,
+     "cat": "massacre"
+    },
+    {
+     "d": "2025-09-09",
+     "t": "Footage from the site where more than 40 Palestinians were killed in a mass lsra",
+     "id": 122966,
+     "cat": "massacre"
+    },
+    {
+     "d": "2025-09-09",
+     "t": "Footage from the site where more than 40 Palestinians were killed in a mass lsra",
+     "id": 122964,
+     "cat": "massacre"
+    },
+    {
+     "d": "2025-09-09",
+     "t": "Footage from the site where more than 40 Palestinians were killed in a mass lsra",
+     "id": 122965,
+     "cat": "massacre"
+    },
+    {
+     "d": "2025-05-13",
+     "t": "From inside Nasser Hospital, where Israel bombed one of its sections, killing jo",
+     "id": 122418,
+     "cat": "press"
+    },
+    {
+     "d": "2025-05-12",
+     "t": "Israel injured several children in an airstrike on Jabalia al-Balad, northern Ga",
+     "id": 122416,
+     "cat": "strike"
+    }
+   ]
+  },
+  {
+   "name": "Dr Hashem Al Shehari",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Field documentation",
+   "items": "2,666 items",
+   "lon": 34.3708,
+   "lat": 31.4156,
+   "exact": 1,
+   "approx": 134,
+   "last": "2025-07-15",
+   "latest": [
+    {
+     "d": "2025-07-15",
+     "t": "🚨 Heartbreaking Scene: A woman remains trapped under the rubble in Jabalia al-B",
+     "id": 78160,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-07-13",
+     "t": "The Israeli military has admitted to killing children at a water collection poin",
+     "id": 78143,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-07-13",
+     "t": "🚨🇮🇱",
+     "id": 78134,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-07-12",
+     "t": "Over the past 30 minutes, Israeli forces have reportedly carried out at least 50",
+     "id": 78130,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-07-11",
+     "t": "🚨",
+     "id": 78121,
+     "cat": "displace"
+    },
+    {
+     "d": "2025-07-10",
+     "t": "🚨",
+     "id": 78109,
+     "cat": "press"
+    }
+   ]
+  },
+  {
+   "name": "Suppressed News",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Underreported incidents",
+   "items": "6,315 items",
+   "lon": 34.3909,
+   "lat": 31.4466,
+   "exact": 0,
+   "approx": 1224,
+   "last": "2025-07-16",
+   "latest": [
+    {
+     "d": "2025-07-16",
+     "t": "⚡️ Demolition operations of residential buildings carried out by the occupation ",
+     "id": 203121,
+     "cat": "demolition"
+    },
+    {
+     "d": "2025-07-16",
+     "t": "9-year-old Palestinian girl Layan Abu Rizq is in intensive care at Nasser Medica",
+     "id": 1000037126,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-07-16",
+     "t": "⚡️ Her mother and siblings were martyred. Nine-year-old Layan Abu Rizq is lying ",
+     "id": 74405,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-07-13",
+     "t": "Grieving Palestinians bid farewell to their loved ones killed in the Israeli mas",
+     "id": 75263,
+     "cat": "massacre"
+    },
+    {
+     "d": "2025-07-13",
+     "t": "⚡️ \"We have been thirsty for three months, we need water, father\" - words of the",
+     "id": 75256,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-07-13",
+     "t": "In pictures: At least 8 Palestinians killed, including children, in a horrific I",
+     "id": 75257,
+     "cat": "massacre"
+    }
+   ]
+  },
+  {
+   "name": "Gaza Notification",
+   "platform": "Twitter / X",
+   "url": "",
+   "note": "News & footage aggregator",
+   "items": "1,660 items",
+   "lon": 34.3876,
+   "lat": 31.4416,
+   "exact": 9,
+   "approx": 671,
+   "last": "2025-07-09",
+   "latest": [
+    {
+     "d": "2025-07-09",
+     "t": "Statement from the Palestinian Prisoners’ Club: Real Fears Grow for Dr. Hussam A",
+     "id": 121685,
+     "cat": "detention"
+    },
+    {
+     "d": "2025-07-07",
+     "t": "Breaking : Israeli army’s fire illumination flares east of Gaza City as naval gu",
+     "id": 121530,
+     "cat": "demolition"
+    },
+    {
+     "d": "2025-05-12",
+     "t": "BREAKING: Two unidentified victims a father and his baby have arrived at the Ind",
+     "id": 120640,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-05-12",
+     "t": "HEARTBREAKING: The father of the child, Noah Al-Saqqa, who was killed by the Isr",
+     "id": 120636,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-05-12",
+     "t": "Heartbreaking: The Daughter of Journalist Ismail Al-Ghoul, Killed by the Israeli",
+     "id": 120637,
+     "cat": "casualty"
+    },
+    {
+     "d": "2025-05-12",
+     "t": "The Israeli army killed the children Ahmad, Hamza, and Abdul Aziz, along with th",
+     "id": 120621,
+     "cat": "strike"
+    }
+   ]
+  },
+  {
+   "name": "Alnasht",
+   "platform": "Telegram",
+   "url": "",
+   "note": "Field documentation · early-war footage",
+   "items": "1,050 items",
+   "lon": 34.401,
+   "lat": 31.4506,
+   "exact": 0,
+   "approx": 186,
+   "last": "2023-10-16",
+   "latest": [
+    {
+     "d": "2023-10-16",
+     "t": ":\"الدمار الذي خلفه قصف الاحتلال لحي الشيخ رضوان في غزة\".",
+     "id": 1000004875,
+     "cat": "urbicide"
+    },
+    {
+     "d": "2023-10-16",
+     "t": "بيان لجيش الاحتلال",
+     "id": 137933,
+     "cat": "execution"
+    },
+    {
+     "d": "2023-10-16",
+     "t": "لفة بدر برفح",
+     "id": 137914,
+     "cat": "nocaption"
+    },
+    {
+     "d": "2023-10-16",
+     "t": "مشاهد ظن استهداف منزل المواطن ابو وائل عوكل لفه بدر بجوار صاله الماسه رفح قبل قل",
+     "id": 137899,
+     "cat": "strike"
+    },
+    {
+     "d": "2023-10-16",
+     "t": "ارتقاء و اصابة اطفال في استهداف لمنزل في خان يونس جنوب غزة",
+     "id": 137898,
+     "cat": "strike"
+    },
+    {
+     "d": "2023-10-16",
+     "t": "#عاجل",
+     "id": 137897,
+     "cat": "medical"
+    }
+   ]
+  },
+  {
+   "name": "Israel Genocide Tracker",
+   "platform": "Telegram",
+   "url": "",
+   "note": "IOF / perpetrator documentation",
+   "items": "288 items",
+   "lon": 34.3566,
+   "lat": 31.3974,
+   "exact": 0,
+   "approx": 45,
+   "last": "2025-10-07",
+   "latest": [
+    {
+     "d": "2025-10-07",
+     "t": "Israeli demolition terrorists have recently begun flattening Gaza City’s high-ri",
+     "id": 99273,
+     "cat": "demolition"
+    },
+    {
+     "d": "2025-10-04",
+     "t": "After forcibly evicting displaced Palestinian families who had been sheltering i",
+     "id": 99271,
+     "cat": "displace"
+    },
+    {
+     "d": "2025-09-30",
+     "t": "\"Road of destruction\"",
+     "id": 99268,
+     "cat": "urbicide"
+    },
+    {
+     "d": "2025-09-20",
+     "t": "Israel’s ISIS-style robots carry two 1-ton plastic tanks, which they fill with a",
+     "id": 99262,
+     "cat": "urbicide"
+    },
+    {
+     "d": "2025-08-29",
+     "t": "While the world continues to issue warnings about Israel’s planned invasion of G",
+     "id": 99256,
+     "cat": "strike"
+    },
+    {
+     "d": "2025-08-23",
+     "t": "\"The work in Gaza is not yet complete; we must not stop,\" wrote an Israeli tanke",
+     "id": 99253,
+     "cat": "incitement"
+    }
+   ]
+  }
+ ]
+}
