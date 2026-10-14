@@ -179,7 +179,7 @@ export function createSpaceView(
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
   /** path of the selected probe: travelled part (bright) and the planned/future part (dim) */
-  const trails = new Map<string, { at: number; anchor: Vec3; past: THREE.Line; fut: THREE.Line; nPast: number; nFut: number }>();
+  const trails = new Map<string, { full: boolean; at: number; anchor: Vec3; past: THREE.Line; fut: THREE.Line; nPast: number; nFut: number }>();
   const labels = new Map<string, HTMLDivElement>();
   let satPoints: THREE.Points | null = null;
   let sats: Sat[] = [];
@@ -915,8 +915,10 @@ export function createSpaceView(
     for (const id of wanted) {
       const c = CRAFT.find((x) => x.id === id)!;
       const times = trajectoryTimes(id);
+      // the whole path (fly-bys included) only for the selected probe; otherwise just the far part
+      const full = id === focusId;
       let trail = trails.get(id);
-      if (trail && Math.abs(trail.at - simTime) > 20 * 86400000) {
+      if (trail && (trail.full !== full || Math.abs(trail.at - simTime) > 20 * 86400000)) {
         removeTrail(id);
         trail = undefined;
       }
@@ -931,7 +933,7 @@ export function createSpaceView(
           const span = TRAIL_DAYS[id] * 86400000;
           for (let k = 0; k < 1500; k++) pastT.push(simTime - span + (k / 1500) * span);
         }
-        const pts = (ts: number[]) => ts.map((t) => at(t)).filter((p): p is Vec3 => !!p);
+        const pts = (ts: number[]) => ts.map((t) => at(t)).filter((p): p is Vec3 => !!p && (full || len(p) >= 5));
         const past = pts(pastT);
         const fut = pts(futT);
         // vertices relative to the craft (float32 has ~7 digits: absolute AU coordinates would be
@@ -951,7 +953,7 @@ export function createSpaceView(
           world.add(line);
           return line;
         };
-        trail = { at: simTime, anchor, past: mk(past, false, 0.85), fut: mk(fut, true, 0.3), nPast: past.length, nFut: fut.length };
+        trail = { full, at: simTime, anchor, past: mk(past, false, 0.85), fut: mk(fut, true, 0.3), nPast: past.length, nFut: fut.length };
         trails.set(id, trail);
       }
       const cur = at(simTime);
