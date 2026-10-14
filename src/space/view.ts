@@ -184,6 +184,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   const gltfCache = new Map<string, Promise<THREE.Object3D>>();
   const crafts = new Map<string, { group: THREE.Group; state: 'idle' | 'loading' | 'ready' | 'error'; detail: 'idle' | 'loading' | 'ready' | 'error'; base?: THREE.Object3D }>();
 
+  // note: with gzip/brotli `total` is the compressed size while `loaded` counts decoded bytes, so clamp
   function loadModel(url: string, onProgress?: (frac: number) => void) {
     if (!gltfLoader) {
       const draco = new DRACOLoader().setDecoderPath('./draco/');
@@ -192,7 +193,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     let p = gltfCache.get(url);
     if (!p) {
       p = gltfLoader
-        .loadAsync(url, onProgress && ((e) => e.lengthComputable && e.total > 0 && onProgress(e.loaded / e.total)))
+        .loadAsync(url, onProgress && ((e) => e.lengthComputable && e.total > 0 && onProgress(Math.min(0.99, e.loaded / e.total))))
         .then((g) => g.scene);
       gltfCache.set(url, p);
     }
