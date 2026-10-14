@@ -182,7 +182,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   let gltfLoader: GLTFLoader | null = null;
   let envMap: THREE.Texture | null = null;
   const gltfCache = new Map<string, Promise<THREE.Object3D>>();
-  const crafts = new Map<string, { group: THREE.Group; state: 'idle' | 'loading' | 'ready' | 'error' }>();
+  const crafts = new Map<string, { group: THREE.Group; state: 'idle' | 'loading' | 'ready' | 'error'; detail: 'idle' | 'loading' | 'ready' | 'error'; base?: THREE.Object3D }>();
 
   function loadModel(url: string) {
     if (!gltfLoader) {
@@ -197,11 +197,37 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     return p;
   }
 
+  /** Normalise a loaded glTF scene to the craft's real size (centred, scaled to AU). */
+  function placeModel(src: THREE.Object3D, b: Body) {
+    const obj = src.clone(true);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    obj.position.sub(center); // centre the model on the craft's position
+    const inner = new THREE.Group();
+    inner.add(obj);
+    inner.scale.setScalar(b.model!.sizeM / Math.max(size.x, size.y, size.z) / (AU_KM * 1000));
+    obj.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+        const std = mat as THREE.MeshStandardMaterial;
+        if ('envMap' in std) {
+          std.envMap = envMap;
+          std.envMapIntensity = 0.55;
+          std.needsUpdate = true;
+        }
+      }
+      mesh.userData.id = b.id;
+    });
+    return inner;
+  }
+
   /** Load (once) and place the model of a craft; scaled to its real size in AU. */
   function ensureCraftModel(b: Body) {
     let c = crafts.get(b.id);
     if (!c) {
-      c = { group: new THREE.Group(), state: 'idle' };
+      c = { group: new THREE.Group(), state: 'idle', detail: 'idle' };
       c.group.visible = false;
       world.add(c.group);
       crafts.set(b.id, c);
@@ -212,28 +238,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     const entry = c;
     loadModel(b.model.url)
       .then((src) => {
-        const obj = src.clone(true);
-        const box = new THREE.Box3().setFromObject(obj);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        obj.position.sub(center); // centre the model on the craft's position
-        const inner = new THREE.Group();
-        inner.add(obj);
-        inner.scale.setScalar(b.model!.sizeM / Math.max(size.x, size.y, size.z) / (AU_KM * 1000));
-        obj.traverse((o) => {
-          const mesh = o as THREE.Mesh;
-          if (!mesh.isMesh) return;
-          for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-            const std = mat as THREE.MeshStandardMaterial;
-            if ('envMap' in std) {
-              std.envMap = envMap;
-              std.envMapIntensity = 0.55;
-              std.needsUpdate = true;
-            }
-          }
-          mesh.userData.id = b.id;
-        });
-        entry.group.add(inner);
+        entry.base = placeModel(src, b);
+        // the detailed model may already have arrived first
+        if (entry.detail !== 'ready') entry.group.add(entry.base);
         entry.state = 'ready';
         if (b.id === focusId) renderInfo();
       })
@@ -243,6 +250,28 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         if (b.id === focusId) renderInfo();
       });
     return c;
+  }
+
+  /** Fetch the big detailed model (if the craft has one) and swap it in; the small one stays until then. */
+  function ensureDetailModel(b: Body) {
+    const c = crafts.get(b.id);
+    const url = b.model?.detailUrl;
+    if (!c || !url || c.detail !== 'idle') return;
+    c.detail = 'loading';
+    if (b.id === focusId) renderInfo();
+    loadModel(url)
+      .then((src) => {
+        const inner = placeModel(src, b);
+        if (c.base) c.group.remove(c.base);
+        c.group.add(inner);
+        c.detail = 'ready';
+        if (b.id === focusId) renderInfo();
+      })
+      .catch((e) => {
+        console.warn('Detailmodell', b.id, e);
+        c.detail = 'error'; // keep showing the small model
+        if (b.id === focusId) renderInfo();
+      });
   }
 
   function updateCraftModels() {
@@ -262,7 +291,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (px < 1.5 && b.id !== focusId && !c) continue;
       const cc = c ?? ensureCraftModel(b);
       if (px >= 1.5 || b.id === focusId) ensureCraftModel(b);
-      cc.group.visible = cc.state === 'ready' && px > 0.5;
+      // the large model only once the craft is selected or clearly visible (tens of pixels)
+      if (b.model.detailUrl && cc.state === 'ready' && (b.id === focusId || px >= 40)) ensureDetailModel(b);
+      cc.group.visible = (cc.state === 'ready' || cc.detail === 'ready') && px > 0.5;
       cc.group.position.copy(v3m);
     }
   }
@@ -1033,7 +1064,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
           : ''
       }
       ${b.model ? `<p class="small muted">3D-Modell: NASA 3D Resources${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
-        crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : ''
+        crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : crafts.get(b.id)?.detail === 'loading' ? ' · Detailmodell wird geladen …' : ''
       }</p>` : ''}
       <div class="sp-actions">
         ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : ''}

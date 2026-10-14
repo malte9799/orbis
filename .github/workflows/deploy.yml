@@ -43,6 +43,19 @@ jobs:
         run: |
           pip install --quiet numpy pillow
           python scripts/moon-textures.py public/textures/moon
+      # Detailed ISS model (NASA 3D Resources, ~96 MB, hosted as release asset "models"). Optional: without it the app
+      # keeps the small bundled ISS model.
+      - name: Cache detailed ISS model
+        id: iss-cache
+        uses: actions/cache@v4
+        with:
+          path: public/models/iss-detail.glb
+          key: iss-detail-${{ hashFiles('scripts/iss-model.sh') }}
+      - name: Detailed ISS model
+        if: steps.iss-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: bash scripts/iss-model.sh public/models/iss-detail.glb
       - run: npm run build
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables

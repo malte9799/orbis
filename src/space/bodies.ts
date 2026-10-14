@@ -36,7 +36,7 @@ export interface Body {
   /** orbital period around the parent (moons) */
   periodDays?: number;
   /** NASA 3D model (glTF), loaded on demand; sizeM = real largest dimension in metres */
-  model?: { url: string; sizeM: number; note?: string };
+  model?: { url: string; sizeM: number; note?: string; detailUrl?: string };
 }
 
 export type PositionContext = (id: string) => Vec3;
@@ -403,7 +403,12 @@ export function setSatLookup(fn: typeof satLookup) {
   satLookup = fn;
 }
 
-const m = (file: string, sizeM: number, note?: string) => ({ url: `./models/${file}`, sizeM, note });
+const m = (file: string, sizeM: number, note?: string, detail?: string) => ({
+  url: `./models/${file}`,
+  sizeM,
+  note,
+  detailUrl: detail ? `./models/${detail}` : undefined,
+});
 
 export const CRAFT: Body[] = [
   {
@@ -413,7 +418,8 @@ export const CRAFT: Body[] = [
     parent: 'earth',
     radiusKm: 0.055,
     color: '#ffffff',
-    model: m('iss.glb', 109),
+    // iss-detail.glb (NASA ISS (D), ~96 MB) is fetched by the deploy workflow; the small model stays until it is loaded
+    model: m('iss.glb', 109, undefined, 'iss-detail.glb'),
     position: (ms) => satLookup('25544', ms),
     facts: [
       ['Bahnhöhe', '≈ 420 km'],
