@@ -31,12 +31,22 @@ Drei Ansichten:
     Perseverance, Curiosity und Ingenuity stehen auf der Oberfläche (aufrecht, mit dem Planeten mitdrehend);
     ihre Fahrspuren und die 72 Ingenuity-Flüge aus den NASA-MMGIS-Daten sind auf dem Boden eingezeichnet
     und folgen der Zeitleiste (Sol, gefahrene Strecke im Steckbrief)
-  - Weit in einen Planeten hineinzoomen öffnet dessen **Karte** (`#/planet?body=mars`) – wie bei der Erde:
-    2D-Karte mit Ebenenwahl (Farbe, CTX, MOLA-Höhenrelief, THEMIS-Infrarot), Landestellen, Fahrspuren der Rover,
-    Ingenuity-Flügen und Maßstab; „3D“ führt zurück zur Kugel. Die Quellen je Himmelskörper stehen in
-    `src/space/planets.ts` (`enabled`): derzeit Erde (Wetterkarte) und Mars; Mond, Merkur und Venus sind
-    vorbereitet und werden dort nur eingeschaltet. Die Fahrspuren werden von `scripts/mars-traverse.mjs`
-    verdichtet (Daten-Branch, Rückfall: `public/data/mars-traverse.json`)
+  - **Planetenkarte** (`#/planet?body=mars`) – bedient sich wie die Erdkarte (MapLibre): 2D-Karte oder 3D-Globus,
+    Ziehen verschiebt die Karte, Zoom zum Mauszeiger, Ebenen-Panel, Kartentyp-Wechsler (Farbe, CTX 5 m, MOLA,
+    THEMIS), Suche und Maßstab. Herauszoomen aus dem Globus bzw. das Weltall-Symbol führt ins Sonnensystem,
+    Hineinzoomen auf den Mars (oder ein Klick auf Rover/Landestelle) von dort auf die Karte. Landestellen,
+    Fahrspuren von Perseverance/Curiosity, die 72 Ingenuity-Flüge; die Rover erscheinen beim Heranzoomen als
+    3D-Modell in Originalgröße. In der Weltall-Ansicht haben die Planeten nur ihre feste Textur, die Detailkacheln
+    gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit Erde und Mars, Mond/Merkur/Venus vorbereitet).
+    Über den globalen Mosaiken liegen automatisch die regionalen HiRISE-Mosaike von Mars Trek (Jezero, Gale,
+    Landestellen, Rover-Gebiete – bis 25 cm/px). Der Kartentyp-Wechsler enthält nur echte Basiskarten
+    (Automatisch, Farbmosaik, CTX ≈ 5 m, Höhe & Tiefe MOLA/HRSC, Infrarot THEMIS und die HRSC-Farbmosaike am
+    Kartenmittelpunkt); Überlagerungen (Geologie, Täler, Mineralien) und Markierungen schaltet das Ebenen-Panel,
+    eine Leiste unten zeigt, was gerade dargestellt wird. Die Trek-Liste ist kuratiert (Duplikate, sehr grobe TES-Karten
+    und regionale CTX-/Hillshade-Fragmente entfallen, da es das globale 5-m-CTX gibt).
+    Die Produktliste stammt aus Trek selbst: `scripts/mars-products.mjs` → `src/space/mars-products.ts`.
+    Die Quellen sind Äquirektangular-Kacheln und werden per `planet://`-Protokoll in Mercator-Kacheln umgerechnet.
+    Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall `public/data/mars-traverse.json`)
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
