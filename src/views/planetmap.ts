@@ -317,6 +317,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     </div>
     <aside class="panel pm-panel"></aside>
     <div class="base-switch"></div>
+    <div class="pm-active" aria-label="Angezeigte Ebenen"></div>
     <section class="space-info pm-info" hidden></section>`;
 
   const mapEl = el.querySelector<HTMLElement>('.map')!;
@@ -324,6 +325,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   const searchEl = el.querySelector<HTMLInputElement>('.pm-search')!;
   const placesEl = el.querySelector<HTMLDataListElement>('#pm-places')!;
   const baseSwitch = el.querySelector<HTMLElement>('.base-switch')!;
+  const activeEl = el.querySelector<HTMLElement>('.pm-active')!;
   const info = el.querySelector<HTMLElement>('.pm-info')!;
   if (window.innerWidth <= 720) panel.hidden = true;
 
@@ -649,6 +651,88 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     else if (o.site) showInfo({ id: o.site, kind: 'site', name: MARS_SITES.find((s) => s.id === o.site)?.name ?? o.site });
   }
 
+  // ----- overlays & the "what is shown" indicator -------------------------------
+  const ovColor = (p: { title: string }) => (/Geology/i.test(p.title) ? '#c9a46a' : /Valley/i.test(p.title) ? '#5ad1ff' : '#c58bff');
+  /** global overlays first, regional ones after */
+  const ovProducts = () =>
+    (cfg().products ?? [])
+      .filter((p) => p.group === 'overlay')
+      .sort((x, y) => Number(isGlobal(y.bbox)) - Number(isGlobal(x.bbox)) || overlayName(x).localeCompare(overlayName(y), 'de'));
+  /** short names: "MRO CRISM Fe-Mg Smectite Indicator, CRISM tile 1303" → "Smectit (CRISM)" */
+  function overlayName(p: { title: string }) {
+    const t = p.title;
+    if (/Geology/i.test(t)) return 'Geologie';
+    if (/Valley/i.test(t)) return 'Täler';
+    if (/Smectite/i.test(t)) return 'Smektit (CRISM)';
+    if (/Sulfate/i.test(t)) return 'Sulfat (CRISM)';
+    return t.replace(/^MRO |^MGS /, '');
+  }
+  function toggleOverlay(id: string) {
+    const on = !overlays.has(id);
+    setOverlay(id, on);
+    // regional overlays only exist in their footprint: take the user there
+    const p = cfg().products?.find((q) => q.id === id);
+    if (on && p && !isGlobal(p.bbox) && map) {
+      const c = map.getCenter();
+      if (c.lng < p.bbox[0] || c.lng > p.bbox[2] || c.lat < p.bbox[1] || c.lat > p.bbox[3]) {
+        const span = Math.max(p.bbox[2] - p.bbox[0], p.bbox[3] - p.bbox[1]);
+        goto({ lat: (p.bbox[1] + p.bbox[3]) / 2, lon: (p.bbox[0] + p.bbox[2]) / 2, zoom: Math.max(3, Math.min(9, Math.log2(360 / span) + 1)) });
+      }
+    }
+    renderPanel();
+    renderBase();
+    renderActive();
+  }
+
+  /** all selectable base maps (global ones; regional ones depend on the map centre) */
+  function baseOptions() {
+    const c = cfg();
+    const products = c.products ?? [];
+    const hasMosaics = products.some((p) => p.group === 'mosaic');
+    return [
+      { id: 'auto', label: hasMosaics ? 'Automatisch (Farbe → 5 m → HiRISE)' : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) },
+      ...(hasMosaics ? [{ id: 'global', label: 'Farbmosaik (Viking, 232 m)', short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
+      ...c.layers.map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l) })),
+      ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: baseName(p.title), short: baseName(p.title), img: thumb(p.layer) })),
+    ];
+  }
+  function baseName(t: string) {
+    if (/Color Hillshade Blend/.test(t)) return 'Höhe & Tiefe (MOLA/HRSC, 200 m)';
+    if (/THEMIS-IR Day/.test(t)) return 'Infrarot (THEMIS, 100 m)';
+    if (/^Mars Express HRSC/.test(t)) return t.replace(/^Mars Express HRSC, /, 'HRSC · ').replace(/ Color Mosaic| Mosaic/g, '');
+    return t;
+  }
+
+  /** the chips on the map: current base map + everything drawn over it (✕ hides) */
+  function renderActive() {
+    const mars = bodyId === 'mars';
+    const all = baseOptions();
+    const regional = (cfg().products ?? []).find((p) => p.id === layerId);
+    const cur = all.find((o) => o.id === layerId) ?? (regional ? { short: baseName(regional.title) } : all[0]);
+    const chips: { label: string; color?: string; off?: string }[] = [];
+    for (const p of ovProducts()) if (overlays.has(p.id)) chips.push({ label: overlayName(p), color: ovColor(p), off: `ov:${p.id}` });
+    if (show.sites) chips.push({ label: 'Landestellen', color: '#ffffff', off: 'sites' });
+    if (mars && show.tracks) chips.push({ label: 'Rover-Spuren', color: 'linear-gradient(90deg,#ffb347,#5ad1ff)', off: 'tracks' });
+    if (mars && show.heli) chips.push({ label: 'Ingenuity', color: '#ff5ad1', off: 'heli' });
+    activeEl.innerHTML =
+      `<span class="pm-chip base" title="Aktuelle Karte">${escapeHtml(cur.short)}</span>` +
+      chips
+        .map((c) => `<button type="button" class="pm-chip" data-off="${c.off}" title="Ausblenden"><i style="background:${c.color}"></i>${escapeHtml(c.label)}<b aria-hidden="true">×</b></button>`)
+        .join('');
+  }
+  activeEl.addEventListener('click', (e) => {
+    const k = (e.target as HTMLElement).closest<HTMLElement>('[data-off]')?.dataset.off;
+    if (!k) return;
+    if (k.startsWith('ov:')) toggleOverlay(k.slice(3));
+    else {
+      show[k as keyof typeof show] = false;
+      refreshData();
+      applyLabels();
+      renderPanel();
+      renderActive();
+    }
+  });
+
   // ----- panel, search, base maps (same look as the Earth map) ------------------
   function renderPanel() {
     const mars = bodyId === 'mars';
@@ -663,12 +747,22 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         <h3>${escapeHtml(cfg().name)}</h3>
         ${
           panelTab === 'layers'
-            ? `<div class="tile-grid three">
+            ? `<h3 class="sp-sub">Markierungen</h3>
+              <div class="tile-grid three">
                 ${tile('sites', show.sites, '#ffffff', 'Landestellen')}
                 ${mars ? tile('tracks', show.tracks, 'linear-gradient(135deg,#ffb347,#5ad1ff)', 'Rover-Spuren') : ''}
                 ${mars ? tile('heli', show.heli, '#ff5ad1', 'Ingenuity') : ''}
                 ${tile('labels', show.labels, '#8899bb', 'Namen')}
-              </div>`
+              </div>
+              ${
+                ovProducts().length
+                  ? `<h3 class="sp-sub">Überlagerungen</h3>
+              <div class="tile-grid three">${ovProducts()
+                .map((p) => tile(`ov:${p.id}`, overlays.has(p.id), ovColor(p), overlayName(p)).replace('data-opt=', 'data-ov-tile='))
+                .join('')}</div>
+              <p class="small muted">Überlagerungen liegen halbtransparent über der gewählten Karte. Regionale (Mineralien) gelten nur in ihrem Gebiet.</p>`
+                  : ''
+              }`
             : `<div class="sp-sites pm-jump">${places().map((p) => `<button class="sp-site" data-place="${p.id}">${escapeHtml(p.name)}</button>`).join('')}
                 ${mars ? '<button class="sp-site" data-place="olympus">Olympus Mons</button><button class="sp-site" data-place="valles">Valles Marineris</button>' : ''}</div>`
         }
@@ -686,7 +780,11 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         refreshData();
         applyLabels();
         renderPanel();
+        renderActive();
       }),
+    );
+    panel.querySelectorAll<HTMLButtonElement>('[data-ov-tile]').forEach((b) =>
+      b.addEventListener('click', () => toggleOverlay(b.dataset.ovTile!.slice(3))),
     );
     panel.querySelectorAll<HTMLButtonElement>('[data-place]').forEach((b) => b.addEventListener('click', () => goTo(b.dataset.place!)));
   }
@@ -721,33 +819,24 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   });
 
   const thumb = (l: TileLayer) => l.url(2, 1, 4);
+  /** popup: only maps (standard maps + regional maps at the current centre) – overlays live in the panel */
   function renderBase(open = false) {
     const c = cfg();
     const center = map?.getCenter();
     const here = (b: [number, number, number, number]) => !center || (center.lng >= b[0] && center.lng <= b[2] && center.lat >= b[1] && center.lat <= b[3]);
-    const products = c.products ?? [];
-    const hasMosaics = products.some((p) => p.group === 'mosaic');
-    const std = [
-      { id: 'auto', label: hasMosaics ? 'Automatisch (mit HiRISE-Mosaiken)' : 'Automatisch', img: thumb(c.detail3d(0)) },
-      ...(hasMosaics ? [{ id: 'global', label: 'Nur globale Mosaike', img: thumb(c.detail3d(0)) }] : []),
-      ...c.layers.map((l) => ({ id: l.id, label: l.label, img: thumb(l) })),
-      ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: p.title, img: thumb(p.layer) })),
-    ];
-    const regional = products.filter((p) => (p.group === 'region' || p.group === 'mosaic') && here(p.bbox));
-    const ovs = products.filter((p) => p.group === 'overlay' && (isGlobal(p.bbox) || here(p.bbox)));
-    const cur = std.find((o) => o.id === layerId) ?? std[0];
-    const chip = (attr: string, on: boolean, text: string) => `<button type="button" class="sp-site ${on ? 'on' : ''}" ${attr} aria-pressed="${on}">${escapeHtml(text)}</button>`;
+    const std = baseOptions();
+    const regional = (c.products ?? []).filter((p) => p.group === 'region' && here(p.bbox));
+    const cur = std.find((o) => o.id === layerId) ?? (regional.find((p) => p.id === layerId) ? { ...std[0], img: thumb(regional.find((p) => p.id === layerId)!.layer) } : std[0]);
     baseSwitch.innerHTML = `
-      <button type="button" class="base-current" aria-expanded="${open}" title="Kartentyp wählen">
+      <button type="button" class="base-current" aria-expanded="${open}" title="Karte wählen">
         <span class="thumb"><img alt="" src="${cur.img}"/></span>
         <span class="base-current-label"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Karte</span>
       </button>
       <div class="base-pop" ${open ? '' : 'hidden'}>
         <div class="base-options">
-          ${std.map((o) => `<button type="button" class="base-opt ${o.id === layerId || (o === cur && !std.some((x) => x.id === layerId)) ? 'on' : ''}" data-base="${o.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
+          ${std.map((o) => `<button type="button" class="base-opt ${o.id === layerId ? 'on' : ''}" data-base="${o.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
+          ${regional.map((p) => `<button type="button" class="base-opt ${p.id === layerId ? 'on' : ''}" data-base="${escapeHtml(p.id)}"><span class="thumb"><img alt="" loading="lazy" src="${thumb(p.layer)}"/></span><span>${escapeHtml(baseName(p.title))}</span></button>`).join('')}
         </div>
-        ${regional.length ? `<h3 class="sp-sub">Hier verfügbar (${regional.length})</h3><div class="sp-sites">${regional.map((p) => chip(`data-base="${escapeHtml(p.id)}"`, p.id === layerId, p.title.replace(/^MRO |^Mars Express /, ''))).join('')}</div>` : ''}
-        ${ovs.length ? `<h3 class="sp-sub">Überlagerungen</h3><div class="sp-sites">${ovs.map((p) => chip(`data-ov="${escapeHtml(p.id)}"`, overlays.has(p.id), p.title.replace(/^MRO |^MGS /, ''))).join('')}</div>` : ''}
       </div>`;
     const pop = baseSwitch.querySelector<HTMLElement>('.base-pop')!;
     const btn = baseSwitch.querySelector<HTMLButtonElement>('.base-current')!;
@@ -760,12 +849,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         layerId = b.dataset.base!;
         setTiles();
         renderBase(true);
-      }),
-    );
-    baseSwitch.querySelectorAll<HTMLButtonElement>('[data-ov]').forEach((b) =>
-      b.addEventListener('click', () => {
-        setOverlay(b.dataset.ov!, !overlays.has(b.dataset.ov!));
-        renderBase(true);
+        renderActive();
       }),
     );
   }
@@ -789,6 +873,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         placesEl.innerHTML = places().map((p) => `<option value="${escapeHtml(p.name)}"></option>`).join('');
         renderPanel();
         renderBase();
+        renderActive();
       }
       const zoom = o.zoom ?? (o.focus ? 14.5 : o.site ? 9 : o.fromSpace ? 2.5 : 4);
       if (!map && o.lat != null && o.lon != null) initial = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace };

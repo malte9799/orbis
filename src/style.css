@@ -2466,3 +2466,65 @@ svg.hourly {
   flex-wrap: wrap;
   overflow-x: visible;
 }
+
+/* planet map: what is currently drawn (base map + overlays) */
+.pm-active {
+  position: absolute;
+  z-index: 4;
+  left: 100px;
+  bottom: 28px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.pm-active .pm-chip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(13, 18, 38, 0.82);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pm-active .pm-chip.base {
+  cursor: default;
+  color: var(--muted);
+}
+
+.pm-active .pm-chip.base::before {
+  content: 'Karte: ';
+}
+
+.pm-active .pm-chip i {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.pm-active .pm-chip b {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.pm-active button.pm-chip:hover b {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .pm-active {
+    left: 8px;
+    bottom: 124px;
+  }
+}

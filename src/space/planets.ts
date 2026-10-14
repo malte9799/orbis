@@ -30,21 +30,6 @@ const trek = (body: string, layer: string, label: string, credit: string, maxZ: 
   url: (z, r, c) => `https://trek.nasa.gov/tiles/${body}/EQ/${layer}/1.0.0/default/default028mm/${z}/${r}/${c}.${ext}`,
 });
 
-/** USGS Astrogeology planetary WMS (CORS enabled) as a tile layer. */
-const usgsWms = (map: string, layer: string, id: string, label: string, credit: string, maxZ: number): TileLayer => ({
-  id,
-  label,
-  credit,
-  px: 256,
-  maxZ,
-  url: (z, r, c) => {
-    const span = 180 / 2 ** z;
-    const lon0 = -180 + c * span;
-    const lat1 = 90 - r * span;
-    return `https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/${map}&SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&LAYERS=${layer}&STYLES=&SRS=EPSG:4326&BBOX=${lon0},${lat1 - span},${lon0 + span},${lat1}&WIDTH=256&HEIGHT=256&FORMAT=image/jpeg`;
-  },
-});
-
 export interface MapSite {
   id: string;
   name: string;
@@ -83,15 +68,13 @@ export interface MapProduct {
 const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'Farbmosaik (Viking, 232 m)', 'NASA/USGS Viking MDIM 2.1 · NASA Mars Trek', 7);
 const MARS_CTX: TileLayer = {
   id: 'ctx',
-  label: 'Kontextkamera CTX (≈ 5 m)',
+  label: 'Kontextkamera (CTX, ≈ 5 m)',
   credit: 'NASA/JPL/MSSS/Caltech Murray Lab · Esri',
   px: 512,
   maxZ: 12,
   tint: 0xe3b79c,
   url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
 };
-const MARS_MOLA = trek('Mars', 'Mars_MGS_MOLA_ClrShade_merge_global_463m', 'Höhenrelief (MOLA, 463 m)', 'NASA MGS MOLA · NASA Mars Trek', 7);
-const MARS_THEMIS = usgsWms('mars/mars_simp_cyl.map', 'THEMIS', 'themis', 'Infrarot (THEMIS, 100 m)', 'NASA/ASU THEMIS · USGS Astrogeology', 9);
 
 /** NASA Mars Trek products (generated list, see scripts/mars-products.mjs). */
 const MARS_TREK_PRODUCTS: MapProduct[] = MARS_PRODUCTS.map(([id, title, group, tpl, px, bbox, maxZ]) => {
@@ -126,7 +109,8 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     radiusKm: 3389.5,
     enabled: true,
     openAt: 1.1,
-    layers: [MARS_CTX, MARS_COLOR, MARS_MOLA, MARS_THEMIS],
+    // colour mosaic = "global only", relief and infrared come from the Trek products (higher resolution)
+    layers: [MARS_CTX],
     // colour mosaic as far as it goes, then the 5 m CTX mosaic (≥ 2× finer from level 7 on)
     detail3d: (z) => (z <= 6 ? MARS_COLOR : MARS_CTX),
     baseLevel: 4, // 8k texture

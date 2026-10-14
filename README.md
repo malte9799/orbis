@@ -39,9 +39,11 @@ Drei Ansichten:
     3D-Modell in Originalgröße. In der Weltall-Ansicht haben die Planeten nur ihre feste Textur, die Detailkacheln
     gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit Erde und Mars, Mond/Merkur/Venus vorbereitet).
     Über den globalen Mosaiken liegen automatisch die regionalen HiRISE-Mosaike von Mars Trek (Jezero, Gale,
-    Landestellen, Rover-Gebiete – bis 25 cm/px). Im Kartentyp-Wechsler stehen außerdem globale Karten
-    (THEMIS Tag/Nacht, MOLA/HRSC-Hillshade, MOC-Atlas, Viking, TES …), die regionalen Karten am aktuellen Kartenmittelpunkt
-    (CTX, HRSC, Hillshades) und Überlagerungen (Geologie, Dünen, Mineralogie, Hangneigung …) zur Wahl.
+    Landestellen, Rover-Gebiete – bis 25 cm/px). Der Kartentyp-Wechsler enthält nur echte Basiskarten
+    (Automatisch, Farbmosaik, CTX ≈ 5 m, Höhe & Tiefe MOLA/HRSC, Infrarot THEMIS und die HRSC-Farbmosaike am
+    Kartenmittelpunkt); Überlagerungen (Geologie, Täler, Mineralien) und Markierungen schaltet das Ebenen-Panel,
+    eine Leiste unten zeigt, was gerade dargestellt wird. Die Trek-Liste ist kuratiert (Duplikate, sehr grobe TES-Karten
+    und regionale CTX-/Hillshade-Fragmente entfallen, da es das globale 5-m-CTX gibt).
     Die Produktliste stammt aus Trek selbst: `scripts/mars-products.mjs` → `src/space/mars-products.ts`.
     Die Quellen sind Äquirektangular-Kacheln und werden per `planet://`-Protokoll in Mercator-Kacheln umgerechnet.
     Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall `public/data/mars-traverse.json`)
