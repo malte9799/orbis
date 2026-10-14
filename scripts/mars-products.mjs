@@ -45,7 +45,23 @@ await Promise.all(
         if (!bb || !tpl || !set || widths[0] !== 2 || heights[0] !== 1) continue; // not the plain 2×1 equirectangular pyramid
         const [w, s] = bb[1].trim().split(/\s+/).map(Number);
         const [e, n] = bb[2].trim().split(/\s+/).map(Number);
-        const maxZ = widths.length - 1;
+        // the declared pyramid is deeper than the data in places: find the finest level that really has tiles
+        const url0 = tpl
+          .replace('{Style}', 'default')
+          .replace('{TileMatrixSet}', set)
+          .replace('{TileMatrix}', '{z}')
+          .replace('{TileRow}', '{r}')
+          .replace('{TileCol}', '{c}')
+          .replace(/([^:])\/\//g, '$1/');
+        const cLon = (w + e) / 2;
+        const cLat = (s + n) / 2;
+        let maxZ = widths.length - 1;
+        for (; maxZ > 0; maxZ--) {
+          const span = 180 / 2 ** maxZ;
+          const u = url0.replace('{z}', maxZ).replace('{r}', Math.floor((90 - cLat) / span)).replace('{c}', Math.floor((cLon + 180) / span));
+          const ok = await fetch(u, { method: 'HEAD', signal: AbortSignal.timeout(20000) }).then((r) => r.ok).catch(() => false);
+          if (ok) break;
+        }
         const global = e - w > 300;
         let group;
         if (BASE_CATS.has(cat1)) group = global ? 'base' : isMosaic(title, x.productLabel) && maxZ >= 13 ? 'mosaic' : 'region';

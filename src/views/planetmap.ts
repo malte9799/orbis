@@ -54,6 +54,28 @@ function loadImg(url: string): Promise<ImageBitmap | null> {
 
 const tile2lat = (y: number, z: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
 
+/** Source tiles (urls) a layer needs for the mercator tile z/x/y – to fetch all layers in parallel. */
+function sourceUrls(layer: TileLayer, z: number, x: number, y: number, bbox?: [number, number, number, number]): string[] {
+  const L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
+  const span = 180 / 2 ** L;
+  const lon0 = (x / 2 ** z) * 360 - 180;
+  const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
+  const nCols = 2 * 2 ** L;
+  const c0 = Math.floor((lon0 + 180) / span);
+  const c1 = Math.min(Math.ceil((lon1 + 180) / span) - 1, c0 + 3);
+  const r0 = Math.max(0, Math.floor((90 - tile2lat(y, z)) / span));
+  const r1 = Math.min(2 ** L - 1, Math.ceil((90 - tile2lat(y + 1, z)) / span) - 1);
+  const urls: string[] = [];
+  for (let r = r0; r <= r1; r++)
+    for (let c = c0; c <= c1; c++) {
+      const w = -180 + c * span;
+      const n = 90 - r * span;
+      if (bbox && (w > bbox[2] || w + span < bbox[0] || n < bbox[1] || n - span > bbox[3])) continue;
+      urls.push(layer.url(L, r, ((c % nCols) + nCols) % nCols));
+    }
+  return urls;
+}
+
 /** Draw one source layer into the 256 px mercator tile (z/x/y). */
 async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer, z: number, x: number, y: number, bbox?: [number, number, number, number]) {
   // a source level with about the output resolution (1 source tile ≈ 1 output tile)
@@ -84,6 +106,17 @@ async function drawLayer(g: OffscreenCanvasRenderingContext2D, layer: TileLayer,
           const dx = ((tLon0 - lon0) / (lon1 - lon0)) * 256;
           const dw = (span / (lon1 - lon0)) * 256;
           const tTop = 90 - r * span;
+          if (z >= 9) {
+            // small tile: latitude is linear in y here, so one smooth (bilinear) draw per source tile –
+            // no blocky row-by-row stretching when the imagery is over-zoomed
+            const k = 256 / (latTop - latBot);
+            const y0 = (latTop - tTop) * k;
+            const y1 = (latTop - (tTop - span)) * k;
+            g.imageSmoothingEnabled = true;
+            g.imageSmoothingQuality = 'high';
+            g.drawImage(img, 0, 0, img.width, img.height, dx - 0.25, y0 - 0.25, dw + 0.5, y1 - y0 + 0.5);
+            return;
+          }
           for (let py = 0; py < 256; py++) {
             const lat = tile2lat(y + (py + 0.5) / 256, z);
             const v = (tTop - lat) / span;
@@ -122,13 +155,33 @@ function registerPlanetProtocol() {
     // thematic overlay: transparent, only inside its footprint
     if (id.startsWith('ov~')) {
       const p = products.find((q) => q.id === id.slice(3));
-      if (p && touches(p.bbox)) await drawLayer(g, p.layer, z, x, y, p.bbox);
+      if (p && touches(p.bbox)) {
+        await Promise.all(sourceUrls(p.layer, z, x, y, p.bbox).map(loadImg));
+        await drawLayer(g, p.layer, z, x, y, p.bbox);
+      }
       const blob = await canvas.convertToBlob({ type: 'image/png' });
       return { data: await blob.arrayBuffer() };
     }
 
     g.fillStyle = '#10131c';
     g.fillRect(0, 0, 256, 256);
+    // fetch everything this tile is made of in parallel, then composite in order
+    {
+      const want: Promise<unknown>[] = [];
+      const warm = (l: TileLayer, bb?: [number, number, number, number]) => sourceUrls(l, z, x, y, bb).forEach((u) => want.push(loadImg(u)));
+      const prod = products.find((q) => q.id === id);
+      warm(cfg.detail3d(0));
+      if (!(prod && isGlobal(prod.bbox))) warm(cfg.detail3d(99));
+      if (prod) {
+        if (touches(prod.bbox)) warm(prod.layer, isGlobal(prod.bbox) ? undefined : prod.bbox);
+      } else if (id === 'auto' && z >= 8) {
+        for (const p of products) if (p.group === 'mosaic' && touches(p.bbox)) warm(p.layer, p.bbox);
+      } else if (id !== 'auto' && id !== 'global') {
+        const l = cfg.layers.find((q) => q.id === id);
+        if (l) warm(l);
+      }
+      await Promise.all(want);
+    }
     // base: colour mosaic, the sharp global mosaic (which has holes) on top …
     const under = cfg.detail3d(0);
     const sharp = cfg.detail3d(99);
@@ -737,20 +790,19 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         renderPanel();
         renderBase();
       }
+      const zoom = o.zoom ?? (o.focus ? 14.5 : o.site ? 9 : o.fromSpace ? 2.5 : 4);
+      if (!map && o.lat != null && o.lon != null) initial = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace };
       if (!map) initMap();
       else {
         map.resize();
         setTiles();
       }
       info.hidden = true;
-      const zoom = o.zoom ?? (o.focus ? 14.5 : o.site ? 9 : o.fromSpace ? 2.5 : 4);
       if (o.lat != null && o.lon != null) {
         const p = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace };
         if (map && ready) goto(p);
-        else if (!map) {
-          initial = p;
-          pending = p.fromSpace ? p : null;
-        } else pending = p;
+        else if (initial) pending = p.fromSpace ? p : null; // first open: the map was created there already
+        else pending = p;
       }
       if (o.focus || o.site) {
         if (tracksLoaded) selectBy(o);
