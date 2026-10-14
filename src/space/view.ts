@@ -179,7 +179,7 @@ export function createSpaceView(
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
   /** path of the selected probe: travelled part (bright) and the planned/future part (dim) */
-  const trails = new Map<string, { full: boolean; at: number; anchor: Vec3; past: THREE.Line; fut: THREE.Line; nPast: number; nFut: number }>();
+  const trails = new Map<string, { full: boolean; at: number; anchor: Vec3; ts: number[]; n: number; k: number; pos: THREE.BufferAttribute; past: THREE.Line; fut: THREE.Line }>();
   const labels = new Map<string, HTMLDivElement>();
   let satPoints: THREE.Points | null = null;
   let sats: Sat[] = [];
@@ -924,53 +924,79 @@ export function createSpaceView(
       }
       const at = (ms: number) => c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
       if (!trail) {
-        let pastT: number[] = [];
-        let futT: number[] = [];
+        // sample times: the stored nodes, each gap subdivided (Hermite) so curves look round
+        const ts: number[] = [];
         if (times) {
-          pastT = times.filter((t) => t < simTime);
-          futT = times.filter((t) => t > simTime);
+          const MAX_GAP = 0.5 * 86400000;
+          for (let i = 0; i < times.length; i++) {
+            ts.push(times[i]);
+            if (i + 1 < times.length) {
+              const pieces = Math.min(8, Math.ceil((times[i + 1] - times[i]) / MAX_GAP));
+              for (let j = 1; j < pieces; j++) ts.push(times[i] + ((times[i + 1] - times[i]) * j) / pieces);
+            }
+          }
         } else {
           const span = TRAIL_DAYS[id] * 86400000;
-          for (let k = 0; k < 1500; k++) pastT.push(simTime - span + (k / 1500) * span);
+          for (let k = 0; k < 1500; k++) ts.push(simTime - span + (k / 1500) * span);
         }
-        const pts = (ts: number[]) => ts.map((t) => at(t)).filter((p): p is Vec3 => !!p && (full || len(p) >= 5));
-        const past = pts(pastT);
-        const fut = pts(futT);
+        const nodes: { t: number; p: Vec3 }[] = [];
+        for (const t of ts) {
+          const p = at(t);
+          if (p && (full || len(p) >= 5)) nodes.push({ t, p });
+        }
         // vertices relative to the craft (float32 has ~7 digits: absolute AU coordinates would be
-        // off by millions of km and the line would not meet the model when zoomed in); one extra
-        // vertex per line is the craft itself and is updated every frame
-        const anchor = at(simTime) ?? past[past.length - 1] ?? fut[0] ?? ([0, 0, 0] as Vec3);
-        const mk = (list: Vec3[], liveFirst: boolean, opacity: number) => {
-          const arr = new Float32Array((list.length + 1) * 3);
-          list.forEach((p, i) => {
-            const v = toThree(sub(p, anchor));
-            arr.set([v.x, v.y, v.z], (i + (liveFirst ? 1 : 0)) * 3);
-          });
+        // off by millions of km and the line would not meet the model when zoomed in); the extra
+        // last vertex is the craft itself and is updated every frame
+        const anchor = at(simTime) ?? nodes[nodes.length - 1]?.p ?? ([0, 0, 0] as Vec3);
+        const n = nodes.length;
+        const arr = new Float32Array((n + 1) * 3);
+        nodes.forEach((nd, i) => {
+          const v = toThree(sub(nd.p, anchor));
+          arr.set([v.x, v.y, v.z], i * 3);
+        });
+        const pos = new THREE.BufferAttribute(arr, 3);
+        const mk = (opacity: number) => {
           const geo = new THREE.BufferGeometry();
-          geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+          geo.setAttribute('position', pos);
           const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity }));
           line.frustumCulled = false;
           world.add(line);
           return line;
         };
-        trail = { full, at: simTime, anchor, past: mk(past, false, 0.85), fut: mk(fut, true, 0.3), nPast: past.length, nFut: fut.length };
+        trail = { full, at: simTime, anchor, ts: nodes.map((x) => x.t), n, k: -1, pos, past: mk(0.85), fut: mk(0.3) };
         trails.set(id, trail);
       }
-      const cur = at(simTime);
-      const v = cur ? toThree(sub(cur, trail.anchor)) : null;
       const t = trail;
-      const put = (line: THREE.Line, idx: number, n: number) => {
-        const attr = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+      const cur = at(simTime);
+      const v = cur ? toThree(sub(cur, t.anchor)) : null;
+      if (v) {
+        t.pos.setXYZ(t.n, v.x, v.y, v.z);
+        t.pos.needsUpdate = true;
+      }
+      // the cut between travelled and future part moves with the craft: nodes before the
+      // current time + the craft, and the craft + the remaining nodes
+      let lo = 0;
+      let hi = t.n;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (t.ts[mid] <= simTime) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo !== t.k) {
+        t.k = lo;
+        const pastIdx = Array.from({ length: lo }, (_, i) => i);
+        const futIdx = Array.from({ length: t.n - lo }, (_, i) => lo + i);
         if (v) {
-          attr.setXYZ(idx, v.x, v.y, v.z);
-          attr.needsUpdate = true;
+          pastIdx.push(t.n);
+          futIdx.unshift(t.n);
         }
-        line.geometry.setDrawRange(0, n + (v ? 1 : 0));
-        line.visible = n + (v ? 1 : 0) > 1;
-        toThree(sub(t.anchor, origin), line.position);
-      };
-      put(t.past, t.nPast, t.nPast);
-      put(t.fut, 0, t.nFut);
+        t.past.geometry.setIndex(pastIdx);
+        t.fut.geometry.setIndex(futIdx);
+      }
+      t.past.visible = t.k > 0;
+      t.fut.visible = t.n - t.k > 0;
+      toThree(sub(t.anchor, origin), t.past.position);
+      toThree(sub(t.anchor, origin), t.fut.position);
     }
   }
 
