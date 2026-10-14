@@ -1,23 +1,38 @@
-name: Deploy to GitHub Pages
+name: Deploy (main + branch previews)
+
+# main → https://<owner>.github.io/<repo>/
+# every other branch → https://<owner>.github.io/<repo>/preview/<branch>/
+# Published on the `gh-pages` branch (Settings → Pages → Source: Deploy from a branch → gh-pages / root).
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
+  pull_request:
+    types: [closed]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
+    # `data` only holds snapshots, no app
+    if: github.event_name != 'pull_request' && github.ref_name != 'data'
     runs-on: ubuntu-latest
     steps:
+      - name: Names
+        id: n
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          slug=$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          if [ "$BRANCH" = "main" ]; then echo "dir=." >> "$GITHUB_OUTPUT"; else echo "dir=preview/$slug" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -60,16 +75,55 @@ jobs:
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+      - name: Publish to gh-pages
+        env:
+          DIR: ${{ steps.n.outputs.dir }}
+        run: |
+          set -e
+          repo="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads "$repo" gh-pages >/dev/null; then
+            git clone --depth 1 --branch gh-pages "$repo" ../pages
+          else
+            mkdir ../pages && git -C ../pages init -q -b gh-pages
+          fi
+          cd ../pages
+          if [ "$DIR" = "." ]; then
+            # main: replace everything except the previews
+            find . -mindepth 1 -maxdepth 1 ! -name .git ! -name preview -exec rm -rf {} +
+          else
+            rm -rf "$DIR"; mkdir -p "$DIR"
+          fi
+          cp -a "$GITHUB_WORKSPACE/dist/." "$DIR/"
+          touch .nojekyll
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit 2>/dev/null \
+            || git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Deploy ${{ github.sha }}"
+          git push -f "$repo" gh-pages
+      - name: Comment preview link on the PR
+        if: github.event_name == 'push' && steps.n.outputs.dir != '.'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ steps.n.outputs.dir }}/"
+          pr=$(gh pr list --head "${{ github.ref_name }}" --json number -q '.[0].number' || true)
+          [ -n "$pr" ] && gh pr comment "$pr" --body "Preview: $url" || true
 
-  deploy:
-    needs: build
+  cleanup:
+    # PR closed (merged or not) → remove its preview
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Remove preview
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -e
+          dir="preview/$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')"
+          repo="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          git clone --depth 1 --branch gh-pages "$repo" ../pages || exit 0
+          cd ../pages
+          [ -d "$dir" ] || exit 0
+          rm -rf "$dir"
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit
+          git push -f "$repo" gh-pages
