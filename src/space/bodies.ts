@@ -8,6 +8,7 @@ import {
   type MoonOrbit,
   type Vec3,
 } from './ephemeris';
+import { getMarsTracks, heliAt, roverAt } from './mars';
 
 export type BodyKind = 'star' | 'planet' | 'dwarf' | 'moon' | 'craft';
 
@@ -35,6 +36,8 @@ export interface Body {
   orbit?: boolean;
   /** orbital period around the parent (moons) */
   periodDays?: number;
+  /** stands on the surface of this body (kept upright, rotates along with it) */
+  surface?: string;
   /** NASA 3D model (glTF), loaded on demand; sizeM = real largest dimension in metres */
   model?: { url: string; sizeM: number; note?: string; detailUrl?: string; detailRotY?: number; source?: string };
 }
@@ -369,6 +372,37 @@ function near(parent: string, from: string, offsetKm: [number, number, number], 
   return (ms: number, ctx: PositionContext) => (ms < a || ms > b ? null : add(ctx(parent), scale(offsetKm, 1 / 149_597_870.7)));
 }
 
+/**
+ * A point on the surface of a rotating body, in heliocentric ecliptic AU. Mirrors the scene
+ * graph of the space view: tilt about x, spin about y, three.js (x, y, z) = ecliptic (x, z, −y).
+ */
+function surfacePoint(parent: string, lon: number, lat: number, altKm: number, ms: number, ctx: PositionContext): Vec3 {
+  const b = BODIES.find((x) => x.id === parent)!;
+  const phi = ((lon + 180) * Math.PI) / 180;
+  const theta = ((90 - lat) * Math.PI) / 180;
+  const x0 = -Math.cos(phi) * Math.sin(theta);
+  const y0 = Math.cos(theta);
+  const z0 = Math.sin(phi) * Math.sin(theta);
+  const a = b.rotationHours ? ((ms / 3600000 / b.rotationHours) % 1) * 2 * Math.PI : 0;
+  const x1 = x0 * Math.cos(a) + z0 * Math.sin(a);
+  const z1 = -x0 * Math.sin(a) + z0 * Math.cos(a);
+  const beta = -((b.tiltDeg ?? 0) * Math.PI) / 180;
+  const y2 = y0 * Math.cos(beta) - z1 * Math.sin(beta);
+  const z2 = y0 * Math.sin(beta) + z1 * Math.cos(beta);
+  const r = (b.radiusKm + altKm) / 149_597_870.7;
+  return add(ctx(parent), [x1 * r, -z2 * r, y2 * r]);
+}
+
+/** Craft standing at a lon/lat on a body, driven along a track (rovers) when one is known. */
+function onSurface(parent: string, from: string, fallback: [number, number], where?: (ms: number) => [number, number] | null) {
+  const a = date(from);
+  return (ms: number, ctx: PositionContext): Vec3 | null => {
+    if (ms < a) return null;
+    const [lon, lat] = where?.(ms) ?? fallback;
+    return surfacePoint(parent, lon, lat, 0.0008, ms, ctx);
+  };
+}
+
 /** Cruise along waypoints (body, date): interpolated in polar coordinates, prograde. */
 function cruise(waypoints: [string, string][], thenNear?: string) {
   const pts = waypoints.map(([body, d]) => ({ body, t: date(d) }));
@@ -598,26 +632,48 @@ export const CRAFT: Body[] = [
   },
   {
     id: 'perseverance',
-    name: 'Perseverance & Ingenuity',
+    name: 'Perseverance',
     kind: 'craft',
+    parent: 'mars',
+    surface: 'mars',
     model: m('perseverance-lite.glb', 3, undefined, 'perseverance.glb'),
     radiusKm: 0.002,
     color: '#ff9966',
-    position: near('mars', '2021-02-18', [3226, 0, 1044]),
+    position: onSurface('mars', '2021-02-18', [77.4509, 18.4446], (ms) => roverAt(getMarsTracks()?.m20, ms)),
     facts: [
       ['Landung', '18. Februar 2021, Jezero-Krater'],
       ['Aufgabe', 'Suche nach Spuren früheren Lebens'],
     ],
+    description: 'Der Rover sammelt Gesteinsproben für eine spätere Rückführung. Position und Fahrspur aus den Daten der NASA (MMGIS).',
+  },
+  {
+    id: 'ingenuity',
+    name: 'Ingenuity',
+    kind: 'craft',
+    parent: 'mars',
+    surface: 'mars',
+    radiusKm: 0.0006,
+    color: '#ffd23f',
+    position: onSurface('mars', '2021-04-04', [77.4510, 18.4449], (ms) => heliAt(ms)),
+    facts: [
+      ['Erstflug', '19. April 2021 – erster Motorflug auf einem anderen Planeten'],
+      ['Flüge', '72 (letzter: 18. Januar 2024)'],
+      ['Status', 'Mission beendet, Rotorblatt beschädigt'],
+    ],
+    description: 'Der Mars-Hubschrauber – die Karte zeigt alle Flugrouten, der Punkt markiert seinen letzten Landeplatz.',
   },
   {
     id: 'curiosity',
     name: 'Curiosity',
     kind: 'craft',
+    parent: 'mars',
+    surface: 'mars',
     model: m('curiosity-lite.glb', 3, undefined, 'curiosity.glb'),
     radiusKm: 0.002,
     color: '#ff9966',
-    position: near('mars', '2012-08-06', [-3379, 0, -279]),
+    position: onSurface('mars', '2012-08-06', [137.4417, -4.5895], (ms) => roverAt(getMarsTracks()?.msl, ms)),
     facts: [['Landung', '6. August 2012, Gale-Krater']],
+    description: 'Der Rover erkundet den Mount Sharp im Gale-Krater. Position und Fahrspur aus den Daten der NASA (MMGIS).',
   },
   {
     id: 'lro',

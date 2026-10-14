@@ -2443,3 +2443,80 @@ svg.hourly {
     display: none;
   }
 }
+
+/* planet map (2D) */
+.planet-view .pm-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+.planet-view .pm-panel {
+  bottom: 56px;
+}
+
+.pm-title {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+.pm-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.pm-switch .btn.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.pm-field {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pm-field select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font: inherit;
+}
+
+.pm-status {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(13, 18, 38, 0.75);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pm-scale {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pm-scale i {
+  display: block;
+  height: 5px;
+  border: 2px solid #fff;
+  border-top: 0;
+}
