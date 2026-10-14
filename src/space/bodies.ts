@@ -12,6 +12,7 @@ import {
   type Vec3,
 } from './ephemeris';
 import { getMarsTracks, heliAt, roverAt } from './mars';
+import { trajectoryAt } from './trajectories';
 
 export type BodyKind = 'star' | 'planet' | 'dwarf' | 'moon' | 'asteroid' | 'craft';
 
@@ -648,6 +649,11 @@ function escaping(lon: number, lat: number, rAt2025: number, auPerYear: number, 
   return (ms: number) => (ms < valid ? null : fromSpherical(lon, lat, rAt2025 + ((ms - t0) / YEAR_MS) * auPerYear));
 }
 
+/** JPL Horizons trajectory when loaded and covering the time, otherwise the approximation. */
+function tracked(id: string, fallback: (ms: number, ctx: PositionContext) => Vec3 | null) {
+  return (ms: number, ctx: PositionContext): Vec3 | null => trajectoryAt(id, ms) ?? fallback(ms, ctx);
+}
+
 /** Near a body (in orbit or on the surface): small fixed offset so it doesn't hide inside. */
 function near(parent: string, from: string, offsetKm: [number, number, number], until?: string) {
   const a = date(from);
@@ -923,8 +929,7 @@ export const CRAFT: Body[] = [
     model: m('voyager.glb', 16),
     radiusKm: 0.002,
     color: '#ffd23f',
-    approx: true,
-    position: escaping(255.6, 35.0, 164.9, 3.57, '1981-01-01'),
+    position: tracked('voyager1', escaping(255.6, 35.0, 164.9, 3.57, '1981-01-01')),
     facts: [
       ['Start', '5. September 1977'],
       ['Status', 'aktiv, im interstellaren Raum'],
@@ -939,8 +944,7 @@ export const CRAFT: Body[] = [
     model: m('voyager.glb', 16),
     radiusKm: 0.002,
     color: '#ffd23f',
-    approx: true,
-    position: escaping(289.8, -32.0, 138.2, 3.25, '1990-01-01'),
+    position: tracked('voyager2', escaping(289.8, -32.0, 138.2, 3.25, '1990-01-01')),
     facts: [
       ['Start', '20. August 1977'],
       ['Status', 'aktiv, im interstellaren Raum'],
@@ -954,8 +958,7 @@ export const CRAFT: Body[] = [
     model: m('newhorizons-lite.glb', 2.2, undefined, 'newhorizons.glb'),
     radiusKm: 0.002,
     color: '#ffd23f',
-    approx: true,
-    position: escaping(288.0, 1.9, 61.1, 2.89, '2016-01-01'),
+    position: tracked('newhorizons', escaping(288.0, 1.9, 61.1, 2.89, '2016-01-01')),
     facts: [
       ['Start', '19. Januar 2006'],
       ['Pluto-Vorbeiflug', '14. Juli 2015'],
@@ -970,8 +973,7 @@ export const CRAFT: Body[] = [
     model: m('pioneer-lite.glb', 8, undefined, 'pioneer.glb'),
     radiusKm: 0.002,
     color: '#b0b8c8',
-    approx: true,
-    position: escaping(77.2, 3.0, 137.0, 2.51, '1980-01-01'),
+    position: tracked('pioneer10', escaping(77.2, 3.0, 137.0, 2.51, '1980-01-01')),
     facts: [
       ['Start', '3. März 1972'],
       ['Status', 'Kontakt 2003 verloren'],
@@ -985,8 +987,7 @@ export const CRAFT: Body[] = [
     model: m('pioneer-lite.glb', 8, 'Modell: Pioneer 10 (baugleich)', 'pioneer.glb'),
     radiusKm: 0.002,
     color: '#b0b8c8',
-    approx: true,
-    position: escaping(284.7, 13.0, 114.0, 2.37, '1991-01-01'),
+    position: tracked('pioneer11', escaping(284.7, 13.0, 114.0, 2.37, '1991-01-01')),
     facts: [
       ['Start', '6. April 1973'],
       ['Status', 'Kontakt 1995 verloren'],
@@ -1029,9 +1030,8 @@ export const CRAFT: Body[] = [
     model: m('parker.glb', 6),
     radiusKm: 0.002,
     color: '#ff7a45',
-    approx: true,
     // final orbit since Nov 2024: perihelion 0.0459 AU, aphelion 0.7316 AU, period ≈ 88 days
-    position: (ms) => {
+    position: tracked('parker', (ms) => {
       if (ms < date('2024-11-07')) return null;
       const a = (0.0459 + 0.7316) / 2;
       const e = (0.7316 - 0.0459) / (0.7316 + 0.0459);
@@ -1043,13 +1043,13 @@ export const CRAFT: Body[] = [
       const y = a * Math.sqrt(1 - e * e) * Math.sin(E);
       const w = (100 * Math.PI) / 180;
       return [x * Math.cos(w) - y * Math.sin(w), x * Math.sin(w) + y * Math.cos(w), 0];
-    },
+    }),
     facts: [
       ['Start', '12. August 2018'],
       ['Sonnennähe', '6,2 Mio. km – näher als je ein Objekt zuvor'],
       ['Höchstgeschwindigkeit', '≈ 690 000 km/h'],
     ],
-    description: 'Fliegt durch die Korona der Sonne. Bahnlage angenähert.',
+    description: 'Fliegt durch die Korona der Sonne.',
   },
   {
     id: 'juno',
@@ -1134,8 +1134,7 @@ export const CRAFT: Body[] = [
     model: m('europaclipper-lite.glb', 30.5, undefined, 'europaclipper.glb'),
     radiusKm: 0.003,
     color: '#7ad3ff',
-    approx: true,
-    position: cruise(
+    position: tracked('europaclipper', cruise(
       [
         ['earth', '2024-10-14'],
         ['mars', '2025-03-01'],
@@ -1143,13 +1142,13 @@ export const CRAFT: Body[] = [
         ['jupiter', '2030-04-11'],
       ],
       'jupiter',
-    ),
+    )),
     facts: [
       ['Start', '14. Oktober 2024'],
       ['Ankunft am Jupiter', 'April 2030'],
       ['Route', 'Mars-Vorbeiflug 2025, Erd-Vorbeiflug 2026'],
     ],
-    description: 'Soll Jupitermond Europa auf Bewohnbarkeit untersuchen. Flugbahn angenähert.',
+    description: 'Soll Jupitermond Europa auf Bewohnbarkeit untersuchen.',
   },
   {
     id: 'juice',
@@ -1158,8 +1157,7 @@ export const CRAFT: Body[] = [
     radiusKm: 0.003,
     model: { ...m('juice.glb', 27), source: 'ESA SPICE (Cosmographia-Modell)' },
     color: '#7ad3ff',
-    approx: true,
-    position: cruise(
+    position: tracked('juice', cruise(
       [
         ['earth', '2023-04-14'],
         ['earth', '2024-08-20'],
@@ -1169,12 +1167,12 @@ export const CRAFT: Body[] = [
         ['jupiter', '2031-07-21'],
       ],
       'jupiter',
-    ),
+    )),
     facts: [
       ['Start', '14. April 2023 (ESA)'],
       ['Ankunft am Jupiter', 'Juli 2031'],
     ],
-    description: 'ESA-Mission zu den Eismonden Ganymed, Kallisto und Europa. Flugbahn angenähert.',
+    description: 'ESA-Mission zu den Eismonden Ganymed, Kallisto und Europa.',
   },
   {
     id: 'bepicolombo',
@@ -1183,8 +1181,7 @@ export const CRAFT: Body[] = [
     radiusKm: 0.003,
     model: { ...m('bepicolombo.glb', 30), source: 'ESA SPICE (Cosmographia-Modell)' },
     color: '#7ad3ff',
-    approx: true,
-    position: cruise(
+    position: tracked('bepicolombo', cruise(
       [
         ['earth', '2018-10-20'],
         ['earth', '2020-04-10'],
@@ -1199,11 +1196,11 @@ export const CRAFT: Body[] = [
         ['mercury', '2026-11-21'],
       ],
       'mercury',
-    ),
+    )),
     facts: [
       ['Start', '20. Oktober 2018 (ESA/JAXA)'],
       ['Ankunft am Merkur', 'November 2026'],
     ],
-    description: 'Europäisch-japanische Merkur-Mission. Flugbahn angenähert.',
+    description: 'Europäisch-japanische Merkur-Mission.',
   },
 ];

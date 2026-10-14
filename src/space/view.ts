@@ -10,6 +10,7 @@ import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body 
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm } from './mars';
 import { PLANET_MAPS, mapEnabled } from './planets';
+import { loadTrajectories } from './trajectories';
 import {
   AU_KM,
   eciToEcliptic,
@@ -176,7 +177,7 @@ export function createSpaceView(
   const meshes = new Map<string, { group: THREE.Group; spin: THREE.Object3D; body: Body }>();
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
-  const trails = new Map<string, { line: THREE.Line; at: number }>();
+  const trails = new Map<string, { line: THREE.Line; at: number; anchor: Vec3; n: number }>();
   const labels = new Map<string, HTMLDivElement>();
   let satPoints: THREE.Points | null = null;
   let sats: Sat[] = [];
@@ -393,6 +394,12 @@ export function createSpaceView(
     envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     ensureSats();
     void loadMarsTracks(); // rover positions
+    // probe trajectories (JPL Horizons): rebuild the trails once the exact data is there
+    void loadTrajectories().then((ok) => {
+      if (!ok) return;
+      for (const t of trails.values()) world.remove(t.line);
+      trails.clear();
+    });
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     world.add(sunLight);
     viewLight = new THREE.DirectionalLight(0xffffff, 0);
@@ -876,32 +883,56 @@ export function createSpaceView(
   }
 
   function updateTrails() {
+    const TRAIL_POINTS = 500;
     for (const c of CRAFT) {
       const days = TRAIL_DAYS[c.id];
       if (!days) continue;
+      const at = (ms: number) => c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
       let t = trails.get(c.id);
       if (!t || Math.abs(t.at - simTime) > 20 * 86400000) {
-        if (t) world.remove(t.line);
-        const pts: THREE.Vector3[] = [];
-        const span = days * 86400000;
-        for (let k = 0; k <= 240; k++) {
-          const ms = simTime - span + (k / 240) * span;
-          const p = c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
-          if (p) pts.push(toThree(p));
+        if (t) {
+          world.remove(t.line);
+          t.line.geometry.dispose();
         }
-        const line = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(pts),
-          new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.55 }),
-        );
+        const span = days * 86400000;
+        const samples: Vec3[] = [];
+        for (let k = 0; k <= TRAIL_POINTS; k++) {
+          const p = at(simTime - span + (k / TRAIL_POINTS) * span);
+          if (p) samples.push(p);
+        }
+        // vertices relative to the craft's position: float32 has ~7 digits, so absolute AU
+        // coordinates (e.g. 160 AU) would be off by millions of km and the trail would not
+        // meet the model when zoomed in
+        const anchor = at(simTime) ?? samples[samples.length - 1] ?? ([0, 0, 0] as Vec3);
+        const arr = new Float32Array((samples.length + 1) * 3);
+        samples.forEach((p, i) => {
+          const v = toThree(sub(p, anchor));
+          arr.set([v.x, v.y, v.z], i * 3);
+        });
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+        geo.setDrawRange(0, samples.length);
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.55 }));
+        line.frustumCulled = false;
         world.add(line);
-        t = { line, at: simTime };
+        t = { line, at: simTime, anchor, n: samples.length };
         trails.set(c.id, t);
       }
-      t.line.visible = opts.craft && pts0(t.line);
-      toThree(sub([0, 0, 0], origin), t.line.position);
+      // the last vertex follows the craft exactly, so the trail always ends on the model
+      const cur = at(simTime);
+      const attr = t.line.geometry.getAttribute('position') as THREE.BufferAttribute;
+      if (cur && t.n > 0) {
+        const v = toThree(sub(cur, t.anchor));
+        attr.setXYZ(t.n, v.x, v.y, v.z);
+        attr.needsUpdate = true;
+        t.line.geometry.setDrawRange(0, t.n + 1);
+      } else {
+        t.line.geometry.setDrawRange(0, t.n);
+      }
+      t.line.visible = opts.craft && t.n > 1;
+      toThree(sub(t.anchor, origin), t.line.position);
     }
   }
-  const pts0 = (l: THREE.Line) => (l.geometry.getAttribute('position')?.count ?? 0) > 1;
 
   function ensureSats() {
     if (sats.length || satsLoading) return;
