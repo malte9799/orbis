@@ -44,22 +44,31 @@ const byId = new Map(ALL.map((b) => [b.id, b]));
 /** ecliptic (x, y, z) → three.js (x, z, -y) with y up = ecliptic north */
 const toThree = (v: Vec3, out = new THREE.Vector3()) => out.set(v[0], v[2], -v[1]);
 
-const SPEEDS: { label: string; f: number }[] = [
-  { label: '−1 Jahr/s', f: -365.25 * 86400 },
-  { label: '−1 Monat/s', f: -30 * 86400 },
-  { label: '−1 Woche/s', f: -7 * 86400 },
-  { label: '−1 Tag/s', f: -86400 },
-  { label: '−1 Std/s', f: -3600 },
-  { label: '−1 min/s', f: -60 },
-  { label: 'Echtzeit', f: 1 },
-  { label: '1 min/s', f: 60 },
-  { label: '1 Std/s', f: 3600 },
-  { label: '1 Tag/s', f: 86400 },
-  { label: '1 Woche/s', f: 7 * 86400 },
-  { label: '1 Monat/s', f: 30 * 86400 },
-  { label: '1 Jahr/s', f: 365.25 * 86400 },
+// simulated seconds per real second: 5 s … 3 years, mirrored for backwards, real time in the middle
+const STEP_S = [5, 30, 60, 300, 600, 1800, 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 3 * 86400, 7 * 86400, 14 * 86400, 30 * 86400, 91 * 86400, 182 * 86400, 365.25 * 86400, 730.5 * 86400, 3 * 365.25 * 86400];
+const UNITS: [number, string, string][] = [
+  [365.25 * 86400, 'YR', 'YRS'],
+  [30 * 86400, 'MO', 'MOS'],
+  [7 * 86400, 'WK', 'WKS'],
+  [86400, 'DAY', 'DAYS'],
+  [3600, 'HR', 'HRS'],
+  [60, 'MIN', 'MIN'],
+  [1, 'SEC', 'SEC'],
 ];
-const REALTIME = 6;
+function rateLabel(f: number) {
+  if (f === 1) return 'REAL RATE';
+  const a = Math.abs(f);
+  // whole numbers of the largest fitting unit (91 d → 3 MOS, 14 d → 2 WKS)
+  const [size, one, many] = UNITS.find(([u]) => a >= u * 0.99) ?? UNITS[UNITS.length - 1];
+  const n = Math.round(a / size);
+  return `${f < 0 ? '-' : ''}${n} ${n === 1 ? one : many}/S`;
+}
+const SPEEDS: { label: string; f: number }[] = [
+  ...[...STEP_S].reverse().map((v) => ({ label: rateLabel(-v), f: -v })),
+  { label: 'REAL RATE', f: 1 },
+  ...STEP_S.map((v) => ({ label: rateLabel(v), f: v })),
+];
+const REALTIME = STEP_S.length;
 
 const KIND_LABEL: Record<string, string> = {
   star: 'Stern',
@@ -92,11 +101,29 @@ export function createSpaceView(
     <div class="space-canvas"></div>
     <div class="space-labels"></div>
     <aside class="space-list panel">
-      <div class="panel-scroll">
+      <div class="sp-list-head">
         <input class="space-filter" type="search" placeholder="Objekt suchen …" aria-label="Objekt suchen"/>
-        <div class="space-list-items"></div>
+        <div class="sp-tabs" role="tablist">
+          <button class="sp-tab on" role="tab" data-tab="planets">Planeten</button>
+          <button class="sp-tab" role="tab" data-tab="other">Sonden &amp; Kleinkörper</button>
+        </div>
+      </div>
+      <div class="sp-list-scroll"><div class="space-list-items"></div></div>
+    </aside>
+    <button class="btn icon-btn space-list-toggle" aria-label="Objektliste" title="Objektliste">
+      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button class="btn icon-btn space-opt-toggle" aria-label="Optionen" title="Optionen" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+    <div class="space-opts panel" hidden>
+      <div class="panel-scroll">
+        <h3>Umlaufbahnen</h3>
+        <label class="row"><input type="checkbox" data-opt="orbPlanets" checked/> Planeten &amp; Monde</label>
+        <label class="row"><input type="checkbox" data-opt="orbCraft" checked/> Sonden</label>
+        <label class="row"><input type="checkbox" data-opt="orbAsteroids" checked/> Asteroiden</label>
+        <label class="row"><input type="checkbox" data-opt="orbDwarf" checked/> Zwergplaneten &amp; Sonstige</label>
         <h3>Anzeige</h3>
-        <label class="row"><input type="checkbox" data-opt="orbits" checked/> Umlaufbahnen</label>
         <label class="row"><input type="checkbox" data-opt="labels" checked/> Beschriftungen</label>
         <label class="row"><input type="checkbox" data-opt="craft" checked/> Raumsonden</label>
         <label class="row"><input type="checkbox" data-opt="sats" checked/> Erdsatelliten (in Erdnähe)</label>
@@ -111,22 +138,36 @@ export function createSpaceView(
         CTX-Mosaik (NASA/JPL/MSSS/Caltech Murray Lab, Esri), Fahrspuren: NASA MMGIS ·
         Bahnen: JPL-Näherungsformeln · Satelliten: CelesTrak</p>
       </div>
-    </aside>
-    <button class="btn icon-btn space-list-toggle" aria-label="Objektliste" title="Objektliste">
-      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
+    </div>
     <section class="space-info" hidden></section>
-    <div class="space-time">
-      <button class="btn icon-btn" data-t="slower" title="Langsamer / rückwärts" aria-label="Langsamer">
-        <svg viewBox="0 0 24 24"><path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/></svg></button>
-      <button class="btn icon-btn sp-play" data-t="play" title="Pause" aria-label="Pause">
-        <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></button>
-      <button class="btn icon-btn" data-t="faster" title="Schneller" aria-label="Schneller">
-        <svg viewBox="0 0 24 24"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
-      <div class="sp-clock"><b class="sp-date"></b><small class="sp-speed"></small></div>
-      <input type="datetime-local" class="sp-date-input" aria-label="Datum wählen"/>
-      <button class="btn small" data-t="now">Jetzt</button>
-      <button class="btn small" data-t="overview" title="Ganzes Sonnensystem">Übersicht</button>
+    <div class="space-time collapsed">
+      <button class="sp-open" data-t="toggle" aria-label="Time controls">
+        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg><span>TIME CONTROLS</span>
+      </button>
+      <div class="sp-tc">
+        <div class="sp-tc-top">
+          <button class="sp-live" data-t="now" title="Back to live"><i></i>LIVE</button>
+          <button class="sp-when sp-date" data-t="pick" aria-label="Pick date"></button>
+          <div class="sp-rate"></div>
+          <button class="sp-when sp-clock" data-t="pick" aria-label="Pick time"></button>
+        </div>
+        <div class="sp-ctl">
+          <button class="sp-cbtn" data-t="slower" title="Rewind / slower" aria-label="Rewind">
+            <svg viewBox="0 0 24 24"><path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/></svg></button>
+          <button class="sp-cbtn sp-play" data-t="play" title="Pause" aria-label="Pause">
+            <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></button>
+          <button class="sp-cbtn" data-t="faster" title="Fast forward / faster" aria-label="Fast forward">
+            <svg viewBox="0 0 24 24"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
+          <button class="sp-overview" data-t="overview" title="Whole solar system">OVERVIEW</button>
+        </div>
+        <div class="sp-arc" aria-label="Speed">
+          <svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 19 Q50 -9 100 19"/></svg>
+          <i class="sp-knob"></i>
+        </div>
+        <button class="sp-close-tc" data-t="toggle" aria-label="Collapse time controls">
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+        <input type="datetime-local" class="sp-date-input" aria-label="Pick date and time" tabindex="-1"/>
+      </div>
     </div>`;
 
   const canvasHost = el.querySelector<HTMLDivElement>('.space-canvas')!;
@@ -134,9 +175,15 @@ export function createSpaceView(
   const info = el.querySelector<HTMLElement>('.space-info')!;
   const listEl = el.querySelector<HTMLDivElement>('.space-list-items')!;
   const listPanel = el.querySelector<HTMLElement>('.space-list')!;
+  const optPanel = el.querySelector<HTMLElement>('.space-opts')!;
   const filterEl = el.querySelector<HTMLInputElement>('.space-filter')!;
+  const timeEl = el.querySelector<HTMLElement>('.space-time')!;
   const dateEl = el.querySelector<HTMLElement>('.sp-date')!;
-  const speedEl = el.querySelector<HTMLElement>('.sp-speed')!;
+  const clockEl = el.querySelector<HTMLElement>('.sp-clock')!;
+  const rateEl = el.querySelector<HTMLElement>('.sp-rate')!;
+  const liveBtn = el.querySelector<HTMLButtonElement>('.sp-live')!;
+  const arcEl = el.querySelector<HTMLElement>('.sp-arc')!;
+  const knobEl = el.querySelector<HTMLElement>('.sp-knob')!;
   const dateInput = el.querySelector<HTMLInputElement>('.sp-date-input')!;
   const playBtn = el.querySelector<HTMLButtonElement>('.sp-play')!;
   if (window.innerWidth <= 720) listPanel.hidden = true;
@@ -146,7 +193,8 @@ export function createSpaceView(
   let speedIdx = REALTIME;
   let playing = true;
   let focusId = 'earth';
-  const opts = { orbits: true, labels: true, craft: true, sats: true, sites: true, tracks: true };
+  let listTab: 'planets' | 'other' = 'planets';
+  const opts = { orbPlanets: true, orbCraft: true, orbAsteroids: true, orbDwarf: true, labels: true, craft: true, sats: true, sites: true, tracks: true };
   /** selected landing site on the Moon (info panel) */
   let siteId: string | null = null;
 
@@ -610,6 +658,7 @@ export function createSpaceView(
     aim = null;
     for (const d of details.values()) d.selected = null;
     controls.minDistance = 0;
+    listTab = tabOf(id);
     renderInfo();
     renderList();
     updateHash();
@@ -780,7 +829,8 @@ export function createSpaceView(
       }
       // planets and everything far out (dwarf planets, distant asteroids); the inner
       // small bodies only while selected, otherwise the inner system drowns in lines
-      o.line.visible = opts.orbits && (b.kind === 'planet' || b.id === focusId || semiMajorAxis(b.id) >= 5);
+      const enabled = b.kind === 'planet' ? opts.orbPlanets : b.kind === 'asteroid' ? opts.orbAsteroids : opts.orbDwarf;
+      o.line.visible = enabled && (b.kind === 'planet' || b.id === focusId || semiMajorAxis(b.id) >= 5);
       toThree(sub([0, 0, 0], origin), o.line.position);
     }
     updateMoonOrbits();
@@ -858,7 +908,7 @@ export function createSpaceView(
     const parentOfInterest = focusBody.kind === 'moon' ? focusBody.parent : focusId;
     for (const b of BODIES) {
       if (b.kind !== 'moon' || !b.parent) continue;
-      const show = opts.orbits && b.parent === parentOfInterest;
+      const show = opts.orbPlanets && b.parent === parentOfInterest;
       let line = moonLines.get(b.id);
       if (!show) {
         if (line) line.visible = false;
@@ -908,7 +958,7 @@ export function createSpaceView(
       for (const c of CRAFT) {
         if (!trajectoryTimes(c.id) && !TRAIL_DAYS[c.id]) continue;
         const p: Vec3 | null = c.id === focusId ? [0, 0, 0] : resolve(c.id, simTime);
-        if (c.id === focusId || (p && len(p) >= 5)) wanted.add(c.id);
+        if (c.id === focusId || (opts.orbCraft && p && len(p) >= 5)) wanted.add(c.id);
       }
     }
     for (const id of [...trails.keys()]) if (!wanted.has(id)) removeTrail(id);
@@ -1124,33 +1174,70 @@ export function createSpaceView(
   }
 
   // ----- UI ----------------------------------------------------------------
+  const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  let clockText = '';
+  /** simulated time was moved away from the wall clock (pause, speed change, picked date) */
+  let shifted = false;
+
   function updateClock() {
     const d = new Date(simTime);
-    dateEl.textContent = d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: speedIdx === REALTIME ? '2-digit' : undefined });
-    speedEl.textContent = playing ? SPEEDS[speedIdx].label : 'angehalten';
+    const date = `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+    const h = d.getHours();
+    const time = `${h % 12 || 12}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())} ${h < 12 ? 'AM' : 'PM'}`;
+    const live = playing && speedIdx === REALTIME && !shifted;
+    const rate = playing ? SPEEDS[speedIdx].label : 'PAUSED';
+    const key = `${date}|${time}|${live}|${rate}`;
+    if (key !== clockText) {
+      clockText = key;
+      dateEl.textContent = date;
+      clockEl.textContent = time;
+      rateEl.textContent = rate;
+      rateEl.classList.toggle('live', live && speedIdx === REALTIME);
+      timeEl.classList.toggle('is-live', live);
+      liveBtn.disabled = live;
+    }
+    // knob rides on the arc according to the time of day
+    const f = speedIdx / (SPEEDS.length - 1);
+    knobEl.style.left = `${f * 100}%`;
+    knobEl.style.top = `${(95 - 4 * 70 * f * (1 - f)).toFixed(1)}%`;
   }
 
   function setPlaying(p: boolean) {
     playing = p;
+    if (!p) shifted = true;
     playBtn.innerHTML = p
       ? '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
       : '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
-    playBtn.setAttribute('aria-label', p ? 'Pause' : 'Abspielen');
+    playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play');
+    clockText = '';
   }
 
-  el.querySelector('.space-time')!.addEventListener('click', (e) => {
+  timeEl.addEventListener('click', (e) => {
     const t = (e.target as HTMLElement).closest<HTMLElement>('[data-t]')?.dataset.t;
-    if (t === 'play') setPlaying(!playing);
+    if (t === 'toggle') timeEl.classList.toggle('collapsed');
+    else if (t === 'pick') {
+      const d = new Date(simTime - new Date(simTime).getTimezoneOffset() * 60000);
+      dateInput.value = d.toISOString().slice(0, 16);
+      try {
+        dateInput.showPicker();
+      } catch {
+        dateInput.focus();
+      }
+    } else if (t === 'play') setPlaying(!playing);
     else if (t === 'slower') {
       speedIdx = Math.max(0, speedIdx - 1);
+      shifted = true;
       setPlaying(true);
     } else if (t === 'faster') {
       speedIdx = Math.min(SPEEDS.length - 1, speedIdx + 1);
+      shifted = true;
       setPlaying(true);
     } else if (t === 'now') {
       simTime = Date.now();
       speedIdx = REALTIME;
       setPlaying(true);
+      shifted = false;
     } else if (t === 'overview') overview();
   });
   dateInput.addEventListener('change', () => {
@@ -1160,41 +1247,125 @@ export function createSpaceView(
       setPlaying(false);
     }
   });
+  // the arc is the speed slider: far left = fastest backwards, middle = real time, far right = fastest forwards
+  const dragArc = (e: PointerEvent) => {
+    const r = arcEl.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const idx = Math.round(f * (SPEEDS.length - 1));
+    if (idx !== speedIdx) shifted = true;
+    speedIdx = idx;
+    if (!playing) setPlaying(true);
+    clockText = '';
+  };
+  arcEl.addEventListener('pointerdown', (e) => {
+    try {
+      arcEl.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic pointer */
+    }
+    dragArc(e);
+    const move = (ev: PointerEvent) => dragArc(ev);
+    const up = () => {
+      arcEl.removeEventListener('pointermove', move);
+      arcEl.removeEventListener('pointerup', up);
+    };
+    arcEl.addEventListener('pointermove', move);
+    arcEl.addEventListener('pointerup', up);
+  });
 
   el.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
     i.addEventListener('change', () => {
       opts[i.dataset.opt as keyof typeof opts] = i.checked;
     }),
   );
+  const optToggle = el.querySelector<HTMLButtonElement>('.space-opt-toggle')!;
+  optToggle.addEventListener('click', () => {
+    optPanel.hidden = !optPanel.hidden;
+    optToggle.setAttribute('aria-expanded', String(!optPanel.hidden));
+  });
   el.querySelector('.space-list-toggle')!.addEventListener('click', () => (listPanel.hidden = !listPanel.hidden));
   filterEl.addEventListener('input', renderList);
+  el.querySelectorAll<HTMLButtonElement>('.sp-tab').forEach((t) =>
+    t.addEventListener('click', () => {
+      listTab = t.dataset.tab as 'planets' | 'other';
+      renderList();
+    }),
+  );
+
+  // small maps for the list thumbnails (the body textures are up to 15 MB)
+  const THUMB: Record<string, string> = {
+    sun: 'sunmap.jpg',
+    mercury: 'mercurymap.jpg',
+    venus: 'venusmap.jpg',
+    earth: 'earthmap2k.jpg',
+    moon: 'moonmap2k.jpg',
+    mars: 'marsmap2k.jpg',
+    jupiter: 'jupitermap.jpg',
+    saturn: 'saturnmap.jpg',
+  };
+  const thumbOf = (b: Body) => (THUMB[b.id] ? `./textures/${THUMB[b.id]}` : b.texture);
+  const CRAFT_ICON =
+    '<svg viewBox="0 0 24 24"><path d="M12 7l2 3-2 6-2-6zM3 9h5v4H3zM16 9h5v4h-5zM8 11h2M14 11h2"/></svg>';
+
+  /** root body (planet or small body) a list entry belongs to → which tab it lives in */
+  function tabOf(id: string): 'planets' | 'other' {
+    let b = byId.get(id);
+    if (!b) return listTab;
+    if (b.kind === 'craft' && b.parent !== 'earth' && !b.surface) return 'other';
+    while (b.parent && byId.get(b.parent)) b = byId.get(b.parent)!;
+    return b.kind === 'star' || b.kind === 'planet' ? 'planets' : 'other';
+  }
+
+  const blurb = (b: Body) => {
+    const d = b.description?.split(/(?<=[.!])\s/)[0];
+    return d || KIND_LABEL[b.kind] || '';
+  };
+
+  function rowHtml(b: Body, child = false) {
+    const img = thumbOf(b);
+    const th = img
+      ? `<span class="sp-thumb" style="background-image:url('${img}')"></span>`
+      : `<span class="sp-thumb ${b.kind}" style="--c:${b.color}">${b.kind === 'craft' ? CRAFT_ICON : ''}</span>`;
+    return `<button class="sp-row ${child ? 'child' : ''} ${b.id === focusId ? 'on' : ''}" data-id="${b.id}">${th}<span class="sp-txt"><b>${escapeHtml(b.name)}</b><small>${escapeHtml(blurb(b))}</small></span></button>`;
+  }
 
   function renderList() {
     const q = filterEl.value.trim().toLowerCase();
-    const groups: [string, Body[]][] = [
-      ['Sonne & Planeten', ALL.filter((b) => b.kind === 'star' || b.kind === 'planet' || b.kind === 'dwarf')],
-      ['Monde', ALL.filter((b) => b.kind === 'moon')],
-      ['Asteroiden', ALL.filter((b) => b.kind === 'asteroid')],
-      ['Raumsonden', ALL.filter((b) => b.kind === 'craft')],
-    ];
-    listEl.innerHTML = groups
-      .map(([title, items]) => {
-        const f = items.filter((b) => !q || b.name.toLowerCase().includes(q));
-        if (!f.length) return '';
-        return `<h3>${title}</h3>${f
-          .map(
-            (b) => `<button class="sp-item ${b.id === focusId ? 'on' : ''}" data-id="${b.id}">
-              <span class="sp-dot" style="background:${b.color}"></span>${escapeHtml(b.name)}${b.parent ? `<small>${escapeHtml(byId.get(b.parent)?.name ?? '')}</small>` : ''}</button>`,
-          )
-          .join('')}`;
-      })
-      .join('');
-    listEl.querySelectorAll<HTMLButtonElement>('.sp-item').forEach((b) =>
+    el.querySelectorAll<HTMLElement>('.sp-tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === listTab && !q));
+    let html = '';
+    if (q) {
+      html = ALL.filter((b) => b.name.toLowerCase().includes(q))
+        .map((b) => rowHtml(b))
+        .join('');
+      if (!html) html = '<p class="small muted sp-empty">Nichts gefunden.</p>';
+    } else {
+      const focusParent = byId.get(focusId)?.parent;
+      const open = (id: string) => id === focusId || id === focusParent;
+      const kids = (b: Body, onlyEarthCraft: boolean) =>
+        ALL.filter((c) => c.parent === b.id && (c.kind !== 'craft' || c.parent === 'earth' || !!c.surface || !onlyEarthCraft));
+      const entry = (b: Body, earthCraftOnly: boolean) => {
+        let out = rowHtml(b);
+        if (open(b.id)) out += kids(b, earthCraftOnly).map((c) => rowHtml(c, true)).join('');
+        return out;
+      };
+      if (listTab === 'planets') {
+        html = BODIES.filter((b) => b.kind === 'star' || b.kind === 'planet').map((b) => entry(b, true)).join('');
+      } else {
+        const sec = (title: string, items: Body[]) => (items.length ? `<h4>${title}</h4>${items.map((b) => entry(b, false)).join('')}` : '');
+        html =
+          sec('Raumsonden', CRAFT.filter((c) => !c.surface && c.parent !== 'earth')) +
+          sec('Zwergplaneten', BODIES.filter((b) => b.kind === 'dwarf')) +
+          sec('Asteroiden', ASTEROIDS);
+      }
+    }
+    listEl.innerHTML = html;
+    listEl.querySelectorAll<HTMLButtonElement>('.sp-row').forEach((b) =>
       b.addEventListener('click', () => {
         focus(b.dataset.id!);
         if (window.innerWidth <= 720) listPanel.hidden = true;
       }),
     );
+    listEl.querySelector('.sp-row.on')?.scrollIntoView({ block: 'nearest' });
   }
 
   function distanceText(au: number) {
