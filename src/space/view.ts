@@ -26,8 +26,27 @@ import {
 
 export interface SpaceView {
   el: HTMLElement;
-  activate(opts?: { focus?: string; lat?: number; lon?: number; site?: string }): void;
+  /**
+   * `planet`: show only that body (the "planet map" in 3D: close-up tiles, rovers with their
+   * models) instead of the whole solar system.
+   */
+  activate(opts?: { focus?: string; lat?: number; lon?: number; site?: string; planet?: string }): void;
   deactivate(): void;
+  /** map layer used for the close-up tiles of the planet ('auto' or a layer id of planets.ts) */
+  setMapLayer(id: string): void;
+  /** camera position as lat/lon on the focused body (for switching 2D ⇄ 3D) */
+  center(): { lat: number; lon: number } | null;
+  /** surface marker visibility in the planet view */
+  setOverlays(o: { sites?: boolean; tracks?: boolean; labels?: boolean }): void;
+  zoomBy(factor: number): void;
+}
+
+export interface SpaceNav {
+  earthMap(lat: number, lon: number): void;
+  /** open the planet map (3D) of a body, optionally on an object / site */
+  planet(body: string, lat: number, lon: number, o?: { focus?: string; site?: string }): void;
+  /** back to the solar system */
+  solar(body: string): void;
 }
 
 const ALL: Body[] = [...BODIES, ...CRAFT];
@@ -76,7 +95,8 @@ const TRAIL_DAYS: Record<string, number> = {
   parker: 88,
 };
 
-export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => void, onOpenPlanetMap: (body: string, lat: number, lon: number) => void): SpaceView {
+export function createSpaceView(nav: SpaceNav): SpaceView {
+  const onOpenEarthMap = nav.earthMap;
   const el = document.createElement('main');
   el.className = 'view space-view';
   el.innerHTML = `
@@ -135,6 +155,9 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   let speedIdx = REALTIME;
   let playing = true;
   let focusId = 'earth';
+  /** planet view: only this body is shown (null = whole solar system) */
+  let planetBody: string | null = null;
+  let mapLayer = 'auto';
   const opts = { orbits: true, labels: true, craft: true, sats: true, sites: true, tracks: true };
   /** selected landing site on the Moon (info panel) */
   let siteId: string | null = null;
@@ -330,7 +353,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (!b.model) continue;
       const p = resolve(b.id, simTime);
       const c = crafts.get(b.id);
-      if (!p || !opts.craft) {
+      // rovers and the like only show their 3D models on the planet map
+      if (!p || !opts.craft || (b.surface && !planetBody)) {
         if (c) c.group.visible = false;
         continue;
       }
@@ -439,7 +463,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
           new BodyDetail(mesh, {
             body: b.id,
             sites: SITES.filter((s) => siteBody(s) === b.id),
-            source: (z) => cfg.detail3d(z),
+            source: (z) => (mapLayer === 'auto' ? cfg.detail3d(z) : cfg.layers.find((l) => l.id === mapLayer) ?? cfg.detail3d(z)),
             maxZ: Math.max(...cfg.layers.map((l) => l.maxZ)),
             baseLevel: b.id === 'moon' ? 2 : cfg.baseLevel,
             upgradeBase: b.id === 'moon',
@@ -504,11 +528,17 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       }
     });
 
-    // zoom far into a body → its map (Earth: weather map, Mars: planet map; see planets.ts)
+    // zoom far into a body → its map (Earth: weather map, Mars: planet map; see planets.ts);
+    // zooming far out of a planet view returns to the solar system
     renderer.domElement.addEventListener(
       'wheel',
       (e) => {
-        if (trans || aim || e.deltaY >= 0) return;
+        if (trans || aim) return;
+        if (planetBody) {
+          if (e.deltaY > 0 && camera.position.length() > radiusAU(byId.get(planetBody)!) * 7) nav.solar(planetBody);
+          return;
+        }
+        if (e.deltaY >= 0) return;
         const cfg = PLANET_MAPS[focusId];
         if (!cfg?.enabled || !(focusId === 'earth' || mapEnabled(focusId))) return;
         if (camera.position.length() < radiusAU(byId.get(focusId)!) * cfg.openAt) openBodyMap();
@@ -573,6 +603,12 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       toast(`${b.name} existiert zum gewählten Zeitpunkt noch nicht (oder die Position ist unbekannt).`);
       return;
     }
+    if (b.surface && !planetBody) {
+      // rovers only exist on the planet map: go there (3D)
+      const ll = surfaceLatLon(b);
+      nav.planet(b.surface, ll.lat, ll.lon, { focus: b.id });
+      return;
+    }
     const from = origin;
     if (b.surface) lookDownAt(b);
     trans = { from, to: id, t0: performance.now(), dur: 1600, d0: camera.position.length(), d1: dist ?? viewDistance(b) };
@@ -591,6 +627,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     const s = SITES.find((x) => x.id === id);
     if (!s) return;
     const bodyId = siteBody(s);
+    if (!planetBody && mapEnabled(bodyId)) return nav.planet(bodyId, s.lat, s.lon, { site: id });
     const R = radiusAU(byId.get(bodyId)!);
     const far = focusId !== bodyId;
     if (far) focus(bodyId, R * 1.6);
@@ -601,6 +638,23 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     aim = { body: bodyId, from: camera.position.clone().normalize(), lat: s.lat, lon: s.lon, t0: performance.now(), dur: 1800, d0: d, d1: Math.min(d, R * 1.6) };
     renderInfo();
     updateHash();
+  }
+
+  /** lat/lon of a craft that stands on a surface (inverse of the sphere parametrisation) */
+  function surfaceLatLon(b: Body) {
+    const p = resolve(b.id, simTime);
+    const host = byId.get(b.surface!)!;
+    const hp = resolve(b.surface!, simTime);
+    const m = meshes.get(b.surface!)!;
+    if (!p || !hp) return { lat: 0, lon: 0 };
+    m.group.updateMatrixWorld(true);
+    const mesh = m.spin.children[0];
+    const local = mesh.worldToLocal(toThree(sub(p, hp), new THREE.Vector3()).add(mesh.getWorldPosition(new THREE.Vector3()))).normalize();
+    void host;
+    const lat = 90 - (Math.acos(Math.max(-1, Math.min(1, local.y))) * 180) / Math.PI;
+    let lon = (Math.atan2(local.z, -local.x) * 180) / Math.PI - 180;
+    lon = ((lon + 540) % 360) - 180;
+    return { lat, lon };
   }
 
   /** Put the camera above a craft that stands on a surface (otherwise it may end up underground). */
@@ -661,7 +715,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   function openBodyMap(id = focusId) {
     if (id === 'earth') return openEarthMap();
     const { lat, lon } = cameraLatLon(id);
-    onOpenPlanetMap(id, lat, lon);
+    nav.planet(id, lat, lon);
   }
 
   // ----- per-frame update --------------------------------------------------
@@ -691,7 +745,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     // bodies
     for (const [id, m] of meshes) {
       const p = resolve(id, simTime);
-      m.group.visible = !!p;
+      m.group.visible = !!p && (!planetBody || id === planetBody);
       if (!p) continue;
       toThree(sub(p, origin), m.group.position);
       const b = m.body;
@@ -723,7 +777,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       const bodyR = radiusAU(focusBody);
       const closeStart = bodyR * 12;
       const closeEnd = bodyR * 3;
-      const closeness = Math.max(0, Math.min(1, (closeStart - camDist) / (closeStart - closeEnd)));
+      const closeness = planetBody ? 1 : Math.max(0, Math.min(1, (closeStart - camDist) / (closeStart - closeEnd)));
       sunLight.intensity = 3.2 * (1 - closeness);
       ambientLight.intensity = 0.07 + 0.5 * closeness;
       viewLight.intensity = 2.5 * closeness;
@@ -752,7 +806,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         o = { line, at: simTime };
         orbitLines.set(b.id, o);
       }
-      o.line.visible = opts.orbits;
+      o.line.visible = opts.orbits && !planetBody;
       toThree(sub([0, 0, 0], origin), o.line.position);
     }
     updateMoonOrbits();
@@ -831,7 +885,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     const parentOfInterest = focusBody.kind === 'moon' ? focusBody.parent : focusId;
     for (const b of BODIES) {
       if (b.kind !== 'moon' || !b.parent) continue;
-      const show = opts.orbits && b.parent === parentOfInterest;
+      const show = opts.orbits && !planetBody && b.parent === parentOfInterest;
       let line = moonLines.get(b.id);
       if (!show) {
         if (line) line.visible = false;
@@ -959,7 +1013,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         t = { line, at: simTime };
         trails.set(c.id, t);
       }
-      t.line.visible = opts.craft && pts0(t.line);
+      t.line.visible = opts.craft && !planetBody && pts0(t.line);
       toThree(sub([0, 0, 0], origin), t.line.position);
     }
   }
@@ -990,7 +1044,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
 
   function updateSatellites(now: number) {
     const earth = resolve('earth', simTime)!;
-    const near = len(sub(origin, earth)) < 0.02 && opts.sats;
+    const near = len(sub(origin, earth)) < 0.02 && opts.sats && !planetBody;
     if (!satPoints) return;
     satPoints.visible = near && sats.length > 0;
     if (!near) return;
@@ -1052,6 +1106,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       const d = labels.get(b.id)!;
       const s = screen.get(b.id);
       let show = !!s && opts.labels;
+      if (planetBody && b.parent !== planetBody) show = false;
       if (show && fs && b.id !== focusId && Math.hypot(s!.x - fs.x, s!.y - fs.y) < fr) {
         const p = resolve(b.id, simTime)!;
         if (toThree(sub(p, origin), v3b).distanceTo(camera.position) > camDist) show = false;
@@ -1192,7 +1247,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       ${simTime < dt.getTime() ? '<p class="small note">Zum gewählten Zeitpunkt ist hier noch niemand gelandet.</p>' : years >= 1 ? `<p class="small muted">Vor ${fmt.num(years, 0)} Jahren.</p>` : ''}
       <div class="sp-actions">
         <button class="btn small" data-a="moon">← ${BODY_NAME_DE[bodyId] ?? 'Zurück'}</button>
-        ${mapEnabled(bodyId) ? `<button class="btn small" data-a="map">Karte (2D)</button>` : ''}
+        ${mapEnabled(bodyId) && !planetBody ? `<button class="btn small" data-a="map">Planetenkarte</button>` : ''}
         <a class="btn small" href="https://de.wikipedia.org/w/index.php?search=${encodeURIComponent(s.name.replace(/ \(.*\)$/, ''))}" target="_blank" rel="noopener">Wikipedia ↗</a>
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1204,7 +1259,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     });
     info.querySelector('[data-a=map]')?.addEventListener('click', () => {
       const site = SITES.find((x) => x.id === id)!;
-      onOpenPlanetMap(bodyId, site.lat, site.lon);
+      nav.planet(bodyId, site.lat, site.lon, { site: id });
     });
   }
 
@@ -1247,7 +1302,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : crafts.get(b.id)?.detail === 'loading' ? ' · Detailmodell wird geladen …' : ''
       }</p>` : ''}
       <div class="sp-actions">
-        ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : mapEnabled(b.id) ? '<button class="btn small" data-a="map">Karte öffnen (2D)</button>' : ''}
+        ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : mapEnabled(b.id) && !planetBody ? '<button class="btn small" data-a="map">Planetenkarte öffnen</button>' : ''}
         ${extLink}
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1293,7 +1348,10 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         renderList();
       }
       active = true;
+      planetBody = o.planet && details.has(o.planet) ? o.planet : null;
+      el.classList.toggle('planet-mode', !!planetBody);
       resize();
+      if (planetBody) o = { ...o, focus: o.focus ?? planetBody };
       const site = o.site && SITES.some((s) => s.id === o.site) ? o.site : undefined;
       const siteObj = site ? SITES.find((s) => s.id === site) : undefined;
       const id = siteObj ? siteBody(siteObj) : o.focus && byId.has(o.focus) ? o.focus : 'earth';
@@ -1307,13 +1365,17 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
         const dir = surfaceDirOf(id, o.lat, o.lon);
         camera.position.copy(dir.multiplyScalar(radiusAU(b) * 1.6));
         controls.update();
-        trans = { from: origin, to: id, t0: performance.now(), dur: 2200, d0: radiusAU(b) * 1.6, d1: radiusAU(b) * 9 };
+        trans = { from: origin, to: id, t0: performance.now(), dur: 2200, d0: radiusAU(b) * 1.6, d1: radiusAU(b) * (planetBody ? 3 : 9) };
       } else if (camera.position.lengthSq() === 0) {
         camera.position.set(0, radiusAU(b) * 1.5, radiusAU(b) * 4);
         controls.minDistance = minDistance(b);
       } else if (o.focus && byId.has(o.focus) && !site) {
         // linked to a specific object: look at it from its default distance
         camera.position.setLength(viewDistance(b));
+        controls.minDistance = minDistance(b);
+      }
+      if (planetBody && id === planetBody && !(o.lat != null && o.lon != null) && !site) {
+        camera.position.setLength(radiusAU(b) * 3);
         controls.minDistance = minDistance(b);
       }
       if (b.surface) {
@@ -1335,6 +1397,26 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     deactivate() {
       active = false;
       cancelAnimationFrame(raf);
+    },
+    setMapLayer(id: string) {
+      if (id === mapLayer) return;
+      mapLayer = id;
+      for (const d of details.values()) d.resetTiles();
+    },
+    center() {
+      const id = planetBody ?? focusId;
+      return meshes.has(id) && details.has(id) ? cameraLatLon(id) : null;
+    },
+    setOverlays(v: { sites?: boolean; tracks?: boolean; labels?: boolean }) {
+      if (v.sites != null) opts.sites = v.sites;
+      if (v.tracks != null) opts.tracks = v.tracks;
+      if (v.labels != null) opts.labels = v.labels;
+    },
+    zoomBy(f: number) {
+      const b = byId.get(planetBody ?? focusId)!;
+      const d = Math.max(minDistance(b), camera.position.length() / f);
+      aim = null;
+      camera.position.setLength(d);
     },
   };
 }

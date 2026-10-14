@@ -31,12 +31,14 @@ Drei Ansichten:
     Perseverance, Curiosity und Ingenuity stehen auf der Oberfläche (aufrecht, mit dem Planeten mitdrehend);
     ihre Fahrspuren und die 72 Ingenuity-Flüge aus den NASA-MMGIS-Daten sind auf dem Boden eingezeichnet
     und folgen der Zeitleiste (Sol, gefahrene Strecke im Steckbrief)
-  - Weit in einen Planeten hineinzoomen öffnet dessen **Karte** (`#/planet?body=mars`) – wie bei der Erde:
-    2D-Karte mit Ebenenwahl (Farbe, CTX, MOLA-Höhenrelief, THEMIS-Infrarot), Landestellen, Fahrspuren der Rover,
-    Ingenuity-Flügen und Maßstab; „3D“ führt zurück zur Kugel. Die Quellen je Himmelskörper stehen in
-    `src/space/planets.ts` (`enabled`): derzeit Erde (Wetterkarte) und Mars; Mond, Merkur und Venus sind
-    vorbereitet und werden dort nur eingeschaltet. Die Fahrspuren werden von `scripts/mars-traverse.mjs`
-    verdichtet (Daten-Branch, Rückfall: `public/data/mars-traverse.json`)
+  - **Planetenkarte** (`#/planet?body=mars&view=3d|2d`) wie bei der Erde mit 2D / 3D / Weltall-Schalter:
+    Weit in den Mars hineinzoomen oder in der Weltall-Ansicht einen Rover anklicken öffnet sie (Standard: 3D).
+    3D zeigt nur diesen Planeten mit Detailkacheln und den Rover-Modellen (die gibt es nur hier), 2D ist eine
+    flache Karte mit Kartentyp-Umschalter (Farbe, CTX 5 m, MOLA, THEMIS), Ebenen (Landestellen, Fahrspuren,
+    Ingenuity-Flüge, Namen), Suche und Maßstab. Herauszoomen bzw. das Weltall-Symbol führt zurück ins Sonnensystem.
+    Die Quellen je Himmelskörper stehen in `src/space/planets.ts` (`enabled`): derzeit Erde (Wetterkarte) und Mars;
+    Mond, Merkur und Venus sind vorbereitet. Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall
+    `public/data/mars-traverse.json`)
   - Zeitstrahl: Datum wählen, abspielen von Echtzeit bis 1 Jahr pro Sekunde (auch rückwärts)
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen

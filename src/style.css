@@ -2444,7 +2444,24 @@ svg.hourly {
   }
 }
 
-/* planet map (2D) */
+/* planet map: 2D canvas and the Earth-style controls (also on top of the 3D view) */
+.planet-view {
+  background: transparent;
+}
+
+.planet-view.is-3d {
+  pointer-events: none;
+}
+
+.planet-view.is-3d > * {
+  pointer-events: auto;
+}
+
+.planet-view.is-3d .pm-canvas,
+.planet-view.is-3d .pm-status {
+  display: none;
+}
+
 .planet-view .pm-canvas {
   position: absolute;
   inset: 0;
@@ -2453,49 +2470,30 @@ svg.hourly {
   touch-action: none;
 }
 
-.planet-view .pm-panel {
-  bottom: 56px;
+.planet-view .globe-top {
+  right: 64px;
 }
 
-.pm-title {
-  margin: 0 0 8px;
-  font-size: 1.3rem;
+.planet-view .pm-ctrls {
+  top: 12px;
+  right: 0;
+  z-index: 5;
 }
 
-.pm-switch {
-  display: inline-flex;
-  gap: 4px;
-  margin-bottom: 12px;
+.planet-view .pm-zoom button {
+  width: 32px !important;
+  height: 32px !important;
+  color: var(--text-2) !important;
+  font: 600 18px/1 inherit;
 }
 
-.pm-switch .btn.on {
-  background: var(--accent);
-  color: #fff;
-}
-
-.pm-field {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.pm-field select {
-  display: block;
-  width: 100%;
-  margin-top: 4px;
-  height: 36px;
-  padding: 0 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.3);
-  color: var(--text);
-  font: inherit;
+.planet-view .pm-zoom button + button {
+  border-top: 1px solid var(--border) !important;
 }
 
 .pm-status {
   position: absolute;
-  right: 12px;
+  right: 56px;
   bottom: 12px;
   z-index: 3;
   display: flex;
@@ -2506,6 +2504,10 @@ svg.hourly {
   background: rgba(13, 18, 38, 0.75);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.pm-status[hidden] {
+  display: none;
 }
 
 .pm-scale {
@@ -2519,4 +2521,20 @@ svg.hourly {
   height: 5px;
   border: 2px solid #fff;
   border-top: 0;
+}
+
+.planet-view .pm-info {
+  top: 140px;
+}
+
+/* 3D planet view (space renderer, one body): no solar-system UI */
+.space-view.planet-mode .space-list,
+.space-view.planet-mode .space-list-toggle,
+.space-view.planet-mode [data-t='overview'] {
+  display: none !important;
+}
+
+.space-view.planet-mode .space-info {
+  top: 140px;
+  max-height: calc(100% - 230px);
 }
