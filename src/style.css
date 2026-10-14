@@ -1968,25 +1968,31 @@ svg.hourly {
   font-variant-numeric: tabular-nums;
 }
 
-/* active layers: small removable chips beside the panel */
+/* active layers: small removable chips, bottom left next to the map-type button */
 .active-strip {
   position: absolute;
   z-index: 3;
-  top: 64px;
-  left: 12px;
-  right: 76px;
+  left: 86px;
+  bottom: 28px;
+  max-width: 190px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column-reverse;
+  align-items: flex-start;
   gap: 5px;
   pointer-events: none;
 }
 
-.globe-view:has(.panel:not([hidden])) .active-strip {
-  left: 324px;
+@media (max-width: 1000px) {
+  .active-strip {
+    left: 12px;
+    bottom: 100px;
+  }
 }
 
 .strip-chip {
   pointer-events: auto;
+  max-width: 100%;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2028,6 +2034,10 @@ svg.hourly {
 }
 
 @media (max-width: 720px) {
+  .active-strip {
+    bottom: 112px;
+  }
+
   .globe-view:has(.panel:not([hidden])) .active-strip {
     display: none;
   }
