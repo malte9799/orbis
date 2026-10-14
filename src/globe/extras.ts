@@ -1222,6 +1222,11 @@ export class ExtraLayers {
     return i.count != null ? fmt.num(i.count) : '';
   }
 
+  /** Number of loaded features (undefined while off or not loaded). */
+  count(id: ExtraId): number | undefined {
+    return this.on.has(id) ? this.info[id]?.count : undefined;
+  }
+
   note(id: ExtraId): string | undefined {
     return this.on.has(id) ? this.info[id]?.note : undefined;
   }

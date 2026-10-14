@@ -371,6 +371,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         .finally(() => {
           fd.at = Date.now();
           fd.loading = null;
+          if (id === 'firms') applyGroups();
           syncEventSources();
           renderPanel();
         });
@@ -395,6 +396,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   function groupCount(id: GroupId): number | null {
+    const linked = LINKED_EXTRA[id];
+    const linkedCount = linked ? extras?.count(linked) : undefined;
+    const events = () => (feedData.eonet.at || feedData.gdacs.at ? [...eonetPoints, ...gdacsPoints].filter((f) => KIND_GROUP[f.properties.kind] === id).length : null);
     switch (id) {
       case 'quakes':
         return feedData.usgs.at || feedData.emsc.at
@@ -404,10 +408,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return feedData.nws.at || feedData.spc.at ? nwsPoints.length + spcPoints.length : null;
       case 'hotspots':
         return firmsCount || null;
-      default: {
-        if (!feedData.eonet.at && !feedData.gdacs.at) return null;
-        return [...eonetPoints, ...gdacsPoints].filter((f) => KIND_GROUP[f.properties.kind] === id).length;
+      case 'volcanoes':
+        // the full GVP catalogue includes the currently erupting ones
+        return linkedCount ?? events();
+      case 'fires': {
+        const ev = events();
+        return ev == null && linkedCount == null ? null : (ev ?? 0) + (linkedCount ?? 0);
       }
+      default:
+        return events();
     }
   }
 
@@ -479,7 +488,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           const count = groupCount(g.id);
           const label = g.id === 'fires' ? 'Feuer' : g.label.replace(' & Zyklone', '').replace(' & Unwetter (USA)', ' (USA)').replace(', Dürren & Erdrutsche', ' & Dürren').replace(', Schnee, Staub & Hitze', ' & Staub');
           const hint = g.id === 'fires' ? 'Waldbrände (EONET, GDACS), Satelliten-Hotspots (NASA FIRMS) und Brandflächen USA (NIFC)' : `${g.label} – ${g.hint}`;
-          const badge = `<span class="ltile-badge">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
+          const badge = `<span class="ltile-badge" data-gbadge="${g.id}">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
           return tile(`data-group="${g.id}"`, on, glyphSvg(g.icon, kindColor(g.icon), 20), label, hint, badge);
         })
         .join('');
@@ -757,6 +766,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   /** Update counts/notes of the extra layers without re-rendering the whole panel. */
   function updateBadges() {
     if (!extras) return;
+    for (const g of GROUPS) {
+      const gb = panel.querySelector(`[data-gbadge="${g.id}"]`);
+      if (!gb) continue;
+      const n = groupCount(g.id);
+      gb.textContent = state.groups[g.id] && n != null ? String(n) : '';
+    }
     for (const d of EXTRAS) {
       const badge = panel.querySelector(`[data-badge-for="${d.id}"]`);
       if (badge) badge.textContent = extras.badge(d.id);
@@ -820,7 +835,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     vis('nws-line', !!state.groups.tornado);
     // clickable points (own key or shared snapshot) when available, else the raster image
     vis('firms', !!state.groups.hotspots && firmsOk);
-    vis('hotspots', !!state.groups.hotspots && !firmsOk);
+    // the coarse raster is only a fallback once the point feed has actually failed (avoids a flash of other dots)
+    vis('hotspots', !!state.groups.hotspots && !firmsOk && feedData.firms.at > 0);
   }
 
   // ----- forecast model ----------------------------------------------------
