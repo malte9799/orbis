@@ -18,6 +18,7 @@ import {
   len,
   moonGeocentric,
   orbitPath,
+  semiMajorAxis,
   sub,
   type Vec3,
 } from './ephemeris';
@@ -178,7 +179,7 @@ export function createSpaceView(
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
   /** path of the selected probe: travelled part (bright) and the planned/future part (dim) */
-  let trail: { id: string; at: number; anchor: Vec3; past: THREE.Line; fut: THREE.Line; nPast: number; nFut: number } | null = null;
+  const trails = new Map<string, { at: number; anchor: Vec3; past: THREE.Line; fut: THREE.Line; nPast: number; nFut: number }>();
   const labels = new Map<string, HTMLDivElement>();
   let satPoints: THREE.Points | null = null;
   let sats: Sat[] = [];
@@ -398,7 +399,7 @@ export function createSpaceView(
     // probe trajectories (JPL Horizons): rebuild the trails once the exact data is there
     void loadTrajectories().then((ok) => {
       if (!ok) return;
-      clearTrail();
+      clearTrails();
     });
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     world.add(sunLight);
@@ -777,8 +778,9 @@ export function createSpaceView(
         o = { line, at: simTime };
         orbitLines.set(b.id, o);
       }
-      // by default only the planets' orbits; anything else only while selected
-      o.line.visible = opts.orbits && (b.kind === 'planet' || b.id === focusId);
+      // planets and everything far out (dwarf planets, distant asteroids); the inner
+      // small bodies only while selected, otherwise the inner system drowns in lines
+      o.line.visible = opts.orbits && (b.kind === 'planet' || b.id === focusId || semiMajorAxis(b.id) >= 5);
       toThree(sub([0, 0, 0], origin), o.line.position);
     }
     updateMoonOrbits();
@@ -883,71 +885,91 @@ export function createSpaceView(
     }
   }
 
-  function clearTrail() {
-    if (!trail) return;
-    for (const l of [trail.past, trail.fut]) {
+  function removeTrail(id: string) {
+    const t = trails.get(id);
+    if (!t) return;
+    for (const l of [t.past, t.fut]) {
       world.remove(l);
       l.geometry.dispose();
     }
-    trail = null;
+    trails.delete(id);
+  }
+  function clearTrails() {
+    for (const id of [...trails.keys()]) removeTrail(id);
   }
 
-  /** Exact path of the selected probe: all stored Horizons nodes, split at the current time. */
+  /**
+   * Exact path of probes: all stored Horizons nodes, split at the current time. Drawn for the
+   * selected probe and for those far out in the outer solar system (Voyager, Pioneer, …).
+   */
   function updateTrails() {
-    const c = CRAFT.find((x) => x.id === focusId);
-    const times = c ? trajectoryTimes(c.id) : null;
-    if (!c || !opts.craft || (!times && !TRAIL_DAYS[c.id])) {
-      clearTrail();
-      return;
-    }
-    if (trail && (trail.id !== c.id || Math.abs(trail.at - simTime) > 20 * 86400000)) clearTrail();
-    const at = (ms: number) => c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
-    if (!trail) {
-      let pastT: number[] = [];
-      let futT: number[] = [];
-      if (times) {
-        pastT = times.filter((t) => t < simTime);
-        futT = times.filter((t) => t > simTime);
-      } else {
-        const span = TRAIL_DAYS[c.id] * 86400000;
-        for (let k = 0; k < 1500; k++) pastT.push(simTime - span + (k / 1500) * span);
+    const wanted = new Set<string>();
+    if (opts.craft) {
+      for (const c of CRAFT) {
+        if (!trajectoryTimes(c.id) && !TRAIL_DAYS[c.id]) continue;
+        const p: Vec3 | null = c.id === focusId ? [0, 0, 0] : resolve(c.id, simTime);
+        if (c.id === focusId || (p && len(p) >= 5)) wanted.add(c.id);
       }
-      const pts = (ts: number[]) => ts.map((t) => at(t)).filter((p): p is Vec3 => !!p);
-      const past = pts(pastT);
-      const fut = pts(futT);
-      // vertices relative to the craft (float32 has ~7 digits: absolute AU coordinates would be
-      // off by millions of km and the line would not meet the model when zoomed in); one extra
-      // vertex per line is the craft itself and is updated every frame
-      const anchor = at(simTime) ?? past[past.length - 1] ?? fut[0] ?? ([0, 0, 0] as Vec3);
-      const mk = (list: Vec3[], liveFirst: boolean, opacity: number) => {
-        const arr = new Float32Array((list.length + 1) * 3);
-        list.forEach((p, i) => {
-          const v = toThree(sub(p, anchor));
-          arr.set([v.x, v.y, v.z], (i + (liveFirst ? 1 : 0)) * 3);
-        });
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity }));
-        line.frustumCulled = false;
-        world.add(line);
-        return line;
+    }
+    for (const id of [...trails.keys()]) if (!wanted.has(id)) removeTrail(id);
+    for (const id of wanted) {
+      const c = CRAFT.find((x) => x.id === id)!;
+      const times = trajectoryTimes(id);
+      let trail = trails.get(id);
+      if (trail && Math.abs(trail.at - simTime) > 20 * 86400000) {
+        removeTrail(id);
+        trail = undefined;
+      }
+      const at = (ms: number) => c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
+      if (!trail) {
+        let pastT: number[] = [];
+        let futT: number[] = [];
+        if (times) {
+          pastT = times.filter((t) => t < simTime);
+          futT = times.filter((t) => t > simTime);
+        } else {
+          const span = TRAIL_DAYS[id] * 86400000;
+          for (let k = 0; k < 1500; k++) pastT.push(simTime - span + (k / 1500) * span);
+        }
+        const pts = (ts: number[]) => ts.map((t) => at(t)).filter((p): p is Vec3 => !!p);
+        const past = pts(pastT);
+        const fut = pts(futT);
+        // vertices relative to the craft (float32 has ~7 digits: absolute AU coordinates would be
+        // off by millions of km and the line would not meet the model when zoomed in); one extra
+        // vertex per line is the craft itself and is updated every frame
+        const anchor = at(simTime) ?? past[past.length - 1] ?? fut[0] ?? ([0, 0, 0] as Vec3);
+        const mk = (list: Vec3[], liveFirst: boolean, opacity: number) => {
+          const arr = new Float32Array((list.length + 1) * 3);
+          list.forEach((p, i) => {
+            const v = toThree(sub(p, anchor));
+            arr.set([v.x, v.y, v.z], (i + (liveFirst ? 1 : 0)) * 3);
+          });
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+          const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity }));
+          line.frustumCulled = false;
+          world.add(line);
+          return line;
+        };
+        trail = { at: simTime, anchor, past: mk(past, false, 0.85), fut: mk(fut, true, 0.3), nPast: past.length, nFut: fut.length };
+        trails.set(id, trail);
+      }
+      const cur = at(simTime);
+      const v = cur ? toThree(sub(cur, trail.anchor)) : null;
+      const t = trail;
+      const put = (line: THREE.Line, idx: number, n: number) => {
+        const attr = line.geometry.getAttribute('position') as THREE.BufferAttribute;
+        if (v) {
+          attr.setXYZ(idx, v.x, v.y, v.z);
+          attr.needsUpdate = true;
+        }
+        line.geometry.setDrawRange(0, n + (v ? 1 : 0));
+        line.visible = n + (v ? 1 : 0) > 1;
+        toThree(sub(t.anchor, origin), line.position);
       };
-      trail = { id: c.id, at: simTime, anchor, past: mk(past, false, 0.85), fut: mk(fut, true, 0.3), nPast: past.length, nFut: fut.length };
+      put(t.past, t.nPast, t.nPast);
+      put(t.fut, 0, t.nFut);
     }
-    const cur = at(simTime);
-    const v = cur ? toThree(sub(cur, trail.anchor)) : null;
-    const put = (line: THREE.Line, idx: number, n: number) => {
-      const attr = line.geometry.getAttribute('position') as THREE.BufferAttribute;
-      if (v) {
-        attr.setXYZ(idx, v.x, v.y, v.z);
-        attr.needsUpdate = true;
-      }
-      line.geometry.setDrawRange(0, n + (v ? 1 : 0));
-      line.visible = n + (v ? 1 : 0) > 1;
-      toThree(sub(trail!.anchor, origin), line.position);
-    };
-    put(trail.past, trail.nPast, trail.nPast);
-    put(trail.fut, 0, trail.nFut);
   }
 
   function ensureSats() {

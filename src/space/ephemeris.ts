@@ -129,6 +129,11 @@ export function orbitPath(key: string, ms: number, n = 360): Vec3[] {
   return Array.from({ length: n + 1 }, (_, j) => fromElements(a, e, I, wbar, node, (j / n) * 2 * Math.PI));
 }
 
+/** Semi-major axis [AU] of a planet or registered small body. */
+export function semiMajorAxis(key: string) {
+  return SMALL[key]?.a ?? ELEMENTS[key === 'earth' ? 'emb' : key]?.[0][0] ?? 0;
+}
+
 export function orbitalPeriodDays(key: string) {
   if (SMALL[key]) return 365.256 * Math.pow(SMALL[key].a, 1.5);
   const a = ELEMENTS[key === 'earth' ? 'emb' : key][0][0];
