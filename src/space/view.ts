@@ -10,6 +10,7 @@ import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body 
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm } from './mars';
 import { PLANET_MAPS, mapEnabled } from './planets';
+import { loadTrajectories, trajectoryTimes } from './trajectories';
 import {
   AU_KM,
   eciToEcliptic,
@@ -17,6 +18,7 @@ import {
   len,
   moonGeocentric,
   orbitPath,
+  semiMajorAxis,
   sub,
   type Vec3,
 } from './ephemeris';
@@ -176,7 +178,8 @@ export function createSpaceView(
   const meshes = new Map<string, { group: THREE.Group; spin: THREE.Object3D; body: Body }>();
   const orbitLines = new Map<string, { line: THREE.Line; at: number }>();
   const moonLines = new Map<string, THREE.Line>();
-  const trails = new Map<string, { line: THREE.Line; at: number }>();
+  /** path of the selected probe: travelled part (bright) and the planned/future part (dim) */
+  const trails = new Map<string, { full: boolean; at: number; anchor: Vec3; ts: number[]; n: number; k: number; pos: THREE.BufferAttribute; past: THREE.Line; fut: THREE.Line }>();
   const labels = new Map<string, HTMLDivElement>();
   let satPoints: THREE.Points | null = null;
   let sats: Sat[] = [];
@@ -393,6 +396,11 @@ export function createSpaceView(
     envMap = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
     ensureSats();
     void loadMarsTracks(); // rover positions
+    // probe trajectories (JPL Horizons): rebuild the trails once the exact data is there
+    void loadTrajectories().then((ok) => {
+      if (!ok) return;
+      clearTrails();
+    });
     sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     world.add(sunLight);
     viewLight = new THREE.DirectionalLight(0xffffff, 0);
@@ -770,7 +778,9 @@ export function createSpaceView(
         o = { line, at: simTime };
         orbitLines.set(b.id, o);
       }
-      o.line.visible = opts.orbits;
+      // planets and everything far out (dwarf planets, distant asteroids); the inner
+      // small bodies only while selected, otherwise the inner system drowns in lines
+      o.line.visible = opts.orbits && (b.kind === 'planet' || b.id === focusId || semiMajorAxis(b.id) >= 5);
       toThree(sub([0, 0, 0], origin), o.line.position);
     }
     updateMoonOrbits();
@@ -875,33 +885,120 @@ export function createSpaceView(
     }
   }
 
+  function removeTrail(id: string) {
+    const t = trails.get(id);
+    if (!t) return;
+    for (const l of [t.past, t.fut]) {
+      world.remove(l);
+      l.geometry.dispose();
+    }
+    trails.delete(id);
+  }
+  function clearTrails() {
+    for (const id of [...trails.keys()]) removeTrail(id);
+  }
+
+  /**
+   * Exact path of probes: all stored Horizons nodes, split at the current time. Drawn for the
+   * selected probe and for those far out in the outer solar system (Voyager, Pioneer, …).
+   */
   function updateTrails() {
-    for (const c of CRAFT) {
-      const days = TRAIL_DAYS[c.id];
-      if (!days) continue;
-      let t = trails.get(c.id);
-      if (!t || Math.abs(t.at - simTime) > 20 * 86400000) {
-        if (t) world.remove(t.line);
-        const pts: THREE.Vector3[] = [];
-        const span = days * 86400000;
-        for (let k = 0; k <= 240; k++) {
-          const ms = simTime - span + (k / 240) * span;
-          const p = c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
-          if (p) pts.push(toThree(p));
-        }
-        const line = new THREE.Line(
-          new THREE.BufferGeometry().setFromPoints(pts),
-          new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.55 }),
-        );
-        world.add(line);
-        t = { line, at: simTime };
-        trails.set(c.id, t);
+    const wanted = new Set<string>();
+    if (opts.craft) {
+      for (const c of CRAFT) {
+        if (!trajectoryTimes(c.id) && !TRAIL_DAYS[c.id]) continue;
+        const p: Vec3 | null = c.id === focusId ? [0, 0, 0] : resolve(c.id, simTime);
+        if (c.id === focusId || (p && len(p) >= 5)) wanted.add(c.id);
       }
-      t.line.visible = opts.craft && pts0(t.line);
-      toThree(sub([0, 0, 0], origin), t.line.position);
+    }
+    for (const id of [...trails.keys()]) if (!wanted.has(id)) removeTrail(id);
+    for (const id of wanted) {
+      const c = CRAFT.find((x) => x.id === id)!;
+      const times = trajectoryTimes(id);
+      // the whole path (fly-bys included) only for the selected probe; otherwise just the far part
+      const full = id === focusId;
+      let trail = trails.get(id);
+      if (trail && (trail.full !== full || Math.abs(trail.at - simTime) > 20 * 86400000)) {
+        removeTrail(id);
+        trail = undefined;
+      }
+      const at = (ms: number) => c.position(ms, (pid) => resolve(pid, ms) ?? [0, 0, 0]);
+      if (!trail) {
+        // sample times: the stored nodes, each gap subdivided (Hermite) so curves look round
+        const ts: number[] = [];
+        if (times) {
+          const MAX_GAP = 0.5 * 86400000;
+          for (let i = 0; i < times.length; i++) {
+            ts.push(times[i]);
+            if (i + 1 < times.length) {
+              const pieces = Math.min(8, Math.ceil((times[i + 1] - times[i]) / MAX_GAP));
+              for (let j = 1; j < pieces; j++) ts.push(times[i] + ((times[i + 1] - times[i]) * j) / pieces);
+            }
+          }
+        } else {
+          const span = TRAIL_DAYS[id] * 86400000;
+          for (let k = 0; k < 1500; k++) ts.push(simTime - span + (k / 1500) * span);
+        }
+        const nodes: { t: number; p: Vec3 }[] = [];
+        for (const t of ts) {
+          const p = at(t);
+          if (p && (full || len(p) >= 5)) nodes.push({ t, p });
+        }
+        // vertices relative to the craft (float32 has ~7 digits: absolute AU coordinates would be
+        // off by millions of km and the line would not meet the model when zoomed in); the extra
+        // last vertex is the craft itself and is updated every frame
+        const anchor = at(simTime) ?? nodes[nodes.length - 1]?.p ?? ([0, 0, 0] as Vec3);
+        const n = nodes.length;
+        const arr = new Float32Array((n + 1) * 3);
+        nodes.forEach((nd, i) => {
+          const v = toThree(sub(nd.p, anchor));
+          arr.set([v.x, v.y, v.z], i * 3);
+        });
+        const pos = new THREE.BufferAttribute(arr, 3);
+        const mk = (opacity: number) => {
+          const geo = new THREE.BufferGeometry();
+          geo.setAttribute('position', pos);
+          const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity }));
+          line.frustumCulled = false;
+          world.add(line);
+          return line;
+        };
+        trail = { full, at: simTime, anchor, ts: nodes.map((x) => x.t), n, k: -1, pos, past: mk(0.85), fut: mk(0.3) };
+        trails.set(id, trail);
+      }
+      const t = trail;
+      const cur = at(simTime);
+      const v = cur ? toThree(sub(cur, t.anchor)) : null;
+      if (v) {
+        t.pos.setXYZ(t.n, v.x, v.y, v.z);
+        t.pos.needsUpdate = true;
+      }
+      // the cut between travelled and future part moves with the craft: nodes before the
+      // current time + the craft, and the craft + the remaining nodes
+      let lo = 0;
+      let hi = t.n;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (t.ts[mid] <= simTime) lo = mid + 1;
+        else hi = mid;
+      }
+      if (lo !== t.k) {
+        t.k = lo;
+        const pastIdx = Array.from({ length: lo }, (_, i) => i);
+        const futIdx = Array.from({ length: t.n - lo }, (_, i) => lo + i);
+        if (v) {
+          pastIdx.push(t.n);
+          futIdx.unshift(t.n);
+        }
+        t.past.geometry.setIndex(pastIdx);
+        t.fut.geometry.setIndex(futIdx);
+      }
+      t.past.visible = t.k > 0;
+      t.fut.visible = t.n - t.k > 0;
+      toThree(sub(t.anchor, origin), t.past.position);
+      toThree(sub(t.anchor, origin), t.fut.position);
     }
   }
-  const pts0 = (l: THREE.Line) => (l.geometry.getAttribute('position')?.count ?? 0) > 1;
 
   function ensureSats() {
     if (sats.length || satsLoading) return;
