@@ -96,14 +96,41 @@ function keplerPosition(key: string, T: number): Vec3 {
   return fromElements(a, e, I, wbar, node, solveKepler(L - wbar, e));
 }
 
+// ---------------------------------------------------------------------------
+// Small bodies (asteroids, dwarf planets): two-body Kepler orbit from osculating elements (JPL SBDB)
+
+export interface SmallBodyElements {
+  a: number; // AU
+  e: number;
+  i: number; // deg
+  om: number; // long. of ascending node [deg]
+  w: number; // argument of perihelion [deg]
+  ma: number; // mean anomaly at epoch [deg]
+  epochJD: number;
+}
+const SMALL: Record<string, SmallBodyElements> = {};
+export function registerSmallBody(key: string, el: SmallBodyElements) {
+  SMALL[key] = el;
+}
+
+export function smallBodyPosition(key: string, ms: number): Vec3 {
+  const el = SMALL[key];
+  const n = 0.9856076686 / Math.pow(el.a, 1.5); // deg/day
+  const M = el.ma + n * (julianDate(ms) - el.epochJD);
+  return fromElements(el.a, el.e, el.i, el.w + el.om, el.om, solveKepler(M, el.e));
+}
+
 /** Points along the current orbit (for drawing orbit lines). */
 export function orbitPath(key: string, ms: number, n = 360): Vec3[] {
+  const sb = SMALL[key];
+  if (sb) return Array.from({ length: n + 1 }, (_, j) => fromElements(sb.a, sb.e, sb.i, sb.w + sb.om, sb.om, (j / n) * 2 * Math.PI));
   const k = key === 'earth' ? 'emb' : key;
   const { a, e, I, wbar, node } = elementsAt(k, centuries(ms));
   return Array.from({ length: n + 1 }, (_, j) => fromElements(a, e, I, wbar, node, (j / n) * 2 * Math.PI));
 }
 
 export function orbitalPeriodDays(key: string) {
+  if (SMALL[key]) return 365.256 * Math.pow(SMALL[key].a, 1.5);
   const a = ELEMENTS[key === 'earth' ? 'emb' : key][0][0];
   return 365.256 * Math.pow(a, 1.5);
 }
