@@ -2652,3 +2652,22 @@ svg.hourly {
 .globe-bottom .legend:not([hidden]) + .timeline:not([hidden]) {
   border-top: 1px solid var(--border);
 }
+
+/* three main tabs: all labels visible */
+.ptab-label,
+.ptab.on .ptab-label {
+  display: inline;
+}
+
+.ptab.on {
+  flex-grow: 1;
+}
+
+.ptab:not(.on) .ptab-n {
+  position: static;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.14);
+}
