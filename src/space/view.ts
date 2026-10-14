@@ -184,21 +184,23 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
   const gltfCache = new Map<string, Promise<THREE.Object3D>>();
   const crafts = new Map<string, { group: THREE.Group; state: 'idle' | 'loading' | 'ready' | 'error'; detail: 'idle' | 'loading' | 'ready' | 'error'; base?: THREE.Object3D }>();
 
-  function loadModel(url: string) {
+  function loadModel(url: string, onProgress?: (frac: number) => void) {
     if (!gltfLoader) {
       const draco = new DRACOLoader().setDecoderPath('./draco/');
       gltfLoader = new GLTFLoader().setDRACOLoader(draco);
     }
     let p = gltfCache.get(url);
     if (!p) {
-      p = gltfLoader.loadAsync(url).then((g) => g.scene);
+      p = gltfLoader
+        .loadAsync(url, onProgress && ((e) => e.lengthComputable && e.total > 0 && onProgress(e.loaded / e.total)))
+        .then((g) => g.scene);
       gltfCache.set(url, p);
     }
     return p;
   }
 
   /** Normalise a loaded glTF scene to the craft's real size (centred, scaled to AU). */
-  function placeModel(src: THREE.Object3D, b: Body) {
+  function placeModel(src: THREE.Object3D, b: Body, detail = false) {
     const obj = src.clone(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
@@ -207,11 +209,20 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     const inner = new THREE.Group();
     inner.add(obj);
     inner.scale.setScalar(b.model!.sizeM / Math.max(size.x, size.y, size.z) / (AU_KM * 1000));
+    if (detail) inner.rotation.y = b.model!.detailRotY ?? 0;
     obj.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         const std = mat as THREE.MeshStandardMaterial;
+        if (detail && std.transparent && std.map) {
+          // alpha-blended cut-outs (panels, truss) sort wrongly and flicker; treat them as hard-edged cut-outs
+          std.transparent = false;
+          std.alphaTest = 0.5;
+          std.depthWrite = true;
+          std.alphaToCoverage = true;
+          std.needsUpdate = true;
+        }
         if ('envMap' in std) {
           std.envMap = envMap;
           std.envMapIntensity = 0.55;
@@ -252,24 +263,51 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
     return c;
   }
 
+  // progress chip for detailed models that are being downloaded
+  const loading = new Map<string, number>();
+  const loadChip = document.createElement('div');
+  loadChip.className = 'sp-loadchip';
+  loadChip.hidden = true;
+  el.append(loadChip);
+  function drawLoad() {
+    loadChip.hidden = loading.size === 0;
+    loadChip.innerHTML = [...loading]
+      .map(
+        ([id, f]) =>
+          `<div><span>${escapeHtml(byId.get(id)?.name ?? id)} · Detailmodell wird geladen${f > 0 ? ` … ${Math.round(f * 100)} %` : ' …'}</span><i style="width:${Math.round(f * 100)}%"></i></div>`,
+      )
+      .join('');
+  }
+  function showLoad(b: Body, f: number) {
+    loading.set(b.id, f);
+    drawLoad();
+  }
+  function hideLoad(b: Body) {
+    loading.delete(b.id);
+    drawLoad();
+  }
+
   /** Fetch the big detailed model (if the craft has one) and swap it in; the small one stays until then. */
   function ensureDetailModel(b: Body) {
     const c = crafts.get(b.id);
     const url = b.model?.detailUrl;
     if (!c || !url || c.detail !== 'idle') return;
     c.detail = 'loading';
+    showLoad(b, 0);
     if (b.id === focusId) renderInfo();
-    loadModel(url)
+    loadModel(url, (f) => showLoad(b, f))
       .then((src) => {
-        const inner = placeModel(src, b);
+        const inner = placeModel(src, b, true);
         if (c.base) c.group.remove(c.base);
         c.group.add(inner);
         c.detail = 'ready';
+        hideLoad(b);
         if (b.id === focusId) renderInfo();
       })
       .catch((e) => {
         console.warn('Detailmodell', b.id, e);
         c.detail = 'error'; // keep showing the small model
+        hideLoad(b);
         if (b.id === focusId) renderInfo();
       });
   }

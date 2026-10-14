@@ -1612,6 +1612,40 @@ svg.hourly {
   color: var(--text);
 }
 
+.sp-loadchip {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  min-width: 240px;
+  padding: 8px 12px;
+  background: rgba(13, 18, 38, 0.88);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.sp-loadchip div + div {
+  margin-top: 6px;
+}
+
+.sp-loadchip span {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.sp-loadchip i {
+  display: block;
+  height: 3px;
+  min-width: 6%;
+  border-radius: 2px;
+  background: var(--accent, #4aa3ff);
+  transition: width 0.2s;
+}
+
 .space-info {
   position: absolute;
   z-index: 4;
