@@ -59,7 +59,7 @@ type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 
-type PanelTab = 'weather' | 'events' | 'traffic';
+type PanelTab = 'weather' | 'events' | 'earth' | 'traffic' | 'infra' | 'live';
 
 /** Weather layers grouped into families; families with several variants get a switcher. */
 const WX_FAMILIES: { id: string; label: string; hint: string; variants: [OverlayId, string][]; swatch?: string }[] = [
@@ -78,8 +78,59 @@ const WX_FAMILIES: { id: string; label: string; hint: string; variants: [Overlay
 const familyOf = (o: OverlayId) => WX_FAMILIES.find((f) => f.variants.some(([v]) => v === o));
 
 const isField = (o: string): o is FieldId => o in FIELDS;
-/** extra-layer sections shown on the "Ereignisse" tab (the others are on "Verkehr") */
-const isEventSection = (s: string) => s === 'europe' || s === 'earth' || s === 'ocean';
+
+/**
+ * Panel structure: top-level tabs, each with optional sub-groups (shown as subtle chips).
+ * The extra layers are placed here by id; anything not listed lands in "Infra → Weitere".
+ */
+interface SubDef { id: string; label: string; groups?: boolean; extras: ExtraId[] }
+const TABS: { id: PanelTab; label: string; title: string; icon: string; subs: SubDef[] }[] = [
+  { id: 'weather', label: 'Wetter', title: 'Wetter & Radar', icon: 'M7 18a4 4 0 0 1-.5-8A5.5 5.5 0 0 1 17 8.5 4.5 4.5 0 0 1 17.5 18z', subs: [] },
+  {
+    id: 'events', label: 'Ereignisse', title: 'Naturereignisse, Warnungen & Messwerte', icon: 'M12 3l10 18H2z M12 10v5 M12 18v.01',
+    subs: [
+      { id: 'nature', label: 'Natur', groups: true, extras: ['gvp', 'fireareas'] },
+      { id: 'warn', label: 'Warnungen', extras: ['dwdwarn', 'nina', 'tsunami', 'gauges', 'rivers'] },
+      { id: 'measure', label: 'Messwerte', extras: ['lightning', 'radiation', 'aq', 'aurora'] },
+    ],
+  },
+  {
+    id: 'earth', label: 'Erde', title: 'Land, Untergrund & Meer', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M3 12h18 M12 3c3 3 3 15 0 18 M12 3c-3 3-3 15 0 18',
+    subs: [
+      { id: 'land', label: 'Land', extras: ['ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'terrain'] },
+      { id: 'ground', label: 'Untergrund', extras: ['geology', 'plates', 'resources'] },
+      { id: 'sea', label: 'Meer', extras: ['waves', 'buoys', 'tides', 'bathymetry', 'chlorophyll'] },
+    ],
+  },
+  {
+    id: 'traffic', label: 'Verkehr', title: 'Luft, Schiene, Straße & See – live und Netze', icon: 'M4 8h13l-3-3 M20 16H7l3 3',
+    subs: [
+      { id: 'air', label: 'Luft & All', extras: ['aircraft', 'airports', 'launches', 'sats', 'starlink', 'sondes'] },
+      { id: 'rail', label: 'Schiene', extras: ['trains', 'transit', 'railmap', 'busnet', 'railspeed', 'railelec'] },
+      { id: 'road', label: 'Straße', extras: ['autobahn', 'roadnet', 'cyclenet', 'hikenet'] },
+      { id: 'sea', label: 'See', extras: ['ships', 'shipping'] },
+    ],
+  },
+  {
+    id: 'infra', label: 'Infra', title: 'Energie, Leitungen & Datennetze', icon: 'M13 2L4 14h7l-1 8 9-12h-7z',
+    subs: [
+      { id: 'energy', label: 'Energie', extras: ['wind', 'solar', 'plants', 'pipelines'] },
+      { id: 'data', label: 'Datennetze', extras: ['cables'] },
+    ],
+  },
+  {
+    id: 'live', label: 'Live', title: 'Webcams, Radio & Kameras', icon: 'M12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z M7.5 7.5a6 6 0 0 0 0 9 M16.5 7.5a6 6 0 0 1 0 9 M4.5 4.5a10 10 0 0 0 0 15 M19.5 4.5a10 10 0 0 1 0 15',
+    subs: [{ id: 'live', label: 'Live', extras: ['webcams', 'radio', 'alpr'] }],
+  },
+];
+/** extras shown on the weather tab (regional radars, city weather) */
+const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar'];
+{
+  const placed = new Set<ExtraId>([...WEATHER_EXTRAS, ...TABS.flatMap((t) => t.subs.flatMap((s) => s.extras))]);
+  const rest = EXTRAS.map((d) => d.id).filter((id) => !placed.has(id));
+  if (rest.length) TABS.find((t) => t.id === 'infra')!.subs.push({ id: 'more', label: 'Weitere', extras: rest });
+}
+const tabDef = (id: PanelTab) => TABS.find((t) => t.id === id) ?? TABS[0];
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -133,6 +184,8 @@ interface GlobeState {
   zoom: number;
   panelOpen: boolean;
   panelTab?: PanelTab;
+  /** last chosen sub-group per tab */
+  subTabs?: Partial<Record<PanelTab, string>>;
   /** last chosen variant per weather family (e.g. temp → feels) */
   variants?: Partial<Record<string, OverlayId>>;
   version?: number;
@@ -194,6 +247,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
       </button>
     </div>
+    <div class="active-strip" hidden></div>
     <aside class="panel" ${state.panelOpen ? '' : 'hidden'}></aside>
     <div class="base-switch"></div>
     <dialog class="settings-dialog"></dialog>
@@ -380,16 +434,24 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const activeFam = familyOf(state.overlay);
     const loading = (g: (typeof GROUPS)[number]) => g.feeds.some((f) => feedData[f].loading);
 
-    // counts of active layers per tab (shown on the tab buttons)
     const groupOn = (id: GroupId) => !!state.groups[id];
     const extraOn = (id: ExtraId) => !!state.extras[id];
-    const evCount = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length + EXTRAS.filter((d) => isEventSection(d.section) && extraOn(d.id)).length;
-    const trCount = EXTRAS.filter((d) => !isEventSection(d.section) && extraOn(d.id)).length;
-    const wxCount = (state.overlay !== 'none' ? 1 : 0) + (state.wind && !FIELDS[state.overlay as FieldId]?.particles ? 1 : 0) + (state.isobars ? 1 : 0);
+    const groupsOn = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length;
+    const subCount = (_t: (typeof TABS)[number], sub: SubDef) =>
+      sub.extras.filter(extraOn).length + (sub.groups ? groupsOn : 0);
+    const tabCount = (t: (typeof TABS)[number]) =>
+      t.id === 'weather'
+        ? (state.overlay !== 'none' ? 1 : 0) + (state.wind && !FIELDS[state.overlay as FieldId]?.particles ? 1 : 0) + (state.isobars ? 1 : 0) + WEATHER_EXTRAS.filter(extraOn).length
+        : t.subs.reduce((n, s) => n + subCount(t, s), 0);
 
     const tile = (attrs: string, on: boolean, icon: string, label: string, title: string, badge = '') =>
       `<button type="button" class="ltile ${on ? 'on' : ''}" ${attrs} aria-pressed="${on}" title="${escapeHtml(title)}">
         ${icon}<span class="ltile-label">${escapeHtml(label)}</span>${badge}</button>`;
+    const extraTile = (id: ExtraId) => {
+      const d = EXTRAS.find((x) => x.id === id);
+      if (!d) return '';
+      return tile(`data-extra="${d.id}"`, extraOn(d.id), glyphSvg(d.glyph, d.color, 20), d.label, `${d.label} – ${d.hint}`, `<span class="ltile-badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>`);
+    };
 
     // ----- Wetter
     const weather = `
@@ -415,49 +477,47 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <p class="small muted panel-meta">${
         modelLoading ? 'Vorhersagedaten werden geladen …' : globalModel ? 'Vorhersage bis +5 Tage – Zeitleiste unten' : ''
       }</p>
-      ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}`;
+      ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}
+      <h3>Zusätzlich</h3>
+      <div class="tile-grid">${WEATHER_EXTRAS.map(extraTile).join('')}</div>`;
 
-    // ----- Ereignisse (incl. Europe)
-    const groupTiles = GROUPS.filter((g) => g.id !== 'hotspots')
-      .map((g) => {
-        const on = groupOn(g.id);
-        const count = groupCount(g.id);
-        const label = g.id === 'fires' ? 'Feuer' : g.label.replace(' & Zyklone', '').replace(' & Unwetter (USA)', ' (USA)').replace(', Dürren & Erdrutsche', ' & Dürren').replace(', Schnee, Staub & Hitze', ' & Staub');
-        const hint = g.id === 'fires' ? 'Waldbrände (EONET, GDACS) und Satelliten-Hotspots (NASA FIRMS)' : `${g.label} – ${g.hint}`;
-        const badge = `<span class="ltile-badge">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
-        return tile(`data-group="${g.id}"`, on, glyphSvg(g.icon, kindColor(g.icon), 20), label, hint, badge);
-      })
-      .join('');
-    const extraTiles = (sec: string) =>
-      EXTRAS.filter((d) => d.section === sec)
-        .map((d) => tile(`data-extra="${d.id}"`, extraOn(d.id), glyphSvg(d.glyph, d.color, 20), d.label, `${d.label} – ${d.hint}`, `<span class="ltile-badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>`))
+    // ----- sub-grouped tabs
+    const groupTiles = () =>
+      GROUPS.filter((g) => g.id !== 'hotspots')
+        .map((g) => {
+          const on = groupOn(g.id);
+          const count = groupCount(g.id);
+          const label = g.id === 'fires' ? 'Feuer' : g.label.replace(' & Zyklone', '').replace(' & Unwetter (USA)', ' (USA)').replace(', Dürren & Erdrutsche', ' & Dürren').replace(', Schnee, Staub & Hitze', ' & Staub');
+          const hint = g.id === 'fires' ? 'Waldbrände (EONET, GDACS) und Satelliten-Hotspots (NASA FIRMS)' : `${g.label} – ${g.hint}`;
+          const badge = `<span class="ltile-badge">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
+          return tile(`data-group="${g.id}"`, on, glyphSvg(g.icon, kindColor(g.icon), 20), label, hint, badge);
+        })
         .join('');
-    const events = `
-      <h3>Naturereignisse</h3>
-      <div class="tile-grid">${groupTiles}</div>
-      <h3>Europa & Messwerte</h3>
-      <div class="tile-grid">${extraTiles('europe')}</div>
-      <h3>Erde & Umwelt</h3>
-      <div class="tile-grid">${extraTiles('earth')}</div>`;
-    const traffic = `
-      <h3>Luftraum & Weltraum</h3>
-      <div class="tile-grid">${extraTiles('air')}</div>
-      <h3>Verkehr & Infrastruktur</h3>
-      <div class="tile-grid">${extraTiles('infra')}</div>
-      <h3>Verkehrsnetze</h3>
-      <div class="tile-grid">${extraTiles('networks')}</div>
-      <h3>Kameras &amp; Radio</h3>
-      <div class="tile-grid">${extraTiles('cams')}</div>`;
+    const curTab = tabDef(tab);
+    const curSub = curTab.subs.find((s) => s.id === state.subTabs?.[tab]) ?? curTab.subs[0];
+    const subBar =
+      curTab.subs.length > 1
+        ? `<div class="subtabs" role="tablist" aria-label="Gruppe">${curTab.subs
+            .map((s) => {
+              const n = subCount(curTab, s);
+              return `<button type="button" role="tab" class="subtab ${s === curSub ? 'on' : ''}" data-sub="${s.id}" aria-selected="${s === curSub}">${escapeHtml(s.label)}${n ? `<i>${n}</i>` : ''}</button>`;
+            })
+            .join('')}</div>`
+        : '';
+    const grouped = curSub
+      ? `${subBar}<div class="tile-grid">${curSub.groups ? groupTiles() : ''}${curSub.extras.map(extraTile).join('')}</div>`
+      : '';
 
-    const tabBtn = (id: PanelTab, label: string, n: number) =>
-      `<button type="button" role="tab" class="ptab ${tab === id ? 'on' : ''}" data-tab="${id}" aria-selected="${tab === id}">${label}${n ? `<span class="ptab-n">${n}</span>` : ''}</button>`;
+    const tabBtn = (t: (typeof TABS)[number]) => {
+      const n = tabCount(t);
+      return `<button type="button" role="tab" class="ptab ${tab === t.id ? 'on' : ''}" data-tab="${t.id}" aria-selected="${tab === t.id}" aria-label="${t.label}" title="${escapeHtml(t.title)}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${t.icon}"/></svg><span class="ptab-label">${t.label}</span>${n ? `<span class="ptab-n">${n}</span>` : ''}</button>`;
+    };
 
     panel.innerHTML = `
-      <div class="ptabs" role="tablist">
-        ${tabBtn('weather', 'Wetter', wxCount)}${tabBtn('events', 'Ereignisse', evCount)}${tabBtn('traffic', 'Verkehr', trCount)}
-      </div>
+      <div class="ptabs" role="tablist">${TABS.map(tabBtn).join('')}</div>
       <div class="panel-scroll">
-        ${tab === 'weather' ? weather : tab === 'events' ? events : traffic}
+        ${tab === 'weather' ? weather : grouped}
         <div class="panel-notes"></div>
       </div>`;
     panel.querySelector('.panel-scroll')!.scrollTop = scrollTop;
@@ -466,6 +526,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) =>
       b.addEventListener('click', () => {
         state.panelTab = b.dataset.tab as PanelTab;
+        panel.querySelector('.panel-scroll')!.scrollTop = 0;
+        renderPanel();
+        save();
+      }),
+    );
+    panel.querySelectorAll<HTMLButtonElement>('[data-sub]').forEach((b) =>
+      b.addEventListener('click', () => {
+        state.subTabs = { ...state.subTabs, [tab]: b.dataset.sub! };
         panel.querySelector('.panel-scroll')!.scrollTop = 0;
         renderPanel();
         save();
@@ -495,27 +563,61 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }),
     );
     panel.querySelectorAll<HTMLButtonElement>('[data-group]').forEach((b) =>
-      b.addEventListener('click', () => {
-        const id = b.dataset.group as GroupId;
-        const on = !state.groups[id];
-        state.groups[id] = on;
-        if (id === 'fires') state.groups.hotspots = on; // "Feuer" = Waldbrände + Hotspots
-        applyGroups();
-        ensureFeeds();
-        renderPanel();
-        save();
-      }),
+      b.addEventListener('click', () => toggleGroup(b.dataset.group as GroupId)),
     );
     panel.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach((b) =>
-      b.addEventListener('click', () => {
-        const id = b.dataset.extra as ExtraId;
-        const on = !state.extras[id];
-        state.extras[id] = on;
-        extras?.toggle(id, on);
-        renderPanel();
-        save();
-      }),
+      b.addEventListener('click', () => toggleExtra(b.dataset.extra as ExtraId)),
     );
+    renderStrip();
+  }
+
+  function toggleGroup(id: GroupId) {
+    const on = !state.groups[id];
+    state.groups[id] = on;
+    if (id === 'fires') state.groups.hotspots = on; // "Feuer" = Waldbrände + Hotspots
+    applyGroups();
+    ensureFeeds();
+    renderPanel();
+    save();
+  }
+
+  function toggleExtra(id: ExtraId) {
+    const on = !state.extras[id];
+    state.extras[id] = on;
+    extras?.toggle(id, on);
+    renderPanel();
+    save();
+  }
+
+  /** Subtle strip of the active layers (click to switch one off) – visible while the panel is closed or beside it. */
+  const strip = el.querySelector<HTMLElement>('.active-strip')!;
+  function renderStrip() {
+    const items: { label: string; color: string; off: () => void }[] = [];
+    const fam = familyOf(state.overlay);
+    if (state.overlay !== 'none') {
+      const variant = fam?.variants.find(([v]) => v === state.overlay)?.[1];
+      const label = state.overlay.startsWith('owm-')
+        ? OWM_LAYERS.find((l) => `owm-${l.id}` === state.overlay)?.label ?? 'OWM'
+        : fam
+          ? variant && fam.variants.length > 1 ? `${fam.label}: ${variant}` : fam.label
+          : String(state.overlay);
+      items.push({ label, color: '#5b9dff', off: () => setOverlay('none') });
+    }
+    for (const g of GROUPS) {
+      if (g.id === 'hotspots' || !state.groups[g.id]) continue;
+      items.push({ label: g.id === 'fires' ? 'Feuer' : g.label.split(/ [&(,]/)[0], color: kindColor(g.icon), off: () => toggleGroup(g.id) });
+    }
+    for (const d of EXTRAS) if (state.extras[d.id]) items.push({ label: d.label, color: d.color, off: () => toggleExtra(d.id) });
+    const MAX = 6;
+    const shown = items.slice(0, MAX);
+    strip.hidden = !items.length;
+    strip.innerHTML =
+      shown.map((it, i) => `<button type="button" class="strip-chip" data-i="${i}" title="Ausblenden"><i style="background:${it.color}"></i>${escapeHtml(it.label)}<b>×</b></button>`).join('') +
+      (items.length > MAX ? `<button type="button" class="strip-chip more" data-more title="Alle Ebenen anzeigen">+${items.length - MAX}</button>` : '');
+    strip.querySelectorAll<HTMLButtonElement>('[data-i]').forEach((b) => b.addEventListener('click', () => shown[Number(b.dataset.i)].off()));
+    strip.querySelector('[data-more]')?.addEventListener('click', () => {
+      if (panel.hidden) panelToggle.click();
+    });
   }
 
   function setOverlay(next: OverlayId) {
@@ -696,9 +798,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const badge = panel.querySelector(`[data-badge-for="${d.id}"]`);
       if (badge) badge.textContent = extras.badge(d.id);
     }
-    // hints like "zoom in to see aircraft" for the layers on the current tab
+    // hints like "zoom in to see aircraft" for the layers on the current tab/sub-group
     const tab = state.panelTab ?? 'weather';
-    const notes = EXTRAS.filter((d) => (tab === 'events' ? isEventSection(d.section) : tab === 'traffic' ? !isEventSection(d.section) : false))
+    const t = tabDef(tab);
+    const sub = t.subs.find((x) => x.id === state.subTabs?.[tab]) ?? t.subs[0];
+    const ids = tab === 'weather' ? WEATHER_EXTRAS : sub?.extras ?? [];
+    const notes = EXTRAS.filter((d) => ids.includes(d.id))
       .map((d) => [d.label, extras!.note(d.id)] as const)
       .filter(([, n]) => n);
     const box = panel.querySelector('.panel-notes');
