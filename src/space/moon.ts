@@ -5,7 +5,7 @@ import * as THREE from 'three';
 // landing sites. Everything hangs below the moon mesh (a unit sphere scaled to the radius),
 // so all lengths here are in moon radii.
 
-export type FlagKind = 'us' | 'su' | 'cn' | 'in' | 'jp';
+export type FlagKind = 'us' | 'su' | 'cn' | 'in' | 'jp' | 'eu';
 
 export interface LandingSite {
   id: string;
@@ -21,9 +21,13 @@ export interface LandingSite {
   region: string;
   text: string;
   approx?: boolean;
+  /** body the site belongs to (default: the Moon) */
+  body?: string;
+  /** a rover model stands here: label only, no flag */
+  hideFlag?: boolean;
 }
 
-export const COUNTRY: Record<FlagKind, string> = { us: 'USA', su: 'Sowjetunion', cn: 'China', in: 'Indien', jp: 'Japan' };
+export const COUNTRY: Record<FlagKind, string> = { us: 'USA', su: 'Sowjetunion', cn: 'China', in: 'Indien', jp: 'Japan', eu: 'Europa' };
 
 export const LANDING_SITES: LandingSite[] = [
   {
@@ -399,19 +403,15 @@ function makeFlag(site: LandingSite) {
   return g;
 }
 
-// ----- close-up tiles (NASA Moon Trek WMTS, equirectangular, 2×1 tiles at level 0) ------
+// ----- close-up tiles (equirectangular WMTS pyramids, see planets.ts) ------
 
-const TILE_URL = (z: number, row: number, col: number) =>
-  `https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/${z}/${row}/${col}.jpg`;
-const TILE_MAX_Z = 7; // 303 px/° → level 7 (182 px/°) is the last one that adds detail
-const TILE_PX = 256;
 const MAX_LOADS = 6;
 const MAX_CACHED = 220;
 /**
  * How far tiles float above the base sphere (in radii), growing with the camera altitude:
  * the depth buffer can only tell surfaces apart that are ≈ 1 % of the viewing distance apart.
  */
-const tileLift = (altitude: number) => Math.min(4e-3, 2e-5 + 0.02 * altitude);
+const tileLift = (altitude: number) => Math.min(4e-3, 1e-8 + 0.02 * altitude);
 
 interface Tile {
   key: string;
@@ -463,21 +463,34 @@ function tileGeometry(z: number, row: number, col: number) {
 // ----- the detail controller ---------------------------------------------------
 
 export interface MoonDetailOptions {
+  /** body the detail belongs to ('moon', 'mars') */
+  body: string;
+  sites: LandingSite[];
+  /** tile source per level */
+  source: (z: number) => { url: (z: number, row: number, col: number) => string; px: number; maxZ: number; tint?: number };
+  /** finest tile level (the last one of the layers) */
+  maxZ: number;
+  /** tile level the global base texture is as sharp as */
+  baseLevel: number;
+  /** load the sharper Moon textures (4k/8k + normal map) when zooming in */
+  upgradeBase: boolean;
   labelHost: HTMLElement;
   onSite: (id: string) => void;
   maxTextureSize: number;
   anisotropy: number;
 }
 
-export class MoonDetail {
+export class BodyDetail {
   private loader = new THREE.TextureLoader();
   private material: THREE.MeshStandardMaterial;
   private baseStage = 0; // 0: 2k, 1: 4k requested, 2: 8k requested
-  private baseLevel = 2; // tile level the current base texture is as sharp as
+  private baseLevel: number; // tile level the current base texture is as sharp as
   private normalMapTiles: THREE.Texture | null = null;
 
   private tiles = new Map<string, Tile>();
   private tileGroup = new THREE.Group();
+  /** overlays that follow the surface (rover traverses): scaled like the tiles */
+  readonly lineGroup = new THREE.Group();
   private loads = 0;
   private tileOk = 0;
   private tileFail = 0;
@@ -485,6 +498,10 @@ export class MoonDetail {
   private flags: { site: LandingSite; dir: THREE.Vector3; obj: THREE.Group; label: HTMLDivElement; t: number; shown: boolean }[] = [];
   /** selected landing site (highlighted label) */
   selected: string | null = null;
+  /** apparent radius of the body on screen in pixels (0 = hidden) */
+  get screen() {
+    return this.screenR;
+  }
 
   private camLocal = new THREE.Vector3();
   private p = new THREE.Vector3();
@@ -503,8 +520,10 @@ export class MoonDetail {
     private o: MoonDetailOptions,
   ) {
     this.material = mesh.material as THREE.MeshStandardMaterial;
+    this.baseLevel = o.baseLevel;
     mesh.add(this.tileGroup);
-    for (const site of LANDING_SITES) {
+    mesh.add(this.lineGroup);
+    for (const site of o.sites) {
       const obj = makeFlag(site);
       mesh.add(obj);
       const label = document.createElement('div');
@@ -535,6 +554,7 @@ export class MoonDetail {
   }
 
   private upgradeBase() {
+    if (!this.o.upgradeBase) return;
     const m = this.material;
     if (this.baseStage < 1 && this.screenR > 50) {
       this.baseStage = 1;
@@ -584,15 +604,16 @@ export class MoonDetail {
     const tile: Tile = { key, z, row, col, state: 'loading' };
     this.tiles.set(key, tile);
     this.loads++;
+    const src = this.o.source(z);
     this.loader.load(
-      TILE_URL(z, row, col),
+      src.url(z, row, col),
       (t) => {
         this.loads--;
         this.tileOk++;
         t.colorSpace = THREE.SRGBColorSpace;
         t.anisotropy = this.o.anisotropy;
-        const mesh = new THREE.Mesh(tileGeometry(z, row, col), new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0 }));
-        mesh.userData.id = 'moon';
+        const mesh = new THREE.Mesh(tileGeometry(z, row, col), new THREE.MeshStandardMaterial({ map: t, roughness: 1, metalness: 0, color: src.tint ?? 0xffffff }));
+        mesh.userData.id = this.o.body;
         mesh.visible = false;
         tile.mesh = mesh;
         tile.state = 'ready';
@@ -634,9 +655,9 @@ export class MoonDetail {
       if (!this.frustum.intersectsSphere(sphere)) return;
       const a = Math.max(0, ang - rho);
       const dist = Math.max(d - 1, Math.sqrt(d * d + 1 - 2 * d * Math.cos(a)));
-      const texel = (span * Math.PI) / 180 / TILE_PX;
+      const texel = (span * Math.PI) / 180 / this.o.source(z).px;
       const px = (texel / dist) * pxPerRad;
-      if (px > 1.3 && z < TILE_MAX_Z) {
+      if (px > 1.3 && z < this.o.maxZ) {
         for (let r = 0; r < 2; r++) for (let k = 0; k < 2; k++) visit(z + 1, row * 2 + r, col * 2 + k);
       } else if (z > this.baseLevel) out.push([z, row, col]);
     };
@@ -663,7 +684,7 @@ export class MoonDetail {
           found = t;
           break;
         }
-        if (zz === z && !t) missing.push([z, row, col]);
+        if (!t) missing.push([zz, rr, cc]); // the tile and, so it does not pop in alone, its ancestors
         zz--;
         rr >>= 1;
         cc >>= 1;
@@ -695,7 +716,7 @@ export class MoonDetail {
     missing.sort((a, b) => a[0] - b[0]);
     for (const [z, row, col] of missing) {
       if (this.loads >= MAX_LOADS) break;
-      this.requestTile(z, row, col);
+      if (!this.tiles.has(`${z}/${row}/${col}`)) this.requestTile(z, row, col);
     }
     this.evict(show);
   }
@@ -730,6 +751,7 @@ export class MoonDetail {
     this.upgradeBase();
     const lift = 1 + tileLift(d - 1);
     this.tileGroup.scale.setScalar(lift);
+    this.lineGroup.scale.setScalar(1 + (lift - 1) * 1.6 + 1.5e-5);
     this.updateTiles(pxPerRad, camera);
 
     const n = this.v;
@@ -737,7 +759,7 @@ export class MoonDetail {
       const p = this.p.copy(f.dir);
       const facing = p.dot(this.camLocal); // > 1: above the horizon
       f.shown = showSites && simTime >= f.t && this.screenR > 70 && facing > 1.0015;
-      f.obj.visible = f.shown;
+      f.obj.visible = f.shown && !f.site.hideFlag;
       if (!f.shown) continue;
       // screen-constant size, the crewed landings a little larger
       const px = (f.site.crewed ? 30 : 22) * Math.min(1, Math.max(0.6, this.screenR / 300)) * (f.site.id === this.selected ? 1.25 : 1);
