@@ -216,6 +216,8 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
       if (!mesh.isMesh) return;
       for (const mat of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
         const std = mat as THREE.MeshStandardMaterial;
+        // many NASA models are single-sided (e.g. JWST's sunshield is invisible from below)
+        std.side = THREE.DoubleSide;
         if (detail && std.transparent && std.map) {
           // alpha-blended cut-outs (panels, truss) sort wrongly and flicker; treat them as hard-edged cut-outs
           std.transparent = false;
@@ -1102,7 +1104,7 @@ export function createSpaceView(onOpenEarthMap: (lat: number, lon: number) => vo
             ).join('')}</div>`
           : ''
       }
-      ${b.model ? `<p class="small muted">3D-Modell: NASA 3D Resources${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
+      ${b.model ? `<p class="small muted">3D-Modell: ${escapeHtml(b.model.source ?? 'NASA 3D Resources')}${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
         crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : crafts.get(b.id)?.detail === 'loading' ? ' · Detailmodell wird geladen …' : ''
       }</p>` : ''}
       <div class="sp-actions">

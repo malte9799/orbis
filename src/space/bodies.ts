@@ -36,7 +36,7 @@ export interface Body {
   /** orbital period around the parent (moons) */
   periodDays?: number;
   /** NASA 3D model (glTF), loaded on demand; sizeM = real largest dimension in metres */
-  model?: { url: string; sizeM: number; note?: string; detailUrl?: string; detailRotY?: number };
+  model?: { url: string; sizeM: number; note?: string; detailUrl?: string; detailRotY?: number; source?: string };
 }
 
 export type PositionContext = (id: string) => Vec3;
@@ -542,6 +542,7 @@ export const CRAFT: Body[] = [
     name: 'SOHO',
     kind: 'craft',
     radiusKm: 0.004,
+    model: m('soho.glb', 9.5),
     color: '#ffb84d',
     approx: true,
     position: (ms, ctx) => (ms < date('1996-02-14') ? null : scale(ctx('earth'), 0.99)),
@@ -663,6 +664,7 @@ export const CRAFT: Body[] = [
     name: 'JUICE',
     kind: 'craft',
     radiusKm: 0.003,
+    model: { ...m('juice.glb', 27), source: 'ESA SPICE (Cosmographia-Modell)' },
     color: '#7ad3ff',
     approx: true,
     position: cruise(
@@ -687,6 +689,7 @@ export const CRAFT: Body[] = [
     name: 'BepiColombo',
     kind: 'craft',
     radiusKm: 0.003,
+    model: { ...m('bepicolombo.glb', 30), source: 'ESA SPICE (Cosmographia-Modell)' },
     color: '#7ad3ff',
     approx: true,
     position: cruise(

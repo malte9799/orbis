@@ -29,7 +29,7 @@ Drei Ansichten:
   - Raumsonden: Voyager 1/2, New Horizons, Pioneer 10/11, Parker Solar Probe, James-Webb-Teleskop,
     SOHO, Juno, Perseverance, Curiosity, Europa Clipper, JUICE, BepiColombo – mit Flugbahnen
   - Erdsatelliten (ISS, Wetter-, GPS-, Galileo-Satelliten) in Erdnähe, berechnet aus CelesTrak-Bahndaten
-  - 3D-Modelle der NASA ([NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), frei verwendbar) für
+  - 3D-Modelle der NASA ([NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources), frei verwendbar) und der ESA für JUICE und BepiColombo (Cosmographia-Modelle aus den [ESA SPICE-Daten](https://spiftp.esac.esa.int/data/SPICE/), © ESA) für
     James-Webb-Teleskop, Hubble, ISS, Voyager, Pioneer, Parker Solar Probe, Juno, Perseverance/Curiosity und LRO.
     Sie werden erst geladen, wenn man ein Objekt anwählt oder nah genug heranzoomt; Die ISS wird zunächst klein, dann (beim Anwählen/Heranzoomen) als detailliertes NASA-Modell (≈ 96 MB, beim Deploy geladen) gezeigt; Große Modelle (Rover, JWST, Europa Clipper …) haben eine kleine Schnellvariante (`*-lite.glb`), die vom Original abgelöst wird; Hubble und ISS mit Live-Position
 
