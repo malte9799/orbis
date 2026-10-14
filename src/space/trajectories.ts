@@ -56,3 +56,12 @@ export function trajectoryAt(id: string, ms: number): Vec3 | null {
   }
   return out;
 }
+
+/** Times [ms] of all stored samples of a probe (the exact path nodes), or null without data. */
+export function trajectoryTimes(id: string): number[] | null {
+  const s = data?.[id];
+  if (!s || s.length < 2 * STRIDE) return null;
+  const out: number[] = [];
+  for (let i = 0; i < s.length; i += STRIDE) out.push(s[i]);
+  return out;
+}
