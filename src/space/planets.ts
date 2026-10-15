@@ -110,12 +110,6 @@ const MARS_TREK_PRODUCTS = trekProducts(MARS_PRODUCTS, { trek: 'NASA/JPL/USGS/AS
 const MOON_TREK_PRODUCTS = trekProducts(MOON_PRODUCTS, { trek: 'NASA/GSFC/ASU/JAXA/USGS · NASA Moon Trek', esri: 'NASA/GSFC/ASU LROC · Esri' });
 
 const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
-/** LOLA laser altimeter relief (NASA Moon Trek): colour-coded height with shading (the plain shading is contained in it) */
-const MOON_LOLA_COLOR: TileLayer = {
-  ...trek('Moon', 'LRO_LOLA_ClrShade_Global_128ppd_v04', 'Höhenkarte (LOLA, Farbe)', 'NASA/GSFC/ASU LRO LOLA · NASA Moon Trek', 6),
-  optional: true,
-};
-
 const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'MESSENGER-Mosaik (166 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
 const MERCURY_COLOR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_EnhancedColor_Mosaic_Global_665m', 'Farbkontrast (665 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 6);
 
@@ -138,7 +132,7 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     products: MARS_TREK_PRODUCTS,
   },
   // the space view keeps its own close-up tiles for the Moon; its map takes over very close to the surface
-  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC, MOON_LOLA_COLOR], detail3d: () => MOON_WAC, baseLevel: 4, autoLabel: 'Automatisch (WAC → LROC-NAC)', products: MOON_TREK_PRODUCTS },
+  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC], detail3d: () => MOON_WAC, baseLevel: 4, autoLabel: 'Automatisch (WAC → LROC-NAC)', products: MOON_TREK_PRODUCTS },
   // prepared, switched on later
   mercury: { id: 'mercury', name: 'Merkur', radiusKm: 2439.7, enabled: false, openAt: 1.1, layers: [MERCURY_BDR, MERCURY_COLOR], detail3d: () => MERCURY_BDR, baseLevel: 4 },
   venus: { id: 'venus', name: 'Venus', radiusKm: 6051.8, enabled: false, openAt: 1.1, layers: [], detail3d: () => MERCURY_BDR, baseLevel: 4 },

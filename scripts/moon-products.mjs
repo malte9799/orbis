@@ -21,7 +21,7 @@ for (let s = 0; s < 4000; s += 500) {
 const products = docs.filter((x) => (x.itemType === 'product' || x.itemType === 'dataset') && x.productLabel);
 console.log(products.length, 'products in the index');
 
-const KNOWN = new Set(['LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO_LOLA_ClrShade_Global_128ppd_v04', 'LRO_LOLA_Shade_Global_128ppd_v04']);
+const KNOWN = new Set(['LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO_WAC_Mosaic_Global_303ppd']);
 
 const BASE_CATS = new Set(['Imagery', 'Topography']);
 const OVERLAY_CATS = new Set(['Geology', 'Landforms', 'Mineral', 'Mineralogy', 'Composition', 'Spectrometer', 'Exploration Zones', 'Terrain', 'Geochemistry']);
@@ -97,44 +97,38 @@ await Promise.all(
   }),
 );
 
-// Curation (the Trek catalogue is large and full of near-duplicates – the map offers only what adds something):
-//  · slopes, roughness, error / count layers, DEM, regional maps and regional overlays are dropped;
-//  · base maps: only global colour / relief maps (plain greyscale imagery = the WAC mosaic we already have, LOLA = planets.ts),
-//    one per family, the finest resolution wins;
-//  · NAC mosaics (composited into "auto", not listed): only those sharper than the WAC mosaic, and none that a finer
-//    mosaic of the same or larger footprint already covers;
-//  · overlays: a few global thematic maps (geology, composition), duplicates by title merged.
-// Every product is listed in the log so the filter can be adjusted after a look at the catalogue.
+// Curation (the Trek catalogue has ~200 products, mostly near-duplicates and per-site fragments – the map offers only
+// what adds something; see the keep/drop log below):
+//  · Selectable (listed): one relief map and one thematic overlay (geology) – nothing else. Albedo/Ti/Fe maps are too coarse,
+//    slopes, hillshades, crater detections, polar and Mini-RF maps are specialist layers, LOLA/Kaguya hillshade is contained
+//    in the colour hillshade.
+//  · Composited into "auto" (not listed): NAC / LROC / Chang'e-2 mosaics sharper than the WAC mosaic. Concept-site series
+//    (Endurance-A), pre/post-landing variants and mosaics a finer one of the same footprint already covers are dropped.
 const isGlobal = (m) => m.bbox[2] - m.bbox[0] >= 300;
-const family = (t) => t.toLowerCase().replace(/\b(global|mosaic|map|v\d+|\d+\s*(m|km|ppd|mpp)(\/px)?)\b/g, '').replace(/[^a-z]+/g, ' ').trim();
 const area = (m) => (m.bbox[2] - m.bbox[0]) * (m.bbox[3] - m.bbox[1]);
 const covers = (a, b) => a.bbox[0] <= b.bbox[0] + 0.01 && a.bbox[1] <= b.bbox[1] + 0.01 && a.bbox[2] >= b.bbox[2] - 0.01 && a.bbox[3] >= b.bbox[3] - 0.01;
-const BAD = /Slope|Roughness|Rock Abundance|Temperature|Illumination|Uncertain|Error|Mask|Count|Anaglyph|Stereo|Polar|Pole/i;
+const BAD = /Slope|Roughness|Rock Abundance|Temperature|Illumination|Uncertain|Error|Mask|Count|Anaglyph|Stereo|Detection|Polar|Pole|PSR|Mini-?RF|Endurance|Concept Site|Landing|Albedo|Titanium|Clementine/i;
+// image mosaics (no hillshade / slope / colour-relief variants of them)
+const isImage = (m) => /NAC|Narrow Angle|LROC|Chang.?e|CE-?2|Kaguya TC Ortho|Ortho/i.test(m.title) && /Mosaic|Ortho/i.test(m.title) && !/Hill+shade|Shade|Slope|Elevation|DEM|WAC/i.test(m.title);
 
-const cand = out.filter((m) => !BAD.test(m.title));
 const keepers = new Set();
-// base maps
-const bases = cand.filter((m) => m.group === 'base' && isGlobal(m) && /Colou?r|Clr|Elevation|Topograph|Hillshade|Shade|Albedo/i.test(m.title) && !/LOLA/i.test(m.title));
-const seenFam = new Set();
-for (const m of bases.sort((x, y) => y.maxZ - x.maxZ || y.px - x.px)) {
-  const f = family(m.title);
-  if (seenFam.has(f) || keepers.size >= 3) continue;
-  seenFam.add(f);
+// the relief map: finest global colour hillshade (LOLA, Kaguya)
+const relief = out
+  .filter((m) => m.group === 'base' && isGlobal(m) && m.maxZ >= 8 && /Color|Clr/i.test(m.title) && /Hill+shade|Shade/i.test(m.title) && !/Slope/i.test(m.title))
+  .sort((x, y) => y.maxZ - x.maxZ || y.px - x.px)[0];
+if (relief) keepers.add(relief);
+// mosaics (global base-group mosaics such as Chang'e-2 count as mosaics: they are drawn into "auto")
+const mosaics = out
+  .filter((m) => !BAD.test(m.title) && isImage(m) && (m.group === 'mosaic' || m.group === 'region' || (m.group === 'base' && /CE-?2|Chang/i.test(m.title))) && m.maxZ >= 10)
+  .sort((x, y) => y.maxZ - x.maxZ || area(y) - area(x));
+for (const m of mosaics) {
+  if ([...keepers].some((k) => k.group === 'mosaic' && k.maxZ >= m.maxZ && covers(k, m))) continue;
+  m.group = 'mosaic';
   keepers.add(m);
 }
-// mosaics
-const mosaics = cand.filter((m) => m.group === 'mosaic' && !isGlobal(m) && m.maxZ >= 10).sort((x, y) => y.maxZ - x.maxZ || area(y) - area(x));
-for (const m of mosaics) if (![...keepers].some((k) => k.group === 'mosaic' && k.maxZ >= m.maxZ && covers(k, m))) keepers.add(m);
-// overlays
-const seenOv = new Set();
-let nOv = 0;
-for (const m of cand.filter((m) => m.group === 'overlay' && isGlobal(m) && /Geolog|Titan|TiO2|FeO|Iron|Thorium|Magnesium|Mineral|Olivine|Pyroxene/i.test(m.title)).sort((x, y) => y.maxZ - x.maxZ)) {
-  const f = family(m.title);
-  if (seenOv.has(f) || nOv >= 4) continue;
-  seenOv.add(f);
-  nOv++;
-  keepers.add(m);
-}
+// the geology overlay
+const geo = out.filter((m) => m.group === 'overlay' && isGlobal(m) && /Geolog/i.test(m.title) && !/South Pole|SPA/i.test(m.title)).sort((x, y) => y.maxZ - x.maxZ)[0];
+if (geo) keepers.add(geo);
 const KEEP = (m) => keepers.has(m);
 for (const m of out) console.log(KEEP(m) ? 'keep' : 'drop', m.group, m.maxZ, m.label, '|', m.title);
 const order = { base: 0, mosaic: 1, region: 2, overlay: 3 };

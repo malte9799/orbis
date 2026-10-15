@@ -41,7 +41,7 @@ Drei Ansichten:
     nur ihre feste Textur, die Detailkacheln gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit
     Erde, Mars und Mond, Merkur/Venus vorbereitet).
   - **Mondkarte** (`#/planet?body=moon`) – dieselbe Karte für den Mond: LRO-WAC-Mosaik (≈ 100 m/px), optional die
-    LOLA-Höhenkarten (Farbe / Schummerung; Einträge, die Moon Trek nicht ausliefert, blenden sich selbst aus),
+    die farbige Reliefkarte aus LOLA/Kaguya,
     ~70 benannte Formationen (Meere, Becken, Krater, Gebirge, Täler – `src/space/moon-features.ts`, schaltbar) und alle
     Landestellen. An den Landestellen stehen 3D-Modelle von Lander, Flagge und Fahrzeugen (Apollo-Landefähre und
     Mondauto, Surveyor, Luna/Lunochod, Chang’e/Yutu, Vikram/Pragyan, SLIM, Odysseus, Blue Ghost …); dieselben
