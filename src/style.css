@@ -3039,3 +3039,10 @@ svg.hourly {
   font-size: 0.68rem;
   background: rgba(255, 255, 255, 0.14);
 }
+
+/* planet map: switch between the bodies that have a map */
+.pm-bodies {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}

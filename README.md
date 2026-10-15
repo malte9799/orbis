@@ -36,8 +36,19 @@ Drei Ansichten:
     THEMIS), Suche und Maßstab. Herauszoomen aus dem Globus bzw. das Weltall-Symbol führt ins Sonnensystem,
     Hineinzoomen auf den Mars (oder ein Klick auf Rover/Landestelle) von dort auf die Karte. Landestellen,
     Fahrspuren von Perseverance/Curiosity, die 72 Ingenuity-Flüge; die Rover erscheinen beim Heranzoomen als
-    3D-Modell in Originalgröße. In der Weltall-Ansicht haben die Planeten nur ihre feste Textur, die Detailkacheln
-    gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit Erde und Mars, Mond/Merkur/Venus vorbereitet).
+    3D-Modell – vergrößert und mit der Zoomstufe mitskalierend (ab ca. Zoom 7 in 2D bzw. 11 im Globus sichtbar, bei
+    sehr hoher Zoomstufe in Originalgröße; `modelPx` in `views/planetmap.ts`). In der Weltall-Ansicht haben die Planeten
+    nur ihre feste Textur, die Detailkacheln gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit
+    Erde, Mars und Mond, Merkur/Venus vorbereitet).
+  - **Mondkarte** (`#/planet?body=moon`) – dieselbe Karte für den Mond: LRO-WAC-Mosaik (≈ 100 m/px), optional die
+    LOLA-Höhenkarten (Farbe / Schummerung; Einträge, die Moon Trek nicht ausliefert, blenden sich selbst aus),
+    ~70 benannte Formationen (Meere, Becken, Krater, Gebirge, Täler – `src/space/moon-features.ts`, schaltbar) und alle
+    Landestellen. An den Landestellen stehen 3D-Modelle von Lander, Flagge und Fahrzeugen (Apollo-Landefähre und
+    Mondauto, Surveyor, Luna/Lunochod, Chang’e/Yutu, Vikram/Pragyan, SLIM, Odysseus, Blue Ghost …); dieselben
+    Modelle gibt es für die Mars-Landestellen (Viking, Pathfinder/Sojourner, Spirit/Opportunity, Phoenix, InSight,
+    Zhurong). Sie sind prozedural erzeugt (`src/space/surface-models.ts`) und per Klick anwählbar. Mars und Mond
+    lassen sich im Ebenen-Panel umschalten; aus der Weltall-Ansicht öffnet sich die Mondkarte beim Heranzoomen
+    bis dicht über die Oberfläche (`openAt`) oder über „Planetenkarte“ im Steckbrief.
     Über den globalen Mosaiken liegen automatisch die regionalen HiRISE-Mosaike von Mars Trek (Jezero, Gale,
     Landestellen, Rover-Gebiete – bis 25 cm/px). Der Kartentyp-Wechsler enthält nur echte Basiskarten
     (Automatisch, Farbmosaik, CTX ≈ 5 m, Höhe & Tiefe MOLA/HRSC, Infrarot THEMIS und die HRSC-Farbmosaike am

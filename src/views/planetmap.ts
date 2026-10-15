@@ -14,9 +14,11 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { CRAFT } from '../space/bodies';
 import { MARS_SITES, SOL_MS, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm, type Track } from '../space/mars';
-import { COUNTRY, flagDataUrl } from '../space/moon';
+import { COUNTRY, LANDING_SITES, flagDataUrl, type LandingSite } from '../space/moon';
+import { KIND_LABEL, MOON_FEATURES, type MoonFeature } from '../space/moon-features';
+import { buildSiteScene, hasSceneModel } from '../space/surface-models';
 import { PLANET_MAPS, type TileLayer } from '../space/planets';
-import { FONT_BOLD, OFM_GLYPHS } from '../globe/vector';
+import { FONT_BOLD, FONT_ITALIC, FONT_REGULAR, OFM_GLYPHS } from '../globe/vector';
 import { escapeHtml, fmt } from '../util';
 
 // Map of another planet – the counterpart of the Earth map (views/globe.ts): MapLibre with
@@ -231,19 +233,34 @@ function registerPlanetProtocol() {
   });
 }
 
-// ----- rover models (three.js custom layer, mercator, real size) -----------------
+// ----- surface models (three.js custom layer, mercator) ------------------------------
+
+const EARTH_RADIUS_M = 6371008.8; // what MapLibre's mercator metres are based on
 
 interface ModelItem {
-  craft: string;
-  url: string;
-  sizeM: number;
+  /** unique per body */
+  id: string;
+  /** glTF model (rovers) … */
+  url?: string;
+  sizeM?: number;
+  /** … or a procedural scene (landing sites) */
+  build?: () => { group: THREE.Group; refM: number };
   lon: number;
   lat: number;
-  obj?: THREE.Object3D;
+  /** what a click on the model opens */
+  info: { id: string; kind: string; name: string };
+  /** characteristic length in metres (set when built) */
+  refM?: number;
 }
 
-class RoverModels implements CustomLayerInterface {
-  id = 'rover-models';
+/**
+ * On-screen size (px) the models are given at a zoom level: they grow with the zoom (a bit slower
+ * than the map itself, so they are readable from far out) until their real size is larger.
+ */
+const modelPx = (zoom: number) => 600 * 2 ** (-0.4 * (MAX_ZOOM - zoom));
+
+class SurfaceModels implements CustomLayerInterface {
+  id = 'surface-models';
   type = 'custom' as const;
   renderingMode = '3d' as const;
   private camera = new THREE.Camera();
@@ -251,62 +268,105 @@ class RoverModels implements CustomLayerInterface {
   private renderer?: THREE.WebGLRenderer;
   private map?: MlMap;
   private loader = new GLTFLoader().setDRACOLoader(new DRACOLoader().setDecoderPath('./draco/'));
-  /** where the models stand (updated from the tracks) */
+  /** what stands on the map right now (rebuilt on refresh) */
   items: ModelItem[] = [];
+  /** radius of the body in metres (the map scale is that of the Earth: lengths are corrected) */
+  radiusM = 3_389_500;
+  /** the globe projection only matches the mercator matrix once the map has flattened out */
+  globe = true;
   private loading = new Set<string>();
+  private objects = new Map<string, THREE.Object3D>();
 
   onAdd(map: MlMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map;
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+    this.scene.add(new THREE.AmbientLight(0xffffff, 1.0));
     const sun = new THREE.DirectionalLight(0xffffff, 2.2);
     sun.position.set(0, -70, 100).normalize();
     this.scene.add(sun);
   }
 
-  /** Fetch the models of the current items (once). */
+  /** Smallest zoom at which the models are drawn. */
+  get minZoom() {
+    return this.globe ? 11 : 7;
+  }
+
+  /** Build / fetch the models of the current items (once per item). */
   load() {
+    const keep = new Set(this.items.map((i) => i.id));
+    for (const [id, obj] of this.objects) obj.visible = keep.has(id);
     for (const it of this.items) {
-      if (it.obj || this.loading.has(it.craft) || !it.url || !this.map) continue;
-      this.loading.add(it.craft);
-      this.loader
-        .loadAsync(it.url)
-        .then((g) => {
-          const box = new THREE.Box3().setFromObject(g.scene);
-          const size = box.getSize(new THREE.Vector3());
-          const k = it.sizeM / Math.max(size.x, size.y, size.z);
-          g.scene.position.sub(box.getCenter(new THREE.Vector3()));
-          const inner = new THREE.Group();
-          inner.add(g.scene);
-          inner.scale.setScalar(k);
-          inner.position.y = (size.y / 2) * k; // wheels on the ground
-          const holder = new THREE.Group();
-          holder.add(inner);
-          holder.userData.craft = it.craft;
-          holder.traverse((o) => (o.frustumCulled = false));
-          this.scene.add(holder);
-          // items are rebuilt on refresh: find ours again by craft id
-          this.byCraft.set(it.craft, holder);
-          this.map?.triggerRepaint();
-        })
-        .catch((e) => console.warn('Modell', it.craft, e));
+      if (this.objects.has(it.id) || this.loading.has(it.id) || !this.map) continue;
+      if (it.build) {
+        const { group, refM } = it.build();
+        this.add(it, group, refM);
+      } else if (it.url) {
+        this.loading.add(it.id);
+        this.loader
+          .loadAsync(it.url)
+          .then((g) => {
+            const box = new THREE.Box3().setFromObject(g.scene);
+            const size = box.getSize(new THREE.Vector3());
+            const k = (it.sizeM ?? 3) / Math.max(size.x, size.y, size.z);
+            g.scene.position.sub(box.getCenter(new THREE.Vector3()));
+            const inner = new THREE.Group();
+            inner.add(g.scene);
+            inner.scale.setScalar(k);
+            inner.position.y = (size.y / 2) * k; // wheels on the ground
+            const holder = new THREE.Group();
+            holder.add(inner);
+            this.add(it, holder, it.sizeM ?? 3);
+          })
+          .catch((e) => console.warn('Modell', it.id, e))
+          .finally(() => this.loading.delete(it.id));
+      }
     }
   }
-  private byCraft = new Map<string, THREE.Object3D>();
+
+  private add(it: ModelItem, obj: THREE.Object3D, refM: number) {
+    obj.traverse((o) => (o.frustumCulled = false));
+    obj.userData.refM = refM;
+    this.scene.add(obj);
+    this.objects.set(it.id, obj);
+    this.map?.triggerRepaint();
+  }
+
+  /** Forget every model (another body). */
+  clear() {
+    for (const obj of this.objects.values()) this.scene.remove(obj);
+    this.objects.clear();
+    this.items = [];
+  }
+
+  /** Apparent size factor of a model of `refM` metres at the map's zoom: ≥ 1 (real size). */
+  private exaggeration(refM: number, lat: number, zoom: number) {
+    const ppm = (512 * 2 ** zoom) / (2 * Math.PI * this.radiusM * Math.max(0.05, Math.cos((lat * Math.PI) / 180)));
+    return Math.max(1, modelPx(zoom) / (refM * ppm));
+  }
+
+  /** Radius in pixels the item covers on screen (for clicks). */
+  radiusPx(it: ModelItem, zoom: number) {
+    const refM = this.objects.get(it.id)?.userData.refM as number | undefined;
+    if (!refM || zoom < this.minZoom) return 0;
+    const ppm = (512 * 2 ** zoom) / (2 * Math.PI * this.radiusM * Math.max(0.05, Math.cos((it.lat * Math.PI) / 180)));
+    return Math.max(18, refM * this.exaggeration(refM, it.lat, zoom) * ppm * 0.7);
+  }
 
   render(_gl: WebGLRenderingContext | WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
     const map = this.map;
-    if (!map || !this.renderer || map.getZoom() < 11) return;
+    if (!map || !this.renderer || map.getZoom() < this.minZoom) return;
+    const zoom = map.getZoom();
     const rotX = new THREE.Matrix4().makeRotationX(Math.PI / 2);
     // Multiply in double precision here (the model sits at ≈ 0.7 in mercator units but is only
     // 1e-7 big): the shader then only sees small clip-space numbers.
     const proj = new THREE.Matrix4().fromArray(Array.from(args.defaultProjectionData.mainMatrix));
+    const toBody = EARTH_RADIUS_M / this.radiusM;
     for (const it of this.items) {
-      const obj = this.byCraft.get(it.craft);
+      const obj = this.objects.get(it.id);
       if (!obj) continue;
       const mc = MercatorCoordinate.fromLngLat([it.lon, it.lat], 0);
-      const s = mc.meterInMercatorCoordinateUnits();
+      const s = mc.meterInMercatorCoordinateUnits() * toBody * this.exaggeration(obj.userData.refM as number, it.lat, zoom);
       obj.matrixAutoUpdate = false;
       obj.matrix.copy(proj).multiply(new THREE.Matrix4().makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s)).multiply(rotX));
       obj.matrixWorldNeedsUpdate = true;
@@ -329,8 +389,14 @@ const TRACKS: { id: 'm20' | 'msl'; color: string; name: string; craft: string }[
   { id: 'msl', color: '#5ad1ff', name: 'Curiosity', craft: 'curiosity' },
 ];
 
+/** where a body's map opens without a position */
+const DEFAULT_VIEW: Record<string, { lat: number; lon: number }> = { mars: { lat: 18.44, lon: 77.45 }, moon: { lat: 0.67, lon: 23.47 } };
+
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
-const MAX_ZOOM = 21; // beyond the imagery (≈ 5 m/px): rover models at real size
+const MAX_ZOOM = 21; // beyond the imagery (≈ 5 m/px): the models are about real size
+
+/** zoom level at which a named feature of `km` fills the screen about */
+const featureZoom = (f: MoonFeature) => Math.max(3, Math.min(11, Math.log2(8000 / f.km) + 1));
 
 export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   const el = document.createElement('main');
@@ -364,19 +430,32 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   let projection: 'globe' | 'mercator' = 'globe';
   let layerId = 'auto';
   let panelTab: 'layers' | 'places' = 'layers';
-  const show = { sites: true, tracks: true, heli: true, labels: true };
+  const show = { sites: true, tracks: true, heli: true, labels: true, models: true, features: true };
   let pending: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean } | null = null;
   let pendingSelect: { focus?: string; site?: string } | null = null;
-  const models = new RoverModels();
+  const models = new SurfaceModels();
   let projCtl: HTMLElement | null = null;
   /** camera at the first open (no flight from a default view) */
-  let initial: { lat: number; lon: number; zoom: number; fromSpace?: boolean } | null = null;
+  let initial: { lat: number; lon: number; zoom: number; fromSpace?: boolean; pitch?: number } | null = null;
   let tracksLoaded = false;
   /** active thematic overlays (product ids) */
   const overlays = new Set<string>();
 
   const cfg = () => PLANET_MAPS[bodyId];
-  const places = () => (bodyId === 'mars' ? [...TRACKS.map((t) => ({ id: t.id as string, name: t.name })), ...MARS_SITES.filter((x) => !x.hideFlag).map((x) => ({ id: x.id, name: x.name }))] : []);
+  const sitesOf = (b = bodyId): LandingSite[] => (b === 'mars' ? MARS_SITES : b === 'moon' ? LANDING_SITES : []);
+  const featureId = (f: MoonFeature) => `f:${f.name}`;
+  /** searchable / listed places of the current body, grouped for the "Orte" tab */
+  const places = (): { id: string; name: string; group: string }[] => {
+    const sites = sitesOf()
+      .filter((x) => !x.hideFlag)
+      .map((x) => ({ id: x.id, name: x.name, group: 'Landestellen' }));
+    if (bodyId === 'mars') return [...TRACKS.map((t) => ({ id: t.id as string, name: t.name, group: 'Rover' })), ...sites];
+    if (bodyId === 'moon') {
+      const group = (f: MoonFeature) => (f.kind === 'mare' || f.kind === 'basin' ? 'Meere & Becken' : f.kind === 'crater' ? 'Krater' : 'Gebirge & Täler');
+      return [...sites, ...MOON_FEATURES.map((f) => ({ id: featureId(f), name: f.name, group: group(f) }))];
+    }
+    return [];
+  };
   const tileUrl = () => `planet://${bodyId}/${encodeURIComponent(layerId)}/{z}/{x}/{y}`;
   const setTiles = () => (map?.getSource('base') as { setTiles?: (t: string[]) => void } | undefined)?.setTiles?.([tileUrl()]);
 
@@ -384,8 +463,9 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   const setData = (id: string, features: Feature[]) => (map?.getSource(id) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
 
   function refreshData() {
-    if (!map || !ready || bodyId !== 'mars') return;
-    const t = getMarsTracks();
+    if (!map || !ready) return;
+    const mars = bodyId === 'mars';
+    const t = mars ? getMarsTracks() : null;
     const now = Date.now();
     const line = (pts: ArrayLike<number>, n: number, props: Record<string, unknown>): Feature => {
       const coords: number[][] = [];
@@ -407,29 +487,47 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     setData('heli', heli);
 
     const pts: Feature[] = [];
-    const point = (id: string, kind: string, name: string, lon: number, lat: number, color: string): Feature => ({
+    const point = (id: string, kind: string, name: string, lon: number, lat: number, color: string, model = 0): Feature => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [lon, lat] } as Point,
-      properties: { id, kind, name, color },
+      properties: { id, kind, name, color, model },
     });
-    if (show.sites) for (const s of MARS_SITES.filter((x) => !x.hideFlag)) pts.push(point(s.id, 'site', s.name, s.lon, s.lat, '#ffffff'));
-    models.items = [];
-    for (const tr of TRACKS) {
-      const p = roverAt(t?.[tr.id], now) ?? (tr.id === 'm20' ? [77.4509, 18.4446] : [137.4417, -4.5895]);
-      if (show.tracks) pts.push(point(tr.craft, 'rover', tr.name, p[0], p[1], tr.color));
-      const craft = CRAFT.find((c) => c.id === tr.craft);
-      if (craft?.model) models.items.push({ craft: tr.craft, url: craft.model.url, sizeM: craft.model.sizeM, lon: p[0], lat: p[1] });
+    const items: ModelItem[] = [];
+    for (const s of sitesOf().filter((x) => !x.hideFlag)) {
+      const hasModel = show.models && hasSceneModel(s.id);
+      if (show.sites) pts.push(point(s.id, 'site', s.name, s.lon, s.lat, '#ffffff', hasModel ? 1 : 0));
+      // the Moon has flags at its landing sites, Mars does not
+      if (hasModel) items.push({ id: `site:${s.id}`, lon: s.lon, lat: s.lat, build: () => buildSiteScene(s.id, bodyId === 'moon' ? s.flag : undefined)!, info: { id: s.id, kind: 'site', name: s.name } });
     }
+    if (mars)
+      for (const tr of TRACKS) {
+        const p = roverAt(t?.[tr.id], now) ?? (tr.id === 'm20' ? [77.4509, 18.4446] : [137.4417, -4.5895]);
+        if (show.tracks) pts.push(point(tr.craft, 'rover', tr.name, p[0], p[1], tr.color, show.models ? 1 : 0));
+        const craft = CRAFT.find((c) => c.id === tr.craft);
+        if (craft?.model && show.models) items.push({ id: `rover:${tr.craft}`, url: craft.model.url, sizeM: craft.model.sizeM, lon: p[0], lat: p[1], info: { id: tr.craft, kind: 'rover', name: tr.name } });
+      }
     const h = t ? heliAt(now) : null;
     if (h && show.heli) pts.push(point('ingenuity', 'heli', 'Ingenuity', h[0], h[1], '#ff5ad1'));
     setData('points', pts);
-    // models are only fetched once the user is close enough to see them
-    if (map.getZoom() >= 10) models.load();
+    models.items = items;
+    models.radiusM = cfg().radiusKm * 1000;
+    models.globe = projection === 'globe';
+    // models are only built once the user is close enough to see them
+    if (map.getZoom() >= models.minZoom - 1) models.load();
     map.triggerRepaint();
   }
 
+  const featureCollection = (): FeatureCollection => ({
+    type: 'FeatureCollection',
+    features:
+      bodyId === 'moon'
+        ? MOON_FEATURES.map((f) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [f.lon, f.lat] } as Point, properties: { id: featureId(f), name: f.name, kind: f.kind, km: f.km } }))
+        : [],
+  });
+
   function applyLabels() {
     if (map?.getLayer('points-label')) map.setLayoutProperty('points-label', 'visibility', show.labels ? 'visible' : 'none');
+    for (const id of ['features-area', 'features-small']) if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', show.features && bodyId === 'moon' ? 'visible' : 'none');
   }
 
   // ----- info card ---------------------------------------------------------------
@@ -442,14 +540,24 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     let flag = '';
     let coordLon = 0;
     let coordLat = 0;
+    let zoomTo = 15.5;
     if (kind === 'site') {
-      const s = MARS_SITES.find((x) => x.id === id);
+      const s = sitesOf().find((x) => x.id === id);
       if (!s) return;
       body = `<p>${escapeHtml(s.text)}</p>`;
       rows.push(['Landung', new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })], ['Nation', COUNTRY[s.flag]], ['Ort', s.region]);
+      if (s.crew) rows.push(['Besatzung', s.crew]);
       if (s.craft) rows.push(['Mission', s.craft]);
       flag = `<img class="sp-flag" src="${flagDataUrl(s.flag)}" alt=""/>`;
       [coordLon, coordLat] = [s.lon, s.lat];
+      if (hasSceneModel(s.id)) body += '<p class="small muted">Beim Heranzoomen erscheint das 3D-Modell von Lander' + (bodyId === 'moon' ? ', Flagge' : '') + ' und Fahrzeugen – vergrößert, damit man es erkennt, und mit dem Zoom mitskalierend.</p>';
+    } else if (kind === 'feature') {
+      const f = MOON_FEATURES.find((x) => featureId(x) === id);
+      if (!f) return;
+      label = KIND_LABEL[f.kind];
+      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', `${fmt.num(f.km, 0)} km`]);
+      [coordLon, coordLat] = [f.lon, f.lat];
+      zoomTo = featureZoom(f);
     } else if (kind === 'rover') {
       label = 'Rover';
       const tr = TRACKS.find((x) => x.craft === id)!;
@@ -460,7 +568,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         const n = trackCount(t, Date.now());
         rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', `${fmt.num(trackKm(t, n), 1)} km`]);
       }
-      body = '<p>Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell in Originalgröße.</p>';
+      body = '<p>Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell – vergrößert und mit dem Zoom mitskalierend.</p>';
     } else {
       label = 'Hubschrauber';
       const f = getMarsTracks()?.heli.flights ?? [];
@@ -477,32 +585,80 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       <dl>${rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
       <div class="sp-actions"><button class="btn small" data-a="zoom">Heranzoomen</button></div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
-    info.querySelector('[data-a=zoom]')!.addEventListener('click', () => map?.flyTo({ center: [coordLon, coordLat], zoom: kind === 'site' ? 10 : 15.5, speed: 1.4 }));
+    info.querySelector('[data-a=zoom]')!.addEventListener('click', () => map?.flyTo({ center: [coordLon, coordLat], zoom: zoomTo, pitch: kind === 'feature' ? 0 : Math.max(map.getPitch(), 45), speed: 1.4 }));
   }
 
   // ----- map ---------------------------------------------------------------------
+  const baseCredit = () => [...new Set(cfg().layers.map((l) => l.credit))].join(' · ');
+
+  /** named lunar features: big areas in spaced italics, small ones (craters, mountains …) in plain text */
+  function featureLayers() {
+    const halo = { 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 };
+    return [
+      {
+        id: 'features-area',
+        type: 'symbol' as const,
+        source: 'features',
+        filter: ['in', ['get', 'kind'], ['literal', ['mare', 'basin']]] as never,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': FONT_ITALIC,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 0.5, 9, 4, 15, 8, 22],
+          'text-letter-spacing': 0.15,
+          'text-max-width': 8,
+          'symbol-sort-key': ['-', 0, ['get', 'km']],
+          visibility: show.features && bodyId === 'moon' ? ('visible' as const) : ('none' as const),
+        } as never,
+        paint: { 'text-color': '#dfe6ff', 'text-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.95, 10, 0.2], ...halo } as never,
+      },
+      {
+        id: 'features-small',
+        type: 'symbol' as const,
+        source: 'features',
+        filter: ['!', ['in', ['get', 'kind'], ['literal', ['mare', 'basin']]]] as never,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': FONT_REGULAR,
+          'text-size': ['interpolate', ['linear'], ['zoom'], 2, 9, 8, 12, 12, 15],
+          'text-max-width': 7,
+          'text-optional': true,
+          'symbol-sort-key': ['-', 0, ['get', 'km']],
+          visibility: show.features && bodyId === 'moon' ? ('visible' as const) : ('none' as const),
+        } as never,
+        paint: {
+          'text-color': ['match', ['get', 'kind'], 'crater', '#ffffff', 'mountain', '#ffd9a0', '#bfe3ff'],
+          // large ones from far out, small ones only when zoomed in
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 2, ['case', ['>', ['get', 'km'], 300], 1, 0], 4, ['case', ['>', ['get', 'km'], 120], 1, 0], 6, ['case', ['>', ['get', 'km'], 60], 1, 0], 8, 1],
+          ...halo,
+        } as never,
+      },
+    ];
+  }
+
   function buildStyle() {
     const round = { 'line-cap': 'round' as const, 'line-join': 'round' as const };
     return {
       version: 8 as const,
       projection: { type: projection },
       glyphs: OFM_GLYPHS,
-      sky: { 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] },
+      sky: { 'atmosphere-blend': bodyId === 'moon' ? 0 : (['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] as unknown) },
       sources: {
         base: {
           type: 'raster' as const,
           tiles: [tileUrl()],
           tileSize: 256,
           maxzoom: 18, // regional HiRISE mosaics reach 25 cm/px
-          attribution: [...new Set(cfg().layers.map((l) => l.credit))].join(' · '),
+          attribution: baseCredit(),
         },
         tracks: { type: 'geojson' as const, data: EMPTY },
         heli: { type: 'geojson' as const, data: EMPTY },
         points: { type: 'geojson' as const, data: EMPTY },
+        features: { type: 'geojson' as const, data: featureCollection() },
       },
       layers: [
         { id: 'space', type: 'background' as const, paint: { 'background-color': '#05070d' } },
         { id: 'base', type: 'raster' as const, source: 'base' },
+        ...featureLayers(),
         { id: 'tracks-casing', type: 'line' as const, source: 'tracks', layout: round, paint: { 'line-color': 'rgba(0,0,0,0.6)', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } },
         { id: 'tracks', type: 'line' as const, source: 'tracks', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.6, 14, 4] } },
         { id: 'heli', type: 'line' as const, source: 'heli', layout: round, paint: { 'line-color': '#ff5ad1', 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.4, 16, 4] } },
@@ -513,8 +669,9 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
           paint: {
             'circle-color': ['get', 'color'],
             'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 10, 7, 15, 9],
-            'circle-opacity': ['interpolate', ['linear'], ['zoom'], 17.5, 1, 19, ['case', ['==', ['get', 'kind'], 'site'], 1, 0]],
-            'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 17.5, 1, 19, ['case', ['==', ['get', 'kind'], 'site'], 1, 0]],
+            // the 3D models take over from the dots
+            'circle-opacity': ['interpolate', ['linear'], ['zoom'], 13, 1, 15, ['case', ['==', ['get', 'model'], 1], 0, 1]],
+            'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 13, 1, 15, ['case', ['==', ['get', 'model'], 1], 0, 1]],
             'circle-stroke-color': 'rgba(0,0,0,0.8)',
             'circle-stroke-width': 2,
           },
@@ -568,8 +725,9 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     map = new MlMap({
       container: mapEl,
       style: buildStyle() as never,
-      center: initial ? [initial.lon, initial.lat] : [77.45, 18.44],
+      center: initial ? [initial.lon, initial.lat] : [DEFAULT_VIEW[bodyId]?.lon ?? 77.45, DEFAULT_VIEW[bodyId]?.lat ?? 18.44],
       zoom: initial ? (initial.fromSpace ? 0.3 : initial.zoom) : 3,
+      pitch: initial?.pitch ?? 0,
       maxPitch: 60,
       maxZoom: MAX_ZOOM,
       minZoom: 0.3, // below this the 3D globe hands over to the solar system
@@ -632,14 +790,28 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         pendingSelect = null;
       });
     });
-    map.on('click', 'points', (e) => {
-      const f = e.features?.[0] as MapGeoJSONFeature | undefined;
-      if (f) showInfo(f.properties);
+    map.on('click', (e) => {
+      if (!map) return;
+      const hit = map.queryRenderedFeatures(e.point, { layers: ['points', 'features-area', 'features-small'].filter((l) => map!.getLayer(l)) })[0] as MapGeoJSONFeature | undefined;
+      if (hit) return showInfo(hit.layer.id.startsWith('features') ? { ...hit.properties, kind: 'feature' } : hit.properties);
+      // a 3D model (they are not map features): the nearest one under the pointer
+      const z = map.getZoom();
+      let best: ModelItem | null = null;
+      let bestD = Infinity;
+      for (const it of models.items) {
+        const sp = map.project([it.lon, it.lat]);
+        const d = Math.hypot(sp.x - e.point.x, sp.y - e.point.y);
+        if (d < models.radiusPx(it, z) && d < bestD) [best, bestD] = [it, d];
+      }
+      if (best) showInfo(best.info);
     });
-    map.on('mouseenter', 'points', () => (map!.getCanvas().style.cursor = 'pointer'));
-    map.on('mouseleave', 'points', () => (map!.getCanvas().style.cursor = ''));
+    const pointer = (on: boolean) => () => (map!.getCanvas().style.cursor = on ? 'pointer' : '');
+    for (const l of ['points', 'features-area', 'features-small']) {
+      map.on('mouseenter', l, pointer(true));
+      map.on('mouseleave', l, pointer(false));
+    }
     map.on('zoomend', () => {
-      if (map && map.getZoom() >= 10) models.load();
+      if (map && map.getZoom() >= models.minZoom - 1) models.load();
     });
     map.on('moveend', () => {
       if (!map || el.hidden) return;
@@ -658,26 +830,42 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
   }
 
+  /** The map shows another body: swap the base source, drop overlays / models. */
+  function switchBody() {
+    if (!map) return;
+    for (const id of [...overlays]) setOverlay(id, false);
+    models.clear();
+    if (map.getLayer('base')) map.removeLayer('base');
+    if (map.getSource('base')) map.removeSource('base');
+    map.addSource('base', { type: 'raster', tiles: [tileUrl()], tileSize: 256, maxzoom: 18, attribution: baseCredit() });
+    map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'features-area');
+    (map.getSource('features') as GeoJSONSource | undefined)?.setData(featureCollection());
+    map.setSky({ 'atmosphere-blend': (bodyId === 'moon' ? 0 : ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0]) as never });
+    applyLabels();
+    refreshData();
+  }
+
   function setProjection(next: typeof projection) {
     if (next === projection) return;
     projection = next;
     map?.setProjection({ type: next });
+    models.globe = next === 'globe';
     renderProj();
   }
 
-  function goto(p: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean }) {
+  function goto(p: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean; pitch?: number }) {
     if (!map) return;
     if (p.jump) map.jumpTo({ center: [p.lon, p.lat], zoom: p.zoom });
     else if (p.fromSpace) {
       // coming back from the solar system: start far out and dive in
       map.jumpTo({ center: [p.lon, p.lat], zoom: map.getMinZoom() });
       map.easeTo({ zoom: p.zoom, duration: 1600 });
-    } else map.flyTo({ center: [p.lon, p.lat], zoom: p.zoom, speed: 1.4, essential: true });
+    } else map.flyTo({ center: [p.lon, p.lat], zoom: p.zoom, speed: 1.4, essential: true, ...(p.pitch != null ? { pitch: p.pitch } : {}) });
   }
 
   function selectBy(o: { focus?: string; site?: string }) {
     if (o.focus) showInfo({ id: o.focus, kind: o.focus === 'ingenuity' ? 'heli' : 'rover', name: o.focus === 'ingenuity' ? 'Ingenuity' : TRACKS.find((t) => t.craft === o.focus)?.name ?? o.focus });
-    else if (o.site) showInfo({ id: o.site, kind: 'site', name: MARS_SITES.find((s) => s.id === o.site)?.name ?? o.site });
+    else if (o.site) showInfo({ id: o.site, kind: 'site', name: sitesOf().find((s) => s.id === o.site)?.name ?? o.site });
   }
 
   // ----- overlays & the "what is shown" indicator -------------------------------
@@ -719,9 +907,9 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const products = c.products ?? [];
     const hasMosaics = products.some((p) => p.group === 'mosaic');
     return [
-      { id: 'auto', label: hasMosaics ? 'Automatisch (Farbe → 5 m → HiRISE)' : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) },
+      ...(products.length ? [{ id: 'auto', label: hasMosaics ? 'Automatisch (Farbe → 5 m → HiRISE)' : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) }] : []),
       ...(hasMosaics ? [{ id: 'global', label: 'Farbmosaik (Viking, 232 m)', short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
-      ...c.layers.map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l) })),
+      ...c.layers.map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional })),
       ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: baseName(p.title), short: baseName(p.title), img: thumb(p.layer) })),
     ];
   }
@@ -741,6 +929,8 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const chips: { label: string; color?: string; off?: string }[] = [];
     for (const p of ovProducts()) if (overlays.has(p.id)) chips.push({ label: overlayName(p), color: ovColor(p), off: `ov:${p.id}` });
     if (show.sites) chips.push({ label: 'Landestellen', color: '#ffffff', off: 'sites' });
+    if (show.models && bodyId !== 'earth') chips.push({ label: '3D-Modelle', color: '#ffd23f', off: 'models' });
+    if (bodyId === 'moon' && show.features) chips.push({ label: 'Mondformationen', color: '#bfe3ff', off: 'features' });
     if (mars && show.tracks) chips.push({ label: 'Rover-Spuren', color: 'linear-gradient(90deg,#ffb347,#5ad1ff)', off: 'tracks' });
     if (mars && show.heli) chips.push({ label: 'Ingenuity', color: '#ff5ad1', off: 'heli' });
     activeEl.innerHTML =
@@ -763,6 +953,16 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   });
 
   // ----- panel, search, base maps (same look as the Earth map) ------------------
+  /** the "Orte" tab: places grouped (rovers, landing sites, lunar features …) */
+  function placesHtml() {
+    const groups = new Map<string, { id: string; name: string }[]>();
+    for (const p of places()) groups.set(p.group, [...(groups.get(p.group) ?? []), p]);
+    if (bodyId === 'mars') groups.set('Regionen', [{ id: 'olympus', name: 'Olympus Mons' }, { id: 'valles', name: 'Valles Marineris' }]);
+    return [...groups]
+      .map(([g, list]) => `<h3 class="sp-sub">${escapeHtml(g)}</h3><div class="sp-sites pm-jump">${list.map((p) => `<button class="sp-site" data-place="${escapeHtml(p.id)}">${escapeHtml(p.name)}</button>`).join('')}</div>`)
+      .join('');
+  }
+
   function renderPanel() {
     const mars = bodyId === 'mars';
     const tile = (opt: string, on: boolean, color: string, label: string) =>
@@ -773,12 +973,17 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         <button type="button" role="tab" class="ptab ${panelTab === 'places' ? 'on' : ''}" data-tab="places">Orte</button>
       </div>
       <div class="panel-scroll">
-        <h3>${escapeHtml(cfg().name)}</h3>
+        <div class="pm-bodies" role="group" aria-label="Himmelskörper">${Object.values(PLANET_MAPS)
+          .filter((c) => c.enabled && c.layers.length)
+          .map((c) => `<button type="button" class="sp-site ${c.id === bodyId ? 'on' : ''}" data-body="${c.id}">${escapeHtml(c.name)}</button>`)
+          .join('')}</div>
         ${
           panelTab === 'layers'
             ? `<h3 class="sp-sub">Markierungen</h3>
               <div class="tile-grid three">
                 ${tile('sites', show.sites, '#ffffff', 'Landestellen')}
+                ${tile('models', show.models, '#ffd23f', '3D-Modelle')}
+                ${bodyId === 'moon' ? tile('features', show.features, '#bfe3ff', 'Mondformationen') : ''}
                 ${mars ? tile('tracks', show.tracks, 'linear-gradient(135deg,#ffb347,#5ad1ff)', 'Rover-Spuren') : ''}
                 ${mars ? tile('heli', show.heli, '#ff5ad1', 'Ingenuity') : ''}
                 ${tile('labels', show.labels, '#8899bb', 'Namen')}
@@ -792,10 +997,14 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
               <p class="small muted">Überlagerungen liegen halbtransparent über der gewählten Karte. Regionale (Mineralien) gelten nur in ihrem Gebiet.</p>`
                   : ''
               }`
-            : `<div class="sp-sites pm-jump">${places().map((p) => `<button class="sp-site" data-place="${p.id}">${escapeHtml(p.name)}</button>`).join('')}
-                ${mars ? '<button class="sp-site" data-place="olympus">Olympus Mons</button><button class="sp-site" data-place="valles">Valles Marineris</button>' : ''}</div>`
+            : placesHtml()
         }
       </div>`;
+    panel.querySelectorAll<HTMLButtonElement>('[data-body]').forEach((b) =>
+      b.addEventListener('click', () => {
+        if (b.dataset.body !== bodyId) location.hash = `#/planet?body=${b.dataset.body}&view=${projection === 'globe' ? '3d' : '2d'}`;
+      }),
+    );
     panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) =>
       b.addEventListener('click', () => {
         panelTab = b.dataset.tab as typeof panelTab;
@@ -827,9 +1036,15 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const tr = TRACKS.find((x) => x.id === id)!;
       return showInfo({ id: tr.craft, kind: 'rover', name: tr.name });
     }
-    const s = MARS_SITES.find((x) => x.id === id);
+    const f = MOON_FEATURES.find((x) => featureId(x) === id);
+    if (f) {
+      goto({ lat: f.lat, lon: f.lon, zoom: featureZoom(f) });
+      return showInfo({ id, kind: 'feature', name: f.name });
+    }
+    const s = sitesOf().find((x) => x.id === id);
     if (s) {
-      goto({ lat: s.lat, lon: s.lon, zoom: 10 });
+      // close enough for the 3D models (tilted, so they are seen from the side)
+      goto({ lat: s.lat, lon: s.lon, zoom: 15.5, pitch: 50 });
       showInfo({ id: s.id, kind: 'site', name: s.name });
     }
   }
@@ -863,10 +1078,12 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       </button>
       <div class="base-pop" ${open ? '' : 'hidden'}>
         <div class="base-options">
-          ${std.map((o) => `<button type="button" class="base-opt ${o.id === layerId ? 'on' : ''}" data-base="${o.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
+          ${std.map((o) => `<button type="button" class="base-opt ${o.id === layerId ? 'on' : ''}" data-base="${o.id}"><span class="thumb"><img alt="" loading="lazy" src="${o.img}"${'optional' in o && o.optional ? ' data-optional' : ''}/></span><span>${escapeHtml(o.label)}</span></button>`).join('')}
           ${regional.map((p) => `<button type="button" class="base-opt ${p.id === layerId ? 'on' : ''}" data-base="${escapeHtml(p.id)}"><span class="thumb"><img alt="" loading="lazy" src="${thumb(p.layer)}"/></span><span>${escapeHtml(baseName(p.title))}</span></button>`).join('')}
         </div>
       </div>`;
+    // maps not verified against the server vanish if their preview does not load
+    baseSwitch.querySelectorAll<HTMLImageElement>('.base-opt img[data-optional]').forEach((im) => im.addEventListener('error', () => im.closest('.base-opt')?.remove()));
     const pop = baseSwitch.querySelector<HTMLElement>('.base-pop')!;
     const btn = baseSwitch.querySelector<HTMLButtonElement>('.base-current')!;
     btn.addEventListener('click', (e) => {
@@ -891,6 +1108,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     el,
     activate(o) {
       const changed = o.body !== bodyId || !map;
+      const prev = bodyId;
       bodyId = PLANET_MAPS[o.body]?.layers.length ? o.body : 'mars';
       if (o.projection) {
         if (map) setProjection(o.projection);
@@ -898,22 +1116,29 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       }
       el.hidden = false;
       if (changed) {
-        layerId = 'auto';
+        layerId = cfg().products?.length ? 'auto' : cfg().layers[0].id;
         placesEl.innerHTML = places().map((p) => `<option value="${escapeHtml(p.name)}"></option>`).join('');
+        if (map && ready && prev !== bodyId) switchBody();
+        panelTab = 'layers';
         renderPanel();
         renderBase();
         renderActive();
       }
-      const zoom = o.zoom ?? (o.focus ? 14.5 : o.site ? 9 : o.fromSpace ? 2.5 : 4);
-      if (!map && o.lat != null && o.lon != null) initial = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace };
+      const zoom = o.zoom ?? (o.focus ? 14.5 : o.site ? 15 : o.fromSpace ? 2.5 : 4);
+      if (!map && o.lat != null && o.lon != null) initial = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace, pitch: o.site || o.focus ? 50 : undefined };
       if (!map) initMap();
       else {
         map.resize();
         setTiles();
       }
       info.hidden = true;
+      if (changed && prev !== bodyId && map && o.lat == null) {
+        // another body without a position: its default view
+        const dv = DEFAULT_VIEW[bodyId];
+        if (dv) map.jumpTo({ center: [dv.lon, dv.lat], zoom: 3, pitch: 0, bearing: 0 });
+      }
       if (o.lat != null && o.lon != null) {
-        const p = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace };
+        const p = { lat: o.lat, lon: o.lon, zoom, fromSpace: o.fromSpace, pitch: o.site || o.focus ? 50 : undefined };
         if (map && ready) goto(p);
         else if (initial) pending = p.fromSpace ? p : null; // first open: the map was created there already
         else pending = p;
