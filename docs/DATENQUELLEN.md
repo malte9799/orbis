@@ -51,10 +51,11 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [RainViewer](https://www.rainviewer.com/api.html) | Regenradar weltweit (letzte 2 h) – seit 2026 auf Zoom 7 beschränkt; eigener RainViewer-kompatibler Server möglich, z. B. [LibreWXR](https://github.com/JoshuaKimsey/LibreWXR) | 🟢 🚫 |
 | [DWD Radar](https://maps.dwd.de) | Radar Deutschland (5 min, 1 km) | 🟢 |
 | [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu) (NOAA NEXRAD) | Regenradar-Mosaik USA | 🟢 |
-| [Environment Canada – GeoMet](https://eccc-msc.github.io/open-data/msc-geomet/readme_en/) | Regenradar Kanada (1 km) | 🟢 Open Government Licence |
-| [Finnish Meteorological Institute](https://en.ilmatieteenlaitos.fi/open-data) | Regenradar Finnland (1 km, 5 min) | 🟢 CC BY 4.0 |
+| [Environment Canada – GeoMet](https://eccc-msc.github.io/open-data/msc-geomet/readme_en/) | Regenradar und Schneeradar Kanada (1 km) | 🟢 Open Government Licence |
+| [Finnish Meteorological Institute](https://en.ilmatieteenlaitos.fi/open-data) | Regenradar Finnland (1 km, 5 min) und 24-h-Regensumme | 🟢 CC BY 4.0 |
 | [NOAA MRMS (opengeo.ncep.noaa.gov)](https://www.nssl.noaa.gov/projects/mrms/) | Regenradar Alaska, Hawaii, Puerto Rico, Guam | 🟢 |
-| [Japan Meteorological Agency](https://www.jma.go.jp/bosai/nowc/) | Niederschlagsradar Japan (5 min) | 🟢 |
+| [Japan Meteorological Agency](https://www.jma.go.jp/bosai/nowc/) | Niederschlagsradar Japan (5 min) und Nowcast (+60 min) | 🟢 |
+| [DWD WMS](https://maps.dwd.de) | Radar-Nowcast Deutschland (WN-Produkt, 2 h) | 🟢 CC BY 4.0 |
 | [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot | 🟢 |
 | [NASA GPM IMERG](https://gpm.nasa.gov/data/imerg) (über GIBS) | Niederschlag aus Satellitendaten | 🟢 |
 | [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs) | Tagesbild (VIIRS), Nachtlichter (Black Marble), Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole, Chlorophyll, Meerestemperatur (GHRSST MUR), Meereis (AMSR2) | 🟢 |

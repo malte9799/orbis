@@ -107,7 +107,7 @@ const TABS: { id: PanelTab; label: string; title: string; icon: string; subs: Su
   },
 ];
 /** extras shown on the weather tab (regional radars, city weather, air, aurora) */
-const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'aq', 'aurora'];
+const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast', 'aq', 'aurora'];
 /** event groups that also switch an extra layer (one entry in the UI instead of two) */
 const LINKED_EXTRA: Partial<Record<GroupId, ExtraId>> = { fires: 'fireareas', volcanoes: 'gvp' };
 {
