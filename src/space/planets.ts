@@ -5,7 +5,8 @@
 // All sources are equirectangular tile pyramids (level 0 = 2 × 1 tiles, level z spans
 // 180 / 2^z degrees per tile, rows counted from the north pole).
 
-import { MARS_PRODUCTS } from './mars-products';
+import { MARS_PRODUCTS, type TrekProduct } from './mars-products';
+import { MOON_PRODUCTS } from './moon-products';
 
 export interface TileLayer {
   id: string;
@@ -55,7 +56,10 @@ export interface PlanetMapConfig {
   detail3d: (z: number) => TileLayer;
   /** level the global base texture of the 3D body already corresponds to (256 px tiles) */
   baseLevel: number;
-  /** more map products (NASA Mars Trek): global maps, regional mosaics, thematic overlays */
+  /** labels of the automatic map ("auto": base + regional mosaics) and of the plain global colour mosaic */
+  autoLabel?: string;
+  globalLabel?: string;
+  /** more map products (NASA Trek): global maps, regional mosaics, thematic overlays */
   products?: MapProduct[];
 }
 
@@ -82,25 +86,28 @@ const MARS_CTX: TileLayer = {
   url: (z, r, c) => `https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer/tile/${z}/${r}/${c}`,
 };
 
-/** NASA Mars Trek products (generated list, see scripts/mars-products.mjs). */
-const MARS_TREK_PRODUCTS: MapProduct[] = MARS_PRODUCTS.map(([id, title, group, tpl, px, bbox, maxZ]) => {
-  const base = tpl.replace(/^~\//, 'https://trek.nasa.gov/');
-  const esri = base.includes('arcgis.com');
-  return {
-    id,
-    title,
-    group,
-    bbox,
-    layer: {
+/** NASA Trek products (generated lists, see scripts/mars-products.mjs and scripts/moon-products.mjs). */
+const trekProducts = (list: TrekProduct[], credit: { trek: string; esri: string }): MapProduct[] =>
+  list.map(([id, title, group, tpl, px, bbox, maxZ]) => {
+    const base = tpl.replace(/^~\//, 'https://trek.nasa.gov/');
+    const esri = base.includes('arcgis.com');
+    return {
       id,
-      label: title,
-      credit: esri ? 'NASA/JPL/University of Arizona (HiRISE) · Esri' : 'NASA/JPL/USGS/ASU/ESA/University of Arizona · NASA Mars Trek',
-      px,
-      maxZ,
-      url: (z, r, c) => base.replace('{z}', String(z)).replace('{r}', String(r)).replace('{c}', String(c)),
-    },
-  };
-});
+      title,
+      group,
+      bbox,
+      layer: {
+        id,
+        label: title,
+        credit: esri ? credit.esri : credit.trek,
+        px,
+        maxZ,
+        url: (z, r, c) => base.replace('{z}', String(z)).replace('{r}', String(r)).replace('{c}', String(c)),
+      },
+    };
+  });
+const MARS_TREK_PRODUCTS = trekProducts(MARS_PRODUCTS, { trek: 'NASA/JPL/USGS/ASU/ESA/University of Arizona · NASA Mars Trek', esri: 'NASA/JPL/University of Arizona (HiRISE) · Esri' });
+const MOON_TREK_PRODUCTS = trekProducts(MOON_PRODUCTS, { trek: 'NASA/GSFC/ASU/JAXA/USGS · NASA Moon Trek', esri: 'NASA/GSFC/ASU LROC · Esri' });
 
 const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
 /** LOLA laser altimeter relief (NASA Moon Trek): colour-coded height with shading, and plain shading */
@@ -130,10 +137,12 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     // colour mosaic as far as it goes, then the 5 m CTX mosaic (≥ 2× finer from level 7 on)
     detail3d: (z) => (z <= 6 ? MARS_COLOR : MARS_CTX),
     baseLevel: 4, // 8k texture
+    autoLabel: 'Automatisch (Farbe → 5 m → HiRISE)',
+    globalLabel: 'Farbmosaik (Viking, 232 m)',
     products: MARS_TREK_PRODUCTS,
   },
   // the space view keeps its own close-up tiles for the Moon; its map takes over very close to the surface
-  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC, MOON_LOLA_COLOR, MOON_LOLA_SHADE], detail3d: () => MOON_WAC, baseLevel: 4 },
+  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC, MOON_LOLA_COLOR, MOON_LOLA_SHADE], detail3d: () => MOON_WAC, baseLevel: 4, autoLabel: 'Automatisch (WAC → LROC-NAC)', products: MOON_TREK_PRODUCTS },
   // prepared, switched on later
   mercury: { id: 'mercury', name: 'Merkur', radiusKm: 2439.7, enabled: false, openAt: 1.1, layers: [MERCURY_BDR, MERCURY_COLOR], detail3d: () => MERCURY_BDR, baseLevel: 4 },
   venus: { id: 'venus', name: 'Venus', radiusKm: 6051.8, enabled: false, openAt: 1.1, layers: [], detail3d: () => MERCURY_BDR, baseLevel: 4 },

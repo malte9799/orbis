@@ -86,6 +86,12 @@ jobs:
         continue-on-error: true
         timeout-minutes: 10
         run: bash scripts/iss-model.sh public/models/iss-detail.glb
+      # Detailed Moon map products (LROC NAC site mosaics, Kaguya, geology … from NASA Moon Trek): the list is read from
+      # Trek itself. Optional: on failure the committed src/space/moon-products.ts stays.
+      - name: Moon Trek products
+        continue-on-error: true
+        timeout-minutes: 10
+        run: node scripts/moon-products.mjs
       - name: 'Status: Build'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Build"

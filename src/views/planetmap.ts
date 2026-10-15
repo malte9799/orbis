@@ -907,8 +907,8 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const products = c.products ?? [];
     const hasMosaics = products.some((p) => p.group === 'mosaic');
     return [
-      ...(products.length ? [{ id: 'auto', label: hasMosaics ? 'Automatisch (Farbe → 5 m → HiRISE)' : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) }] : []),
-      ...(hasMosaics ? [{ id: 'global', label: 'Farbmosaik (Viking, 232 m)', short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
+      ...(products.length ? [{ id: 'auto', label: hasMosaics ? (c.autoLabel ?? 'Automatisch') : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) }] : []),
+      ...(hasMosaics && c.globalLabel ? [{ id: 'global', label: c.globalLabel, short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
       ...c.layers.map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional })),
       ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: baseName(p.title), short: baseName(p.title), img: thumb(p.layer) })),
     ];
