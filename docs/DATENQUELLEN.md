@@ -56,7 +56,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NOAA MRMS (opengeo.ncep.noaa.gov)](https://www.nssl.noaa.gov/projects/mrms/) | Regenradar Alaska, Hawaii, Puerto Rico, Guam | 🟢 |
 | [Japan Meteorological Agency](https://www.jma.go.jp/bosai/nowc/) | Niederschlagsradar Japan (5 min) und Nowcast (+60 min) | 🟢 |
 | [DWD WMS](https://maps.dwd.de) | Radar-Nowcast Deutschland (WN-Produkt, 2 h) | 🟢 CC BY 4.0 |
-| [DWD Open Data – RV-Komposit](https://opendata.dwd.de/weather/radar/composite/rv/) | Rohraster 1 km, 5 min, Analyse + 120 min Nowcast (HDF5); wird per Workflow `radar.yml` zu geglätteten mm/h-Bildern verarbeitet (Branch `radar`) | 🟢 CC BY 4.0 |
+| [DWD Open Data – RV-Komposit](https://opendata.dwd.de/weather/radar/composite/rv/) | Rohraster 1 km, 5 min, Analyse + 120 min Nowcast (HDF5); geprüfte Quellen siehe [RADAR-QUELLEN.md](RADAR-QUELLEN.md) | 🟢 CC BY 4.0 |
 | [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot | 🟢 |
 | [NASA GPM IMERG](https://gpm.nasa.gov/data/imerg) (über GIBS) | Niederschlag aus Satellitendaten | 🟢 |
 | [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs) | Tagesbild (VIIRS), Nachtlichter (Black Marble), Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole, Chlorophyll, Meerestemperatur (GHRSST MUR), Meereis (AMSR2) | 🟢 |

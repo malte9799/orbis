@@ -35,7 +35,8 @@ import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
-import { HdRadar, rainLabel, rainviewerTiles } from '../globe/hdradar';
+import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
+import { RadarGl } from '../globe/radargl';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
@@ -998,7 +999,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let radar: RadarFrames | null = null;
   let radarAt = 0;
   let radarIdx = 0;
-  let hdRadar: HdRadar | null = null;
+  let radarGl: RadarGl | null = null;
+  let playRaf = 0;
   let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
@@ -1010,47 +1012,33 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map) return;
     if (!radar || Date.now() - radarAt > REFRESH_MS) {
       try {
-        const old = radar;
         radar = await loadRadarFrames();
         radarAt = Date.now();
-        old?.frames.forEach((f) => {
-          if (map!.getLayer(`radar-${f.time}`)) map!.removeLayer(`radar-${f.time}`);
-          if (map!.getSource(`radar-${f.time}`)) map!.removeSource(`radar-${f.time}`);
-        });
       } catch {
         toast('Regenradar (RainViewer) konnte nicht geladen werden.', 'error');
         return;
       }
     }
-    // Orbis composites supply the forecast steps beyond RainViewer's last measurement
-    hdRadar ??= new HdRadar(map);
-    const hdOk = await hdRadar.ensure('anchor-weather');
-    radar.frames = radar.frames.filter((f) => !f.hd);
-    const pastTimes = radar.frames.filter((f) => !f.nowcast).map((f) => f.time);
-    if (hdOk && pastTimes.length) {
-      const last = Math.max(...pastTimes);
-      const have = new Set(radar.frames.map((f) => f.time));
-      for (const t of hdRadar.futureTimes(last * 1000 + 60000)) {
-        if (!have.has(t / 1000)) radar.frames.push({ time: t / 1000, path: '', nowcast: true, hd: true });
-      }
-    }
+    // measurements only: RainViewer's own nowcast steps are not shown
+    radar.frames = radar.frames.filter((f) => !f.nowcast && !f.hd);
     if (state.overlay !== 'radar' || !radar.frames.length) return;
-    for (const f of radar.frames) {
-      if (f.hd) continue;
-      const id = `radar-${f.time}`;
-      if (map.getSource(id)) continue;
-      map.addSource(id, {
-        type: 'raster',
-        tiles: [rainviewerTiles(radar.host, f.path)],
-        tileSize: 256,
-        maxzoom: store.getKeys().radarHost ? 10 : 7,
-        attribution: store.getKeys().radarHost ? 'Radar: eigener Radar-Server (LibreWXR / RainViewer-kompatibel)' : 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',
-      });
-      map.addLayer(
-        { id, type: 'raster', source: id, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } },
-        'anchor-weather',
-      );
+
+    // one WebGL layer for all steps: it mixes the values of two neighbouring steps
+    if (!radarGl) {
+      radarGl = new RadarGl(LUT);
+      map.addLayer(radarGl, 'anchor-weather');
     }
+    // attributions are shown for sources of visible layers: a layer without features carries them
+    if (!map.getSource('radar-attr')) {
+      map.addSource('radar-attr', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        attribution: `Radar © <a href="https://www.rainviewer.com/">RainViewer</a>`,
+      });
+      map.addLayer({ id: 'radar-attr', type: 'circle', source: 'radar-attr', paint: { 'circle-opacity': 0 } }, 'anchor-weather');
+    }
+    const maxzoom = store.getKeys().radarHost ? 10 : 7;
+    radarGl.setFrames(radar.frames.map((f) => rainviewerFrame(radar!.host, f.path, f.time * 1000, maxzoom)));
     showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
@@ -1058,33 +1046,20 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const lastPastRadarFrame = () => Math.max(0, (radar?.frames.filter((f) => !f.nowcast).length ?? 1) - 1);
 
   function setRadarVisible(on: boolean) {
-    if (!radar || !map) return;
-    if (on) {
-      showRadarFrame(radarIdx);
-      return;
-    }
-    for (const f of radar.frames) vis(`radar-${f.time}`, false);
-    hdRadar?.setVisible(false);
+    radarGl?.setVisible(on);
+    if (map?.getLayer('radar-attr')) vis('radar-attr', on);
+    if (on && radar) showRadarFrame(radarIdx);
   }
 
   /**
-   * RainViewer tiles (re-coloured with the Orbis scale by the rvradar:// protocol) show the
-   * measurements; the DWD nowcast (hdRadar) supplies the forecast steps after the last one.
-   * Hidden layers request no tiles, so only the shown frame ±1 is loaded.
+   * The radar is one WebGL layer (src/globe/radargl.ts) holding the values of two neighbouring
+   * steps; showing a step sets the time, playing moves it continuously, so the rain edges slide
+   * between the positions of the steps.
    */
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
-    const fr = radar.frames[i];
-    const hd = state.overlay === 'radar' ? hdRadar : null;
-    if (fr.hd && hd) hd.show(fr.time * 1000);
-    else hd?.setVisible(false);
-    radar.frames.forEach((f, k) => {
-      const id = `radar-${f.time}`;
-      if (!map!.getLayer(id)) return;
-      vis(id, !fr.hd && Math.abs(k - i) <= 1);
-      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.9 : 0);
-    });
+    radarGl?.setTime(radar.frames[i].time * 1000);
     renderTimeline();
   }
 
@@ -1142,6 +1117,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function stopAnimation() {
     clearInterval(playTimer);
     playTimer = 0;
+    cancelAnimationFrame(playRaf);
+    playRaf = 0;
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
     playBtn.setAttribute('aria-label', 'Abspielen');
   }
@@ -1156,10 +1133,34 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (globalModel) setTimeIndex(nearestTimeIndex(globalModel.times));
   });
   playBtn.addEventListener('click', () => {
-    if (playTimer) return stopAnimation();
+    if (playTimer || playRaf) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     playBtn.setAttribute('aria-label', 'Pause');
     const radarMode = timelineMode() === 'radar';
+    if (radarMode && radar && radarGl) {
+      // continuous time: 10 minutes of radar per 700 ms; the layer mixes the steps around it
+      const frames = radar.frames;
+      const t0 = frames[0].time * 1000;
+      const t1 = frames[frames.length - 1].time * 1000;
+      const speed = 600000 / 700;
+      let t = frames[radarIdx].time * 1000;
+      let last = performance.now();
+      const loop = (now: number) => {
+        t += (now - last) * speed;
+        last = now;
+        if (t > t1 + 600000) t = t0;
+        radarGl!.setTime(Math.min(t, t1));
+        let idx = 0;
+        while (idx < frames.length - 1 && frames[idx + 1].time * 1000 <= t) idx++;
+        if (idx !== radarIdx) {
+          radarIdx = idx;
+          renderTimeline();
+        }
+        playRaf = requestAnimationFrame(loop);
+      };
+      playRaf = requestAnimationFrame(loop);
+      return;
+    }
     playTimer = window.setInterval(() => {
       const n = Number(rangeEl.max) + 1;
       setTimeIndex(((radarMode ? radarIdx : timeIdx) + 1) % n);
@@ -1405,7 +1406,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('moveend', () => {
       refreshDetail();
       extras?.onMoveEnd();
-      if (state.overlay === 'radar' && hdRadar && radar) showRadarFrame(radarIdx);
       const c = map!.getCenter();
       state.center = [+c.lng.toFixed(3), +c.lat.toFixed(3)];
       state.zoom = +map!.getZoom().toFixed(2);
@@ -1444,8 +1444,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
         const { lng, lat } = e.lngLat;
-        const rain = state.overlay === 'radar' && hdRadar?.isVisible() ? hdRadar.sample(lng, lat) : Promise.resolve(null);
-        void rain.catch(() => null).then((r) => weatherPopup(lng, lat, r));
+        const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
+        weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
       }
     });
     for (const l of interactive) {
