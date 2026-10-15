@@ -359,7 +359,7 @@ function drawFlag(kind: FlagKind): HTMLCanvasElement {
 }
 
 const flagCanvases = new Map<FlagKind, HTMLCanvasElement>();
-const flagCanvas = (k: FlagKind) => {
+export const flagCanvas = (k: FlagKind) => {
   let c = flagCanvases.get(k);
   if (!c) flagCanvases.set(k, (c = drawFlag(k)));
   return c;
