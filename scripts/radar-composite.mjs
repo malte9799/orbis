@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-// Radar composites for the app: downloads raw radar rasters, reprojects them to Web Mercator
-// and writes one small grayscale PNG per region and time step, plus a manifest.json.
+// Radar composites for the app: downloads raw radar rasters, reprojects them to Web Mercator and
+// writes a tile pyramid (z/x/y, zoom 2–7) per region and time step, plus a manifest.json.
 //
-// The PNG holds the rain rate, not colours: byte = round(sqrt(mm/h) * 25), 0 = no rain / no data
-// (255 ≈ 104 mm/h). The browser colours and smooths it (src/globe/radar.ts), so the colour scale,
-// the click value and the animation are identical for every source.
+// Tiles are 512 px grayscale PNGs that hold the rain rate, not colours:
+// byte = round(sqrt(mm/h) * 25), 0 = no rain / no data (255 ≈ 104 mm/h). Zoom 7 is the native
+// resolution of the 1 km sources, beyond that the browser stretches the tiles. The browser colours
+// the values (src/globe/hdradar.ts), so scale, click value and animation are the same everywhere.
 //
 // Sources (open data, no key):
 //   de  DWD RV composite, 1 km, 5 min, analysis + 120 min nowcast   (CC BY 4.0)
@@ -13,7 +14,7 @@
 //   prevDir = previous snapshot; its frames of the last two hours are carried over.
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -25,6 +26,9 @@ if (!OUT) {
   process.exit(1);
 }
 const KEEP_MIN = 120;
+const TILE = 512; // pixels per tile edge (2x the 256 px tile grid: smooth when zoomed in)
+const ZMIN = 2;
+const ZMAX = 7;
 const UA = 'orbis-radar/1.0 (+https://github.com/malte9799/orbis)';
 
 // ---- PNG (grayscale, 8 bit) ---------------------------------------------------------------
@@ -133,64 +137,127 @@ const REGIONS = [
     name: 'Deutschland & Umgebung',
     attribution: 'Radar: © Deutscher Wetterdienst (DWD), CC BY 4.0',
     bounds: [1.2, 45.6, 19.0, 56.0], // west, south, east, north
-    width: 1200,
     load: loadDwd,
   },
 ];
 
-// ---- reprojection -------------------------------------------------------------------------
-function render(frame, bounds, width, height) {
-  const [w, s, e, n] = bounds;
-  const yN = mercY(n);
-  const yS = mercY(s);
-  const out = new Uint8Array(width * height);
-  const { nx, ny, cell, x0, y0, gain, offset, nodata, factor, data, proj } = frame;
-  const rate = (col, row) => {
-    if (col < 0 || row < 0 || col >= nx || row >= ny) return 0;
-    const v = data[row * nx + col];
-    if (v === nodata) return 0;
-    return Math.max(0, (v * gain + offset) * factor);
-  };
-  for (let py = 0; py < height; py++) {
-    const lat = mercLat(yN - ((py + 0.5) / height) * (yN - yS));
-    for (let px = 0; px < width; px++) {
-      const lon = w + ((px + 0.5) / width) * (e - w);
-      const [x, y] = proj(lon, lat);
+// ---- tiles --------------------------------------------------------------------------------
+const tileLon = (x, z) => (x / 2 ** z) * 360 - 180;
+const tileLat = (y, z) => {
+  const n = Math.PI - (2 * Math.PI * y) / 2 ** z;
+  return (Math.atan(Math.sinh(n)) * 180) / Math.PI;
+};
+const lonTile = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
+const latTile = (lat, z) => {
+  const r = lat * rad;
+  return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z);
+};
+
+/** source grid position (fractional col/row) of every pixel of a tile */
+function tileGeometry(z, x, y, frame) {
+  const { cell, x0, y0, proj } = frame;
+  const gx = new Float32Array(TILE * TILE);
+  const gy = new Float32Array(TILE * TILE);
+  for (let py = 0; py < TILE; py++) {
+    const lat = tileLat(y + (py + 0.5) / TILE, z);
+    for (let px = 0; px < TILE; px++) {
+      const lon = tileLon(x + (px + 0.5) / TILE, z);
+      const [X, Y] = proj(lon, lat);
       // x_0/y_0 put the grid's north-west corner at the origin: x grows east, y runs down the rows
-      const gx = (x + x0) / cell - 0.5;
-      const gy = -(y + y0) / cell - 0.5;
-      const c0 = Math.floor(gx);
-      const r0 = Math.floor(gy);
-      const fx = gx - c0;
-      const fy = gy - r0;
-      const v =
-        rate(c0, r0) * (1 - fx) * (1 - fy) + rate(c0 + 1, r0) * fx * (1 - fy) + rate(c0, r0 + 1) * (1 - fx) * fy + rate(c0 + 1, r0 + 1) * fx * fy;
-      out[py * width + px] = v < 0.02 ? 0 : Math.min(255, Math.round(Math.sqrt(v) * 25));
+      gx[py * TILE + px] = (X + x0) / cell - 0.5;
+      gy[py * TILE + px] = -(Y + y0) / cell - 0.5;
     }
+  }
+  return { gx, gy };
+}
+
+/** rain rate [mm/h] grid of a frame, nodata = 0 */
+function rateGrid(frame) {
+  const { nx, ny, gain, offset, nodata, factor, data } = frame;
+  const out = new Float32Array(nx * ny);
+  for (let i = 0; i < out.length; i++) {
+    const v = data[i];
+    out[i] = v === nodata ? 0 : Math.max(0, (v * gain + offset) * factor);
   }
   return out;
 }
 
+// Catmull-Rom weights: bicubic sampling keeps the echoes round instead of diamond shaped
+const cr = (t) => [(-t * t * t + 2 * t * t - t) / 2, (3 * t * t * t - 5 * t * t + 2) / 2, (-3 * t * t * t + 4 * t * t + t) / 2, (t * t * t - t * t) / 2];
+
+function renderTile(rates, nx, ny, geo) {
+  const out = new Uint8Array(TILE * TILE);
+  const { gx, gy } = geo;
+  let any = false;
+  for (let i = 0; i < out.length; i++) {
+    const fx = gx[i];
+    const fy = gy[i];
+    if (fx < -1 || fy < -1 || fx > nx || fy > ny) continue;
+    const c0 = Math.floor(fx);
+    const r0 = Math.floor(fy);
+    const wx = cr(fx - c0);
+    const wy = cr(fy - r0);
+    let v = 0;
+    for (let j = 0; j < 4; j++) {
+      const r = r0 - 1 + j;
+      if (r < 0 || r >= ny) continue;
+      let row = 0;
+      for (let k = 0; k < 4; k++) {
+        const c = c0 - 1 + k;
+        if (c >= 0 && c < nx) row += rates[r * nx + c] * wx[k];
+      }
+      v += row * wy[j];
+    }
+    if (v >= 0.01) {
+      out[i] = Math.min(255, Math.round(Math.sqrt(v) * 25));
+      any = true;
+    }
+  }
+  return { out, any };
+}
+
 // ---- main ---------------------------------------------------------------------------------
 const stamp = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').slice(0, 13).replace('T', '') + 'Z';
-const manifest = { updated: new Date().toISOString(), encoding: 'sqrt25', regions: [] };
+const manifest = { updated: new Date().toISOString(), encoding: 'sqrt25', tileSize: TILE, regions: [] };
 const now = Date.now();
 
 for (const region of REGIONS) {
   const dir = join(OUT, region.id);
   mkdirSync(dir, { recursive: true });
   const [w, s, e, n] = region.bounds;
-  const height = Math.round(((mercY(n) - mercY(s)) / ((e - w) * rad)) * region.width);
   const tmp = mkdtempSync(join(tmpdir(), `radar-${region.id}-`));
   const frames = [];
   try {
-    for (const fr of await region.load(tmp)) {
-      const file = `${stamp(fr.time)}.png`;
-      writeFileSync(join(dir, file), encodePng(region.width, height, render(fr, region.bounds, region.width, height)));
-      frames.push({ time: new Date(fr.time).toISOString(), lead: fr.lead, file });
+    const src = await region.load(tmp);
+    const rates = src.map(rateGrid);
+    const names = src.map((fr) => stamp(fr.time));
+    src.forEach((fr, k) => {
+      frames.push({ time: new Date(fr.time).toISOString(), lead: fr.lead, id: names[k] });
+      mkdirSync(join(dir, names[k]), { recursive: true });
+    });
+    const empty = encodePng(TILE, TILE, new Uint8Array(TILE * TILE));
+    let count = 0;
+    for (let z = ZMIN; z <= ZMAX; z++) {
+      const x0t = lonTile(w, z);
+      const x1t = lonTile(e, z);
+      const y0t = latTile(n, z);
+      const y1t = latTile(s, z);
+      for (let x = x0t; x <= x1t; x++) {
+        for (let y = y0t; y <= y1t; y++) {
+          const geo = tileGeometry(z, x, y, src[0]);
+          src.forEach((fr, k) => {
+            const { out, any } = renderTile(rates[k], fr.nx, fr.ny, geo);
+            const d = join(dir, names[k], String(z), String(x));
+            mkdirSync(d, { recursive: true });
+            writeFileSync(join(d, `${y}.png`), any ? encodePng(TILE, TILE, out) : empty);
+            count++;
+          });
+        }
+      }
     }
+    console.log(`${region.id}: ${count} tiles`);
   } catch (err) {
-    console.warn(`${region.id}: ${err.message}`);
+    console.warn(`${region.id}: ${err.stack ?? err.message}`);
   }
 
   // carry over earlier observation frames of the previous snapshot
@@ -199,13 +266,13 @@ for (const region of REGIONS) {
   const prevRegion = prevManifest?.regions.find((r) => r.id === region.id);
   for (const f of prevRegion?.frames ?? []) {
     const t = Date.parse(f.time);
-    if (f.lead !== 0 || fresh.has(f.time) || t < now - KEEP_MIN * 60000) continue;
-    const src = join(PREV, region.id, f.file);
-    if (!existsSync(src)) continue;
-    copyFileSync(src, join(dir, f.file));
+    if (f.lead !== 0 || fresh.has(f.time) || t < now - KEEP_MIN * 60000 || !f.id) continue;
+    const from = join(PREV, region.id, f.id);
+    if (!existsSync(from)) continue;
+    cpSync(from, join(dir, f.id), { recursive: true });
     frames.push(f);
   }
-  // a frame is the analysis (lead 0) of its run or a forecast; keep the newest run per valid time
+  // keep the newest run per valid time (an analysis wins over a forecast)
   const byTime = new Map();
   for (const f of frames.sort((a, b) => a.time.localeCompare(b.time) || a.lead - b.lead)) {
     if (!byTime.has(f.time) || f.lead === 0) byTime.set(f.time, f);
@@ -217,11 +284,11 @@ for (const region of REGIONS) {
     name: region.name,
     attribution: region.attribution,
     bounds: region.bounds,
-    width: region.width,
-    height,
+    minzoom: ZMIN,
+    maxzoom: ZMAX,
     frames: list,
   });
-  console.log(`${region.id}: ${list.length} frames, ${region.width}x${height}`);
+  console.log(`${region.id}: ${list.length} frames`);
 }
 
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest));
