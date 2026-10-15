@@ -1062,10 +1062,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     radar.frames.forEach((f, k) => {
       if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i && !covered ? 0.8 : 0);
     });
-    void hd?.show(radar.frames[i].time * 1000).then(() => {
-      // coverage is known only after the first frame is drawn
-      if (map && state.overlay === 'radar' && !covered && hd.covers(map.getCenter().lng, map.getCenter().lat)) showRadarFrame(radarIdx);
-    });
+    hd?.show(radar.frames[i].time * 1000);
+    // coverage is known only after the frame is picked
+    if (hd && !covered && hd.covers(c.lng, c.lat)) {
+      radar.frames.forEach((f) => map!.getLayer(`radar-${f.time}`) && map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', 0));
+    }
     renderTimeline();
   }
 
@@ -1165,7 +1166,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
     } else if (o === 'radar') {
       html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#88ddee,#0099cc,#0077aa,#005588,#ffee00,#ffaa00,#ff4400,#c10000,#ffaaff)"></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#b4d4ff,#8cbcfa,#6496f2,#5269e8,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
     } else if (o === 'dwd-radar') {
       html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
@@ -1424,7 +1425,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
-        weatherPopup(e.lngLat.lng, e.lngLat.lat, state.overlay === 'radar' ? hdRadar?.sample(e.lngLat.lng, e.lngLat.lat) : null);
+        const { lng, lat } = e.lngLat;
+        const rain = state.overlay === 'radar' && hdRadar ? hdRadar.sample(lng, lat) : Promise.resolve(null);
+        void rain.catch(() => null).then((r) => weatherPopup(lng, lat, r));
       }
     });
     for (const l of interactive) {

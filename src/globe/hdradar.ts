@@ -1,29 +1,31 @@
-import type { ImageSource, Map as MlMap } from 'maplibre-gl';
+import { addProtocol, type Map as MlMap } from 'maplibre-gl';
 import { DATA_BASE } from '../api/data';
 
-// Orbis radar composites (scripts/radar-composite.mjs → `radar` branch): one grayscale PNG per
-// region and time step holding the rain rate (byte = sqrt(mm/h) * 25). The browser smooths it,
-// colours it with a continuous mm/h scale and keeps the values for the click read-out. These
-// images are not tiles: MapLibre stretches the same picture over the region at every zoom.
+// Orbis radar composites (scripts/radar-composite.mjs → `radar` branch): a z/x/y tile pyramid per
+// region and time step (zoom 2–7, 512 px). The tiles hold the rain rate (byte = sqrt(mm/h) * 25),
+// not colours: the `hdradar://` protocol below turns them into a continuous mm/h colour scale in
+// the browser and keeps the values for the click read-out. Zoom 7 is the native 1 km resolution of
+// the sources; beyond that MapLibre stretches the tiles.
 
 const RADAR_BASE = DATA_BASE.replace(/data\/$/, 'radar/');
-/** upscaling of the 1 km grid before colouring – the smooth look comes from this interpolation */
-const SCALE = 2;
 /** a frame further than this from the requested time is not shown */
 const MAX_GAP_MS = 8 * 60000;
+const OPACITY = 0.9;
+/** frames this close to the shown time are kept loaded for smooth stepping */
+const PRELOAD_MS = 25 * 60000;
 
 interface ManifestFrame {
   time: string;
   lead: number;
-  file: string;
+  id: string;
 }
 interface Region {
   id: string;
   name: string;
   attribution: string;
   bounds: [number, number, number, number];
-  width: number;
-  height: number;
+  minzoom: number;
+  maxzoom: number;
   frames: ManifestFrame[];
 }
 interface Manifest {
@@ -33,17 +35,17 @@ interface Manifest {
 
 // mm/h → colour. Interpolated on a log scale, so light rain stays readable and heavy rain glows.
 const STOPS: [number, [number, number, number, number]][] = [
-  [0.01, [200, 225, 255, 0]],
-  [0.05, [195, 222, 255, 120]], // faintest echoes stay visible as a pale veil (like Zoom Earth)
-  [0.2, [160, 203, 255, 170]],
-  [0.6, [120, 170, 255, 205]],
-  [1.5, [95, 140, 250, 220]],
-  [3, [105, 118, 240, 232]],
-  [6, [150, 108, 232, 240]],
-  [10, [205, 100, 212, 245]],
-  [20, [240, 100, 165, 248]],
-  [40, [255, 135, 105, 252]],
-  [80, [255, 195, 85, 255]],
+  [0.01, [185, 215, 255, 0]],
+  [0.05, [180, 212, 255, 125]], // faintest echoes stay visible as a pale veil (like Zoom Earth)
+  [0.2, [140, 188, 250, 175]],
+  [0.6, [100, 150, 242, 208]],
+  [1.5, [82, 105, 232, 222]], // Zoom Earth's legend: light blue → blue → violet → magenta → salmon → yellow
+  [3, [120, 85, 220, 232]],
+  [6, [190, 75, 180, 240]],
+  [10, [228, 85, 135, 245]],
+  [20, [244, 130, 100, 248]],
+  [40, [250, 190, 85, 252]],
+  [80, [255, 240, 95, 255]],
 ];
 
 const LUT = (() => {
@@ -70,23 +72,76 @@ export function rainLabel(mmh: number): string {
   return 'Sehr starker Regen';
 }
 
-interface Shown {
-  region: Region;
-  frame: ManifestFrame | null;
+// ---- tile values ---------------------------------------------------------------------------
+interface TileValues {
+  v: Uint8Array;
+  size: number;
+}
+const values = new Map<string, Promise<TileValues | null>>();
+
+function tileValues(path: string): Promise<TileValues | null> {
+  let p = values.get(path);
+  if (!p) {
+    p = (async () => {
+      const res = await fetch(`${RADAR_BASE}${path}.png`);
+      if (!res.ok) return null;
+      const bmp = await createImageBitmap(await res.blob());
+      const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(bmp, 0, 0);
+      const px = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+      const v = new Uint8Array(bmp.width * bmp.height);
+      for (let i = 0; i < v.length; i++) v[i] = px[i * 4];
+      return { v, size: bmp.width };
+    })().catch(() => null);
+    values.set(path, p);
+    // the animation needs ~50 tiles per frame set; keep memory bounded
+    if (values.size > 400) values.delete(values.keys().next().value!);
+  }
+  return p;
 }
 
+let protocolRegistered = false;
+function registerProtocol() {
+  if (protocolRegistered) return;
+  protocolRegistered = true;
+  // URL format: hdradar://<region>/<frame>/<z>/<x>/<y>
+  addProtocol('hdradar', async (params) => {
+    const path = params.url.replace(/^hdradar:\/\//, '');
+    const tile = await tileValues(path);
+    if (!tile) return { data: await createImageBitmap(new OffscreenCanvas(1, 1)) };
+    const canvas = new OffscreenCanvas(tile.size, tile.size);
+    const ctx = canvas.getContext('2d')!;
+    const img = ctx.createImageData(tile.size, tile.size);
+    const d = img.data;
+    for (let i = 0; i < tile.v.length; i++) {
+      const o = tile.v[i] * 4;
+      d[i * 4] = LUT[o];
+      d[i * 4 + 1] = LUT[o + 1];
+      d[i * 4 + 2] = LUT[o + 2];
+      d[i * 4 + 3] = LUT[o + 3];
+    }
+    ctx.putImageData(img, 0, 0);
+    return { data: await createImageBitmap(canvas) };
+  });
+}
+
+// ---- layer ---------------------------------------------------------------------------------
 export class HdRadar {
   private manifest: Manifest | null = null;
   private loadedAt = 0;
-  private values = new Map<string, Promise<Uint8Array | null>>();
-  private shown = new Map<string, Shown>();
   private visible = false;
-  private token = 0;
-  private urls = new Map<string, string>();
+  /** frame id currently shown per region (null = no frame close enough to the requested time) */
+  private current = new Map<string, string | null>();
+  private lastTime = 0;
 
-  constructor(private map: MlMap) {}
+  constructor(private map: MlMap) {
+    registerProtocol();
+  }
 
-  /** Load (or refresh) the manifest and make sure every region has its layer. */
+  private layerId = (r: Region, f: ManifestFrame) => `hdradar-${r.id}-${f.id}`;
+
+  /** Load (or refresh) the manifest and make sure every frame has its layer. */
   async ensure(before?: string): Promise<boolean> {
     if (!this.manifest || Date.now() - this.loadedAt > 4 * 60000) {
       try {
@@ -99,198 +154,110 @@ export class HdRadar {
         return !!this.manifest;
       }
     }
+    const wanted = new Set<string>();
     for (const r of this.manifest.regions) {
-      const id = this.layerId(r);
-      if (this.map.getSource(id)) continue;
-      const [w, s, e, n] = r.bounds;
-      this.map.addSource(id, { type: 'image', url: blank(), coordinates: [[w, n], [e, n], [e, s], [w, s]] });
-      this.map.addLayer(
-        { id, type: 'raster', source: id, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9, 'raster-fade-duration': 0, 'raster-resampling': 'linear' } },
-        before && this.map.getLayer(before) ? before : undefined,
-      );
+      for (const f of r.frames) {
+        if (!f.id) continue; // manifest of the previous (single image) format
+        const id = this.layerId(r, f);
+        wanted.add(id);
+        if (this.map.getSource(id)) continue;
+        this.map.addSource(id, {
+          type: 'raster',
+          tiles: [`hdradar://${r.id}/${f.id}/{z}/{x}/{y}`],
+          tileSize: 256,
+          minzoom: r.minzoom,
+          maxzoom: r.maxzoom,
+          bounds: r.bounds,
+          attribution: r.attribution,
+        });
+        this.map.addLayer(
+          {
+            id,
+            type: 'raster',
+            source: id,
+            layout: { visibility: 'none' }, // show() makes the frames around the shown time visible
+            paint: { 'raster-opacity': 0, 'raster-fade-duration': 0, 'raster-resampling': 'linear' },
+          },
+          before && this.map.getLayer(before) ? before : undefined,
+        );
+      }
     }
-    return this.manifest.regions.length > 0;
+    // drop frames that left the two-hour window
+    for (const l of this.map.getStyle().layers ?? []) {
+      if (l.id.startsWith('hdradar-') && !wanted.has(l.id)) {
+        this.map.removeLayer(l.id);
+        this.map.removeSource(l.id);
+      }
+    }
+    return wanted.size > 0;
   }
 
-  private layerId = (r: Region) => `hdradar-${r.id}`;
-
-  /** The region whose footprint contains the point, if its data are loaded. */
+  /** The region whose footprint contains the point. */
   private regionAt(lng: number, lat: number): Region | undefined {
     return this.manifest?.regions.find((r) => lng >= r.bounds[0] && lng <= r.bounds[2] && lat >= r.bounds[1] && lat <= r.bounds[3]);
   }
 
-  /** True if the point lies in a region this module draws – the caller can hide a coarser layer there. */
+  /** True if the point lies in a region with a frame for the shown time – coarser layers can hide there. */
   covers(lng: number, lat: number): boolean {
     if (!this.visible) return false;
     const r = this.regionAt(lng, lat);
-    return !!r && !!this.shown.get(r.id)?.frame;
+    return !!r && !!this.current.get(r.id);
   }
 
   setVisible(on: boolean) {
     this.visible = on;
-    for (const r of this.manifest?.regions ?? []) {
-      const id = this.layerId(r);
-      if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+    for (const l of this.map.getStyle().layers ?? []) {
+      if (l.id.startsWith('hdradar-')) this.map.setLayoutProperty(l.id, 'visibility', on ? 'visible' : 'none');
     }
+    if (on && this.lastTime) this.show(this.lastTime);
   }
 
-  /** Time axis (ms) of all frames – the player uses it to show the picture closest to the slider. */
-  async show(timeMs: number) {
+  /** Show, per region, the frame closest to the requested time. */
+  show(timeMs: number) {
     if (!this.manifest) return;
-    const token = ++this.token;
     this.visible = true;
+    this.lastTime = timeMs;
     for (const r of this.manifest.regions) {
       let best: ManifestFrame | null = null;
       let gap = Infinity;
       for (const f of r.frames) {
+        if (!f.id) continue;
         const d = Math.abs(Date.parse(f.time) - timeMs);
         if (d < gap) {
           gap = d;
           best = f;
         }
       }
-      const frame = best && gap <= MAX_GAP_MS ? best : null;
-      const id = this.layerId(r);
-      if (!this.map.getLayer(id)) continue;
-      if (this.shown.get(r.id)?.frame?.file === frame?.file) {
-        this.map.setLayoutProperty(id, 'visibility', frame ? 'visible' : 'none');
-        continue;
+      const pick = best && gap <= MAX_GAP_MS ? best : null;
+      this.current.set(r.id, pick?.id ?? null);
+      for (const f of r.frames) {
+        const id = this.layerId(r, f);
+        if (!this.map.getLayer(id)) continue;
+        // only frames around the shown time are loaded (hidden layers request no tiles),
+        // far ones follow when the slider gets there
+        const near = Math.abs(Date.parse(f.time) - timeMs) <= PRELOAD_MS;
+        this.map.setLayoutProperty(id, 'visibility', near ? 'visible' : 'none');
+        this.map.setPaintProperty(id, 'raster-opacity', f === pick ? OPACITY : 0);
       }
-      if (!frame) {
-        this.shown.set(r.id, { region: r, frame: null });
-        this.map.setLayoutProperty(id, 'visibility', 'none');
-        continue;
-      }
-      const url = await this.colorize(r, frame);
-      if (token !== this.token || !url) continue;
-      (this.map.getSource(id) as ImageSource | undefined)?.updateImage({ url });
-      const old = this.urls.get(r.id);
-      if (old) setTimeout(() => URL.revokeObjectURL(old), 3000);
-      this.urls.set(r.id, url);
-      this.shown.set(r.id, { region: r, frame });
-      this.map.setLayoutProperty(id, 'visibility', 'visible');
     }
   }
 
   /** Rain rate [mm/h] at a point of the currently shown frame, or null outside the data. */
-  sample(lng: number, lat: number): number | null {
+  async sample(lng: number, lat: number): Promise<number | null> {
     const r = this.regionAt(lng, lat);
-    const shown = r && this.shown.get(r.id);
-    if (!r || !shown?.frame) return null;
-    const vals = this.cached(r, shown.frame);
-    if (!vals) return null;
-    const [w, s, e, n] = r.bounds;
-    const my = (la: number) => Math.log(Math.tan(Math.PI / 4 + (la * Math.PI) / 360));
-    const x = Math.floor(((lng - w) / (e - w)) * r.width);
-    const y = Math.floor(((my(n) - my(lat)) / (my(n) - my(s))) * r.height);
-    if (x < 0 || y < 0 || x >= r.width || y >= r.height) return null;
-    return rainRate(vals[y * r.width + x]);
-  }
-
-  private resolved = new Map<string, Uint8Array>();
-  private cached(r: Region, f: ManifestFrame) {
-    return this.resolved.get(`${r.id}/${f.file}`) ?? null;
-  }
-
-  private values$(r: Region, f: ManifestFrame): Promise<Uint8Array | null> {
-    const key = `${r.id}/${f.file}`;
-    let p = this.values.get(key);
-    if (!p) {
-      p = (async () => {
-        const res = await fetch(`${RADAR_BASE}${key}`);
-        if (!res.ok) return null;
-        const bmp = await createImageBitmap(await res.blob());
-        const c = document.createElement('canvas');
-        c.width = bmp.width;
-        c.height = bmp.height;
-        const ctx = c.getContext('2d', { willReadFrequently: true })!;
-        ctx.drawImage(bmp, 0, 0);
-        const px = ctx.getImageData(0, 0, c.width, c.height).data;
-        const out = new Uint8Array(c.width * c.height);
-        for (let i = 0; i < out.length; i++) out[i] = px[i * 4];
-        this.resolved.set(key, out);
-        // keep memory bounded: the animation needs ~50 frames per region
-        if (this.resolved.size > 60) this.resolved.delete(this.resolved.keys().next().value!);
-        return out;
-      })().catch(() => null);
-      this.values.set(key, p);
-      if (this.values.size > 60) this.values.delete(this.values.keys().next().value!);
-    }
-    return p;
-  }
-
-  private async colorize(r: Region, f: ManifestFrame): Promise<string | null> {
-    const vals = await this.values$(r, f);
-    if (!vals) return null;
-    const { width: w, height: h } = r;
-    const small = document.createElement('canvas');
-    small.width = w;
-    small.height = h;
-    const sctx = small.getContext('2d')!;
-    const img = sctx.createImageData(w, h);
-    for (let i = 0; i < vals.length; i++) {
-      const v = vals[i];
-      img.data[i * 4] = v;
-      img.data[i * 4 + 1] = v;
-      img.data[i * 4 + 2] = v;
-      img.data[i * 4 + 3] = 255;
-    }
-    sctx.putImageData(img, 0, 0);
-    const big = document.createElement('canvas');
-    big.width = w * SCALE;
-    big.height = h * SCALE;
-    const bctx = big.getContext('2d', { willReadFrequently: true })!;
-    bctx.imageSmoothingEnabled = true;
-    bctx.imageSmoothingQuality = 'high';
-    bctx.drawImage(small, 0, 0, big.width, big.height);
-    const out = bctx.getImageData(0, 0, big.width, big.height);
-    const d = out.data;
-    softenRed(d, big.width, big.height, 2);
-    for (let i = 0; i < d.length; i += 4) {
-      const o = d[i] * 4;
-      d[i] = LUT[o];
-      d[i + 1] = LUT[o + 1];
-      d[i + 2] = LUT[o + 2];
-      d[i + 3] = LUT[o + 3];
-    }
-    bctx.putImageData(out, 0, 0);
-    return new Promise((resolve) => big.toBlob((b) => resolve(b ? URL.createObjectURL(b) : null), 'image/png'));
-  }
-
-  attributions(): string[] {
-    return this.manifest?.regions.map((r) => r.attribution) ?? [];
+    const frame = r && this.current.get(r.id);
+    if (!r || !frame) return null;
+    const z = r.maxzoom;
+    const n = 2 ** z;
+    const fx = ((lng + 180) / 360) * n;
+    const rl = (lat * Math.PI) / 180;
+    const fy = ((1 - Math.log(Math.tan(rl) + 1 / Math.cos(rl)) / Math.PI) / 2) * n;
+    const x = Math.floor(fx);
+    const y = Math.floor(fy);
+    const tile = await tileValues(`${r.id}/${frame}/${z}/${x}/${y}`);
+    if (!tile) return null;
+    const px = Math.min(tile.size - 1, Math.floor((fx - x) * tile.size));
+    const py = Math.min(tile.size - 1, Math.floor((fy - y) * tile.size));
+    return rainRate(tile.v[py * tile.size + px]);
   }
 }
-
-/** Box blur (two passes) of the red channel in place: rounds the edges of echoes like Zoom Earth. */
-function softenRed(d: Uint8ClampedArray, w: number, h: number, r: number) {
-  const tmp = new Float32Array(w * h);
-  for (let pass = 0; pass < 2; pass++) {
-    // horizontal
-    for (let y = 0; y < h; y++) {
-      let sum = 0;
-      const row = y * w;
-      for (let x = -r; x <= r; x++) sum += d[(row + Math.min(w - 1, Math.max(0, x))) * 4];
-      for (let x = 0; x < w; x++) {
-        tmp[row + x] = sum / (2 * r + 1);
-        sum += d[(row + Math.min(w - 1, x + r + 1)) * 4] - d[(row + Math.max(0, x - r)) * 4];
-      }
-    }
-    // vertical
-    for (let x = 0; x < w; x++) {
-      let sum = 0;
-      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
-      for (let y = 0; y < h; y++) {
-        d[(y * w + x) * 4] = sum / (2 * r + 1);
-        sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
-      }
-    }
-  }
-}
-
-/** 1×1 transparent PNG, placeholder until the first frame is coloured. */
-function blank(): string {
-  return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-}
-
-export type { Shown };
