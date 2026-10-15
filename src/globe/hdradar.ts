@@ -35,12 +35,12 @@ interface Manifest {
 
 // mm/h → colour. Interpolated on a log scale, so light rain stays readable and heavy rain glows.
 const STOPS: [number, [number, number, number, number]][] = [
-  [0.002, [190, 218, 255, 0]],
-  [0.01, [180, 212, 255, 105]], // even 0.01 mm/h (the sources' smallest step) shows as a pale veil
-  [0.05, [170, 207, 255, 145]],
-  [0.2, [140, 188, 250, 175]],
-  [0.6, [100, 150, 242, 208]],
-  [1.5, [82, 105, 232, 222]], // Zoom Earth's legend: light blue → blue → violet → magenta → salmon → yellow
+  [0.002, [110, 170, 255, 0]],
+  [0.01, [115, 175, 255, 140]], // even 0.01 mm/h (the sources' smallest step) is a clearly blue veil
+  [0.05, [105, 165, 255, 170]],
+  [0.2, [90, 150, 250, 195]],
+  [0.6, [85, 135, 245, 210]],
+  [1.5, [80, 110, 235, 222]], // Zoom Earth's legend: blue → violet → magenta → salmon → yellow
   [3, [120, 85, 220, 232]],
   [6, [190, 75, 180, 240]],
   [10, [228, 85, 135, 245]],

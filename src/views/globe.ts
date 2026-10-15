@@ -1174,7 +1174,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
     } else if (o === 'radar') {
       html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#b4d4ff,#8cbcfa,#6496f2,#5269e8,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)"></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
     } else if (o === 'dwd-radar') {
       html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
