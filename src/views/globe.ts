@@ -35,7 +35,7 @@ import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
-import { HdRadar, rainLabel } from '../globe/hdradar';
+import { HdRadar, rainLabel, rainviewerTiles } from '../globe/hdradar';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
@@ -1022,13 +1022,26 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return;
       }
     }
+    // Orbis composites supply the forecast steps beyond RainViewer's last measurement
+    hdRadar ??= new HdRadar(map);
+    const hdOk = await hdRadar.ensure('anchor-weather');
+    radar.frames = radar.frames.filter((f) => !f.hd);
+    const pastTimes = radar.frames.filter((f) => !f.nowcast).map((f) => f.time);
+    if (hdOk && pastTimes.length) {
+      const last = Math.max(...pastTimes);
+      const have = new Set(radar.frames.map((f) => f.time));
+      for (const t of hdRadar.futureTimes(last * 1000 + 60000)) {
+        if (!have.has(t / 1000)) radar.frames.push({ time: t / 1000, path: '', nowcast: true, hd: true });
+      }
+    }
     if (state.overlay !== 'radar' || !radar.frames.length) return;
     for (const f of radar.frames) {
+      if (f.hd) continue;
       const id = `radar-${f.time}`;
       if (map.getSource(id)) continue;
       map.addSource(id, {
         type: 'raster',
-        tiles: [`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_0.png`],
+        tiles: [rainviewerTiles(radar.host, f.path)],
         tileSize: 256,
         maxzoom: store.getKeys().radarHost ? 10 : 7,
         attribution: store.getKeys().radarHost ? 'Radar: eigener Radar-Server (LibreWXR / RainViewer-kompatibel)' : 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',
@@ -1038,9 +1051,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         'anchor-weather',
       );
     }
-    // Orbis composites (smooth, own colour scale) replace RainViewer where they cover the view
-    hdRadar ??= new HdRadar(map);
-    await hdRadar.ensure('anchor-weather');
     showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
@@ -1058,22 +1068,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   /**
-   * Orbis composites (hdRadar) where they cover the view, RainViewer as backup elsewhere.
-   * Hidden layers request no tiles, so RainViewer only loads the shown frame ±1 and nothing
-   * at all inside the composite's area (it rate-limits with HTTP 429 otherwise).
+   * RainViewer tiles (re-coloured with the Orbis scale by the rvradar:// protocol) show the
+   * measurements; the DWD nowcast (hdRadar) supplies the forecast steps after the last one.
+   * Hidden layers request no tiles, so only the shown frame ±1 is loaded.
    */
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
-    const c = map.getCenter();
+    const fr = radar.frames[i];
     const hd = state.overlay === 'radar' ? hdRadar : null;
-    hd?.show(radar.frames[i].time * 1000);
-    const covered = !!hd?.covers(c.lng, c.lat);
+    if (fr.hd && hd) hd.show(fr.time * 1000);
+    else hd?.setVisible(false);
     radar.frames.forEach((f, k) => {
       const id = `radar-${f.time}`;
       if (!map!.getLayer(id)) return;
-      vis(id, !covered && Math.abs(k - i) <= 1);
-      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.8 : 0);
+      vis(id, !fr.hd && Math.abs(k - i) <= 1);
+      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.9 : 0);
     });
     renderTimeline();
   }
@@ -1434,7 +1444,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
         const { lng, lat } = e.lngLat;
-        const rain = state.overlay === 'radar' && hdRadar ? hdRadar.sample(lng, lat) : Promise.resolve(null);
+        const rain = state.overlay === 'radar' && hdRadar?.isVisible() ? hdRadar.sample(lng, lat) : Promise.resolve(null);
         void rain.catch(() => null).then((r) => weatherPopup(lng, lat, r));
       }
     });

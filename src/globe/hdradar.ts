@@ -33,25 +33,31 @@ interface Manifest {
   regions: Region[];
 }
 
+/** first byte value that means "no measurement" (the composites write 255) */
+const NODATA_MIN = 250;
+
 // mm/h → colour. Interpolated on a log scale, so light rain stays readable and heavy rain glows.
 const STOPS: [number, [number, number, number, number]][] = [
-  [0.002, [110, 170, 255, 0]],
-  [0.01, [115, 175, 255, 140]], // even 0.01 mm/h (the sources' smallest step) is a clearly blue veil
-  [0.05, [105, 165, 255, 170]],
-  [0.2, [90, 150, 250, 195]],
-  [0.6, [85, 135, 245, 210]],
-  [1.5, [80, 110, 235, 222]], // Zoom Earth's legend: blue → violet → magenta → salmon → yellow
-  [3, [120, 85, 220, 232]],
-  [6, [190, 75, 180, 240]],
-  [10, [228, 85, 135, 245]],
-  [20, [244, 130, 100, 248]],
+  [0.002, [150, 205, 255, 0]],
+  [0.01, [150, 205, 255, 175]], // even 0.01 mm/h is a clearly blue veil, bright enough over dark imagery
+  [0.05, [140, 198, 255, 195]],
+  [0.2, [120, 180, 252, 210]],
+  [0.6, [100, 158, 246, 222]],
+  [1.5, [85, 120, 238, 230]], // Zoom Earth's legend: blue → violet → magenta → salmon → yellow
+  [3, [125, 90, 225, 236]],
+  [6, [190, 75, 180, 242]],
+  [10, [228, 85, 135, 246]],
+  [20, [244, 130, 100, 249]],
   [40, [250, 190, 85, 252]],
   [80, [255, 240, 95, 255]],
 ];
 
 const LUT = (() => {
   const lut = new Uint8ClampedArray(256 * 4);
-  for (let v = 1; v < 256; v++) {
+  // 0 = measured, no rain; 255 = no measurement (outside every radar's range): both transparent.
+  // Some browsers shift gray values by one while decoding (255 → 254), so everything from
+  // NODATA_MIN up counts as "no measurement"; real rain stops at 249 (≈ 99 mm/h).
+  for (let v = 1; v < NODATA_MIN; v++) {
     const mmh = (v / 25) ** 2;
     let k = 0;
     while (k < STOPS.length - 2 && mmh > STOPS[k + 1][0]) k++;
@@ -102,28 +108,119 @@ function tileValues(path: string): Promise<TileValues | null> {
   return p;
 }
 
+/** Rain rate [mm/h] → byte of the shared value encoding. */
+const rateByte = (mmh: number) => (mmh < 0.002 ? 0 : Math.min(NODATA_MIN - 1, Math.round(Math.sqrt(mmh) * 25)));
+
+/** value bytes (size × size) → coloured, smoothly interpolated image */
+async function paintValues(v: Uint8Array, size: number, upscale: number): Promise<ImageBitmap> {
+  const small = new OffscreenCanvas(size, size);
+  const sctx = small.getContext('2d')!;
+  const gray = sctx.createImageData(size, size);
+  for (let i = 0; i < v.length; i++) {
+    gray.data[i * 4] = v[i];
+    gray.data[i * 4 + 1] = v[i];
+    gray.data[i * 4 + 2] = v[i];
+    gray.data[i * 4 + 3] = 255;
+  }
+  sctx.putImageData(gray, 0, 0);
+  const n = size * upscale;
+  const canvas = new OffscreenCanvas(n, n);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(small, 0, 0, n, n); // interpolates the values, the colours come afterwards
+  const img = ctx.getImageData(0, 0, n, n);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const o = d[i] * 4;
+    d[i] = LUT[o];
+    d[i + 1] = LUT[o + 1];
+    d[i + 2] = LUT[o + 2];
+    d[i + 3] = LUT[o + 3];
+  }
+  ctx.putImageData(img, 0, 0);
+  return createImageBitmap(canvas);
+}
+
+// ---- RainViewer tiles, re-coloured with the Orbis scale -------------------------------------
+// RainViewer's tiles come in a fixed colour ramp: weak echoes are tan with growing alpha, then
+// light → dark blue, then yellow → red → pink. The ramp is read back into a rain rate (rough dBZ
+// anchors, Marshall-Palmer) so the same scale and smoothing apply to every source.
+/** weakest RainViewer haze that is still drawn (see rainviewerRate) */
+const TAN_MIN_ALPHA = 100;
+
+const WARM: [number, number, number, number][] = [
+  [255, 238, 0, 36],
+  [255, 170, 0, 42],
+  [255, 68, 0, 48],
+  [193, 0, 0, 55],
+  [255, 170, 255, 62],
+];
+
+function rainviewerRate(r: number, g: number, b: number, a: number): number {
+  if (a === 0) return 0;
+  let dbz: number;
+  if (a < 255 && b <= g) {
+    // tan = RainViewer's faintest haze (alpha 20 … 190). Compared tile by tile, Zoom Earth shows
+    // none of the alpha < ~100 part (e.g. Bavaria 17:40 UTC: Zoom Earth and DWD empty, RainViewer
+    // 15–24 % haze), so it is dropped here.
+    if (a < TAN_MIN_ALPHA) return 0;
+    dbz = 2 + ((a - 20) / 170) * 13; // tan: 2 … 15 dBZ
+  } else if (r > 150 && !(b > r && g < 200)) {
+    let best = WARM[0];
+    let bd = Infinity;
+    for (const w of WARM) {
+      const d = (w[0] - r) ** 2 + (w[1] - g) ** 2 + (w[2] - b) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = w;
+      }
+    }
+    dbz = best[3];
+  } else {
+    // blues: R falls 136 → 0, then G falls 163 → 85
+    const p = r > 0 ? ((136 - r) / 136) * 0.25 : 0.25 + ((163 - g) / (163 - 85)) * 0.75;
+    dbz = 15 + Math.max(0, Math.min(1, p)) * 20;
+  }
+  return (10 ** (dbz / 10) / 200) ** 0.625;
+}
+
+/** Tile URL template for a RainViewer frame, to be used as a raster source `tiles` entry. */
+export function rainviewerTiles(host: string, path: string): string {
+  registerProtocol();
+  return `rvradar://${encodeURIComponent(host)}${path}/{z}/{x}/{y}`;
+}
+
 let protocolRegistered = false;
 function registerProtocol() {
   if (protocolRegistered) return;
   protocolRegistered = true;
+  const blank = () => createImageBitmap(new OffscreenCanvas(1, 1));
   // URL format: hdradar://<region>/<frame>/<z>/<x>/<y>
   addProtocol('hdradar', async (params) => {
     const path = params.url.replace(/^hdradar:\/\//, '');
     const tile = await tileValues(path);
-    if (!tile) return { data: await createImageBitmap(new OffscreenCanvas(1, 1)) };
-    const canvas = new OffscreenCanvas(tile.size, tile.size);
-    const ctx = canvas.getContext('2d')!;
-    const img = ctx.createImageData(tile.size, tile.size);
-    const d = img.data;
-    for (let i = 0; i < tile.v.length; i++) {
-      const o = tile.v[i] * 4;
-      d[i * 4] = LUT[o];
-      d[i * 4 + 1] = LUT[o + 1];
-      d[i * 4 + 2] = LUT[o + 2];
-      d[i * 4 + 3] = LUT[o + 3];
+    return { data: tile ? await paintValues(tile.v, tile.size, 1) : await blank() };
+  });
+  // URL format: rvradar://<encoded host><path>/<z>/<x>/<y>
+  addProtocol('rvradar', async (params, abort) => {
+    const m = /^rvradar:\/\/([^/]+)(.*)\/(\d+)\/(\d+)\/(\d+)$/.exec(params.url);
+    if (!m) return { data: await blank() };
+    const url = `${decodeURIComponent(m[1])}${m[2]}/256/${m[3]}/${m[4]}/${m[5]}/2/1_0.png`;
+    try {
+      const res = await fetch(url, { signal: abort.signal });
+      if (!res.ok) return { data: await blank() };
+      const bmp = await createImageBitmap(await res.blob());
+      const c = new OffscreenCanvas(bmp.width, bmp.height);
+      const cx = c.getContext('2d', { willReadFrequently: true })!;
+      cx.drawImage(bmp, 0, 0);
+      const px = cx.getImageData(0, 0, bmp.width, bmp.height).data;
+      const v = new Uint8Array(bmp.width * bmp.height);
+      for (let i = 0; i < v.length; i++) v[i] = rateByte(rainviewerRate(px[i * 4], px[i * 4 + 1], px[i * 4 + 2], px[i * 4 + 3]));
+      return { data: await paintValues(v, bmp.width, 2) };
+    } catch {
+      return { data: await blank() };
     }
-    ctx.putImageData(img, 0, 0);
-    return { data: await createImageBitmap(canvas) };
   });
 }
 
@@ -193,16 +290,23 @@ export class HdRadar {
     return wanted.size > 0;
   }
 
+  isVisible = () => this.visible;
+
+  /** Valid times (ms) of forecast steps later than `afterMs`, for the shared timeline. */
+  futureTimes(afterMs: number): number[] {
+    const t = new Set<number>();
+    for (const r of this.manifest?.regions ?? []) {
+      for (const f of r.frames) {
+        const ms = Date.parse(f.time);
+        if (f.id && ms > afterMs) t.add(ms);
+      }
+    }
+    return [...t].sort((x, y) => x - y);
+  }
+
   /** The region whose footprint contains the point. */
   private regionAt(lng: number, lat: number): Region | undefined {
     return this.manifest?.regions.find((r) => lng >= r.bounds[0] && lng <= r.bounds[2] && lat >= r.bounds[1] && lat <= r.bounds[3]);
-  }
-
-  /** True if the point lies in a region with a frame for the shown time – coarser layers can hide there. */
-  covers(lng: number, lat: number): boolean {
-    if (!this.visible) return false;
-    const r = this.regionAt(lng, lat);
-    return !!r && !!this.current.get(r.id);
   }
 
   setVisible(on: boolean) {
@@ -259,6 +363,7 @@ export class HdRadar {
     if (!tile) return null;
     const px = Math.min(tile.size - 1, Math.floor((fx - x) * tile.size));
     const py = Math.min(tile.size - 1, Math.floor((fy - y) * tile.size));
-    return rainRate(tile.v[py * tile.size + px]);
+    const byte = tile.v[py * tile.size + px];
+    return byte >= NODATA_MIN ? null : rainRate(byte);
   }
 }

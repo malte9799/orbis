@@ -1,7 +1,7 @@
 name: Update radar composites
 
-# Turns raw radar rasters (DWD RV, …) into smooth, value-encoded PNG composites per region and
-# time step (scripts/radar-composite.mjs) and publishes them on the `radar` branch, served to the
+# Turns the DWD RV radar composite (analysis + 2 h nowcast) into value-encoded PNG tiles per time
+# step (scripts/radar-composite.mjs) and publishes them on the `radar` branch, served to the
 # app via raw.githubusercontent.com (src/globe/hdradar.ts). GitHub's cron is best effort: runs
 # every 5 min are often delayed, so the radar can lag by a few minutes.
 
@@ -31,15 +31,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Previous composites
-        run: |
-          if git fetch --depth=1 origin radar; then
-            git worktree add --detach ../radar-prev FETCH_HEAD
-          else
-            mkdir -p ../radar-prev
-          fi
       - name: Build composites
-        run: node scripts/radar-composite.mjs ../radar-out ../radar-prev
+        run: node scripts/radar-composite.mjs ../radar-out
       - name: Publish radar branch
         working-directory: ../radar-out
         run: |
