@@ -17,7 +17,8 @@
   },
   "devDependencies": {
     "@types/three": "^0.183.1",
-    "jsfive": "^0.4.2",
+    "h5wasm": "^0.10.3",
+    "proj4": "^2.22.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
   }
