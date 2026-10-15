@@ -41,12 +41,15 @@ Drei Ansichten:
     nur ihre feste Textur, die Detailkacheln gibt es nur auf der Karte (`src/space/planets.ts`: `enabled` – derzeit
     Erde, Mars und Mond, Merkur/Venus vorbereitet).
   - **Mondkarte** (`#/planet?body=moon`) – dieselbe Karte für den Mond: LRO-WAC-Mosaik (≈ 100 m/px), optional die
-    LOLA-Höhenkarten (Farbe / Schummerung; Einträge, die Moon Trek nicht ausliefert, blenden sich selbst aus),
+    die farbige Reliefkarte aus LOLA/Kaguya,
     ~70 benannte Formationen (Meere, Becken, Krater, Gebirge, Täler – `src/space/moon-features.ts`, schaltbar) und alle
     Landestellen. An den Landestellen stehen 3D-Modelle von Lander, Flagge und Fahrzeugen (Apollo-Landefähre und
     Mondauto, Surveyor, Luna/Lunochod, Chang’e/Yutu, Vikram/Pragyan, SLIM, Odysseus, Blue Ghost …); dieselben
     Modelle gibt es für die Mars-Landestellen (Viking, Pathfinder/Sojourner, Spirit/Opportunity, Phoenix, InSight,
-    Zhurong). Sie sind prozedural erzeugt (`src/space/surface-models.ts`) und per Klick anwählbar. Mars und Mond
+    Zhurong). Regionale Detailkarten (LROC-NAC-Mosaike der Landestellen, Kaguya, Geologie, Mineralien …) liest
+    `scripts/moon-products.mjs` aus dem Moon-Trek-Index (wie `mars-products.mjs`) nach `src/space/moon-products.ts`;
+    der Deploy-Workflow führt das Skript aus (optional, bei Fehlern bleibt die eingecheckte Liste). Die Mosaike
+    liegen in „Automatisch“ über dem WAC-Mosaik. Sie sind prozedural erzeugt (`src/space/surface-models.ts`) und per Klick anwählbar. Mars und Mond
     lassen sich im Ebenen-Panel umschalten; aus der Weltall-Ansicht öffnet sich die Mondkarte beim Heranzoomen
     bis dicht über die Oberfläche (`openAt`) oder über „Planetenkarte“ im Steckbrief.
     Über den globalen Mosaiken liegen automatisch die regionalen HiRISE-Mosaike von Mars Trek (Jezero, Gale,
