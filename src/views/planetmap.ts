@@ -909,7 +909,8 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     return [
       ...(products.length ? [{ id: 'auto', label: hasMosaics ? (c.autoLabel ?? 'Automatisch') : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) }] : []),
       ...(hasMosaics && c.globalLabel ? [{ id: 'global', label: c.globalLabel, short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
-      ...c.layers.map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional })),
+      // the automatic map already is that mosaic (plus the finer regional ones)
+      ...c.layers.filter((l) => !(products.length && !c.globalLabel && l.id === c.detail3d(0).id)).map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional })),
       ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: baseName(p.title), short: baseName(p.title), img: thumb(p.layer) })),
     ];
   }

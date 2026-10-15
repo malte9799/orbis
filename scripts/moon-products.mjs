@@ -97,19 +97,46 @@ await Promise.all(
   }),
 );
 
-// Curation: drop duplicates, slopes / roughness / DEM products and very coarse maps. Every product is listed
-// in the log so the filter can be adjusted after a look at the catalogue.
-const KEEP = (m) => {
-  const t = m.title;
-  if (/Slope|Roughness|Rock Abundance|Temperature|Illumination|Uncertain|Error|Mask|Count/i.test(t)) return false;
-  if (m.group === 'mosaic') return true;
-  if (m.group === 'base') return /LOLA|Kaguya|SELENE|Clementine|WAC|Hillshade|Color/i.test(t);
-  if (m.group === 'region') return /LROC|NAC|Kaguya|Apollo|Color|Ortho/i.test(t);
-  return true;
-};
-for (const m of out) console.log(KEEP(m) ? 'keep' : 'drop', m.group, m.maxZ, m.label, '|', m.title);
-for (let k = out.length - 1; k >= 0; k--) if (!KEEP(out[k])) out.splice(k, 1);
+// Curation (the Trek catalogue is large and full of near-duplicates – the map offers only what adds something):
+//  · slopes, roughness, error / count layers, DEM, regional maps and regional overlays are dropped;
+//  · base maps: only global colour / relief maps (plain greyscale imagery = the WAC mosaic we already have, LOLA = planets.ts),
+//    one per family, the finest resolution wins;
+//  · NAC mosaics (composited into "auto", not listed): only those sharper than the WAC mosaic, and none that a finer
+//    mosaic of the same or larger footprint already covers;
+//  · overlays: a few global thematic maps (geology, composition), duplicates by title merged.
+// Every product is listed in the log so the filter can be adjusted after a look at the catalogue.
+const isGlobal = (m) => m.bbox[2] - m.bbox[0] >= 300;
+const family = (t) => t.toLowerCase().replace(/\b(global|mosaic|map|v\d+|\d+\s*(m|km|ppd|mpp)(\/px)?)\b/g, '').replace(/[^a-z]+/g, ' ').trim();
+const area = (m) => (m.bbox[2] - m.bbox[0]) * (m.bbox[3] - m.bbox[1]);
+const covers = (a, b) => a.bbox[0] <= b.bbox[0] + 0.01 && a.bbox[1] <= b.bbox[1] + 0.01 && a.bbox[2] >= b.bbox[2] - 0.01 && a.bbox[3] >= b.bbox[3] - 0.01;
+const BAD = /Slope|Roughness|Rock Abundance|Temperature|Illumination|Uncertain|Error|Mask|Count|Anaglyph|Stereo|Polar|Pole/i;
 
+const cand = out.filter((m) => !BAD.test(m.title));
+const keepers = new Set();
+// base maps
+const bases = cand.filter((m) => m.group === 'base' && isGlobal(m) && /Colou?r|Clr|Elevation|Topograph|Hillshade|Shade|Albedo/i.test(m.title) && !/LOLA/i.test(m.title));
+const seenFam = new Set();
+for (const m of bases.sort((x, y) => y.maxZ - x.maxZ || y.px - x.px)) {
+  const f = family(m.title);
+  if (seenFam.has(f) || keepers.size >= 3) continue;
+  seenFam.add(f);
+  keepers.add(m);
+}
+// mosaics
+const mosaics = cand.filter((m) => m.group === 'mosaic' && !isGlobal(m) && m.maxZ >= 10).sort((x, y) => y.maxZ - x.maxZ || area(y) - area(x));
+for (const m of mosaics) if (![...keepers].some((k) => k.group === 'mosaic' && k.maxZ >= m.maxZ && covers(k, m))) keepers.add(m);
+// overlays
+const seenOv = new Set();
+let nOv = 0;
+for (const m of cand.filter((m) => m.group === 'overlay' && isGlobal(m) && /Geolog|Titan|TiO2|FeO|Iron|Thorium|Magnesium|Mineral|Olivine|Pyroxene/i.test(m.title)).sort((x, y) => y.maxZ - x.maxZ)) {
+  const f = family(m.title);
+  if (seenOv.has(f) || nOv >= 4) continue;
+  seenOv.add(f);
+  nOv++;
+  keepers.add(m);
+}
+const KEEP = (m) => keepers.has(m);
+for (const m of out) console.log(KEEP(m) ? 'keep' : 'drop', m.group, m.maxZ, m.label, '|', m.title);
 const order = { base: 0, mosaic: 1, region: 2, overlay: 3 };
 out.sort((a, b) => order[a.group] - order[b.group] || (a.group === 'mosaic' ? a.maxZ - b.maxZ || (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]) - (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]) : a.title.localeCompare(b.title)));
 const strip = (u) => u.replace(/^https:\/\/trek\.nasa\.gov\//, '~/');
