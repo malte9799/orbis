@@ -21,8 +21,8 @@ concurrency:
 
 jobs:
   deploy:
-    # `data` only holds snapshots, no app
-    if: github.event_name != 'pull_request' && github.ref_name != 'data'
+    # `data` and `radar` only hold snapshots, no app
+    if: github.event_name != 'pull_request' && github.ref_name != 'data' && github.ref_name != 'radar'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

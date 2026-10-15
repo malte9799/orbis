@@ -35,6 +35,7 @@ import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
+import { HdRadar, rainLabel } from '../globe/hdradar';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
@@ -997,6 +998,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let radar: RadarFrames | null = null;
   let radarAt = 0;
   let radarIdx = 0;
+  let hdRadar: HdRadar | null = null;
   let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
@@ -1036,6 +1038,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         'anchor-weather',
       );
     }
+    // Orbis composites (smooth, own colour scale) replace RainViewer where they cover the view
+    hdRadar ??= new HdRadar(map);
+    await hdRadar.ensure('anchor-weather');
     showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
@@ -1045,13 +1050,21 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function setRadarVisible(on: boolean) {
     if (!radar || !map) return;
     for (const f of radar.frames) vis(`radar-${f.time}`, on);
+    if (!on) hdRadar?.setVisible(false);
   }
 
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
+    const c = map.getCenter();
+    const hd = state.overlay === 'radar' ? hdRadar : null;
+    const covered = !!hd?.covers(c.lng, c.lat);
     radar.frames.forEach((f, k) => {
-      if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i ? 0.8 : 0);
+      if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i && !covered ? 0.8 : 0);
+    });
+    void hd?.show(radar.frames[i].time * 1000).then(() => {
+      // coverage is known only after the first frame is drawn
+      if (map && state.overlay === 'radar' && !covered && hd.covers(map.getCenter().lng, map.getCenter().lat)) showRadarFrame(radarIdx);
     });
     renderTimeline();
   }
@@ -1223,13 +1236,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     return node;
   }
 
-  async function weatherPopup(lng: number, lat: number) {
-    const node = openPopup({ lng, lat }, `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div><div class="pop-loading">Lade Wetter …</div></div>`);
+  async function weatherPopup(lng: number, lat: number, rain?: number | null) {
+    // radar read-out of the Orbis composites: available even if the weather request fails
+    const radarLine =
+      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${fmt.num(rain, rain < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag')}</b></div>` : '';
+    const node = openPopup({ lng, lat }, `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`);
     try {
       const w = await getCurrent(lat, lng);
       const c = w.current;
       node.innerHTML = `<div class="pop">
         <div class="pop-sub">${fmt.coords(lat, lng)} · ${Math.round(w.elevation)} m</div>
+        ${radarLine}
         <div class="pop-wx">${weatherIcon(c.weather_code, c.is_day === 1, 52)}
           <div><div class="pop-temp">${fmt.temp(c.temperature_2m, 1)}</div><div>${escapeHtml(describe(c.weather_code))}</div></div></div>
         <div class="pop-grid">
@@ -1369,6 +1386,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('moveend', () => {
       refreshDetail();
       extras?.onMoveEnd();
+      if (state.overlay === 'radar' && hdRadar && radar) showRadarFrame(radarIdx);
       const c = map!.getCenter();
       state.center = [+c.lng.toFixed(3), +c.lat.toFixed(3)];
       state.zoom = +map!.getZoom().toFixed(2);
@@ -1406,7 +1424,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
-        weatherPopup(e.lngLat.lng, e.lngLat.lat);
+        weatherPopup(e.lngLat.lng, e.lngLat.lat, state.overlay === 'radar' ? hdRadar?.sample(e.lngLat.lng, e.lngLat.lat) : null);
       }
     });
     for (const l of interactive) {
