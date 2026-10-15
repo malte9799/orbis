@@ -1,4 +1,4 @@
-import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
+import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature, RasterTileSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
@@ -94,7 +94,10 @@ export type ExtraId =
   | 'bathymetry'
   | 'chlorophyll'
   | 'ecradar'
-  | 'nexrad';
+  | 'nexrad'
+  | 'fmiradar'
+  | 'noaaradar'
+  | 'jmaradar';
 
 export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams';
 
@@ -145,6 +148,9 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'chlorophyll', section: 'ocean', label: 'Chlorophyll (Algen)', hint: 'Algenblüte im Meer, Satellit – NASA VIIRS', glyph: 'wind', color: '#2e7d32' },
   { id: 'nexrad', section: 'ocean', label: 'Radar USA (NEXRAD)', hint: 'Regenradar Mosaik der USA, ~5 min – NOAA via Iowa Environmental Mesonet', glyph: 'storm', color: '#ef5350' },
   { id: 'ecradar', section: 'ocean', label: 'Radar Kanada', hint: 'Regenradar Kanada, 1 km, ~6 min – Environment Canada', glyph: 'storm', color: '#e53935' },
+  { id: 'fmiradar', section: 'ocean', label: 'Radar Finnland', hint: 'Regenradar Finnland, 1 km, 5 min – Finnish Meteorological Institute (CC BY 4.0)', glyph: 'storm', color: '#1e88e5' },
+  { id: 'noaaradar', section: 'ocean', label: 'Radar Alaska, Hawaii, Karibik, Guam', hint: 'Regenradar Alaska, Hawaii, Puerto Rico und Guam – NOAA MRMS', glyph: 'storm', color: '#d84315' },
+  { id: 'jmaradar', section: 'ocean', label: 'Radar Japan', hint: 'Niederschlagsradar Japan, 5 min – Japan Meteorological Agency', glyph: 'storm', color: '#c62828' },
   { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
@@ -225,11 +231,16 @@ const LAYERS: Record<ExtraId, string[]> = {
   chlorophyll: ['chlorophyll'],
   nexrad: ['nexrad'],
   ecradar: ['ecradar'],
+  fmiradar: ['fmiradar'],
+  noaaradar: ['noaa-ak', 'noaa-hi', 'noaa-pr', 'noaa-gu'],
+  jmaradar: ['jmaradar'],
   terrain: ['hillshade'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
 };
+
+const JMA_RADAR_TILES = (time: string) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${time}/none/${time}/surf/hrpns/{z}/{x}/{y}.png`;
 
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
@@ -489,6 +500,15 @@ export class ExtraLayers {
     overlay('chlorophyll', [gibsWms('VIIRS_SNPP_L2_Chlorophyll_A')], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
     overlay('nexrad', ['https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'], 'Radar USA: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/">Iowa Environmental Mesonet</a>', 9, 0.8, { bounds: [-130, 20, -60, 52] });
     overlay('ecradar', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RRAI&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.8, { bounds: [-141, 41, -52, 70] });
+    overlay('fmiradar', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_dbz_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Finnland: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
+    const noaaWms = (region: string) => `https://opengeo.ncep.noaa.gov/geoserver/${region}/ows?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${region}_bref_qcd&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256`;
+    const noaaCredit = 'Radar: <a href="https://www.nssl.noaa.gov/projects/mrms/">NOAA MRMS</a>';
+    overlay('noaa-ak', [noaaWms('alaska')], noaaCredit, 9, 0.8, { bounds: [-170, 51, -129, 72] });
+    overlay('noaa-hi', [noaaWms('hawaii')], noaaCredit, 9, 0.8, { bounds: [-164, 17, -153, 24] });
+    overlay('noaa-pr', [noaaWms('carib')], noaaCredit, 9, 0.8, { bounds: [-70, 15, -62, 20] });
+    overlay('noaa-gu', [noaaWms('guam')], noaaCredit, 9, 0.8, { bounds: [142, 11, 148, 16] });
+    // JMA tiles are addressed by scan time – the newest one is looked up in loadJmaRadar()
+    overlay('jmaradar', [JMA_RADAR_TILES('20000101000000')], 'Radar Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
     // 3D terrain: AWS Terrarium tiles (also used for the hillshade below)
     if (!m.getSource('terrain-dem')) {
       m.addSource('terrain-dem', {
@@ -1431,6 +1451,9 @@ export class ExtraLayers {
         case 'rivers':
           this.loadRiversNow();
           break;
+        case 'jmaradar':
+          this.loadOnce('jmaradar', 5 * 60000, () => this.loadJmaRadar());
+          break;
         case 'terrain':
           this.setTerrain(true);
           break;
@@ -1550,6 +1573,16 @@ export class ExtraLayers {
     const at = this.info[id]?.at ?? 0;
     if (Date.now() - at > maxAge || !at) run();
     if (Number.isFinite(maxAge)) this.every(id, maxAge, run);
+  }
+
+  /** Point the JMA radar source at its newest scan (tile URLs carry the scan time). */
+  private async loadJmaRadar() {
+    const r = await fetch('https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_N1.json');
+    if (!r.ok) throw new Error(`JMA ${r.status}`);
+    const times = (await r.json()) as { basetime: string; validtime: string }[];
+    const latest = times.find((t) => t.basetime === t.validtime) ?? times[0];
+    if (!latest) throw new Error('JMA: keine Radarzeit');
+    (this.map.getSource('jmaradar') as RasterTileSource | undefined)?.setTiles([JMA_RADAR_TILES(latest.validtime)]);
   }
 
   private async loadCities() {
