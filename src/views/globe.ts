@@ -1028,7 +1028,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (map.getSource(id)) continue;
       map.addSource(id, {
         type: 'raster',
-        tiles: [`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`],
+        tiles: [`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_0.png`],
         tileSize: 256,
         maxzoom: store.getKeys().radarHost ? 10 : 7,
         attribution: store.getKeys().radarHost ? 'Radar: eigener Radar-Server (LibreWXR / RainViewer-kompatibel)' : 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',

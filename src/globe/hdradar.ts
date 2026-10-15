@@ -33,16 +33,17 @@ interface Manifest {
 
 // mm/h → colour. Interpolated on a log scale, so light rain stays readable and heavy rain glows.
 const STOPS: [number, [number, number, number, number]][] = [
-  [0.05, [150, 205, 255, 0]],
-  [0.1, [140, 200, 255, 150]],
-  [0.5, [100, 175, 255, 195]],
-  [1, [70, 145, 250, 210]],
-  [2.5, [60, 110, 235, 225]],
-  [5, [95, 80, 220, 235]],
-  [10, [150, 60, 210, 240]],
-  [20, [210, 50, 190, 245]],
-  [40, [255, 60, 130, 250]],
-  [80, [255, 200, 80, 255]],
+  [0.01, [200, 225, 255, 0]],
+  [0.05, [195, 222, 255, 120]], // faintest echoes stay visible as a pale veil (like Zoom Earth)
+  [0.2, [160, 203, 255, 170]],
+  [0.6, [120, 170, 255, 205]],
+  [1.5, [95, 140, 250, 220]],
+  [3, [105, 118, 240, 232]],
+  [6, [150, 108, 232, 240]],
+  [10, [205, 100, 212, 245]],
+  [20, [240, 100, 165, 248]],
+  [40, [255, 135, 105, 252]],
+  [80, [255, 195, 85, 255]],
 ];
 
 const LUT = (() => {
@@ -244,6 +245,7 @@ export class HdRadar {
     bctx.drawImage(small, 0, 0, big.width, big.height);
     const out = bctx.getImageData(0, 0, big.width, big.height);
     const d = out.data;
+    softenRed(d, big.width, big.height, 2);
     for (let i = 0; i < d.length; i += 4) {
       const o = d[i] * 4;
       d[i] = LUT[o];
@@ -257,6 +259,32 @@ export class HdRadar {
 
   attributions(): string[] {
     return this.manifest?.regions.map((r) => r.attribution) ?? [];
+  }
+}
+
+/** Box blur (two passes) of the red channel in place: rounds the edges of echoes like Zoom Earth. */
+function softenRed(d: Uint8ClampedArray, w: number, h: number, r: number) {
+  const tmp = new Float32Array(w * h);
+  for (let pass = 0; pass < 2; pass++) {
+    // horizontal
+    for (let y = 0; y < h; y++) {
+      let sum = 0;
+      const row = y * w;
+      for (let x = -r; x <= r; x++) sum += d[(row + Math.min(w - 1, Math.max(0, x))) * 4];
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum / (2 * r + 1);
+        sum += d[(row + Math.min(w - 1, x + r + 1)) * 4] - d[(row + Math.max(0, x - r)) * 4];
+      }
+    }
+    // vertical
+    for (let x = 0; x < w; x++) {
+      let sum = 0;
+      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        d[(y * w + x) * 4] = sum / (2 * r + 1);
+        sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+      }
+    }
   }
 }
 

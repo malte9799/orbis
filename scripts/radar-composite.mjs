@@ -165,7 +165,7 @@ function render(frame, bounds, width, height) {
       const fy = gy - r0;
       const v =
         rate(c0, r0) * (1 - fx) * (1 - fy) + rate(c0 + 1, r0) * fx * (1 - fy) + rate(c0, r0 + 1) * (1 - fx) * fy + rate(c0 + 1, r0 + 1) * fx * fy;
-      out[py * width + px] = v < 0.02 ? 0 : Math.min(255, Math.round(Math.sqrt(v) * 25));
+      out[py * width + px] = v < 0.01 ? 0 : Math.min(255, Math.round(Math.sqrt(v) * 25));
     }
   }
   return out;
