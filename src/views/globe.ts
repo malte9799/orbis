@@ -1049,24 +1049,32 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function setRadarVisible(on: boolean) {
     if (!radar || !map) return;
-    for (const f of radar.frames) vis(`radar-${f.time}`, on);
-    if (!on) hdRadar?.setVisible(false);
+    if (on) {
+      showRadarFrame(radarIdx);
+      return;
+    }
+    for (const f of radar.frames) vis(`radar-${f.time}`, false);
+    hdRadar?.setVisible(false);
   }
 
+  /**
+   * Orbis composites (hdRadar) where they cover the view, RainViewer as backup elsewhere.
+   * Hidden layers request no tiles, so RainViewer only loads the shown frame ±1 and nothing
+   * at all inside the composite's area (it rate-limits with HTTP 429 otherwise).
+   */
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
     const c = map.getCenter();
     const hd = state.overlay === 'radar' ? hdRadar : null;
+    hd?.show(radar.frames[i].time * 1000);
     const covered = !!hd?.covers(c.lng, c.lat);
     radar.frames.forEach((f, k) => {
-      if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i && !covered ? 0.8 : 0);
+      const id = `radar-${f.time}`;
+      if (!map!.getLayer(id)) return;
+      vis(id, !covered && Math.abs(k - i) <= 1);
+      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.8 : 0);
     });
-    hd?.show(radar.frames[i].time * 1000);
-    // coverage is known only after the frame is picked
-    if (hd && !covered && hd.covers(c.lng, c.lat)) {
-      radar.frames.forEach((f) => map!.getLayer(`radar-${f.time}`) && map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', 0));
-    }
     renderTimeline();
   }
 
