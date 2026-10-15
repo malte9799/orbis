@@ -208,7 +208,7 @@ function renderTile(rates, nx, ny, geo) {
       }
       v += row * wy[j];
     }
-    if (v >= 0.01) {
+    if (v >= 0.003) {
       out[i] = Math.min(255, Math.round(Math.sqrt(v) * 25));
       any = true;
     }
