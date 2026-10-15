@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['scripts/radar-composite.mjs', '.github/workflows/radar.yml']
+    paths: ['scripts/radar-composite.mjs', 'scripts/radar-README.md', '.github/workflows/radar.yml']
 
 permissions:
   contents: write

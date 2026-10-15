@@ -14,9 +14,10 @@
 //   prevDir = previous snapshot; its frames of the last two hours are carried over.
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import * as hdf5 from 'jsfive';
 
@@ -292,3 +293,4 @@ for (const region of REGIONS) {
 }
 
 writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest));
+copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'radar-README.md'), join(OUT, 'README.md'));
