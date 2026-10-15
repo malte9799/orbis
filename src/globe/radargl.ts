@@ -21,10 +21,14 @@ const NODATA_MIN = 250;
 const MIN_Z = 2;
 const MAX_TILES = 72;
 const MAX_CACHE = 480;
-const MAX_PARALLEL = 8;
+const MAX_PARALLEL = 4;
+/** a tile that failed (rate limit, network) is asked for again after this */
+const RETRY_MS = 20000;
 
 interface Entry {
-  state: 'loading' | 'ready' | 'empty';
+  state: 'loading' | 'ready' | 'empty' | 'error';
+  /** when a failed tile may be requested again */
+  retryAt: number;
   bytes: Uint8Array | null;
   size: number;
   tex: WebGLTexture | null;
@@ -258,6 +262,8 @@ export class RadarGl implements CustomLayerInterface {
   private queue: (() => void)[] = [];
   /** zoom and range of the tiles drawn last, for sample() */
   private lastZ = MIN_Z;
+  /** tiles of the shown pair that are still on their way */
+  private waiting = 0;
 
   constructor(
     private lut: Uint8ClampedArray,
@@ -273,6 +279,11 @@ export class RadarGl implements CustomLayerInterface {
   setTime(ms: number) {
     this.time = ms;
     this.map?.triggerRepaint();
+  }
+
+  /** True while tiles of the two shown steps are still loading (the player waits for them). */
+  get isLoading() {
+    return this.waiting > 0;
   }
 
   setVisible(on: boolean) {
@@ -390,8 +401,12 @@ export class RadarGl implements CustomLayerInterface {
   private entry(f: GlFrame, z: number, x: number, y: number): Entry {
     const key = `${f.key}/${z}/${x}/${y}`;
     let e = this.tiles.get(key);
+    if (e?.state === 'error' && performance.now() >= e.retryAt) {
+      this.tiles.delete(key);
+      e = undefined;
+    }
     if (!e) {
-      e = { state: 'loading', bytes: null, size: 0, tex: null, used: 0 };
+      e = { state: 'loading', bytes: null, size: 0, tex: null, used: 0, retryAt: 0 };
       this.tiles.set(key, e);
       const entry = e;
       const start = () => {
@@ -404,7 +419,11 @@ export class RadarGl implements CustomLayerInterface {
               entry.state = 'ready';
             } else entry.state = 'empty';
           })
-          .catch(() => (entry.state = 'empty'))
+          .catch(() => {
+            // rate limit or network: not "no rain" – try again later
+            entry.state = 'error';
+            entry.retryAt = performance.now() + RETRY_MS;
+          })
           .finally(() => {
             this.inflight--;
             this.queue.shift()?.();
@@ -501,10 +520,12 @@ export class RadarGl implements CustomLayerInterface {
   render(gl: WebGL2RenderingContext, args: CustomRenderMethodInput) {
     const map = this.map;
     if (!map || !this.visible) return;
-    const { a, b, ratio, c } = this.pair();
+    const { a, b, ratio } = this.pair();
     if (!a) return;
 
-    const z = Math.max(MIN_Z, Math.min(a.maxzoom, Math.round(map.getZoom())));
+    // One zoom level below the map's: a quarter of the tiles (RainViewer rate-limits hard), and
+    // the bicubic sampling keeps the edges round. Never above the source's own maximum.
+    const z = Math.max(MIN_Z, Math.min(a.maxzoom, Math.round(map.getZoom()) - 1));
     this.lastZ = z;
     const n = 2 ** z;
     const bounds = map.getBounds();
@@ -545,14 +566,16 @@ export class RadarGl implements CustomLayerInterface {
     gl.disable(gl.DEPTH_TEST);
 
     const now = performance.now();
+    let waiting = 0;
     let flowBudget = 4;
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
         const ea = this.entry(a, z, x, y);
         const eb = b ? this.entry(b, z, x, y) : null;
-        if (c) this.entry(c, z, x, y); // prefetch the step after next
         ea.used = now;
         if (eb) eb.used = now;
+        if (ea.state === 'loading') waiting++;
+        if (eb?.state === 'loading') waiting++;
         const ta = ea.state === 'ready' ? this.upload(gl, ea) : null;
         const tb = eb && eb.state === 'ready' ? this.upload(gl, eb) : null;
         if (!ta && !tb) continue;
@@ -599,6 +622,7 @@ export class RadarGl implements CustomLayerInterface {
         gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
       }
     }
+    this.waiting = waiting;
     // leave the context as MapLibre expects it
     for (const unit of [gl.TEXTURE3, gl.TEXTURE2, gl.TEXTURE1, gl.TEXTURE0]) {
       gl.activeTexture(unit);

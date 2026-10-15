@@ -108,7 +108,8 @@ export function rainviewerFrame(host: string, path: string, timeMs: number, maxz
     maxzoom,
     async fetchTile(z, x, y) {
       const res = await fetch(`${host}${path}/256/${z}/${x}/${y}/2/1_0.png`);
-      if (!res.ok) return null; // e.g. HTTP 429: treated as empty
+      if (res.status === 404) return null; // no tile there: no rain
+      if (!res.ok) throw new Error(`HTTP ${res.status}`); // 429 / 5xx: the layer asks again later
       const { data, size } = await readPixels(await res.blob());
       const bytes = new Uint8Array(size * size);
       for (let i = 0; i < bytes.length; i++) bytes[i] = rateByte(rainviewerRate(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]));

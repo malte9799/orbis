@@ -1146,7 +1146,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       let t = frames[radarIdx].time * 1000;
       let last = performance.now();
       const loop = (now: number) => {
-        t += (now - last) * speed;
+        // wait for the tiles of the next step instead of requesting them faster than they arrive
+        if (!radarGl!.isLoading) t += (now - last) * speed;
         last = now;
         if (t > t1 + 600000) t = t0;
         radarGl!.setTime(Math.min(t, t1));
