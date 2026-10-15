@@ -1303,6 +1303,8 @@ export function createSpaceView(
     saturn: 'saturnmap.jpg',
   };
   const thumbOf = (b: Body) => (THUMB[b.id] ? `./textures/${THUMB[b.id]}` : b.texture);
+  const MAP_ICON =
+    '<svg viewBox="0 0 24 24"><path d="M9 4L3 6.5v13L9 17l6 3 6-2.5v-13L15 7zM9 4v13M15 7v13"/></svg>';
   const CRAFT_ICON =
     '<svg viewBox="0 0 24 24"><path d="M12 7l2 3-2 6-2-6zM3 9h5v4H3zM16 9h5v4h-5zM8 11h2M14 11h2"/></svg>';
 
@@ -1325,7 +1327,10 @@ export function createSpaceView(
     const th = img
       ? `<span class="sp-thumb" style="background-image:url('${img}')"></span>`
       : `<span class="sp-thumb ${b.kind}" style="--c:${b.color}">${b.kind === 'craft' ? CRAFT_ICON : ''}</span>`;
-    return `<button class="sp-row ${child ? 'child' : ''} ${b.id === focusId ? 'on' : ''}" data-id="${b.id}">${th}<span class="sp-txt"><b>${escapeHtml(b.name)}</b><small>${escapeHtml(blurb(b))}</small></span></button>`;
+    // bodies with a detailed map (Earth weather map, planet maps)
+    const detail = b.id === 'earth' || mapEnabled(b.id);
+    const badge = detail ? `<span class="sp-badge" title="Detailkarte verfügbar">${MAP_ICON}</span>` : '';
+    return `<button class="sp-row ${child ? 'child' : ''} ${detail ? 'has-detail' : ''} ${b.id === focusId ? 'on' : ''}" data-id="${b.id}"><span class="sp-thumb-wrap">${th}${badge}</span><span class="sp-txt"><b>${escapeHtml(b.name)}</b><small>${escapeHtml(blurb(b))}</small></span></button>`;
   }
 
   function renderList() {
