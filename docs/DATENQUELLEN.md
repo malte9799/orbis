@@ -76,7 +76,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Smithsonian Global Volcanism Program](https://volcano.si.edu) | Alle ~1.300 Vulkane mit letztem Ausbruch | 🟢 📦 |
 | [Blitzortung.org](https://www.blitzortung.org) | Blitze live, letzte 15 min weltweit (WebSocket) | 🟢 🚫 📦 |
 | [BfS ODL-Messnetz](https://odlinfo.bfs.de) | Radioaktivität (Ortsdosisleistung) Deutschland | 🟢 DL-DE 2.0 |
-| [EURDEP](https://remap.jrc.ec.europa.eu) (JRC) | Radioaktivität: ~5.500 Sonden in 39 Ländern | 🟢 |
+| [EURDEP](https://remap.jrc.ec.europa.eu) (JRC) | Radioaktivität: ~3.500 Sonden in über 40 Ländern (u. a. FR, TR, CA, RU, HK) | 🟢 |
 | [Safecast](https://safecast.org) · [Karte](https://map.safecast.org) | Radioaktivität weltweit | 🟢 CC0, 📦 |
 
 ## 4. Erde & Umwelt

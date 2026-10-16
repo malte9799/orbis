@@ -135,7 +135,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
   { id: 'lightning', section: 'earth', label: 'Blitze live', hint: 'Einschläge der letzten 15 Minuten weltweit – Blitzortung.org', glyph: 'bolt', color: '#ffd600' },
-  { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (39 Länder Europas), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
+  { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (40+ Länder, u. a. Frankreich, Türkei, Kanada), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
   { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
   { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
   { id: 'plates', section: 'earth', label: 'Tektonische Platten', hint: 'Plattengrenzen (PB2002, Bird 2003)', glyph: 'quake', color: '#ef5350' },

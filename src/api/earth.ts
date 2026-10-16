@@ -222,12 +222,19 @@ export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; f
   return { fc: { type: 'FeatureCollection', features }, failed };
 }
 
-async function loadBfs(): Promise<Feature<Point>[]> {
-  const json = await fetchJson<FeatureCollection<Point, Record<string, unknown>>>(
+type RawFc = FeatureCollection<Point, Record<string, unknown>>;
+
+/** Live BfS ODL download (also used by scripts/fetch-data.ts for the data-branch snapshot). */
+export function fetchBfsRaw() {
+  return fetchJson<RawFc>(
     'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:odlinfo_odl_1h_latest&outputFormat=application/json',
     undefined,
     30000,
   );
+}
+
+async function loadBfs(): Promise<Feature<Point>[]> {
+  const json = await snapshotJson('bfs-odl.json', fetchBfsRaw);
   return json.features
     .filter((f) => f.geometry && Number.isFinite(Number(f.properties?.value)))
     .map((f) => {
@@ -246,28 +253,40 @@ async function loadBfs(): Promise<Feature<Point>[]> {
     });
 }
 
-/** EURDEP – European Radiological Data Exchange Platform (~5,500 probes in 39 countries), via BfS. */
-async function loadEurdep(): Promise<Feature<Point>[]> {
+/**
+ * Live EURDEP download – European Radiological Data Exchange Platform (~3,500 probes in 40+ countries),
+ * via BfS. Also used by scripts/fetch-data.ts for the data-branch snapshot.
+ */
+export async function fetchEurdepRaw(): Promise<Feature<Point, Record<string, unknown>>[]> {
+  // the server caps every page at 1,000 features regardless of `count`; each probe is stored once per
+  // averaging period, so request only the 6 h series (all probes report it) to keep the paging short
   const base =
-    'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=opendata:eurdep_latestValue&outputFormat=application/json&sortBy=id';
-  const all: Feature<Point, Record<string, unknown>>[] = [];
-  for (let start = 0; start < 20000; start += 5000) {
-    const page = await fetchJson<FeatureCollection<Point, Record<string, unknown>>>(`${base}&count=5000&startIndex=${start}`, undefined, 40000).catch((e) => {
+    'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=opendata:eurdep_latestValue&outputFormat=application/json&sortBy=id&count=1000&cql_filter=' +
+    encodeURIComponent('analyzed_range_in_h=6');
+  const best = new Map<string, Feature<Point, Record<string, unknown>>>();
+  for (let start = 0; start < 20000; start += 1000) {
+    const page = await fetchJson<RawFc>(`${base}&startIndex=${start}`, undefined, 40000).catch((e) => {
       if (start === 0) throw e;
       return { type: 'FeatureCollection' as const, features: [] };
     });
-    all.push(...page.features);
-    if (page.features.length < 5000) break;
+    // keep the most recent value per probe, trimmed to the fields we use
+    for (const f of page.features) {
+      const p = f.properties ?? {};
+      const id = String(p.id ?? '');
+      const prev = best.get(id);
+      if (f.geometry && (!prev || String(p.end_measure ?? '') > String(prev.properties.end_measure ?? ''))) {
+        best.set(id, { type: 'Feature', geometry: f.geometry, properties: { id: p.id, name: p.name, value: p.value, unit: p.unit, end_measure: p.end_measure } });
+      }
+    }
+    if (page.features.length < 1000) break;
   }
-  // several averaging periods per probe – keep the shortest (most recent) one
-  const best = new Map<string, Feature<Point, Record<string, unknown>>>();
-  for (const f of all) {
-    const id = String(f.properties?.id ?? '');
-    const prev = best.get(id);
-    if (!prev || Number(f.properties.analyzed_range_in_h ?? 99) < Number(prev.properties.analyzed_range_in_h ?? 99)) best.set(id, f);
-  }
+  return [...best.values()];
+}
+
+async function loadEurdep(): Promise<Feature<Point>[]> {
+  const raw = await snapshotJson('eurdep.json', fetchEurdepRaw);
   const out: Feature<Point>[] = [];
-  for (const f of best.values()) {
+  for (const f of raw) {
     const p = f.properties;
     if (!f.geometry) continue;
     let v = Number(p.value);
