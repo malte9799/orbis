@@ -27,6 +27,7 @@ const HOSTS = {
   'maps2.dcgis.dc.gov': 600,
   'verkehr.autobahn.de': 600,
   'www3.septa.org': 30,
+  'warnung.bund.de': 120,
   // ocean layers
   'www.ndbc.noaa.gov': 300,
   'api.tidesandcurrents.noaa.gov': 120,

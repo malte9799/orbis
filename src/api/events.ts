@@ -349,7 +349,7 @@ export async function loadGdacs(): Promise<EventFeature[]> {
         severitydata?: { severitytext?: string };
       }
     >
-  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP?eventlist=TC;FL;VO;DR;WF', undefined, 30000);
+  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC;FL;VO;DR;WF', undefined, 30000);
   const out: EventFeature[] = [];
   for (const f of data.features) {
     if (!f.geometry || f.geometry.type !== 'Point') continue;
