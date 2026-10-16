@@ -38,6 +38,7 @@ const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchPa
 // not available on every setup (e.g. *.workers.dev) – absorbs bursts of identical requests.
 const memory = new Map();
 const MEMORY_MAX = 60;
+const UPSTREAM_TIMEOUT_MS = 20000;
 const pending = new Map();
 
 function cors(origin) {
@@ -53,7 +54,7 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') ?? '';
     const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-    if (allowed.length && !allowed.includes(origin)) return new Response('Origin not allowed', { status: 403 });
+    if (allowed.length && !allowed.includes(origin)) return new Response('Origin not allowed', { status: 403, headers: cors(origin) });
     const headers = cors(allowed.length ? origin : '*');
 
     if (request.method === 'OPTIONS') return new Response(null, { headers });
@@ -84,7 +85,8 @@ export default {
     try {
       entry = await job;
     } catch (e) {
-      return new Response(`Upstream not reachable: ${e}`, { status: 502, headers });
+      const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+      return new Response(`Upstream not reachable: ${e}`, { status: timedOut ? 504 : 502, headers });
     }
     if (entry.status === 200) {
       memory.delete(key);
@@ -98,6 +100,9 @@ export default {
 async function load(target, ttl) {
   const res = await fetch(target.toString(), {
     headers: { Accept: 'application/json', 'User-Agent': 'Orbis-Proxy/2.0 (+https://github.com/malte9799/orbis)' },
+    // fail fast with a regular (CORS-carrying) answer instead of hanging until Cloudflare
+    // aborts the request with its own error page, which browsers report as a CORS failure
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': ttl, '300-599': 0 } },
   });
   return {

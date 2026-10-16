@@ -2301,8 +2301,9 @@ export class ExtraLayers {
           source: src,
           'source-layer': ALPR_SOURCE_LAYER,
           minzoom: 6,
-          maxzoom: CAM_DETAIL_ZOOM,
-          paint: { 'circle-color': '#ef4444', 'circle-radius': 1.8, 'circle-opacity': 0.8 },
+          // no maxzoom: the tiles carry single cameras up to zoom 14, so the map stays filled when
+          // the live Overpass query fails (the live layer is drawn on top of these dots)
+          paint: { 'circle-color': '#ef4444', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
         },
         'alpr-cone',
       );
