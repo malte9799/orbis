@@ -3047,12 +3047,7 @@ svg.hourly {
   margin-bottom: 8px;
 }
 
-/* dock: bottom left next to the base-map switch, legend labels inside the bar */
-.globe-bottom {
-  left: 100px;
-  transform: none;
-  width: min(560px, calc(100% - 112px));
-}
+/* legend labels inside the bar */
 
 .globe-bottom .legend-bar {
   height: 20px;
@@ -3083,12 +3078,4 @@ svg.hourly {
 .globe-bottom .legend-ticks span:only-child {
   transform: none;
   margin-left: 4px;
-}
-
-@media (max-width: 720px) {
-  .globe-bottom {
-    left: 96px;
-    right: 8px;
-    width: auto;
-  }
 }
