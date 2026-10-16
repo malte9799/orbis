@@ -418,7 +418,8 @@ export function loadFirmsSnapshot(): Promise<FirmsFC> {
 
 export interface RadarFrames {
   host: string;
-  frames: { time: number; path: string; nowcast: boolean }[];
+  /** `hd`: a forecast step of the Orbis composites (no RainViewer tiles behind it) */
+  frames: { time: number; path: string; nowcast: boolean; hd?: boolean }[];
 }
 
 /** RainViewer by default; a self-hosted, API-compatible server (LibreWXR) can be set in the settings. */

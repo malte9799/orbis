@@ -35,6 +35,8 @@ import { getCurrent, reverseGeocode } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
+import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
+import { RadarGl } from '../globe/radargl';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
@@ -107,7 +109,7 @@ const TABS: { id: PanelTab; label: string; title: string; icon: string; subs: Su
   },
 ];
 /** extras shown on the weather tab (regional radars, city weather, air, aurora) */
-const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar', 'aq', 'aurora'];
+const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast', 'aq', 'aurora'];
 /** event groups that also switch an extra layer (one entry in the UI instead of two) */
 const LINKED_EXTRA: Partial<Record<GroupId, ExtraId>> = { fires: 'fireareas', volcanoes: 'gvp' };
 {
@@ -997,6 +999,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let radar: RadarFrames | null = null;
   let radarAt = 0;
   let radarIdx = 0;
+  let radarGl: RadarGl | null = null;
+  let playRaf = 0;
   let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
@@ -1008,34 +1012,33 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map) return;
     if (!radar || Date.now() - radarAt > REFRESH_MS) {
       try {
-        const old = radar;
         radar = await loadRadarFrames();
         radarAt = Date.now();
-        old?.frames.forEach((f) => {
-          if (map!.getLayer(`radar-${f.time}`)) map!.removeLayer(`radar-${f.time}`);
-          if (map!.getSource(`radar-${f.time}`)) map!.removeSource(`radar-${f.time}`);
-        });
       } catch {
         toast('Regenradar (RainViewer) konnte nicht geladen werden.', 'error');
         return;
       }
     }
+    // measurements only: RainViewer's own nowcast steps are not shown
+    radar.frames = radar.frames.filter((f) => !f.nowcast && !f.hd);
     if (state.overlay !== 'radar' || !radar.frames.length) return;
-    for (const f of radar.frames) {
-      const id = `radar-${f.time}`;
-      if (map.getSource(id)) continue;
-      map.addSource(id, {
-        type: 'raster',
-        tiles: [`${radar.host}${f.path}/256/{z}/{x}/{y}/2/1_1.png`],
-        tileSize: 256,
-        maxzoom: store.getKeys().radarHost ? 10 : 7,
-        attribution: store.getKeys().radarHost ? 'Radar: eigener Radar-Server (LibreWXR / RainViewer-kompatibel)' : 'Radar © <a href="https://www.rainviewer.com/">RainViewer</a>',
-      });
-      map.addLayer(
-        { id, type: 'raster', source: id, layout: { visibility: 'none' }, paint: { 'raster-opacity': 0, 'raster-fade-duration': 0 } },
-        'anchor-weather',
-      );
+
+    // one WebGL layer for all steps: it mixes the values of two neighbouring steps
+    if (!radarGl) {
+      radarGl = new RadarGl(LUT);
+      map.addLayer(radarGl, 'anchor-weather');
     }
+    // attributions are shown for sources of visible layers: a layer without features carries them
+    if (!map.getSource('radar-attr')) {
+      map.addSource('radar-attr', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+        attribution: `Radar © <a href="https://www.rainviewer.com/">RainViewer</a>`,
+      });
+      map.addLayer({ id: 'radar-attr', type: 'circle', source: 'radar-attr', paint: { 'circle-opacity': 0 } }, 'anchor-weather');
+    }
+    const maxzoom = store.getKeys().radarHost ? 10 : 7;
+    radarGl.setFrames(radar.frames.map((f) => rainviewerFrame(radar!.host, f.path, f.time * 1000, maxzoom)));
     showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
@@ -1043,21 +1046,20 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const lastPastRadarFrame = () => Math.max(0, (radar?.frames.filter((f) => !f.nowcast).length ?? 1) - 1);
 
   function setRadarVisible(on: boolean) {
-    if (!radar || !map) return;
-    // Only the current frame is made visible: hidden layers load no tiles, so we
-    // don't fire every frame's tiles at once (RainViewer answers with 429).
-    radar.frames.forEach((f, k) => vis(`radar-${f.time}`, on && k === radarIdx));
+    radarGl?.setVisible(on);
+    if (map?.getLayer('radar-attr')) vis('radar-attr', on);
+    if (on && radar) showRadarFrame(radarIdx);
   }
 
+  /**
+   * The radar is one WebGL layer (src/globe/radargl.ts) holding the values of two neighbouring
+   * steps; showing a step sets the time, playing moves it continuously, so the rain edges slide
+   * between the positions of the steps.
+   */
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
-    radar.frames.forEach((f, k) => {
-      const id = `radar-${f.time}`;
-      if (!map!.getLayer(id)) return;
-      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.8 : 0);
-      if (state.overlay === 'radar') vis(id, k === i);
-    });
+    radarGl?.setTime(radar.frames[i].time * 1000);
     renderTimeline();
   }
 
@@ -1115,6 +1117,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function stopAnimation() {
     clearInterval(playTimer);
     playTimer = 0;
+    cancelAnimationFrame(playRaf);
+    playRaf = 0;
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
     playBtn.setAttribute('aria-label', 'Abspielen');
   }
@@ -1129,10 +1133,35 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (globalModel) setTimeIndex(nearestTimeIndex(globalModel.times));
   });
   playBtn.addEventListener('click', () => {
-    if (playTimer) return stopAnimation();
+    if (playTimer || playRaf) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     playBtn.setAttribute('aria-label', 'Pause');
     const radarMode = timelineMode() === 'radar';
+    if (radarMode && radar && radarGl) {
+      // continuous time: 10 minutes of radar per 700 ms; the layer mixes the steps around it
+      const frames = radar.frames;
+      const t0 = frames[0].time * 1000;
+      const t1 = frames[frames.length - 1].time * 1000;
+      const speed = 600000 / 700;
+      let t = frames[radarIdx].time * 1000;
+      let last = performance.now();
+      const loop = (now: number) => {
+        // wait for the tiles of the next step instead of requesting them faster than they arrive
+        if (!radarGl!.isLoading) t += (now - last) * speed;
+        last = now;
+        if (t > t1 + 600000) t = t0;
+        radarGl!.setTime(Math.min(t, t1));
+        let idx = 0;
+        while (idx < frames.length - 1 && frames[idx + 1].time * 1000 <= t) idx++;
+        if (idx !== radarIdx) {
+          radarIdx = idx;
+          renderTimeline();
+        }
+        playRaf = requestAnimationFrame(loop);
+      };
+      playRaf = requestAnimationFrame(loop);
+      return;
+    }
     playTimer = window.setInterval(() => {
       const n = Number(rangeEl.max) + 1;
       setTimeIndex(((radarMode ? radarIdx : timeIdx) + 1) % n);
@@ -1157,7 +1186,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
     } else if (o === 'radar') {
       html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#88ddee,#0099cc,#0077aa,#005588,#ffee00,#ffaa00,#ff4400,#c10000,#ffaaff)"></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
     } else if (o === 'dwd-radar') {
       html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
@@ -1228,13 +1257,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     return node;
   }
 
-  async function weatherPopup(lng: number, lat: number) {
-    const node = openPopup({ lng, lat }, `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div><div class="pop-loading">Lade Wetter …</div></div>`);
+  async function weatherPopup(lng: number, lat: number, rain?: number | null) {
+    // radar read-out of the Orbis composites: available even if the weather request fails
+    const radarLine =
+      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${fmt.num(rain, rain < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag')}</b></div>` : '';
+    const node = openPopup({ lng, lat }, `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`);
     try {
       const w = await getCurrent(lat, lng);
       const c = w.current;
       node.innerHTML = `<div class="pop">
         <div class="pop-sub">${fmt.coords(lat, lng)} · ${Math.round(w.elevation)} m</div>
+        ${radarLine}
         <div class="pop-wx">${weatherIcon(c.weather_code, c.is_day === 1, 52)}
           <div><div class="pop-temp">${fmt.temp(c.temperature_2m, 1)}</div><div>${escapeHtml(describe(c.weather_code))}</div></div></div>
         <div class="pop-grid">
@@ -1411,7 +1444,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else {
-        weatherPopup(e.lngLat.lng, e.lngLat.lat);
+        const { lng, lat } = e.lngLat;
+        const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
+        weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
       }
     });
     for (const l of interactive) {
