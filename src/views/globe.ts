@@ -999,8 +999,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let radar: RadarFrames | null = null;
   let radarAt = 0;
   let radarIdx = 0;
-  /** continuous radar time (ms); radarIdx is the frame at or before it */
-  let radarT = 0;
+  let radarT = 0; // continuous radar time in ms (the slider moves in minutes)
   let radarScrubTimer = 0;
   let radarGl: RadarGl | null = null;
   let playRaf = 0;
@@ -1051,7 +1050,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function setRadarVisible(on: boolean) {
     radarGl?.setVisible(on);
     if (map?.getLayer('radar-attr')) vis('radar-attr', on);
-    if (on && radar) showRadarFrame(radarIdx);
+    if (on && radar) showRadarTime(radarT);
   }
 
   /**
@@ -1062,9 +1061,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
+    showRadarTime(radar.frames[i].time * 1000);
+  }
+
+  /** Any point in time between the first and last step; the layer mixes the neighbouring steps. */
+  function showRadarTime(t: number, debounce = false) {
+    if (!radar || !map) return;
     clearTimeout(radarScrubTimer);
-    radarT = radar.frames[i].time * 1000;
-    radarGl?.setTime(radarT);
+    const frames = radar.frames;
+    radarT = Math.max(frames[0].time * 1000, Math.min(frames[frames.length - 1].time * 1000, t));
+    let idx = 0;
+    while (idx < frames.length - 1 && frames[idx + 1].time * 1000 <= radarT) idx++;
+    radarIdx = idx;
+    if (debounce) {
+      // scrubbing: only the position where the slider rests loads tiles (rate limit)
+      radarScrubTimer = window.setTimeout(() => radarGl?.setTime(radarT), 180);
+    } else radarGl?.setTime(radarT);
     renderTimeline();
   }
 
@@ -1083,15 +1095,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (mode === 'none') return;
     const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
     const idx = mode === 'radar' ? radarIdx : timeIdx;
-    rangeEl.max = String(times.length - 1);
-    rangeEl.step = mode === 'radar' ? 'any' : '1';
     let t = times[idx];
     if (mode === 'radar') {
-      // fractional slider position between two frames, matching the interpolated time
-      t = Math.round(radarT / 60000) * 60000;
-      const next = times[Math.min(idx + 1, times.length - 1)];
-      rangeEl.value = String(next > times[idx] ? idx + Math.min(1, Math.max(0, (radarT - times[idx]) / (next - times[idx]))) : idx);
-    } else rangeEl.value = String(idx);
+      // radar slider: one step per minute
+      rangeEl.step = '1';
+      rangeEl.max = String(Math.round((times[times.length - 1] - times[0]) / 60000));
+      rangeEl.value = String(Math.round((radarT - times[0]) / 60000));
+      t = radarT;
+    } else {
+      rangeEl.step = '1';
+      rangeEl.max = String(times.length - 1);
+      rangeEl.value = String(idx);
+    }
     const nowcast = mode === 'radar' && radar!.frames[idx].nowcast;
     const rel = Math.round((t - Date.now()) / 3600000);
     timeEl.innerHTML = `<b>${escapeHtml(timeLabel(t))}</b><small>${
@@ -1136,20 +1151,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   rangeEl.addEventListener('input', () => {
     stopAnimation();
-    if (timelineMode() === 'radar' && radar && radarGl) {
-      const frames = radar.frames;
-      const v = Math.min(Number(rangeEl.value), frames.length - 1);
-      const i = Math.min(Math.floor(v), frames.length - 1);
-      const j = Math.min(i + 1, frames.length - 1);
-      radarT = frames[i].time * 1000 + (v - i) * (frames[j].time - frames[i].time) * 1000;
-      radarIdx = i;
-      // debounced: while scrubbing only the position where the slider rests loads tiles (rate limit)
-      clearTimeout(radarScrubTimer);
-      radarScrubTimer = window.setTimeout(() => radarGl?.setTime(radarT), 180);
-      renderTimeline();
-      return;
-    }
-    setTimeIndex(Number(rangeEl.value));
+    if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
+    else setTimeIndex(Number(rangeEl.value));
   });
   nowBtn.addEventListener('click', () => {
     stopAnimation();
@@ -1162,32 +1165,26 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     playBtn.setAttribute('aria-label', 'Pause');
     const radarMode = timelineMode() === 'radar';
     if (radarMode && radar && radarGl) {
-      clearTimeout(radarScrubTimer);
       // continuous time: 10 minutes of radar per 700 ms; the layer mixes the steps around it
       const frames = radar.frames;
       const t0 = frames[0].time * 1000;
       const t1 = frames[frames.length - 1].time * 1000;
       const speed = 600000 / 700;
-      let t = radarT || frames[radarIdx].time * 1000;
+      let t = radarT;
       let last = performance.now();
       const loop = (now: number) => {
         // wait for the tiles of the next step instead of requesting them faster than they arrive
         if (!radarGl!.isLoading) t += (now - last) * speed;
         last = now;
         if (t > t1 + 600000) t = t0;
-        radarT = Math.min(t, t1);
-        radarGl!.setTime(radarT);
-        let idx = 0;
-        while (idx < frames.length - 1 && frames[idx + 1].time * 1000 <= t) idx++;
-        radarIdx = idx;
-        renderTimeline();
+        showRadarTime(Math.min(t, t1));
         playRaf = requestAnimationFrame(loop);
       };
       playRaf = requestAnimationFrame(loop);
       return;
     }
     playTimer = window.setInterval(() => {
-      const n = Number(rangeEl.max) + 1;
+      const n = radarMode ? radar!.frames.length : Number(rangeEl.max) + 1;
       setTimeIndex(((radarMode ? radarIdx : timeIdx) + 1) % n);
     }, radarMode ? 700 : 1100);
   });
