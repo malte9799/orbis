@@ -249,7 +249,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   terrain: ['hillshade'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
-  alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr'],
+  alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],
 };
 
 const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
@@ -261,6 +261,10 @@ export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circ
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
+const ALPR_RED = '#ef4444';
+const ALPR_FOV_ZOOM = 12; // sectors are drawn from here on
+const ALPR_FOV_RADIUS = 50; // metres
+const ALPR_FOV_ANGLE = 60; // degrees
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
@@ -312,6 +316,8 @@ export class ExtraLayers {
   private alprKey = '';
   private alprTilesAdded = false;
   private alprTilesFailed = false;
+  private alprLive: Feature[] = [];
+  private alprFovKey = '';
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
   private busnetKey = '';
@@ -377,7 +383,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -1087,23 +1093,24 @@ export class ExtraLayers {
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
+    // field of view as real-size sectors (metres on the ground, so they scale with the zoom)
     add(
       {
         id: 'alpr-cone',
-        type: 'symbol',
-        source: 'alpr',
-        minzoom: 13,
-        filter: ['>=', ['get', 'dir'], 0],
-        layout: {
-          ...hidden,
-          'icon-image': 'sil-cone',
-          'icon-size': ['interpolate', ['exponential', 2], ['zoom'], 13, 1.4, 16, 3.2, 18, 6],
-          'icon-rotate': ['get', 'dir'],
-          'icon-rotation-alignment': 'map',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-        paint: { 'icon-color': ['case', ['get', 'flock'], '#ef4444', '#ff9800'], 'icon-opacity': 0.4 },
+        type: 'fill',
+        source: 'alpr-fov',
+        layout: hidden,
+        paint: { 'fill-color': ALPR_RED, 'fill-opacity': 0.28 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'alpr-cone-line',
+        type: 'line',
+        source: 'alpr-fov',
+        layout: hidden,
+        paint: { 'line-color': ALPR_RED, 'line-width': 1.2, 'line-opacity': 0.85 },
       },
       'marker',
     );
@@ -1114,7 +1121,7 @@ export class ExtraLayers {
         source: 'alpr',
         layout: hidden,
         paint: {
-          'circle-color': ['case', ['get', 'flock'], '#ef4444', '#ff9800'],
+          'circle-color': ['case', ['get', 'flock'], ALPR_RED, '#ff9800'],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
@@ -2294,27 +2301,6 @@ export class ExtraLayers {
         },
         'alpr-cone',
       );
-      // viewing direction as a cone, like the live layer (the tiles carry `direction` in degrees)
-      m.addLayer(
-        {
-          id: `alpr-cone-${src}`,
-          type: 'symbol',
-          source: src,
-          'source-layer': ALPR_SOURCE_LAYER,
-          minzoom: 11,
-          filter: ['all', ['has', 'direction'], ['>=', ['to-number', ['get', 'direction'], -1], 0]],
-          layout: {
-            'icon-image': 'sil-cone',
-            'icon-size': ['interpolate', ['exponential', 2], ['zoom'], 11, 0.4, 13, 1.4, 16, 3.2, 18, 6],
-            'icon-rotate': ['to-number', ['get', 'direction'], 0],
-            'icon-rotation-alignment': 'map',
-            'icon-allow-overlap': true,
-            'icon-ignore-placement': true,
-          },
-          paint: { 'icon-color': ['case', ['in', 'flock', ['downcase', ['to-string', ['coalesce', ['get', 'brand'], '']]]], '#ef4444', '#ff9800'], 'icon-opacity': 0.4 },
-        },
-        'alpr-cone',
-      );
       m.addLayer(
         {
           id: `alpr-dots-${src}`,
@@ -2324,13 +2310,51 @@ export class ExtraLayers {
           minzoom: 6,
           // no maxzoom: the tiles carry single cameras up to zoom 14, so the map stays filled when
           // the live Overpass query fails (the live layer is drawn on top of these dots)
-          paint: { 'circle-color': '#ef4444', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
+          paint: { 'circle-color': ALPR_RED, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
         },
         'alpr-cone',
       );
     }
-    LAYERS.alpr.push('alpr-cone-alpr-us', 'alpr-cone-alpr-ca', 'alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
+    m.on('idle', () => this.updateAlprFov());
+    LAYERS.alpr.push('alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
     this.apply();
+  }
+
+  /** Viewing-direction sectors for the cameras in view: live data plus what the overview tiles carry. */
+  private updateAlprFov() {
+    if (!this.on.has('alpr')) return;
+    const m = this.map;
+    const cams = new Map<string, [number, number, number]>();
+    const take = (lon: number, lat: number, dir: unknown) => {
+      const d = Number(dir);
+      if (dir == null || dir === '' || !Number.isFinite(d) || d < 0) return;
+      cams.set(`${lon.toFixed(6)},${lat.toFixed(6)},${d}`, [lon, lat, d]);
+    };
+    if (m.getZoom() >= ALPR_FOV_ZOOM) {
+      for (const f of this.alprLive) take((f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], f.properties?.dir);
+      if (this.alprTilesAdded && !this.alprTilesFailed) {
+        for (const src of ['alpr-us', 'alpr-ca']) {
+          if (!m.getSource(src)) continue;
+          for (const f of m.querySourceFeatures(src, { sourceLayer: ALPR_SOURCE_LAYER, filter: ['has', 'direction'] })) {
+            if (f.geometry.type === 'Point') take(f.geometry.coordinates[0], f.geometry.coordinates[1], f.properties?.direction);
+          }
+        }
+      }
+    }
+    const key = [...cams.keys()].sort().join('|');
+    if (key === this.alprFovKey) return;
+    this.alprFovKey = key;
+    const features: Feature[] = [...cams.values()].map(([lon, lat, dir]) => {
+      const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+      const ring: [number, number][] = [[lon, lat]];
+      for (let i = 0; i <= 12; i++) {
+        const a = ((dir - ALPR_FOV_ANGLE / 2 + (ALPR_FOV_ANGLE * i) / 12) * Math.PI) / 180;
+        ring.push([lon + (Math.sin(a) * ALPR_FOV_RADIUS) / kx, lat + (Math.cos(a) * ALPR_FOV_RADIUS) / 111320]);
+      }
+      ring.push([lon, lat]);
+      return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
+    });
+    this.setData('alpr-fov', { type: 'FeatureCollection', features });
   }
 
   private updateAlprNote() {
@@ -2346,6 +2370,7 @@ export class ExtraLayers {
     this.updateAlprNote();
     if (this.map.getZoom() < CAM_DETAIL_ZOOM) {
       this.setData('alpr', empty());
+      this.alprLive = [];
       this.alprKey = '';
       return;
     }
@@ -2358,6 +2383,8 @@ export class ExtraLayers {
       .then((fc) => {
         if (this.alprKey !== key) return;
         this.setData('alpr', fc);
+        this.alprLive = fc.features;
+        this.updateAlprFov();
         const flock = fc.features.filter((f) => f.properties?.flock).length;
         this.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? `${flock} davon Flock Safety (im Ausschnitt)` : 'keine Kennzeichen-Kameras im Ausschnitt erfasst' });
       })
@@ -2478,7 +2505,7 @@ export class ExtraLayers {
         ].filter(([, v]) => v);
         const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : ''}
           <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
-        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? '#ef4444' : '#ff9800', title: p.title, source: 'OpenStreetMap / DeFlock', url: p.url, extra }), lng: pt[0], lat: pt[1] };
+        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, source: 'OpenStreetMap / DeFlock', url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
       case 'gvp':
         return { type: 'html', html: html('volcano', String(p.color)), lng: pt[0], lat: pt[1] };
