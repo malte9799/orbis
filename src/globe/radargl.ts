@@ -18,9 +18,9 @@ export interface GlFrame {
 }
 
 const NODATA_MIN = 250;
-const MIN_Z = 2;
-const MAX_TILES = 72;
-const MAX_CACHE = 480;
+const MIN_Z = 4;
+const MAX_TILES = 300;
+const MAX_CACHE = 720;
 const MAX_PARALLEL = 4;
 /** a tile that failed (rate limit, network) is asked for again after this */
 const RETRY_MS = 20000;
