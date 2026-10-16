@@ -1000,6 +1000,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let radarAt = 0;
   let radarIdx = 0;
   let radarT = 0; // continuous radar time in ms (the slider moves in minutes)
+  let radarScrubTimer = 0;
   let radarGl: RadarGl | null = null;
   let playRaf = 0;
   let playTimer = 0;
@@ -1064,14 +1065,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   /** Any point in time between the first and last step; the layer mixes the neighbouring steps. */
-  function showRadarTime(t: number) {
+  function showRadarTime(t: number, debounce = false) {
     if (!radar || !map) return;
+    clearTimeout(radarScrubTimer);
     const frames = radar.frames;
     radarT = Math.max(frames[0].time * 1000, Math.min(frames[frames.length - 1].time * 1000, t));
     let idx = 0;
     while (idx < frames.length - 1 && frames[idx + 1].time * 1000 <= radarT) idx++;
     radarIdx = idx;
-    radarGl?.setTime(radarT);
+    if (debounce) {
+      // scrubbing: only the position where the slider rests loads tiles (rate limit)
+      radarScrubTimer = window.setTimeout(() => radarGl?.setTime(radarT), 180);
+    } else radarGl?.setTime(radarT);
     renderTimeline();
   }
 
@@ -1146,7 +1151,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   rangeEl.addEventListener('input', () => {
     stopAnimation();
-    if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000);
+    if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
     else setTimeIndex(Number(rangeEl.value));
   });
   nowBtn.addEventListener('click', () => {
