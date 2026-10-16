@@ -1344,19 +1344,29 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     });
 
     // Zooming further out of the 3D globe leaves Earth and enters the solar system.
-    let outTicks = 0;
-    let outTimer = 0;
+    // A gesture (events less than 250 ms apart, incl. trackpad/free-spinning momentum) that reaches the minimum
+    // zoom only stops there; a fresh gesture starting at minimum zoom is needed to actually leave.
+    let lastWheel = 0;
+    let gestureAtMin = false;
+    let outDelta = 0;
     map.getContainer().addEventListener(
       'wheel',
       (e) => {
-        if (!map || state.projection !== 'globe' || e.deltaY <= 0 || map.getZoom() > map.getMinZoom() + 0.05) {
-          outTicks = 0;
+        if (!map || state.projection !== 'globe' || e.deltaY <= 0) {
+          outDelta = 0;
           return;
         }
-        clearTimeout(outTimer);
-        outTimer = window.setTimeout(() => (outTicks = 0), 900);
-        if (++outTicks >= 4) {
-          outTicks = 0;
+        const now = performance.now();
+        if (now - lastWheel > 250) {
+          gestureAtMin = map.getZoom() <= map.getMinZoom() + 0.05;
+          outDelta = 0;
+        }
+        lastWheel = now;
+        if (!gestureAtMin) return;
+        outDelta += e.deltaY;
+        if (outDelta >= 300) {
+          outDelta = 0;
+          gestureAtMin = false;
           const c = map.getCenter();
           onOpenSpace(c.lat, c.lng);
         }
