@@ -257,11 +257,50 @@ const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/b
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
 const ALPR_RED = '#ef4444';
+const CARDINAL = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+const ALPR_ZONE: Record<string, string> = { traffic: 'Verkehr', parking: 'Parkplatz', town: 'Ortschaft', building: 'Gebäude', public: 'Öffentlich', shop: 'Geschäft' };
+const ALPR_MOUNT: Record<string, string> = { pole: 'Mast', wall: 'Wand', street_lamp: 'Laterne', ceiling: 'Decke', bridge: 'Brücke', traffic_signals: 'Ampel', building: 'Gebäude' };
+
+/** Stock photo per vendor (DeFlock CDN, first image of each LPR vendor), matched on the manufacturer tag. */
+const ALPR_VENDOR_IMG: [RegExp, string][] = [
+  [/flock/i, 'flock/flock-1.jpg'],
+  [/motorola|vigilant/i, 'motorola/motorola-1.jpg'],
+  [/genetec/i, 'genetec/genetec-1.webp'],
+  [/leonardo|elsag/i, 'leonardo/elsag-1.jpg'],
+  [/neology/i, 'neology/neology-1.jpg'],
+  [/axon/i, 'axon/axon-1.webp'],
+  [/verkada/i, 'verkada/verkada_bullet_cropped.png'],
+];
+const alprVendorImg = (brand: string) => {
+  const hit = ALPR_VENDOR_IMG.find(([re]) => re.test(brand));
+  return hit ? `https://cdn.deflock.me/vendors/${hit[1]}` : '';
+};
+
+/** Properties of an overview-tile camera in the shape of the live (Overpass) ones. */
+function alprTileProps(t: Record<string, unknown> | null, lon: number, lat: number): Record<string, unknown> {
+  const brand = String(t?.brand ?? '');
+  const flock = /flock/i.test(brand);
+  const dir = Number(t?.direction);
+  return {
+    title: flock ? 'Flock-Kamera (ALPR)' : 'Kennzeichenerfassung (ALPR)',
+    subtitle: [brand, t?.operator].filter(Boolean).join(' · '),
+    flock,
+    dir: t?.direction != null && t.direction !== '' && Number.isFinite(dir) ? dir : -1,
+    mount: t?.mountType ?? '',
+    operator: t?.operator ?? '',
+    brand,
+    zone: t?.surveillanceZone ?? '',
+    since: t?.startDate ?? '',
+    ref: t?.ref ?? '',
+    url: t?.osmId ? `https://www.openstreetmap.org/${t.osmType ?? 'node'}/${t.osmId}` : undefined,
+    deflock: `https://maps.deflock.org/?lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&zoom=17`,
+  };
+}
 const ALPR_FOV_ZOOM = 12; // sectors are drawn from here on
 const ALPR_FOV_RADIUS = 50; // metres
 const ALPR_FOV_ANGLE = 60; // degrees
@@ -2400,11 +2439,12 @@ export class ExtraLayers {
   // Clicks
 
   click(f: MapGeoJSONFeature, at: { lng: number; lat: number }): ClickResult | null {
-    const p = f.properties as Record<string, unknown>;
     const pt = f.geometry.type === 'Point' ? (f.geometry as Point).coordinates : [at.lng, at.lat];
+    const tileCam = f.layer.id.startsWith('alpr-dots-');
+    const p = (tileCam ? alprTileProps(f.properties, pt[0], pt[1]) : f.properties) as Record<string, unknown>;
     const html = (glyph: GlyphId, color: string, extra?: string) =>
       cardHtml({ glyph, color, title: p.title, subtitle: p.subtitle, date: p.date, description: p.description, source: p.source, url: p.url, extra });
-    switch (f.layer.id) {
+    switch (tileCam ? 'alpr' : f.layer.id) {
       case 'cities':
         return { type: 'weather', lng: pt[0], lat: pt[1] };
       case 'dwd-warn-fill':
@@ -2497,15 +2537,21 @@ export class ExtraLayers {
       }
       case 'alpr': {
         const dir = Number(p.dir);
+        const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
         const rows = [
           ['Hersteller', p.brand],
           ['Betreiber', p.operator],
-          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}°` : ''],
-          ['Montage', p.mount],
+          ['Bereich', ALPR_ZONE[String(p.zone)] ?? p.zone],
+          ['Montage', ALPR_MOUNT[String(p.mount)] ?? p.mount],
+          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
+          ['Seit', p.since],
+          ['Kennung', p.ref],
+          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
         ].filter(([, v]) => v);
-        const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : ''}
+        const photo = alprVendorImg(String(p.brand ?? ''));
+        const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
           <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
-        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, source: 'OpenStreetMap / DeFlock', url: p.url, extra }), lng: pt[0], lat: pt[1] };
+        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap / DeFlock (Beispielfoto: deflock.org)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
       case 'gvp':
         return { type: 'html', html: html('volcano', String(p.color)), lng: pt[0], lat: pt[1] };
