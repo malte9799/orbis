@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { viaProxy } from './proxy';
 
 // Public transport and rail – live positions.
 // • Transitous (community-run MOTIS, timetables + realtime for Germany and many other countries):
@@ -307,7 +308,8 @@ export async function loadAutobahn(): Promise<{ points: FeatureCollection<Point>
 
 // ---------------------------------------------------------------------------
 // NINA – warnings of the German federal warning system (BBK): MoWaS, KATWARN, BIWAPP,
-// flood portal (LHP) and police. DWD weather warnings have their own layer.
+// flood portal (LHP) and police. DWD weather warnings have their own layer. The API sends
+// no CORS headers, so requests go through the data proxy.
 
 const NINA = 'https://warnung.bund.de/api31';
 const NINA_SOURCES = ['mowas', 'katwarn', 'biwapp', 'lhp', 'police'];
@@ -317,12 +319,12 @@ const SOURCE_LABEL: Record<string, string> = { mowas: 'MoWaS', katwarn: 'KATWARN
 export async function loadNina(): Promise<FeatureCollection> {
   const lists = await Promise.allSettled(
     NINA_SOURCES.map((src) =>
-      fetchJson<{ id: string; severity?: string; startDate?: string; i18nTitle?: Record<string, string> }[]>(`${NINA}/${src}/mapData.json`, undefined, 20000).then((l) => l.map((w) => ({ ...w, src }))),
+      fetchJson<{ id: string; severity?: string; startDate?: string; i18nTitle?: Record<string, string> }[]>(viaProxy(`${NINA}/${src}/mapData.json`), undefined, 20000).then((l) => l.map((w) => ({ ...w, src }))),
     ),
   );
   if (lists.every((l) => l.status === 'rejected')) throw (lists[0] as PromiseRejectedResult).reason;
   const all = lists.flatMap((l) => (l.status === 'fulfilled' ? l.value : []));
-  const geo = await pool(all, 6, (w) => fetchJson<FeatureCollection>(`${NINA}/warnings/${encodeURIComponent(w.id)}.geojson`, undefined, 20000));
+  const geo = await pool(all, 6, (w) => fetchJson<FeatureCollection>(viaProxy(`${NINA}/warnings/${encodeURIComponent(w.id)}.geojson`), undefined, 20000));
   const features: Feature[] = [];
   geo.forEach((g, i) => {
     if (g.status !== 'fulfilled') return;

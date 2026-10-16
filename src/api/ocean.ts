@@ -109,7 +109,10 @@ export async function loadTideStations(): Promise<FeatureCollection<Point>> {
 export async function loadTideDetails(id: string): Promise<{ level?: { v: number; t: string }; next: { t: string; v: number; type: 'H' | 'L' }[] }> {
   const base = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=${encodeURIComponent(id)}&units=metric&time_zone=gmt&format=json&datum=MLLW&application=orbis`;
   const [level, hilo] = await Promise.allSettled([
-    fetchJson<{ data?: { t: string; v: string }[] }>(viaProxy(`${base}&product=water_level&date=latest`)),
+    // Great Lakes gauges have no MLLW datum (and no predictions) – they use IGLD
+    fetchJson<{ data?: { t: string; v: string }[] }>(viaProxy(`${base}&product=water_level&date=latest`)).catch(() =>
+      fetchJson<{ data?: { t: string; v: string }[] }>(viaProxy(`${base.replace('datum=MLLW', 'datum=IGLD')}&product=water_level&date=latest`)),
+    ),
     fetchJson<{ predictions?: { t: string; v: string; type: 'H' | 'L' }[] }>(viaProxy(`${base}&product=predictions&interval=hilo&range=48&begin_date=${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`)),
   ]);
   const lv = level.status === 'fulfilled' ? level.value.data?.[0] : undefined;

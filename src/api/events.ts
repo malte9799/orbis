@@ -349,7 +349,7 @@ export async function loadGdacs(): Promise<EventFeature[]> {
         severitydata?: { severitytext?: string };
       }
     >
-  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP?eventlist=TC;FL;VO;DR;WF', undefined, 30000);
+  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC;FL;VO;DR;WF', undefined, 30000);
   const out: EventFeature[] = [];
   for (const f of data.features) {
     if (!f.geometry || f.geometry.type !== 'Point') continue;
@@ -369,7 +369,7 @@ export async function loadGdacs(): Promise<EventFeature[]> {
         url: p.url?.report,
         description: p.description,
         color: ALERT_COLOR[level] ?? KIND_COLOR[kind],
-        weight: level === 'red' ? 1 : level === 'orange' ? 0.75 : 0.45,
+        weight: 0.25, // same small size for all alert levels – the colour shows the level
       }),
     );
   }
