@@ -369,7 +369,7 @@ export async function loadGdacs(): Promise<EventFeature[]> {
         url: p.url?.report,
         description: p.description,
         color: ALERT_COLOR[level] ?? KIND_COLOR[kind],
-        weight: level === 'red' ? 1 : level === 'orange' ? 0.75 : 0.45,
+        weight: kind === 'fire' ? 0.25 : level === 'red' ? 1 : level === 'orange' ? 0.75 : 0.45, // fires as small as the EONET ones
       }),
     );
   }

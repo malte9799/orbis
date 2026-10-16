@@ -2294,6 +2294,27 @@ export class ExtraLayers {
         },
         'alpr-cone',
       );
+      // viewing direction as a cone, like the live layer (the tiles carry `direction` in degrees)
+      m.addLayer(
+        {
+          id: `alpr-cone-${src}`,
+          type: 'symbol',
+          source: src,
+          'source-layer': ALPR_SOURCE_LAYER,
+          minzoom: 11,
+          filter: ['all', ['has', 'direction'], ['>=', ['to-number', ['get', 'direction'], -1], 0]],
+          layout: {
+            'icon-image': 'sil-cone',
+            'icon-size': ['interpolate', ['exponential', 2], ['zoom'], 11, 0.4, 13, 1.4, 16, 3.2, 18, 6],
+            'icon-rotate': ['to-number', ['get', 'direction'], 0],
+            'icon-rotation-alignment': 'map',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+          },
+          paint: { 'icon-color': ['case', ['in', 'flock', ['downcase', ['to-string', ['coalesce', ['get', 'brand'], '']]]], '#ef4444', '#ff9800'], 'icon-opacity': 0.4 },
+        },
+        'alpr-cone',
+      );
       m.addLayer(
         {
           id: `alpr-dots-${src}`,
@@ -2308,7 +2329,7 @@ export class ExtraLayers {
         'alpr-cone',
       );
     }
-    LAYERS.alpr.push('alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
+    LAYERS.alpr.push('alpr-cone-alpr-us', 'alpr-cone-alpr-ca', 'alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
     this.apply();
   }
 
