@@ -1044,14 +1044,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function setRadarVisible(on: boolean) {
     if (!radar || !map) return;
-    for (const f of radar.frames) vis(`radar-${f.time}`, on);
+    // Only the current frame is made visible: hidden layers load no tiles, so we
+    // don't fire every frame's tiles at once (RainViewer answers with 429).
+    radar.frames.forEach((f, k) => vis(`radar-${f.time}`, on && k === radarIdx));
   }
 
   function showRadarFrame(i: number) {
     if (!radar || !map) return;
     radarIdx = i;
     radar.frames.forEach((f, k) => {
-      if (map!.getLayer(`radar-${f.time}`)) map!.setPaintProperty(`radar-${f.time}`, 'raster-opacity', k === i ? 0.8 : 0);
+      const id = `radar-${f.time}`;
+      if (!map!.getLayer(id)) return;
+      map!.setPaintProperty(id, 'raster-opacity', k === i ? 0.8 : 0);
+      if (state.overlay === 'radar') vis(id, k === i);
     });
     renderTimeline();
   }
