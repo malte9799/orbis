@@ -3,7 +3,8 @@ import { store } from '../store';
 // Shared data proxy (proxy/cloudflare-worker.js). Set at build time via the repository
 // variable PROXY_URL (→ VITE_PROXY_URL), can be overridden per browser in the settings.
 
-const BUILT_IN = (import.meta.env.VITE_PROXY_URL as string | undefined)?.trim() || '';
+// import.meta.env is undefined when the data Action imports this under Node
+const BUILT_IN = (import.meta.env?.VITE_PROXY_URL as string | undefined)?.trim() || '';
 
 export const builtInProxy = () => BUILT_IN;
 
