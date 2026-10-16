@@ -79,6 +79,16 @@ await task('safecast', 0, async () => {
   write('safecast.json', await json('https://tt.safecast.org/devices'));
 });
 
+await task('radiation', 0, async () => {
+  const { fetchBfsRaw, fetchEurdepRaw } = await import('../src/api/earth');
+  const [bfs, eurdep] = await Promise.allSettled([fetchBfsRaw(), fetchEurdepRaw()]);
+  if (bfs.status === 'fulfilled') write('bfs-odl.json', bfs.value);
+  else console.warn(`  BfS ODL: ${bfs.reason} – keeping previous data`);
+  if (eurdep.status === 'fulfilled') write('eurdep.json', eurdep.value);
+  else console.warn(`  EURDEP: ${eurdep.reason} – keeping previous data`);
+  if (bfs.status === 'rejected' && eurdep.status === 'rejected') throw new Error('BfS and EURDEP failed');
+});
+
 await task('firms', 0, async () => {
   const key = process.env.FIRMS_MAP_KEY;
   if (!key) {

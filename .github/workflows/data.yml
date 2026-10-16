@@ -14,7 +14,7 @@ on:
         default: true
   push:
     branches: [main]
-    paths: ['scripts/fetch-data.ts', 'scripts/mars-traverse.mjs', 'src/api/camfeeds.ts', '.github/workflows/data.yml']
+    paths: ['scripts/fetch-data.ts', 'scripts/mars-traverse.mjs', 'src/api/camfeeds.ts', 'src/api/earth.ts', '.github/workflows/data.yml']
 
 permissions:
   contents: write
