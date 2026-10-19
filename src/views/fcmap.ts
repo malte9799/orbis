@@ -7,6 +7,7 @@ import { baseLayers, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../gl
 import { loadRadarFrames } from '../api/events';
 import { LUT, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
+import { EUROPE_CITIES, WORLD_CITIES } from '../api/cities';
 import { escapeHtml, fmt, rampColor } from '../util';
 
 // Compact regional weather map for the forecast page (rain/snow, temperature, wind, snow),
@@ -161,25 +162,11 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
           { id: 'f1', type: 'raster', source: 'f1', layout: { visibility: 'none' }, paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
           ...labelLayers().filter((l) => l.id !== 'lbl-water').map(visible),
           {
-            id: 'arrows',
-            type: 'symbol',
-            source: 'points',
-            filter: ['has', 'dir'],
-            layout: {
-              'icon-image': 'fcm-arrow',
-              'icon-rotate': ['get', 'dir'],
-              'icon-rotation-alignment': 'map',
-              'icon-allow-overlap': true,
-              'icon-size': ['interpolate', ['linear'], ['get', 'spd'], 0, 0.8, 50, 1.4],
-            },
-            paint: { 'icon-color': '#ffffff', 'icon-opacity': 0.85, 'icon-halo-color': 'rgba(0,0,0,0.6)', 'icon-halo-width': 1 },
-          },
-          {
             id: 'values',
             type: 'symbol',
             source: 'points',
             filter: ['has', 'label'],
-            layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-allow-overlap': false },
+            layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-allow-overlap': false, 'symbol-sort-key': ['get', 'rank'] },
             paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.4 },
           },
         ],
@@ -204,7 +191,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     });
     map.touchZoomRotate.disableRotation();
     map.on('load', () => {
-      map?.addImage('fcm-arrow', arrowImage(), { sdf: true, pixelRatio: 2 });
       render();
     });
     const el = document.createElement('div');
@@ -317,24 +303,20 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     }
   }
 
-  /** Wind arrows at every grid point, temperature values on every other one. */
+  /** City temperatures (most important cities win where labels would collide). */
   function points(s: ModelSampler): FeatureCollection<Point> {
-    const g = s.global;
     const features: Feature<Point>[] = [];
-    for (let y = 0; y < g.ny; y++)
-      for (let x = 0; x < g.nx; x++) {
-        const lat = g.lat0 - y * g.dy;
-        const lon = g.lon0 + x * g.dx;
-        const i = (s.t * g.ny + y) * g.nx + x;
-        if (mode === 'wind') {
-          const dir = g.data.wind_direction_10m[i];
-          const spd = g.data.wind_speed_10m[i];
-          if (Number.isFinite(dir)) features.push({ type: 'Feature', properties: { dir: dir + 180, spd }, geometry: { type: 'Point', coordinates: [lon, lat] } });
-        } else if (mode === 'temp' && x % 2 === 1 && y % 2 === 1) {
-          const t = g.data.temperature_2m[i];
-          if (Number.isFinite(t)) features.push({ type: 'Feature', properties: { label: fmt.temp(t) }, geometry: { type: 'Point', coordinates: [lon, lat] } });
-        }
-      }
+    if (mode !== 'temp') return { type: 'FeatureCollection', features };
+    const g = s.global;
+    const south = g.lat0 - (g.ny - 1) * g.dy;
+    const north = g.lat0;
+    const west = g.lon0;
+    const east = g.lon0 + (g.nx - 1) * g.dx;
+    for (const [name, lat, lon, rank] of [...EUROPE_CITIES, ...WORLD_CITIES]) {
+      if (lat < south || lat > north || lon < west || lon > east) continue;
+      const t = s.sample('temperature_2m', lat, lon);
+      if (Number.isFinite(t)) features.push({ type: 'Feature', properties: { label: `${name} ${fmt.temp(t)}`, rank }, geometry: { type: 'Point', coordinates: [lon, lat] } });
+    }
     return { type: 'FeatureCollection', features };
   }
 
@@ -399,22 +381,4 @@ function formatWhen(ms: number) {
   const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
   const today = new Date().toDateString() === d.toDateString();
   return `${today ? 'Heute' : day}, ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
-}
-
-/** Arrow pointing up (north), rendered as SDF so it can be tinted. */
-function arrowImage(): ImageData {
-  const S = 40;
-  const c = new OffscreenCanvas(S, S).getContext('2d')!;
-  c.fillStyle = '#fff';
-  c.beginPath();
-  c.moveTo(S / 2, 3);
-  c.lineTo(S / 2 + 11, 17);
-  c.lineTo(S / 2 + 4, 17);
-  c.lineTo(S / 2 + 4, S - 3);
-  c.lineTo(S / 2 - 4, S - 3);
-  c.lineTo(S / 2 - 4, 17);
-  c.lineTo(S / 2 - 11, 17);
-  c.closePath();
-  c.fill();
-  return c.getImageData(0, 0, S, S);
 }
