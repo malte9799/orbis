@@ -2,16 +2,20 @@ import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid } from '../api/model';
 import type { Forecast } from '../api/openmeteo';
-import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, type FieldId } from '../globe/overlay';
+import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
 import { baseLayers, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
+import { loadRadarFrames } from '../api/events';
+import { LUT, rainviewerFrame } from '../globe/hdradar';
+import { RadarGl } from '../globe/radargl';
 import { escapeHtml, fmt, rampColor } from '../util';
 
 // Compact regional weather map for the forecast page (rain/snow, temperature, wind, snow),
 // in the spirit of the maps on classic weather sites. Uses a small regional model grid.
 
-export type MapMode = 'precip' | 'temp' | 'wind' | 'snow';
+export type MapMode = 'radar' | 'precip' | 'temp' | 'wind' | 'snow';
 
 const MODES: { id: MapMode; label: string; fields: FieldId[] }[] = [
+  { id: 'radar', label: 'Radar', fields: [] },
   { id: 'precip', label: 'Niederschlag', fields: ['precipmix'] },
   { id: 'temp', label: 'Temperatur', fields: ['temp'] },
   { id: 'wind', label: 'Wind', fields: ['gusts'] },
@@ -48,6 +52,10 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let map: MlMap | null = null;
   let playing: number | null = null;
   let destroyed = false;
+  let particles: WindParticles | null = null;
+  let radarGl: RadarGl | null = null;
+  let radarLoading = false;
+  let curSampler: ModelSampler | null = null;
 
   host.innerHTML = `
     <div class="fcm-head">
@@ -224,6 +232,10 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     renderLegend();
     if (!map || !grid || timeIdx < 0 || !map.isStyleLoaded()) return;
     const sampler = new ModelSampler(grid, null, timeIdx);
+    curSampler = sampler;
+    particles ??= new WindParticles(map, () => curSampler);
+    if (mode === 'wind') particles.start();
+    else particles.stop();
     setActiveSampler(sampler, key);
     const fields = MODES.find((m) => m.id === mode)!.fields;
     ['f0', 'f1'].forEach((id, i) => {
@@ -233,11 +245,33 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     });
     map.setPaintProperty('f0', 'raster-opacity', mode === 'snow' ? 0.75 : 1);
     (map.getSource('points') as GeoJSONSource).setData(points(sampler));
+    radarGl?.setVisible(mode === 'radar');
+    if (mode === 'radar') void showRadar();
     const empty = host.querySelector<HTMLElement>('.fcm-empty')!;
     const msg = emptyMessage(grid, timeIdx);
     empty.hidden = !msg;
     empty.textContent = msg;
     whenEl.textContent = formatWhen(grid.times[timeIdx]);
+  }
+
+  /** Latest measured RainViewer frame as WebGL layer below the labels. */
+  async function showRadar() {
+    if (radarGl || radarLoading || !map) return;
+    radarLoading = true;
+    try {
+      const r = await loadRadarFrames();
+      const frames = r.frames.filter((f) => !f.nowcast && !f.hd);
+      if (destroyed || !map || !frames.length) return;
+      radarGl = new RadarGl(LUT);
+      map.addLayer(radarGl, labelLayers().find((l) => l.id !== 'lbl-water')?.id);
+      radarGl.setFrames(frames.map((f) => rainviewerFrame(r.host, f.path, f.time * 1000, 7)));
+      radarGl.setTime(frames[frames.length - 1].time * 1000);
+      radarGl.setVisible(mode === 'radar');
+    } catch (e) {
+      console.warn('Radar', e);
+    } finally {
+      radarLoading = false;
+    }
   }
 
   /** Wind arrows at every grid point, temperature values on every other one. */
@@ -308,6 +342,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     destroy() {
       destroyed = true;
       stop();
+      particles?.stop();
       io.disconnect();
       setActiveSampler(null, key);
       map?.remove();
