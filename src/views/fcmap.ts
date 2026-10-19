@@ -56,7 +56,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let particles: WindParticles | null = null;
   let radarGl: RadarGl | null = null;
   let radarLoading = false;
-  let citiesOn = false;
   let citiesLoaded = false;
   let radarFrames: number[] = [];
   let radarIdx = 0;
@@ -69,7 +68,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       <div class="fcm-modes" role="tablist">
         ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${m.label}</button>`).join('')}
       </div>
-      <button type="button" class="seg-chip" data-cities aria-pressed="false">Städtewetter</button>
     </div>
     ${pre.reason ? `<div class="fcm-hint">Vorauswahl: ${escapeHtml(pre.reason)}</div>` : ''}
     <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div></div>
@@ -101,13 +99,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       render();
     }),
   );
-  const cityBtn = host.querySelector<HTMLButtonElement>('[data-cities]')!;
-  cityBtn.addEventListener('click', () => {
-    citiesOn = !citiesOn;
-    cityBtn.classList.toggle('on', citiesOn);
-    cityBtn.setAttribute('aria-pressed', String(citiesOn));
-    void showCities();
-  });
   slider.addEventListener('input', () => {
     stop();
     if (mode === 'radar') radarIdx = +slider.value;
@@ -247,6 +238,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     renderLegend();
     if (!map || !map.isStyleLoaded()) return;
     syncSlider();
+    void showCities();
     if (mode === 'radar') {
       particles?.stop();
       ['f0', 'f1'].forEach((id) => map!.setLayoutProperty(id, 'visibility', 'none'));
@@ -282,11 +274,11 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     whenEl.textContent = formatWhen(grid.times[timeIdx]);
   }
 
-  /** "Städtewetter": current weather of the big cities (same data as the globe layer). */
+  /** Städtewetter on the temperature map: current weather of the big cities (same data as the globe layer). */
   async function showCities() {
     if (!map) return;
-    if (map.getLayer('cities')) map.setLayoutProperty('cities', 'visibility', citiesOn ? 'visible' : 'none');
-    if (!citiesOn || citiesLoaded) return;
+    if (map.getLayer('cities')) map.setLayoutProperty('cities', 'visibility', mode === 'temp' ? 'visible' : 'none');
+    if (mode !== 'temp' || citiesLoaded) return;
     citiesLoaded = true;
     try {
       const list = await loadCityWeather();
