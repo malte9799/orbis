@@ -67,7 +67,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       const [f, aq, alerts] = await Promise.all([
         getForecast(current.lat, current.lon),
         getAirQuality(current.lat, current.lon).catch(() => null),
-        getAlerts(current.lat, current.lon, current.countryCode),
+        getAlerts(current.lat, current.lon, current.countryCode).catch((): Alert[] => []),
       ]);
       if (my !== loadSeq) return;
       render(f, aq, alerts);
@@ -164,7 +164,15 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
 
     renderHourlyChart(body.querySelector<HTMLElement>('.hourly-wrap')!, f);
     fcMap?.destroy();
-    fcMap = createForecastMap(body.querySelector<HTMLElement>('.fc-map-card')!, current, f);
+    const mapCard = body.querySelector<HTMLElement>('.fc-map-card')!;
+    try {
+      fcMap = createForecastMap(mapCard, current, f);
+    } catch (e) {
+      // the map is optional: a broken map must not take the forecast down with it
+      console.warn('Wetterkarte', e);
+      fcMap = null;
+      mapCard.innerHTML = '<h2>Wetterkarte</h2><p class="muted">Die Karte konnte nicht geladen werden.</p>';
+    }
 
     body.querySelector('[data-act=fav]')!.addEventListener('click', (e) => {
       const on = store.toggleFavorite(current);
