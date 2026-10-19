@@ -55,6 +55,9 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let particles: WindParticles | null = null;
   let radarGl: RadarGl | null = null;
   let radarLoading = false;
+  let radarFrames: number[] = [];
+  let radarIdx = 0;
+  let modelMin = 0;
   let curSampler: ModelSampler | null = null;
 
   host.innerHTML = `
@@ -85,6 +88,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
   host.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
     b.addEventListener('click', () => {
+      stop();
       mode = b.dataset.mode as MapMode;
       host.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((o) => {
         o.classList.toggle('on', o === b);
@@ -95,18 +99,21 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   );
   slider.addEventListener('input', () => {
     stop();
-    timeIdx = +slider.value;
+    if (mode === 'radar') radarIdx = +slider.value;
+    else timeIdx = +slider.value;
     render();
   });
   playBtn.addEventListener('click', () => (playing ? stop() : play()));
 
   function play() {
-    if (!grid) return;
+    if (mode === 'radar' ? radarFrames.length < 2 : !grid) return;
     playBtn.classList.add('on');
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>';
     playing = window.setInterval(() => {
-      timeIdx = timeIdx >= +slider.max ? +slider.min : timeIdx + 1;
-      slider.value = String(timeIdx);
+      const next = (+slider.value >= +slider.max ? +slider.min : +slider.value + 1);
+      if (mode === 'radar') radarIdx = next;
+      else timeIdx = next;
+      slider.value = String(next);
       render();
     }, 900);
   }
@@ -211,6 +218,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         grid = g;
         // only the future: start at the current time step
         const now = nearestTimeIndex(g.times);
+        modelMin = now;
         slider.min = String(now);
         slider.max = String(g.times.length - 1);
         timeIdx = now;
@@ -230,7 +238,25 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
   function render() {
     renderLegend();
-    if (!map || !grid || timeIdx < 0 || !map.isStyleLoaded()) return;
+    if (!map || !map.isStyleLoaded()) return;
+    syncSlider();
+    if (mode === 'radar') {
+      particles?.stop();
+      ['f0', 'f1'].forEach((id) => map!.setLayoutProperty(id, 'visibility', 'none'));
+      (map.getSource('points') as GeoJSONSource).setData({ type: 'FeatureCollection', features: [] });
+      host.querySelector<HTMLElement>('.fcm-empty')!.hidden = true;
+      radarGl?.setVisible(true);
+      if (radarFrames.length) {
+        radarGl?.setTime(radarFrames[radarIdx]);
+        whenEl.textContent = formatWhen(radarFrames[radarIdx]);
+      } else {
+        whenEl.textContent = 'Radar wird geladen …';
+        void showRadar();
+      }
+      return;
+    }
+    radarGl?.setVisible(false);
+    if (!grid || timeIdx < 0) return;
     const sampler = new ModelSampler(grid, null, timeIdx);
     curSampler = sampler;
     particles ??= new WindParticles(map, () => curSampler);
@@ -245,8 +271,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     });
     map.setPaintProperty('f0', 'raster-opacity', mode === 'snow' ? 0.75 : 1);
     (map.getSource('points') as GeoJSONSource).setData(points(sampler));
-    radarGl?.setVisible(mode === 'radar');
-    if (mode === 'radar') void showRadar();
     const empty = host.querySelector<HTMLElement>('.fcm-empty')!;
     const msg = emptyMessage(grid, timeIdx);
     empty.hidden = !msg;
@@ -254,19 +278,38 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     whenEl.textContent = formatWhen(grid.times[timeIdx]);
   }
 
-  /** Latest measured RainViewer frame as WebGL layer below the labels. */
+  /** The slider belongs to the radar (last 2 h) or to the model run, depending on the layer. */
+  function syncSlider() {
+    if (mode === 'radar') {
+      slider.min = '0';
+      slider.max = String(Math.max(0, radarFrames.length - 1));
+      slider.value = String(radarIdx);
+      slider.disabled = radarFrames.length < 2;
+    } else if (grid) {
+      slider.min = String(modelMin);
+      slider.max = String(grid.times.length - 1);
+      slider.value = String(timeIdx);
+      slider.disabled = false;
+    }
+  }
+
+  /** Measured RainViewer frames of the last 2 h as WebGL layer below the labels. */
   async function showRadar() {
     if (radarGl || radarLoading || !map) return;
     radarLoading = true;
     try {
       const r = await loadRadarFrames();
-      const frames = r.frames.filter((f) => !f.nowcast && !f.hd);
+      let frames = r.frames.filter((f) => !f.nowcast && !f.hd);
       if (destroyed || !map || !frames.length) return;
+      const last = frames[frames.length - 1].time;
+      frames = frames.filter((f) => f.time >= last - 2 * 3600);
+      radarFrames = frames.map((f) => f.time * 1000);
+      radarIdx = frames.length - 1;
       radarGl = new RadarGl(LUT);
       map.addLayer(radarGl, labelLayers().find((l) => l.id !== 'lbl-water')?.id);
       radarGl.setFrames(frames.map((f) => rainviewerFrame(r.host, f.path, f.time * 1000, 7)));
-      radarGl.setTime(frames[frames.length - 1].time * 1000);
       radarGl.setVisible(mode === 'radar');
+      render();
     } catch (e) {
       console.warn('Radar', e);
     } finally {
