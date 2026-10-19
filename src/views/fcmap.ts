@@ -1,26 +1,26 @@
 import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type RasterTileSource } from 'maplibre-gl';
-import type { Feature, FeatureCollection, Point } from 'geojson';
 import { getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid } from '../api/model';
 import type { Forecast } from '../api/openmeteo';
 import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
-import { baseLayers, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
+import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
 import { loadRadarFrames } from '../api/events';
 import { LUT, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
-import { EUROPE_CITIES, WORLD_CITIES } from '../api/cities';
+import { loadCityWeather } from '../api/europe';
+import { ensureWeatherIcons } from '../globe/icons';
+import { weatherIcon } from '../weather';
 import { escapeHtml, fmt, rampColor } from '../util';
 
-// Compact regional weather map for the forecast page (rain/snow, temperature, wind, snow),
+// Compact regional weather map for the forecast page (radar, rain/snow, temperature, wind, city weather),
 // in the spirit of the maps on classic weather sites. Uses a small regional model grid.
 
-export type MapMode = 'radar' | 'precip' | 'temp' | 'wind' | 'snow';
+export type MapMode = 'radar' | 'precip' | 'temp' | 'wind';
 
 const MODES: { id: MapMode; label: string; fields: FieldId[] }[] = [
   { id: 'radar', label: 'Radar', fields: [] },
   { id: 'precip', label: 'Niederschlag', fields: ['precipmix'] },
   { id: 'temp', label: 'Temperatur', fields: ['temp'] },
   { id: 'wind', label: 'Wind', fields: ['gusts'] },
-  { id: 'snow', label: 'Schnee', fields: ['snow', 'snowfall'] },
 ];
 
 const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
@@ -30,7 +30,7 @@ export function preselect(f: Forecast): { mode: MapMode; reason: string } {
   const h = f.hourly;
   const start = Math.max(0, h.time.findIndex((t) => t >= f.current.time.slice(0, 13)));
   const idx = Array.from({ length: 24 }, (_, i) => start + i).filter((i) => i < h.time.length);
-  if (idx.some((i) => SNOW_CODES.has(h.weather_code[i]))) return { mode: 'snow', reason: 'Schneefall erwartet' };
+  if (idx.some((i) => SNOW_CODES.has(h.weather_code[i]))) return { mode: 'precip', reason: 'Schneefall erwartet' };
   const gust = Math.max(...idx.map((i) => h.wind_gusts_10m[i] ?? 0));
   if (gust >= 62) return { mode: 'wind', reason: `Sturmböen bis ${Math.round(gust)} km/h erwartet` };
   const rain = idx.reduce((s, i) => s + (h.precipitation[i] ?? 0), 0);
@@ -56,6 +56,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let particles: WindParticles | null = null;
   let radarGl: RadarGl | null = null;
   let radarLoading = false;
+  let citiesOn = false;
+  let citiesLoaded = false;
   let radarFrames: number[] = [];
   let radarIdx = 0;
   let modelMin = 0;
@@ -67,6 +69,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       <div class="fcm-modes" role="tablist">
         ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${m.label}</button>`).join('')}
       </div>
+      <button type="button" class="seg-chip" data-cities aria-pressed="false">Städtewetter</button>
     </div>
     ${pre.reason ? `<div class="fcm-hint">Vorauswahl: ${escapeHtml(pre.reason)}</div>` : ''}
     <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div></div>
@@ -98,6 +101,13 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       render();
     }),
   );
+  const cityBtn = host.querySelector<HTMLButtonElement>('[data-cities]')!;
+  cityBtn.addEventListener('click', () => {
+    citiesOn = !citiesOn;
+    cityBtn.classList.toggle('on', citiesOn);
+    cityBtn.setAttribute('aria-pressed', String(citiesOn));
+    void showCities();
+  });
   slider.addEventListener('input', () => {
     stop();
     if (mode === 'radar') radarIdx = +slider.value;
@@ -154,7 +164,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       style: {
         version: 8,
         glyphs: OFM_GLYPHS,
-        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), points: empty },
+        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), cities: empty },
         layers: [
           { id: 'bg', type: 'background', paint: { 'background-color': '#0b1220' } },
           ...baseLayers('dark').map(visible),
@@ -162,12 +172,23 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
           { id: 'f1', type: 'raster', source: 'f1', layout: { visibility: 'none' }, paint: { 'raster-resampling': 'linear', 'raster-fade-duration': 0 } },
           ...labelLayers().filter((l) => l.id !== 'lbl-water').map(visible),
           {
-            id: 'values',
+            id: 'cities',
             type: 'symbol',
-            source: 'points',
-            filter: ['has', 'label'],
-            layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'], 'text-size': 13, 'text-allow-overlap': false, 'symbol-sort-key': ['get', 'rank'] },
-            paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.4 },
+            source: 'cities',
+            layout: {
+              visibility: 'none',
+              'icon-image': ['get', 'icon'],
+              'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.75, 7, 1],
+              'text-field': ['format', ['get', 'temp'], { 'font-scale': 1.1, 'text-font': ['literal', FONT_BOLD] }, '\n', {}, ['get', 'name'], { 'font-scale': 0.8 }],
+              'text-font': FONT_REGULAR,
+              'text-size': 12,
+              'text-anchor': 'left',
+              'text-offset': [1.3, 0],
+              'text-justify': 'left',
+              'symbol-sort-key': ['get', 'rank'],
+              'icon-padding': 4,
+            },
+            paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.3 },
           },
         ],
       },
@@ -229,7 +250,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     if (mode === 'radar') {
       particles?.stop();
       ['f0', 'f1'].forEach((id) => map!.setLayoutProperty(id, 'visibility', 'none'));
-      (map.getSource('points') as GeoJSONSource).setData({ type: 'FeatureCollection', features: [] });
       host.querySelector<HTMLElement>('.fcm-empty')!.hidden = true;
       radarGl?.setVisible(true);
       if (radarFrames.length) {
@@ -255,13 +275,36 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       map!.setLayoutProperty(id, 'visibility', fid ? 'visible' : 'none');
       if (fid) (map!.getSource(id) as RasterTileSource).setTiles([`wxfield://${fid}/${key}~${grid!.times[0]}-${timeIdx}/{z}/{x}/{y}`]);
     });
-    map.setPaintProperty('f0', 'raster-opacity', mode === 'snow' ? 0.75 : 1);
-    (map.getSource('points') as GeoJSONSource).setData(points(sampler));
     const empty = host.querySelector<HTMLElement>('.fcm-empty')!;
     const msg = emptyMessage(grid, timeIdx);
     empty.hidden = !msg;
     empty.textContent = msg;
     whenEl.textContent = formatWhen(grid.times[timeIdx]);
+  }
+
+  /** "Städtewetter": current weather of the big cities (same data as the globe layer). */
+  async function showCities() {
+    if (!map) return;
+    if (map.getLayer('cities')) map.setLayoutProperty('cities', 'visibility', citiesOn ? 'visible' : 'none');
+    if (!citiesOn || citiesLoaded) return;
+    citiesLoaded = true;
+    try {
+      const list = await loadCityWeather();
+      if (destroyed || !map) return;
+      await ensureWeatherIcons(map, list.map((c) => ({ code: c.code, isDay: c.isDay })), (code, isDay) => weatherIcon(code, isDay, 64));
+      if (destroyed || !map) return;
+      (map.getSource('cities') as GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: list.map((c) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [c.lon, c.lat] },
+          properties: { name: c.name, temp: `${Math.round(c.temp)}°`, icon: `wx-${c.code}-${c.isDay ? 'd' : 'n'}`, rank: c.rank },
+        })),
+      });
+    } catch (e) {
+      citiesLoaded = false;
+      console.warn('Städtewetter', e);
+    }
   }
 
   /** The slider belongs to the radar (last 2 h) or to the model run, depending on the layer. */
@@ -303,39 +346,19 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     }
   }
 
-  /** City temperatures (most important cities win where labels would collide). */
-  function points(s: ModelSampler): FeatureCollection<Point> {
-    const features: Feature<Point>[] = [];
-    if (mode !== 'temp') return { type: 'FeatureCollection', features };
-    const g = s.global;
-    const south = g.lat0 - (g.ny - 1) * g.dy;
-    const north = g.lat0;
-    const west = g.lon0;
-    const east = g.lon0 + (g.nx - 1) * g.dx;
-    for (const [name, lat, lon, rank] of [...EUROPE_CITIES, ...WORLD_CITIES]) {
-      if (lat < south || lat > north || lon < west || lon > east) continue;
-      const t = s.sample('temperature_2m', lat, lon);
-      if (Number.isFinite(t)) features.push({ type: 'Feature', properties: { label: `${name} ${fmt.temp(t)}`, rank }, geometry: { type: 'Point', coordinates: [lon, lat] } });
-    }
-    return { type: 'FeatureCollection', features };
-  }
-
   /** Short note when the chosen map has nothing to show at this time step. */
   function emptyMessage(g: ModelGrid, t: number): string {
-    if (mode !== 'precip' && mode !== 'snow') return '';
+    if (mode !== 'precip') return '';
     const n = g.nx * g.ny;
     let rain = false;
     let snowfall = false;
-    let cover = false;
     for (let i = t * n; i < (t + 1) * n; i++) {
       const p = g.data.precipitation[i] >= 0.1;
       const cold = g.data.temperature_2m[i] < 1;
       if (p && cold) snowfall = true;
       else if (p) rain = true;
-      if (g.data.snow_depth[i] >= 0.01) cover = true;
     }
-    if (mode === 'precip') return rain || snowfall ? '' : 'Kein Niederschlag im Kartenausschnitt';
-    return snowfall || cover ? '' : 'Kein Schnee im Kartenausschnitt';
+    return rain || snowfall ? '' : 'Kein Niederschlag im Kartenausschnitt';
   }
 
   function renderLegend() {
@@ -357,9 +380,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     legendEl.innerHTML =
       mode === 'precip'
         ? bar(PRECIP_STOPS, 'Regen', [0.1, 3, 10, 20, 40], 'mm/h') + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], 'mm/h')
-        : mode === 'snow'
-          ? bar(def('snow').legend.stops.map(([v, c]) => [v * 100, c]), 'Schneehöhe', [1, 50, 100, 200, 300], 'cm') +
-            bar(SNOWFALL_STOPS, 'Schneefall', [0.1, 1.5, 3, 6], 'mm/h')
+        : mode === 'radar'
+          ? ''
           : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit);
   }
 
