@@ -7,6 +7,33 @@ import { store, type Place } from '../store';
 import { beaufort, compass, escapeHtml, fmt, tempColor, toast } from '../util';
 import { aqiLabel, describe, pollenLabel, uvLabel, weatherIcon } from '../weather';
 
+const CACHE_KEY = 'wg.fccache';
+const CACHE_MAX_AGE = 6 * 3600000;
+const CACHE_PLACES = 8;
+type CacheEntry = { t: number; f: Forecast; aq: AirQuality | null };
+
+const cacheId = (p: Place) => `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`;
+
+function readCache(p: Place): CacheEntry | null {
+  try {
+    const e = (JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}') as Record<string, CacheEntry>)[cacheId(p)];
+    return e && Date.now() - e.t < CACHE_MAX_AGE ? e : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(p: Place, f: Forecast, aq: AirQuality | null) {
+  try {
+    const all = JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}') as Record<string, CacheEntry>;
+    all[cacheId(p)] = { t: Date.now(), f, aq };
+    const keep = Object.entries(all).sort((a, b) => b[1].t - a[1].t).slice(0, CACHE_PLACES);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(keep)));
+  } catch {
+    /* storage full or unavailable */
+  }
+}
+
 export interface ForecastView {
   el: HTMLElement;
   show(place?: Place): void;
@@ -62,24 +89,42 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
     const my = ++loadSeq;
     fcMap?.destroy();
     fcMap = null;
-    body.innerHTML = skeleton();
+    const cached = readCache(current);
+    if (cached) {
+      // stale-while-revalidate: show the last forecast at once, refresh in the background
+      render(cached.f, cached.aq, []);
+      staleNote(cached.t);
+    } else body.innerHTML = skeleton();
     try {
       const [f, aq, alerts] = await Promise.all([
         getForecast(current.lat, current.lon),
         getAirQuality(current.lat, current.lon).catch(() => null),
-        getAlerts(current.lat, current.lon, current.countryCode),
+        getAlerts(current.lat, current.lon, current.countryCode).catch((): Alert[] => []),
       ]);
       if (my !== loadSeq) return;
+      writeCache(current, f, aq);
       render(f, aq, alerts);
     } catch (e) {
       if (my !== loadSeq) return;
       console.error(e);
+      if (cached) {
+        staleNote(cached.t, true);
+        return;
+      }
       body.innerHTML = `<div class="card error-card">
         <h2>Wetterdaten konnten nicht geladen werden</h2>
         <p>Bitte Internetverbindung prüfen und erneut versuchen.</p>
         <button class="btn" data-act="retry">Erneut versuchen</button></div>`;
       body.querySelector('[data-act=retry]')!.addEventListener('click', () => show());
     }
+  }
+
+  function staleNote(t: number, failed = false) {
+    const at = new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    body.insertAdjacentHTML(
+      'afterbegin',
+      `<p class="muted small stale-note">${failed ? `Aktualisierung fehlgeschlagen – Stand ${at} Uhr` : `Stand ${at} Uhr – wird aktualisiert …`}</p>`,
+    );
   }
 
   function render(f: Forecast, aq: AirQuality | null, alerts: Alert[]) {
@@ -164,7 +209,15 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
 
     renderHourlyChart(body.querySelector<HTMLElement>('.hourly-wrap')!, f);
     fcMap?.destroy();
-    fcMap = createForecastMap(body.querySelector<HTMLElement>('.fc-map-card')!, current, f);
+    const mapCard = body.querySelector<HTMLElement>('.fc-map-card')!;
+    try {
+      fcMap = createForecastMap(mapCard, current, f);
+    } catch (e) {
+      // the map is optional: a broken map must not take the forecast down with it
+      console.warn('Wetterkarte', e);
+      fcMap = null;
+      mapCard.innerHTML = '<h2>Wetterkarte</h2><p class="muted">Die Karte konnte nicht geladen werden.</p>';
+    }
 
     body.querySelector('[data-act=fav]')!.addEventListener('click', (e) => {
       const on = store.toggleFavorite(current);
