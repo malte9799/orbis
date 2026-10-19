@@ -9,7 +9,7 @@ import { RadarGl } from '../globe/radargl';
 import { loadCityWeather } from '../api/europe';
 import { ensureWeatherIcons } from '../globe/icons';
 import { weatherIcon } from '../weather';
-import { escapeHtml, fmt, rampColor } from '../util';
+import { fmt, rampColor } from '../util';
 
 // Compact regional weather map for the forecast page (radar, rain/snow, temperature, wind, city weather),
 // in the spirit of the maps on classic weather sites. Uses a small regional model grid.
@@ -23,31 +23,15 @@ const MODES: { id: MapMode; label: string; fields: FieldId[] }[] = [
   { id: 'wind', label: 'Wind', fields: ['gusts'] },
 ];
 
-const SNOW_CODES = new Set([71, 73, 75, 77, 85, 86]);
-
-/** Pick the most relevant map for the next 24 hours: snow > storm > rain > precipitation map. */
-export function preselect(f: Forecast): { mode: MapMode; reason: string } {
-  const h = f.hourly;
-  const start = Math.max(0, h.time.findIndex((t) => t >= f.current.time.slice(0, 13)));
-  const idx = Array.from({ length: 24 }, (_, i) => start + i).filter((i) => i < h.time.length);
-  if (idx.some((i) => SNOW_CODES.has(h.weather_code[i]))) return { mode: 'precip', reason: 'Schneefall erwartet' };
-  const gust = Math.max(...idx.map((i) => h.wind_gusts_10m[i] ?? 0));
-  if (gust >= 62) return { mode: 'wind', reason: `Sturmböen bis ${Math.round(gust)} km/h erwartet` };
-  const rain = idx.reduce((s, i) => s + (h.precipitation[i] ?? 0), 0);
-  if (rain >= 0.3) return { mode: 'precip', reason: `${fmt.num(rain, 1)} mm Niederschlag in 24 h erwartet` };
-  return { mode: 'precip', reason: '' };
-}
-
 export interface ForecastMap {
   destroy(): void;
 }
 
 let seq = 0;
 
-export function createForecastMap(host: HTMLElement, place: { lat: number; lon: number; name: string }, f: Forecast): ForecastMap {
+export function createForecastMap(host: HTMLElement, place: { lat: number; lon: number; name: string }, _f?: Forecast): ForecastMap {
   const key = `fc${++seq}`;
-  const pre = preselect(f);
-  let mode: MapMode = pre.mode;
+  let mode: MapMode = 'radar';
   let grid: ModelGrid | null = null;
   let timeIdx = -1;
   let map: MlMap | null = null;
@@ -69,7 +53,6 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${m.label}</button>`).join('')}
       </div>
     </div>
-    ${pre.reason ? `<div class="fcm-hint">Vorauswahl: ${escapeHtml(pre.reason)}</div>` : ''}
     <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div></div>
     <div class="fcm-legend"></div>
     <div class="fcm-time">
