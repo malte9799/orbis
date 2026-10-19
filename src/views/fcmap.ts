@@ -184,7 +184,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         ],
       },
       center: [place.lon, place.lat],
-      zoom: 5,
+      zoom: 6.5,
       minZoom: 3,
       maxZoom: 9,
       maxBounds: [
