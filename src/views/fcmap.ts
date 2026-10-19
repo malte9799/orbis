@@ -267,7 +267,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       map!.setLayoutProperty(id, 'visibility', fid ? 'visible' : 'none');
       if (fid) (map!.getSource(id) as RasterTileSource).setTiles([`wxfield://${fid}/${key}~${grid!.times[0]}-${timeIdx}/{z}/{x}/{y}`]);
     });
-    map.setPaintProperty('f0', 'raster-opacity', mode === 'temp' || mode === 'wind' ? 0.55 : 1);
+    map.setPaintProperty('f0', 'raster-opacity', mode === 'temp' || mode === 'wind' ? 0.8 : 1);
     const empty = host.querySelector<HTMLElement>('.fcm-empty')!;
     const msg = emptyMessage(grid, timeIdx);
     empty.hidden = !msg;
