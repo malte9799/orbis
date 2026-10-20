@@ -49,7 +49,12 @@ export const IMERG_WMS =
 export const gibsSst = (date: string) =>
   `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Surface_Temperature/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
 export const gibsSeaIce = (date: string) =>
-  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/AMSRU2_Sea_Ice_Concentration_12km/default/${date}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`;
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Ice_Concentration/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
+
+/** HD satellite: daily true-colour mosaic of NOAA-21 VIIRS (fewest gaps of the three VIIRS satellites, ~250 m). */
+export const HD_SAT = 'VIIRS_NOAA21';
+/** used instead when NOAA-21 delivers nothing at all (probed in globe.ts) */
+export const HD_SAT_BACKUP = 'VIIRS_NOAA20';
 
 /** DWD precipitation radar composite for Germany (5 min, 1 km), latest scan. */
 export const DWD_RADAR_WMS =
@@ -109,6 +114,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
       },
+      hd: { type: 'raster', tiles: [gibsTrueColor(nasaDate, HD_SAT)], tileSize: 256, maxzoom: 9, attribution: 'NASA EOSDIS GIBS / VIIRS' },
       blackmarble: {
         type: 'raster',
         tiles: [BLACK_MARBLE],
@@ -156,8 +162,8 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         type: 'raster',
         tiles: [gibsSeaIce(gibsDate(2))],
         tileSize: 256,
-        maxzoom: 6,
-        attribution: 'Meereis: NASA AMSR2 / GIBS',
+        maxzoom: 7,
+        attribution: 'Meereis: NASA GHRSST MUR / GIBS',
       },
       hotspots: {
         type: 'raster',
@@ -207,6 +213,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       { id: 'base-night', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
       ...baseLayers('dark'),
       ...baseLayers('light'),
+      { id: 'hd', type: 'raster' as const, source: 'hd', layout: { visibility: 'none' as const } },
       {
         id: 'field',
         type: 'raster',
