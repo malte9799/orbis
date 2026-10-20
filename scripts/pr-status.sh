@@ -6,7 +6,8 @@ set -u
 stage="${1:-}"; final="${2:-}"
 state="${RUNNER_TEMP:-/tmp}/pr-status"
 mkdir -p "$state"
-if [ ! -f "$state/pr" ]; then
+# re-check while no PR was found: it may be opened while the build is running
+if [ ! -s "$state/pr" ]; then
   gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number -q '.[0].number' > "$state/pr" 2>/dev/null || true
 fi
 pr=$(cat "$state/pr")
