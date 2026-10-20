@@ -31,7 +31,7 @@ import {
   nearestTimeIndex,
   type ModelGrid,
 } from '../api/model';
-import { getCurrent, reverseGeocode } from '../api/openmeteo';
+import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
@@ -47,7 +47,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
 import type { Karte, KView } from '../hud/karten';
@@ -60,7 +60,7 @@ import { describe, weatherIcon } from '../weather';
 // ---------------------------------------------------------------------------
 // Configuration
 
-type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
+type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 const isField = (o: string): o is FieldId => o in FIELDS;
@@ -532,7 +532,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
         PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
-        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
+        Overpass API, Blitzortung.org, EURDEP (JRC), Japan Meteorological Agency, Finnish Meteorological Institute, NOAA MRMS, NOAA SPC, Esri World Imagery, NASA Blue/Black Marble,
+        Bright Sky, BigDataCloud (Ortsname zum eigenen Standort), Nominatim/OpenStreetMap (Ortsname zum Kartenklick), Open-Meteo Geocoding/Flood (GloFAS), Global Shipping Lanes (P. Benden), PB2002 (Bird 2003), ALERTCalifornia, NYC DOT, DDOT,
+        511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service.
+        Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.
+        <a href="https://github.com/malte9799/orbis/blob/main/docs/DATENQUELLEN.md" target="_blank" rel="noopener">Alle Quellen mit Lizenzen</a> ·
+        Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
+        <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
@@ -744,6 +751,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
   }, 700);
 
+  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile) */
+  let hdSat: string = HD_SAT;
+  async function updateHdSource() {
+    const date = gibsDate(1);
+    const works = (sat: string) =>
+      fetch(gibsTrueColor(date, sat).replace('{z}/{y}/{x}', '2/1/2'), { signal: AbortSignal.timeout(8000) }).then(
+        (r) => r.ok,
+        () => false,
+      );
+    hdSat = (await works(HD_SAT)) ? HD_SAT : HD_SAT_BACKUP;
+    (map?.getSource('hd') as RasterTileSource | undefined)?.setTiles([gibsTrueColor(date, hdSat)]);
+  }
+
   function setGeo(source: string, data: FeatureCollection) {
     (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
   }
@@ -753,6 +773,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const o = state.overlay;
     stopAnimation();
     vis('field', false);
+    vis('hd', o === 'sat-hd');
     vis('sat-ir', o === 'sat-ir');
     vis('dwd-radar', o === 'dwd-radar');
     vis('imerg', o === 'imerg');
@@ -1005,12 +1026,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return t('Niederschlagsradar', 'live', 'linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)', [[0, 'leicht'], [50, 'mäßig'], [100, 'stark']]);
       case 'dwd-radar':
         return t('Radar Deutschland', 'DWD · letzte Messung, alle 5 min aktualisiert', 'linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)', [[0, 'leicht'], [50, 'mäßig'], [100, 'Unwetter']]);
+      case 'sat-hd':
+        // a true-colour image: no colour scale
+        return t('Satellit HD', 'NASA VIIRS · Tagesbild von gestern', '', []);
       case 'sat-ir':
         return t('Satellit Infrarot', 'live · hohe, kalte Wolken erscheinen hell', 'linear-gradient(90deg,#111,#777,#fff)', [[0, 'warm/tief'], [100, 'kalt/hoch']]);
       case 'sst':
         return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
       case 'seaice':
-        return t('Meereis-Konzentration', 'NASA AMSR2 · vor 2 Tagen', 'linear-gradient(90deg,#0b2a5b,#2d5f9a,#7fa8d6,#d7e6f5,#ffffff)', [[0, '15 %'], [50, '60 %'], [100, '100 %']]);
+        return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
       case 'imerg':
         return t('Niederschlag Satellit', 'NASA IMERG · mm/h', 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, '0,1'], [50, '5'], [100, '50+']]);
       default:
@@ -1021,11 +1045,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function renderLegend() {
     const l = legendInfo();
     legend.innerHTML = l
-      ? `<div class="legend-title">${escapeHtml(l.title)} <small>${escapeHtml(l.sub)}</small></div>
-        <div class="legend-bar" style="background:${l.gradient}"></div>
+      ? `<div class="legend-title">${escapeHtml(l.title)} <small>${escapeHtml(l.sub)}</small></div>${
+          l.gradient
+            ? `<div class="legend-bar" style="background:${l.gradient}"></div>
         <div class="legend-ticks">${l.ticks.map((x) => `<span style="left:${x.pos}%">${escapeHtml(x.label)}</span>`).join('')}</div>`
+            : ''
+        }`
       : '';
     legend.hidden = !l;
+    // without a colour scale (true-colour image) the phone layouts, which show only the bar, drop it
+    legend.classList.toggle('no-scale', !!l && !l.gradient);
     hud?.syncSheet();
   }
 
@@ -1116,7 +1145,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
       </div>`;
       node.querySelector('[data-wx=open]')!.addEventListener('click', async () => {
-        onOpenForecast(await reverseGeocode(lat, lng));
+        onOpenForecast(await reverseGeocodePoint(lat, lng));
       });
     } catch {
       node.querySelector('.pop-loading')!.textContent = 'Wetterdaten nicht verfügbar.';
@@ -1242,6 +1271,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
+      void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();
@@ -1393,8 +1423,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     },
     async placeName(v) {
-      const p = await reverseGeocode(v.center[1], v.center[0]);
-      return p.name && p.name !== 'Mein Standort' ? p.name : undefined;
+      // any point on the map: Nominatim (BigDataCloud may only be asked for the own position)
+      const p = await reverseGeocodePoint(v.center[1], v.center[0]);
+      return p.name && p.name !== 'Ausgewählter Ort' ? p.name : undefined;
     },
     onPlace(p) {
       store.setLastPlace(p);
@@ -1446,6 +1477,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       clearInterval(liveTimer);
       liveTimer = window.setInterval(() => {
         if (!map || document.hidden) return;
+        if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
         const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, imerg: IMERG_WMS };
         const url = live[state.overlay];

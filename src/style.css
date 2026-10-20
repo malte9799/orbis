@@ -2533,6 +2533,10 @@ svg.hourly {
 .fcm-src {
   margin: 6px 0 0;
 }
+.fc-src {
+  margin: 4px 4px 0;
+  line-height: 1.5;
+}
 @media (max-width: 640px) {
   .fcm-map {
     height: 320px;

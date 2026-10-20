@@ -175,7 +175,11 @@ export async function searchPlaces(name: string): Promise<Place[]> {
   }));
 }
 
-/** Reverse geocoding (Open-Meteo has none) – BigDataCloud's free client endpoint, no key. */
+/**
+ * Name of the device's own position (Open-Meteo has no reverse geocoding) – BigDataCloud's free
+ * client endpoint, no key. Its fair-use policy allows only the device's current location obtained
+ * via geolocation: never pass other coordinates here, use {@link reverseGeocodePoint} instead.
+ */
 export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
   try {
     const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), localityLanguage: 'de' });
@@ -196,5 +200,30 @@ export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
     };
   } catch {
     return { name: 'Mein Standort', lat, lon };
+  }
+}
+
+/**
+ * Name of any point on the map – OpenStreetMap Nominatim (ODbL). Usage policy: at most one request
+ * per second and no bulk lookups, which a single click per user easily meets.
+ */
+export async function reverseGeocodePoint(lat: number, lon: number): Promise<Place> {
+  try {
+    const q = new URLSearchParams({ format: 'jsonv2', lat: String(lat), lon: String(lon), zoom: '10', 'accept-language': 'de' });
+    const r = await fetchJson<{
+      name?: string;
+      address?: { city?: string; town?: string; village?: string; municipality?: string; county?: string; state?: string; country?: string; country_code?: string };
+    }>(`https://nominatim.openstreetmap.org/reverse?${q}`, undefined, 8000);
+    const a = r.address ?? {};
+    return {
+      name: a.city || a.town || a.village || a.municipality || r.name || a.county || 'Ausgewählter Ort',
+      lat,
+      lon,
+      region: a.state,
+      country: a.country,
+      countryCode: a.country_code?.toUpperCase(),
+    };
+  } catch {
+    return { name: 'Ausgewählter Ort', lat, lon };
   }
 }

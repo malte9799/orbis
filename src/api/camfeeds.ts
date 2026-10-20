@@ -54,7 +54,7 @@ export const CAM_FEEDS: CamFeed[] = [
       const list = await fetchJson<{ id: string; commonName: string; lat: number; lon: number; additionalProperties?: { key: string; value: string }[] }[]>('https://api.tfl.gov.uk/Place/Type/JamCam', undefined, 30000);
       return list.map((c) => {
         const prop = (k: string) => c.additionalProperties?.find((p) => p.key === k)?.value;
-        return cam(c.lon, c.lat, { id: c.id, title: c.commonName, subtitle: 'Verkehrskamera London', image: prop('imageUrl'), video: prop('videoUrl'), url: prop('videoUrl') ?? prop('imageUrl'), source: 'Transport for London' });
+        return cam(c.lon, c.lat, { id: c.id, title: c.commonName, subtitle: 'Verkehrskamera London', image: prop('imageUrl'), video: prop('videoUrl'), url: prop('videoUrl') ?? prop('imageUrl'), source: 'Powered by TfL Open Data · Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights 2019' });
       });
     },
   },
@@ -65,7 +65,7 @@ export const CAM_FEEDS: CamFeed[] = [
     async load() {
       const j = await fetchJson<{ items: { cameras: { camera_id: string; image: string; timestamp?: string; location: { latitude: number; longitude: number } }[] }[] }>('https://api.data.gov.sg/v1/transport/traffic-images', undefined, 20000);
       // signed image URLs – reload the feed instead of busting the cache
-      return (j.items[0]?.cameras ?? []).map((c) => cam(c.location.longitude, c.location.latitude, { id: `sg-${c.camera_id}`, title: `Kamera ${c.camera_id}`, subtitle: 'Verkehrskamera Singapur', image: c.image, url: c.image, source: 'LTA / data.gov.sg', live: false }));
+      return (j.items[0]?.cameras ?? []).map((c) => cam(c.location.longitude, c.location.latitude, { id: `sg-${c.camera_id}`, title: `Kamera ${c.camera_id}`, subtitle: 'Verkehrskamera Singapur', image: c.image, url: c.image, source: `LTA – Contains information from Traffic Images accessed on ${new Date().toLocaleDateString('de-DE')} from data.gov.sg which is made available under the terms of the Singapore Open Data Licence version 1.0`, live: false }));
     },
   },
   {
@@ -81,7 +81,7 @@ export const CAM_FEEDS: CamFeed[] = [
         const lat = Number(t('latitude'));
         const lon = Number(t('longitude'));
         if (!ok(lon, lat)) return [];
-        return [cam(lon, lat, { id: `hk-${t('key')}`, title: t('description') || t('key'), subtitle: [t('district'), t('region')].filter(Boolean).join(', '), image: t('url'), url: t('url'), source: 'Transport Department HK' })];
+        return [cam(lon, lat, { id: `hk-${t('key')}`, title: t('description') || t('key'), subtitle: [t('district'), t('region')].filter(Boolean).join(', '), image: t('url'), url: t('url'), source: 'Transport Department HK, DATA.GOV.HK (Nutzungsbedingungen: data.gov.hk/en/terms-and-conditions)' })];
       });
     },
   },
@@ -156,7 +156,7 @@ export const CAM_FEEDS: CamFeed[] = [
           .filter((c) => ok(c.Longitude, c.Latitude))
           .map((c) => {
             const view = c.Views?.find((v) => v.Status !== 'Disabled') ?? c.Views?.[0];
-            return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, source: host });
+            return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, source: host === '511on.ca' ? '511 Ontario (Ministry of Transportation Ontario)' : '511 Alberta (Alberta Transportation)' });
           });
       },
     }),

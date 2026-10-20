@@ -49,7 +49,12 @@ export const IMERG_WMS =
 export const gibsSst = (date: string) =>
   `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Surface_Temperature/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
 export const gibsSeaIce = (date: string) =>
-  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/AMSRU2_Sea_Ice_Concentration_12km/default/${date}/GoogleMapsCompatible_Level6/{z}/{y}/{x}.png`;
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GHRSST_L4_MUR_Sea_Ice_Concentration/default/${date}/GoogleMapsCompatible_Level7/{z}/{y}/{x}.png`;
+
+/** HD satellite: daily true-colour mosaic of NOAA-21 VIIRS (fewest gaps of the three VIIRS satellites, ~250 m). */
+export const HD_SAT = 'VIIRS_NOAA21';
+/** used instead when NOAA-21 delivers nothing at all (probed in globe.ts) */
+export const HD_SAT_BACKUP = 'VIIRS_NOAA20';
 
 /** DWD precipitation radar composite for Germany (5 min, 1 km), latest scan. */
 export const DWD_RADAR_WMS =
@@ -78,7 +83,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
         tileSize: 256,
         maxzoom: 18,
-        attribution: 'Bilder © Esri, Maxar, Earthstar Geographics',
+        attribution: 'Powered by <a href="https://www.esri.com/">Esri</a> · Bilder: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       },
       sentinel: {
         type: 'raster',
@@ -109,6 +114,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 9,
         attribution: 'NASA EOSDIS GIBS / VIIRS',
       },
+      hd: { type: 'raster', tiles: [gibsTrueColor(nasaDate, HD_SAT)], tileSize: 256, maxzoom: 9, attribution: 'NASA EOSDIS GIBS / VIIRS' },
       blackmarble: {
         type: 'raster',
         tiles: [BLACK_MARBLE],
@@ -136,7 +142,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tiles: [EUMETSAT_IR],
         tileSize: 256,
         maxzoom: 7,
-        attribution: 'Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a>',
+        attribution: `Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a> ${new Date().getUTCFullYear()}`,
       },
       imerg: {
         type: 'raster',
@@ -156,8 +162,8 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         type: 'raster',
         tiles: [gibsSeaIce(gibsDate(2))],
         tileSize: 256,
-        maxzoom: 6,
-        attribution: 'Meereis: NASA AMSR2 / GIBS',
+        maxzoom: 7,
+        attribution: 'Meereis: NASA GHRSST MUR / GIBS',
       },
       hotspots: {
         type: 'raster',
@@ -175,16 +181,20 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>',
       },
       night: empty,
-      'dwd-warn': empty,
+      'dwd-warn': { ...empty, attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>' },
       gauges: { ...empty, attribution: 'Pegel: <a href="https://www.pegelonline.wsv.de/">WSV PEGELONLINE</a>' },
       cities: { ...empty, attribution: 'Wetter: <a href="https://open-meteo.com/">Open-Meteo</a>' },
       aq: { ...empty, attribution: 'Luftqualität: Copernicus CAMS / Open-Meteo' },
-      isobars: empty,
-      'nws-poly': empty,
-      tracks: empty,
+      isobars: { ...empty, attribution: 'Isobaren: <a href="https://open-meteo.com/">Open-Meteo.com</a> (CC BY 4.0)' },
+      'nws-poly': { ...empty, attribution: 'Warnungen USA: <a href="https://www.weather.gov/">NOAA/NWS</a>' },
+      tracks: { ...empty, attribution: 'Sturmbahnen: <a href="https://eonet.gsfc.nasa.gov/">NASA EONET</a>' },
       quakes: { ...empty, attribution: 'Erdbeben: USGS, <a href="https://www.emsc-csem.org/">EMSC</a>' },
-      firms: empty,
-      events: empty,
+      firms: { ...empty, attribution: 'Feuer: <a href="https://firms.modaps.eosdis.nasa.gov/">NASA FIRMS</a>' },
+      events: {
+        ...empty,
+        attribution:
+          'Ereignisse: <a href="https://eonet.gsfc.nasa.gov/">NASA EONET</a>, <a href="https://www.gdacs.org/">GDACS</a>, <a href="https://www.spc.noaa.gov/">NOAA SPC</a>, <a href="https://www.weather.gov/">NWS</a>, USGS, <a href="https://www.emsc-csem.org/">EMSC</a>',
+      },
       marker: empty,
     },
     layers: [
@@ -203,6 +213,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       { id: 'base-night', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
       ...baseLayers('dark'),
       ...baseLayers('light'),
+      { id: 'hd', type: 'raster' as const, source: 'hd', layout: { visibility: 'none' as const } },
       {
         id: 'field',
         type: 'raster',

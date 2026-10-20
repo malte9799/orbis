@@ -205,7 +205,14 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       <section class="card">
         <h2>14-Tage-Vorhersage</h2>
         ${renderDaily(f)}
-      </section>`;
+      </section>
+
+      <p class="muted small fc-src">Wetterdaten: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) auf Basis nationaler Wetterdienste (u. a. DWD, ECMWF, NOAA)${
+          aq
+            ? ` · Luftqualität &amp; Pollen: Generated using Copernicus Atmosphere Monitoring Service information ${new Date().getFullYear()} (via <a href="https://open-meteo.com/en/docs/air-quality-api" target="_blank" rel="noopener">Open-Meteo</a>). Weder die Europäische Kommission noch das ECMWF haften für die Nutzung dieser Informationen.`
+            : ''
+        }</p>`;
 
     renderHourlyChart(body.querySelector<HTMLElement>('.hourly-wrap')!, f);
     fcMap?.destroy();

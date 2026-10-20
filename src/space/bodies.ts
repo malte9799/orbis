@@ -778,7 +778,7 @@ export const ASTEROIDS: Body[] = [
     kind: 'asteroid',
     radiusKm: 0.2675,
     color: '#a09585',
-    model: { ...m('itokawa.glb', 535), source: 'NASA 3D Resources (Formmodell)' },
+    model: { ...m('itokawa.glb', 535), source: 'NASA 3D Resources (Formmodell nach JAXA-Hayabusa-Daten)' },
     position: small('itokawa'),
     orbit: true,
     facts: [
@@ -1155,7 +1155,7 @@ export const CRAFT: Body[] = [
     name: 'JUICE',
     kind: 'craft',
     radiusKm: 0.003,
-    model: { ...m('juice.glb', 27), source: 'ESA SPICE (Cosmographia-Modell)' },
+    model: { ...m('juice.glb', 27), source: '© ESA – ESA SPICE Service (Cosmographia-Modell)' },
     color: '#7ad3ff',
     position: tracked('juice', cruise(
       [
@@ -1179,7 +1179,7 @@ export const CRAFT: Body[] = [
     name: 'BepiColombo',
     kind: 'craft',
     radiusKm: 0.003,
-    model: { ...m('bepicolombo.glb', 30), source: 'ESA SPICE (Cosmographia-Modell)' },
+    model: { ...m('bepicolombo.glb', 30), source: '© ESA – ESA SPICE Service (Cosmographia-Modell)' },
     color: '#7ad3ff',
     position: tracked('bepicolombo', cruise(
       [

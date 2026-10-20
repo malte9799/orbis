@@ -62,7 +62,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       <input type="range" min="0" max="0" value="0" aria-label="Zeitpunkt" disabled>
       <span class="fcm-when">–</span>
     </div>
-    <p class="muted small fcm-src">Modelldaten: Open-Meteo · Karte: OpenFreeMap © OpenStreetMap</p>`;
+    <p class="muted small fcm-src"></p>`;
 
   const mapEl = host.querySelector<HTMLElement>('.fcm-map')!;
   const statusEl = host.querySelector<HTMLElement>('.fcm-status')!;
@@ -70,6 +70,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   const whenEl = host.querySelector<HTMLElement>('.fcm-when')!;
   const playBtn = host.querySelector<HTMLButtonElement>('.fcm-play')!;
   const legendEl = host.querySelector<HTMLElement>('.fcm-legend')!;
+  renderSource();
 
   host.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
     b.addEventListener('click', () => {
@@ -219,6 +220,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
   function render() {
     renderLegend();
+    renderSource();
     if (!map || !map.isStyleLoaded()) return;
     syncSlider();
     void showCities();
@@ -335,6 +337,16 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       else if (p) rain = true;
     }
     return rain || snowfall ? '' : 'Kein Niederschlag im Kartenausschnitt';
+  }
+
+  /** Credits for the visible layer: radar comes from RainViewer, everything else from Open-Meteo. */
+  function renderSource() {
+    const data =
+      mode === 'radar'
+        ? 'Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>'
+        : 'Modelldaten: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>)';
+    host.querySelector<HTMLElement>('.fcm-src')!.innerHTML =
+      `${data} · Ortswetter: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> · Karte: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a>`;
   }
 
   function renderLegend() {

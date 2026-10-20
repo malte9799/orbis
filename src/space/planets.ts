@@ -77,7 +77,7 @@ const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'Far
 const MARS_CTX: TileLayer = {
   id: 'ctx',
   label: 'Kontextkamera (CTX, ≈ 5 m)',
-  credit: 'NASA/JPL/MSSS/Caltech Murray Lab · Esri',
+  credit: 'NASA/JPL/MSSS/Caltech Murray Lab · Powered by Esri',
   px: 512,
   maxZ: 12,
   tint: 0xe3b79c,
@@ -99,15 +99,16 @@ const trekProducts = (list: TrekProduct[], credit: { trek: string; esri: string 
       layer: {
         id,
         label: title,
-        credit: esri ? credit.esri : credit.trek,
+        // HRSC products are CC BY-SA 3.0 IGO and must name ESA/DLR/FU Berlin
+        credit: (esri ? credit.esri : credit.trek) + (/HRSC/i.test(`${id} ${title}`) ? ' · HRSC: ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO' : ''),
         px,
         maxZ,
         url: (z, r, c) => base.replace('{z}', String(z)).replace('{r}', String(r)).replace('{c}', String(c)),
       },
     };
   });
-const MARS_TREK_PRODUCTS = trekProducts(MARS_PRODUCTS, { trek: 'NASA/JPL/USGS/ASU/ESA/University of Arizona · NASA Mars Trek', esri: 'NASA/JPL/University of Arizona (HiRISE) · Esri' });
-const MOON_TREK_PRODUCTS = trekProducts(MOON_PRODUCTS, { trek: 'NASA/GSFC/ASU/JAXA/USGS · NASA Moon Trek', esri: 'NASA/GSFC/ASU LROC · Esri' });
+const MARS_TREK_PRODUCTS = trekProducts(MARS_PRODUCTS, { trek: 'NASA/JPL/USGS/ASU/ESA/University of Arizona · NASA Mars Trek', esri: 'NASA/JPL/University of Arizona (HiRISE) · Powered by Esri' });
+const MOON_TREK_PRODUCTS = trekProducts(MOON_PRODUCTS, { trek: 'NASA/GSFC/ASU/JAXA/USGS · NASA Moon Trek', esri: 'NASA/GSFC/ASU LROC · Powered by Esri' });
 
 const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
 const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'MESSENGER-Mosaik (166 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
