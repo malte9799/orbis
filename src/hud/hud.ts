@@ -281,12 +281,12 @@ export function createHud(host: HudHost): Hud {
       ${ui.pick ? pick(f.id) : ''}
       ${f.variants.length > 1 ? `<div class="seg">${f.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>` : ''}
       ${opts.length ? `<div class="fl">${opts.join('')}</div>` : ''}
-      ${lg ? `<div class="g" style="background:${lg.gradient}"></div><div class="ticks">${lg.ticks.map((t) => `<span style="left:${t.pos}%">${esc(t.label)}</span>`).join('')}</div>` : ''}
+      ${lg?.gradient ? `<div class="g" style="background:${lg.gradient}"></div><div class="ticks">${lg.ticks.map((t) => `<span style="left:${t.pos}%">${esc(t.label)}</span>`).join('')}</div>` : ''}
     </div>`;
   }
 
   function stackBody(k: Karte): string {
-    const timeTxt = k.main ? (k.main === 'radar' || k.main === 'sat' ? 'Live' : 'Vorhersage, ab jetzt') : 'Live';
+    const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? 'Tagesbild von gestern' : k.main && k.main !== 'radar' && k.main !== 'sat' ? 'Vorhersage, ab jetzt' : 'Live';
     const bases = BASES.map((b) => b.id);
     const others = bases.filter((b) => !MAIN_BASES.includes(b));
     const showMore = ui.moreBases || others.includes(k.base);

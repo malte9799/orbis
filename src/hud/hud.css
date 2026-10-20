@@ -450,6 +450,8 @@ body.hud-cover .topbar { z-index: 0; }
 .globe-view[data-layout='landscape'] .globe-bottom .legend-bar { height: 6px; border-radius: 3px; }
 .globe-view[data-layout='landscape'] .globe-bottom .tl-time { order: 4; min-width: 70px; }
 
+.globe-view:not([data-layout='desktop']) .legend.no-scale { display: none; }
+
 /* --- touch: every target at least 44px (tablets use the desktop layout) --- */
 @media (pointer: coarse) {
   .hud .rn { min-height: 32px; }
