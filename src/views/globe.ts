@@ -31,7 +31,7 @@ import {
   nearestTimeIndex,
   type ModelGrid,
 } from '../api/model';
-import { getCurrent, reverseGeocode } from '../api/openmeteo';
+import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { labelPaint } from '../globe/vector';
@@ -713,7 +713,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <h3>Datenquellen</h3>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
         PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
-        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, TeleGeography, PeeringDB, WRI, OpenStreetMap/OpenFreeMap.
+        The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
+        Overpass API, Blitzortung.org, EURDEP (JRC), Japan Meteorological Agency, Finnish Meteorological Institute, NOAA MRMS, NOAA SPC, Esri World Imagery, NASA Blue/Black Marble,
+        Bright Sky, BigDataCloud (Ortsname zum eigenen Standort), Nominatim/OpenStreetMap (Ortsname zum Kartenklick), Open-Meteo Geocoding/Flood (GloFAS), Global Shipping Lanes (P. Benden), PB2002 (Bird 2003), ALERTCalifornia, NYC DOT, DDOT,
+        511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service.
+        Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.
+        <a href="https://github.com/malte9799/orbis/blob/main/docs/DATENQUELLEN.md" target="_blank" rel="noopener">Alle Quellen mit Lizenzen</a> ·
+        Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
+        <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
@@ -1302,7 +1309,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <button class="btn small wide" data-act="open">Vorhersage öffnen →</button>
       </div>`;
       node.querySelector('[data-act=open]')!.addEventListener('click', async () => {
-        onOpenForecast(await reverseGeocode(lat, lng));
+        onOpenForecast(await reverseGeocodePoint(lat, lng));
       });
     } catch {
       node.querySelector('.pop-loading')!.textContent = 'Wetterdaten nicht verfügbar.';

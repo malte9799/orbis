@@ -4,7 +4,7 @@
 // Live sources are refreshed on every run (every 15 min), slow-changing ones once a day;
 // if a download fails, the previous file is kept.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
@@ -128,22 +128,67 @@ await task('firms', 0, async () => {
 // ---------------------------------------------------------------------------
 // daily
 
-await task('cables', DAY, async () => {
-  const API = 'https://www.submarinecablemap.com/api/v3';
-  const geo = await json<{ features: { properties: { id: string } }[] }>(`${API}/cable/cable-geo.json`);
-  write('cables/cable-geo.json', geo);
-  write('cables/landing-point-geo.json', await json(`${API}/landing-point/landing-point-geo.json`));
-  const ids = [...new Set(geo.features.map((f) => f.properties.id))];
-  const details: Record<string, unknown> = {};
-  await pool(ids, 6, async (id) => {
+// Submarine telecom cables from OpenStreetMap (ODbL). Replaces the former TeleGeography
+// snapshot, whose database is not openly licensed – its old files are removed from the branch.
+rmSync(join(OUT, 'cables'), { recursive: true, force: true });
+delete meta.tasks.cables;
+
+await task('osm-cables', DAY, async () => {
+  const query = `[out:json][timeout:600];(
+    way["telecom"="line"]["location"~"underwater|submarine"];
+    way["communication"="line"]["location"~"underwater|submarine"];
+    way["submarine"="yes"]["telecom"="line"];
+    way["seamark:type"="cable_submarine"]["seamark:cable_submarine:category"~"^(fibre_optic|fiber_optic|optical|telephone|telegraph|telecommunication|communication)$"];
+  );out tags geom;`;
+  type OsmWay = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
+  let elements: OsmWay[] | null = null;
+  const errors: string[] = [];
+  for (const server of ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
     try {
-      const d = await json<{ name: string; length?: string; rfs?: string; owners?: string; url?: string; landing_points?: { name: string }[] }>(`${API}/cable/${encodeURIComponent(id)}.json`, 20000);
-      details[id] = { name: d.name, length: d.length, rfs: d.rfs, owners: d.owners, url: d.url, landing_points: d.landing_points?.map((l) => ({ name: l.name })) };
-    } catch {
-      /* skip single cable */
+      const res = await fetch(server, {
+        method: 'POST',
+        headers: { ...UA, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ data: query }),
+        signal: AbortSignal.timeout(660000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      ({ elements } = (await res.json()) as { elements: OsmWay[] });
+      break;
+    } catch (e) {
+      errors.push(`${new URL(server).host}: ${e instanceof Error ? e.message : e}`);
     }
-  });
-  write('cables/details.json', details);
+  }
+  if (!elements) throw new Error(`Overpass – ${errors.join(', ')}`);
+  const PALETTE = ['#9c6bff', '#4fc3f7', '#4db6ac', '#f06292', '#ffb74d', '#aed581', '#7986cb', '#ba68c8'];
+  const r = (v: number) => Math.round(v * 1000) / 1000;
+  const features = [];
+  for (const el of elements) {
+    const t = el.tags ?? {};
+    if (/power/.test(`${t['seamark:cable_submarine:category'] ?? ''} ${t.power ?? ''}`) || !el.geometry || el.geometry.length < 2) continue;
+    const coords: number[][] = [];
+    for (const g of el.geometry) {
+      const c = [r(g.lon), r(g.lat)];
+      const last = coords[coords.length - 1];
+      if (!last || last[0] !== c[0] || last[1] !== c[1]) coords.push(c);
+    }
+    if (coords.length < 2) continue;
+    const name = t.name ?? t['seamark:cable_submarine:name'] ?? t['seamark:name'] ?? '';
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: {
+        id: el.id,
+        name,
+        operator: t.operator ?? '',
+        since: t.start_date ?? '',
+        // one colour per cable name so the segments of a cable match
+        color: PALETTE[[...(name || String(el.id))].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % PALETTE.length],
+      },
+    });
+  }
+  if (features.length < 100) throw new Error(`only ${features.length} cables – Overpass answer incomplete?`);
+  write('osm-cables/cables.json', { type: 'FeatureCollection', features });
+  write('osm-cables/LICENSE.txt', 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\n');
 });
 
 await task('volcanoes', DAY, async () => {

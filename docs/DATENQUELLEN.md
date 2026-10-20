@@ -34,10 +34,11 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [Open-Meteo](https://open-meteo.com) – [Forecast](https://open-meteo.com/en/docs) | Aktuelles Wetter, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Sonnenzeiten; globales Modellraster (Wind, Böen, Temperatur, Feuchte, Niederschlag, Bewölkung, Luftdruck, Schnee, CAPE) für die Kartenebenen | 🟢 CC BY 4.0, 🚫 nicht-kommerziell, 10 000 Aufrufe/Tag |
-| [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | Luftqualität & Pollen (Copernicus CAMS) | 🟢 |
+| [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | Luftqualität & Pollen (Copernicus CAMS) | 🟢 Pflichtsatz „Generated using Copernicus Atmosphere Monitoring Service information“ |
 | [Copernicus Atmosphere Monitoring Service](https://atmosphere.copernicus.eu) | Datengrundlage für Luftqualität & Pollen | 🟢 |
 | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | Ortssuche | 🟢 |
-| [BigDataCloud](https://www.bigdatacloud.com/free-api/free-reverse-geocode-to-city-api) | Ortsname zum eigenen Standort (Reverse-Geocoding) | 🟢 |
+| [BigDataCloud](https://www.bigdatacloud.com/free-api/free-reverse-geocode-to-city-api) | Ortsname zum **eigenen** Standort (Reverse-Geocoding) – laut Fair-Use-Regel nur für den Gerätestandort erlaubt | 🟢 |
+| [Nominatim](https://nominatim.org) (OpenStreetMap) | Ortsname zu einem Kartenklick | 🟢 ODbL, max. 1 Anfrage/s |
 | [Bright Sky](https://brightsky.dev) (Deutscher Wetterdienst) | Amtliche Unwetterwarnungen Deutschland | 🟢 |
 | [Deutscher Wetterdienst (DWD)](https://www.dwd.de) | Warnungen, Datengrundlage von Bright Sky | 🟢 DWD-Nutzungsbedingungen |
 | [NWS – api.weather.gov](https://www.weather.gov/documentation/services-web-api) | Unwetterwarnungen USA, Tornado-/Unwetterwarnungen auf der Karte | 🟢 gemeinfrei |
@@ -74,7 +75,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NOAA Tsunami Warning Centers](https://www.tsunami.gov) | Tsunami-Meldungen (7 Tage) | 🟢 📦 |
 | [NIFC WFIGS](https://data-nifc.opendata.arcgis.com) | Waldbrand-Flächen USA | 🟢 |
 | [Smithsonian Global Volcanism Program](https://volcano.si.edu) | Alle ~1.300 Vulkane mit letztem Ausbruch | 🟢 📦 |
-| [Blitzortung.org](https://www.blitzortung.org) | Blitze live, letzte 15 min weltweit (WebSocket) | 🟢 🚫 📦 |
+| [Blitzortung.org](https://www.blitzortung.org) | Blitze live, letzte 15 min weltweit (inoffizieller WebSocket) | ⚠️ nur privat/Unterhaltung, nicht für Warnungen; Rohdaten nur mit Erlaubnis des Betreibers – Erlaubnis ausstehend |
 | [BfS ODL-Messnetz](https://odlinfo.bfs.de) | Radioaktivität (Ortsdosisleistung) Deutschland | 🟢 DL-DE 2.0 |
 | [EURDEP](https://remap.jrc.ec.europa.eu) (JRC) | Radioaktivität: ~3.500 Sonden in über 40 Ländern (u. a. FR, TR, CA, RU, HK) | 🟢 |
 | [Safecast](https://safecast.org) · [Karte](https://map.safecast.org) | Radioaktivität weltweit | 🟢 CC0, 📦 |
@@ -161,7 +162,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
-| [TeleGeography Submarine Cable Map](https://www.submarinecablemap.com) | Seekabel mit Anlandepunkten | 🚫 📦 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Unterseekabel (Telekommunikation) – weniger vollständig als kommerzielle Karten; frühere Quelle TeleGeography siehe [Archiv](archiv/telegeography-seekabel.md) | 🟢 ODbL, 📦 |
 | [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs) | 🟢 |
 | [WRI Global Power Plant Database](https://datasets.wri.org/dataset/globalpowerplantdatabase) | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke | 🟢 CC BY 4.0 |
 | OpenStreetMap (Overpass) | Einzelne Windräder, Öl-/Gaspipelines | 🟢 ODbL |
@@ -171,7 +172,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektorkarte (Dunkel/Hell), Ortsnamen auf Deutsch, Grenzen | 🟢 ODbL |
-| [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | 🟢 🚫 |
+| [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
 | [EOX Sentinel-2 cloudless](https://s2maps.eu) | Wolkenloses Satellitenbild (Copernicus Sentinel-2) | 🟢 CC BY-NC-SA 4.0, 🚫 |
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | 3D-Gelände & Schummerung (USGS 3DEP, SRTM, GMTED, ETOPO1) | 🟢 |
@@ -211,7 +212,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Quelle | Verwendung |
 |---|---|
-| [NASA Mars Trek](https://trek.nasa.gov/mars/) | Farbmosaik, MOLA-Höhe, THEMIS-Infrarot, HRSC-Farbmosaike, HiRISE-Regionalmosaike (bis 25 cm/px), Geologie, Täler, Mineralien; Produktliste per `scripts/mars-products.mjs` |
+| [NASA Mars Trek](https://trek.nasa.gov/mars/) | Farbmosaik, MOLA-Höhe, THEMIS-Infrarot, HRSC-Farbmosaike (ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO), HiRISE-Regionalmosaike (bis 25 cm/px), Geologie, Täler, Mineralien; Produktliste per `scripts/mars-products.mjs` |
 | [CTX Global Mosaic](https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer) (NASA/JPL/MSSS/Caltech Murray Lab via Esri) | 5-m-Basiskarte |
 | [NASA MMGIS](https://mars.nasa.gov/maps/) | Fahrspuren von Perseverance & Curiosity, 72 Ingenuity-Flüge (`scripts/mars-traverse.mjs`, Rückfall `public/data/mars-traverse.json`) |
 | [Landestellen-Steckbriefe](https://mars.nasa.gov/mars2020/) | Viking, Pathfinder, Spirit, Opportunity, Phoenix, Curiosity, InSight, Perseverance, Zhurong |
@@ -228,9 +229,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Quelle | Verwendung | Lizenz |
 |---|---|---|
 | [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources) | JWST, Hubble, ISS (≈ 96 MB, beim Deploy geladen), Voyager, Pioneer, Parker, Juno, Perseverance/Curiosity, LRO, Asteroiden (Eros, Bennu, Itokawa, Kleopatra …) | frei verwendbar |
-| ESA (Cosmographia-Modelle aus den [SPICE-Daten](https://spiftp.esac.esa.int/data/SPICE/)) | JUICE, BepiColombo | © ESA |
+| ESA (Cosmographia-Modelle aus den [SPICE-Daten](https://spiftp.esac.esa.int/data/SPICE/)) | JUICE, BepiColombo | © ESA – Lizenz für Weitergabe ungeklärt |
 | Prozedural (`src/space/surface-models.ts`) | Lander, Flaggen, Fahrzeuge an Mond- und Mars-Landestellen | eigener Code |
-| [Draco](https://google.github.io/draco/) | Kompression der GLB-Modelle (`public/draco`) | Apache-2.0 |
+| [Draco](https://google.github.io/draco/) | Kompression der GLB-Modelle (`public/draco`) | Apache-2.0 (Lizenztext in `public/draco/LICENSE`) |
 
 ## 13. Software & Bibliotheken
 

@@ -20,39 +20,10 @@ export async function loadShippingLanes(): Promise<FeatureCollection> {
 }
 
 // ---------------------------------------------------------------------------
-// Submarine cables & landing points – TeleGeography Submarine Cable Map (free, non-commercial)
+// Submarine telecom cables – OpenStreetMap (ODbL). The worldwide Overpass query is too heavy for
+// every browser, so the data workflow stores it daily in the data branch (scripts/fetch-data.ts).
 
-const CABLE_API = 'https://www.submarinecablemap.com/api/v3';
-
-export async function loadCables(): Promise<{ cables: FeatureCollection; landings: FeatureCollection }> {
-  // TeleGeography sends no CORS headers – use the snapshot from the data branch
-  const [cables, landings] = await Promise.all([
-    snapshotJson('cables/cable-geo.json', () => fetchJson<FeatureCollection>(`${CABLE_API}/cable/cable-geo.json`, undefined, 40000)),
-    snapshotJson('cables/landing-point-geo.json', () => fetchJson<FeatureCollection>(`${CABLE_API}/landing-point/landing-point-geo.json`, undefined, 40000)).catch(
-      () => ({ type: 'FeatureCollection', features: [] }) as FeatureCollection,
-    ),
-  ]);
-  return { cables, landings };
-}
-
-export interface CableDetails {
-  name: string;
-  length?: string;
-  rfs?: string;
-  owners?: string;
-  url?: string;
-  landing_points?: { name: string }[];
-}
-
-let cableDetails: Promise<Record<string, CableDetails>> | null = null;
-
-export async function loadCableDetails(id: string): Promise<CableDetails> {
-  cableDetails ??= snapshotJson<Record<string, CableDetails>>('cables/details.json').catch(() => ({}));
-  const d = (await cableDetails)[id];
-  return d ?? fetchJson<CableDetails>(`${CABLE_API}/cable/${encodeURIComponent(id)}.json`, undefined, 15000);
-}
-
-export const cableUrl = (id: string) => `https://www.submarinecablemap.com/submarine-cable/${encodeURIComponent(id)}`;
+export const loadCables = () => snapshotJson<FeatureCollection>('osm-cables/cables.json', undefined, 40000);
 
 // ---------------------------------------------------------------------------
 // Internet exchange points – PeeringDB (free, open API); located via their facilities
