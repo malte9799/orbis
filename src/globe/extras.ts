@@ -1,7 +1,7 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature, RasterTileSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
-import { cableUrl, FUELS, loadCableDetails, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
+import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
@@ -134,7 +134,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
-  { id: 'lightning', section: 'earth', label: 'Blitze live', hint: 'Einschläge der letzten 15 Minuten weltweit – Blitzortung.org', glyph: 'bolt', color: '#ffd600' },
+  { id: 'lightning', section: 'earth', label: 'Blitze live', hint: 'Einschläge der letzten 15 Minuten weltweit – Blitzortung.org (Hobby-Netzwerk, nicht amtlich, nur zur privaten Information, nicht für Warnzwecke)', glyph: 'bolt', color: '#ffd600' },
   { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (40+ Länder, u. a. Frankreich, Türkei, Kanada), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
   { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
   { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
@@ -179,7 +179,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'pipelines', section: 'infra', label: 'Öl- & Gaspipelines', hint: 'Pipelines für Gas, Öl, Wasserstoff (ab Zoom 8) – OpenStreetMap', glyph: 'cable', color: '#29b6f6' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
-  { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'TeleGeography, PeeringDB', glyph: 'cable', color: '#9c6bff' },
+  { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'Unterseekabel aus OpenStreetMap (unvollständig), Internetknoten von PeeringDB', glyph: 'cable', color: '#9c6bff' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
   { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Kern, Kohle, Gas, Wasser, Biomasse …', glyph: 'plant', color: FUELS.Nuclear.color },
@@ -198,7 +198,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
   shipping: ['ship-lanes', 'ferries'],
-  cables: ['cables', 'landings', 'ixp'],
+  cables: ['cables', 'ixp'],
   wind: ['power', 'osm-power'],
   solar: ['power', 'osm-power'],
   plants: ['power', 'osm-power'],
@@ -391,7 +391,7 @@ export class ExtraLayers {
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
       'ship-lanes': 'Schiffsrouten: <a href="https://doi.org/10.5281/zenodo.6361763">P. Benden, CC BY 4.0</a>',
-      cables: 'Seekabel: <a href="https://www.submarinecablemap.com/">TeleGeography</a>',
+      cables: 'Seekabel: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)',
       ixp: 'Internetknoten: <a href="https://www.peeringdb.com/">PeeringDB</a>',
       power: 'Kraftwerke: <a href="https://datasets.wri.org/dataset/globalpowerplantdatabase">WRI GPPD, CC BY 4.0</a>',
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://airplanes.live/">airplanes.live</a>, <a href="https://opensky-network.org/">OpenSky</a>',
@@ -404,11 +404,11 @@ export class ExtraLayers {
       gvp: 'Vulkane: <a href="https://volcano.si.edu/">Smithsonian GVP</a>',
       fireareas: 'Brandflächen: <a href="https://data-nifc.opendata.arcgis.com/">NIFC</a>',
       tsunami: 'Tsunami: <a href="https://www.tsunami.gov/">NOAA</a>',
-      lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> (nicht-kommerziell)',
+      lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
       radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://remap.jrc.ec.europa.eu/">EURDEP</a>, <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC, data.gov.my, Transport Victoria (CC BY 4.0), CTA, Trafiklab',
+      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (Contains information licensed under the Open Government Licence – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA (Data provided by Chicago Transit Authority), Trafiklab',
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
@@ -422,7 +422,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'landings', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -507,17 +507,6 @@ export class ExtraLayers {
     );
     add(
       {
-        id: 'landings',
-        type: 'circle',
-        source: 'landings',
-        minzoom: 2,
-        layout: hidden,
-        paint: { 'circle-color': '#ffffff', 'circle-radius': 2.2, 'circle-stroke-color': '#9c6bff', 'circle-stroke-width': 1 },
-      },
-      'gauges',
-    );
-    add(
-      {
         id: 'ixp',
         type: 'circle',
         source: 'ixp',
@@ -578,7 +567,12 @@ export class ExtraLayers {
         tileSize: 256,
         maxzoom: 14,
         encoding: 'terrarium',
-        attribution: 'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (USGS 3DEP, SRTM, GMTED, ETOPO1)',
+        // full credit list required by the terrain tiles (tilezen/joerd docs/attribution.md)
+        attribution:
+          'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
+          'ArcticDEM (DigitalGlobe-Bilder, NSF-gefördert); © Commonwealth of Australia (Geoscience Australia) 2017; © offene Daten Österreichs – DGM Österreich; ' +
+          'Open Government Licence – Canada; EU-DEM: produced using Copernicus data and information funded by the European Union; INEGI, Continental relief, 2016; ' +
+          '© Land Information New Zealand; © Kartverket; © Environment Agency copyright and/or database right 2015',
       });
     }
     add(
@@ -1798,9 +1792,8 @@ export class ExtraLayers {
     let count = 0;
     const missing: string[] = [];
     if (cables.status === 'fulfilled') {
-      this.setData('cables', cables.value.cables);
-      this.setData('landings', cables.value.landings);
-      count += cables.value.cables.features.length;
+      this.setData('cables', cables.value);
+      count += cables.value.features.length;
     } else missing.push('Seekabel');
     if (ixps.status === 'fulfilled') {
       this.setData('ixp', ixps.value);
@@ -2496,28 +2489,24 @@ export class ExtraLayers {
         };
       }
       case 'cables': {
-        const id = String(p.id ?? p.feature_id ?? '');
-        const name = String(p.name ?? 'Seekabel');
+        const id = String(p.id ?? '');
+        const rows = [
+          ['Betreiber', p.operator],
+          ['In Betrieb seit', p.since],
+        ].filter(([, v]) => v);
         return {
           type: 'html',
-          html: cardHtml({ glyph: 'cable', color: String(p.color ?? '#9c6bff'), title: name, subtitle: 'Unterseekabel', source: 'TeleGeography', url: id ? cableUrl(id) : undefined, extra: '<div class="pop-loading small">Details werden geladen …</div>' }),
+          html: cardHtml({
+            glyph: 'cable',
+            color: String(p.color ?? '#9c6bff'),
+            title: String(p.name || 'Seekabel'),
+            subtitle: 'Unterseekabel (Telekommunikation)',
+            source: 'OpenStreetMap-Mitwirkende (ODbL)',
+            url: id ? `https://www.openstreetmap.org/way/${encodeURIComponent(id)}` : undefined,
+            extra: rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : undefined,
+          }),
           lng: at.lng,
           lat: at.lat,
-          after: (node) => {
-            if (!id) return;
-            loadCableDetails(id)
-              .then((d) => {
-                const rows = [
-                  ['Länge', d.length],
-                  ['In Betrieb seit', d.rfs],
-                  ['Betreiber', d.owners],
-                  ['Anlandungen', d.landing_points?.map((l) => l.name).slice(0, 8).join(', ')],
-                ].filter(([, v]) => v);
-                const el = node.querySelector('.pop-loading');
-                if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-              })
-              .catch(() => node.querySelector('.pop-loading')?.remove());
-          },
         };
       }
       case 'ixp':

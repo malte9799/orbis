@@ -176,7 +176,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
 | 📷 **Kameras** | Webcams weltweit (u. a. London, New York, Kalifornien, Hongkong, Singapur), ALPR-Kameras | [Digitraffic](https://weathercam.digitraffic.fi), [TfL](https://api.tfl.gov.uk), [Caltrans](https://cwwp2.dot.ca.gov), [ALERTCalifornia](https://cameras.alertcalifornia.org), [DeFlock](https://deflock.org) |
 | 📻 **Radio** | Über 50.000 Sender im Player | [Radio Browser](https://www.radio-browser.info) |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Windräder, Pipelines | [TeleGeography](https://www.submarinecablemap.com), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
+| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
 
 ### 🔑 Optional mit kostenlosem Schlüssel
 
@@ -252,8 +252,8 @@ eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen 
 
 <br>
 
-Einige Quellen erlauben keine Abrufe direkt aus dem Browser (fehlende CORS-Header): Seekabel (TeleGeography), Vulkane
-(Smithsonian), Tsunami-Meldungen (NOAA), Blitze (Blitzortung.org), Safecast, Radio Browser und mehrere Webcam-Listen.
+Einige Quellen erlauben keine Abrufe direkt aus dem Browser (fehlende CORS-Header) oder sind für jeden Browser zu groß: Seekabel
+(weltweite OpenStreetMap-Abfrage), Vulkane (Smithsonian), Tsunami-Meldungen (NOAA), Safecast, Radio Browser und mehrere Webcam-Listen.
 `.github/workflows/data.yml` lädt sie deshalb serverseitig – live alle 15 Minuten, den Rest täglich – mit
 `scripts/fetch-data.ts` in den Branch `data`. Die App liest sie über `raw.githubusercontent.com` und fällt sonst auf die
 Originalquelle zurück. Der erste Lauf startet automatisch beim Push, danach per Zeitplan (oder manuell unter *Actions*).
@@ -276,7 +276,7 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
   Rasterpunkt zählt). Alle Open-Meteo-Abrufe laufen über eine Drossel; das globale Raster wird eine Stunde im Browser
   zwischengespeichert.
 - **Tornados:** Daten gibt es nur für die USA – dort werden sie offiziell gewarnt und gemeldet.
-- **Lizenzen:** Einige Datensätze sind nur für nicht-kommerzielle Nutzung frei (u. a. TeleGeography-Seekabel, Esri-Satellitenbild,
+- **Lizenzen:** Einige Datensätze sind nur für nicht-kommerzielle Nutzung frei (u. a. Esri-Satellitenbild, Blitzortung.org,
   airplanes.live, EOX Sentinel-2). Für eine kommerzielle Nutzung müssten diese ersetzt oder lizenziert werden.
 - **Warnungen:** Die Rohdaten stammen von den jeweiligen Anbietern; für Warnungen gelten immer die amtlichen Stellen.
 - **Nicht zur Navigation:** Meerestiefe und Schiffsdaten dienen der Information, nicht der Navigation.

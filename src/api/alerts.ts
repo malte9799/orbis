@@ -30,7 +30,7 @@ async function dwdAlerts(lat: number, lon: number): Promise<Alert[]> {
     }[];
   }>(`https://api.brightsky.dev/alerts?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, undefined, 10000);
   return (data.alerts ?? []).map((a) => ({
-    source: 'Deutscher Wetterdienst',
+    source: 'Deutscher Wetterdienst (via Bright Sky)',
     event: a.event_de ?? 'Warnung',
     headline: a.headline_de ?? a.event_de ?? '',
     description: a.description_de ?? '',
