@@ -12,6 +12,11 @@
   --danger: #ff5a5f;
   --radius: 16px;
   --topbar: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --topbar-total: calc(var(--topbar) + var(--safe-top));
   color-scheme: dark;
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 15px;
@@ -40,6 +45,11 @@ body {
 
 body.mode-globe {
   overflow: hidden;
+}
+
+/* on the map views the bar is (almost) opaque so it does not read as a band over the map */
+body.mode-globe .topbar {
+  background: rgba(11, 16, 32, 0.96);
 }
 
 [hidden] {
@@ -77,12 +87,12 @@ small,
   position: sticky;
   top: 0;
   z-index: 20;
-  height: var(--topbar);
+  height: var(--topbar-total);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 16px;
+  padding: var(--safe-top) max(16px, var(--safe-right)) 0 max(16px, var(--safe-left));
   background: rgba(11, 16, 32, 0.82);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
@@ -714,7 +724,7 @@ svg.hourly {
 /* ---------- Globe view ---------- */
 .globe-view {
   position: fixed;
-  inset: var(--topbar) 0 0 0;
+  inset: var(--topbar-total) 0 0 0;
 }
 
 .map {
@@ -810,46 +820,6 @@ svg.hourly {
   margin-bottom: 6px;
 }
 
-.seg-btn {
-  text-align: center;
-  padding: 6px 4px;
-  border-radius: 9px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: var(--text-2);
-}
-
-.seg-btn input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.seg-btn.on {
-  background: var(--accent);
-  color: #fff;
-}
-
-.seg-btn:focus-within {
-  outline: 2px solid var(--accent);
-}
-
-.ev-row svg {
-  flex: none;
-}
-
-.ev-text {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  line-height: 1.25;
-}
-
-.ev-text small {
-  color: var(--muted);
-  font-size: 0.74rem;
-}
-
 .badge {
   font-size: 0.75rem;
   color: var(--text-2);
@@ -887,10 +857,6 @@ svg.hourly {
   background: rgba(0, 0, 0, 0.3);
   color: var(--text);
   font: inherit;
-}
-
-.attribution-note {
-  margin-top: 14px;
 }
 
 .globe-bottom {
@@ -1213,10 +1179,6 @@ svg.hourly {
   .timeline {
     padding: 8px 12px;
   }
-
-  body:has(.panel:not([hidden])) .globe-bottom {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1232,63 +1194,12 @@ svg.hourly {
   margin-bottom: 2px;
 }
 
-/* ---------- Layer buttons (zoom.earth-style) ---------- */
-.layer-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.layer-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.84rem;
-  line-height: 1.2;
-  cursor: pointer;
-  color: var(--text-2);
-}
-
-.layer-btn:hover {
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.layer-btn.on {
-  border-color: var(--accent);
-  background: rgba(91, 157, 255, 0.18);
-  color: var(--text);
-}
-
-.layer-btn:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.layer-btn input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
 .swatch {
   flex: none;
   width: 18px;
   height: 18px;
   border-radius: 5px;
   border: 1px solid rgba(255, 255, 255, 0.25);
-}
-
-.h3-note {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-  margin-left: 4px;
 }
 
 /* timeline */
@@ -1397,24 +1308,15 @@ svg.hourly {
   }
 }
 
-.ev-text small.note {
-  color: #f2c94c;
-}
-
 .pop-grid.two {
   grid-template-columns: auto 1fr;
   margin: 6px 0 4px;
 }
 
-.panel-error {
-  color: #ff8a8a;
-  margin: -2px 0 8px;
-}
-
 /* ---------- Solar system ---------- */
 .space-view {
   position: fixed;
-  inset: var(--topbar) 0 0 0;
+  inset: var(--topbar-total) 0 0 0;
   background: #000;
   overflow: hidden;
 }
@@ -2198,7 +2100,6 @@ svg.hourly {
   border-left: 1px solid var(--border);
 }
 
-
 /* ---------- Layer panel v2: tabs + tiles ---------- */
 .globe-view .panel {
   bottom: 118px;
@@ -2256,78 +2157,6 @@ svg.hourly {
   color: #fff;
 }
 
-/* only the active tab shows its name; the others are icons with a count dot */
-.ptab-label {
-  display: none;
-  white-space: nowrap;
-}
-
-.ptab.on .ptab-label {
-  display: inline;
-}
-
-.ptab-n {
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 0.68rem;
-  line-height: 16px;
-}
-
-.ptab:not(.on) .ptab-n {
-  position: absolute;
-  top: 1px;
-  right: 2px;
-  min-width: 14px;
-  height: 14px;
-  line-height: 14px;
-  padding: 0 3px;
-  font-size: 0.62rem;
-  background: var(--accent);
-  color: #fff;
-}
-
-/* sub-groups: quiet text chips with an underline for the active one */
-.subtabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
-  margin: 6px 2px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.subtab {
-  padding: 4px 0 6px;
-  margin-bottom: -1px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.subtab:hover {
-  color: var(--text);
-}
-
-.subtab.on {
-  color: var(--text);
-  border-bottom-color: var(--accent);
-}
-
-.subtab i {
-  margin-left: 5px;
-  font-style: normal;
-  font-size: 0.68rem;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
-
 .tile-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2375,26 +2204,6 @@ svg.hourly {
   border-radius: 5px;
 }
 
-.ltile-badge {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  font-size: 0.66rem;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
-}
-
-.ltile-badge:empty {
-  display: none;
-}
-
-.seg-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 2px 0 8px;
-}
-
 .seg-chip {
   height: 28px;
   padding: 0 11px;
@@ -2427,20 +2236,6 @@ svg.hourly {
 .seg-chip.toggle.on::before {
   background: var(--accent);
   border-color: var(--accent);
-}
-
-.extras-row {
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.panel-meta {
-  margin: 4px 0;
-}
-
-.panel-notes .note {
-  color: #f2c94c;
-  margin: 4px 0;
 }
 
 /* ---------- base map switcher (Google-Maps style) ---------- */
@@ -2551,32 +2346,6 @@ svg.hourly {
 
 .base-opt.on .thumb {
   border-color: var(--accent);
-}
-
-.base-toggles {
-  display: flex;
-  gap: 14px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.base-toggles label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.base-toggles input {
-  accent-color: var(--accent);
-}
-
-/* ---------- settings dialog ---------- */
-.globe-top .settings-btn {
-  flex: none;
 }
 
 .settings-dialog {
@@ -3021,23 +2790,8 @@ svg.hourly {
   border-top: 1px solid var(--border);
 }
 
-/* three main tabs: all labels visible */
-.ptab-label,
-.ptab.on .ptab-label {
-  display: inline;
-}
-
 .ptab.on {
   flex-grow: 1;
-}
-
-.ptab:not(.on) .ptab-n {
-  position: static;
-  min-width: 16px;
-  height: 16px;
-  line-height: 16px;
-  font-size: 0.68rem;
-  background: rgba(255, 255, 255, 0.14);
 }
 
 /* planet map: switch between the bodies that have a map */
