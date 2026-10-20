@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   buoys: ['buoys', 'buoys-label'],
   tides: ['tides'],
   bathymetry: ['emodnet', 'gebco'],
-  chlorophyll: ['chlorophyll'],
+  chlorophyll: ['chlorophyll-pace', 'chlorophyll-n20', 'chlorophyll'],
   nexrad: ['nexrad'],
   ecradar: ['ecradar'],
   fmiradar: ['fmiradar'],
@@ -545,16 +545,20 @@ export class ExtraLayers {
     overlay('aerosol', [gibsWms('MODIS_Combined_Value_Added_AOD')], 'Aerosole: NASA MODIS', 6, 0.75);
     overlay(
       'landcover',
-      ['https://services.terrascope.be/wms/v2?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=WORLDCOVER_2021_MAP&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'],
+      ['https://wmts.terrascope.be/?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=esa-worldcover-map-10m-2021-v2_map&STYLE=default&FORMAT=image/png&TILEMATRIXSET=EPSG:3857&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&TIME=2021-01-01'],
       'Landbedeckung: © ESA WorldCover 2021 (CC BY 4.0)',
-      // 10 m data: zoom 14 is full resolution, beyond that MapLibre overzooms instead of
-      // asking the (slow, on-demand rendering) WMS for ever more tiles
+      // 10 m data: zoom 14 is full resolution; the service has no tiles below zoom 6
       14,
       0.75,
+      { minzoom: 6 },
     );
     overlay('gebco', ['https://wms.gebco.net/mapserv?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GEBCO_LATEST&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Meerestiefe: <a href="https://www.gebco.net/">GEBCO</a> (nicht zur Navigation)', 10, 0.8);
     overlay('emodnet', ['https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png'], 'Europa: <a href="https://emodnet.ec.europa.eu/">EMODnet Bathymetry</a> (CC BY 4.0, nicht zur Navigation)', 11, 0.85, { bounds: [-36, 15, 43, 74] });
-    overlay('chlorophyll', [gibsWms('VIIRS_SNPP_L2_Chlorophyll_A')], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
+    // daily ocean-colour swaths (and clouds) leave gaps: three satellites stacked cover the oceans
+    const chlDay = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    overlay('chlorophyll-pace', [gibsWms('OCI_PACE_Chlorophyll_a', chlDay)], 'Chlorophyll: NASA PACE / GIBS', 7, 0.8);
+    overlay('chlorophyll-n20', [gibsWms('VIIRS_NOAA20_Chlorophyll_a', chlDay)], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
+    overlay('chlorophyll', [gibsWms('VIIRS_SNPP_L2_Chlorophyll_A', chlDay)], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
     overlay('nexrad', ['https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'], 'Radar USA: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/">Iowa Environmental Mesonet</a>', 9, 0.8, { bounds: [-130, 20, -60, 52] });
     overlay('ecradar', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RRAI&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.8, { bounds: [-141, 41, -52, 70] });
     overlay('fmiradar', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_dbz_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Finnland: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });

@@ -47,7 +47,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EOX_S2, EUMETSAT_IR, OPENTOPO, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EOX_S2, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, OPENTOPO, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { createSearch, locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
@@ -57,7 +57,7 @@ import { describe, weatherIcon } from '../weather';
 // ---------------------------------------------------------------------------
 // Configuration
 
-type LiveId = 'radar' | 'dwd-radar' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
+type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 
@@ -66,7 +66,7 @@ type PanelTab = 'weather' | 'earth' | 'live';
 /** Weather layers grouped into families; families with several variants get a switcher. */
 const WX_FAMILIES: { id: string; label: string; hint: string; variants: [OverlayId, string][]; swatch?: string }[] = [
   { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', variants: [['radar', 'Weltweit'], ['dwd-radar', 'Deutschland (DWD)']], swatch: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)' },
-  { id: 'sat', label: 'Satellit', hint: 'Live-Satellitendaten', variants: [['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']], swatch: 'linear-gradient(135deg,#111,#888,#fff)' },
+  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']], swatch: 'linear-gradient(135deg,#111,#888,#fff)' },
   { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
   { id: 'temp', label: 'Temperatur', hint: 'Vorhersage', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
   { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', variants: [['precip', '']] },
@@ -952,6 +952,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
   }, 700);
 
+  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile) */
+  let hdSat: string = HD_SAT;
+  async function updateHdSource() {
+    const date = gibsDate(1);
+    const works = (sat: string) =>
+      fetch(gibsTrueColor(date, sat).replace('{z}/{y}/{x}', '2/1/2'), { signal: AbortSignal.timeout(8000) }).then(
+        (r) => r.ok,
+        () => false,
+      );
+    hdSat = (await works(HD_SAT)) ? HD_SAT : HD_SAT_BACKUP;
+    (map?.getSource('hd') as RasterTileSource | undefined)?.setTiles([gibsTrueColor(date, hdSat)]);
+  }
+
   function setGeo(source: string, data: FeatureCollection) {
     (map?.getSource(source) as GeoJSONSource | undefined)?.setData(data);
   }
@@ -961,6 +974,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const o = state.overlay;
     stopAnimation();
     vis('field', false);
+    vis('hd', o === 'sat-hd');
     vis('sat-ir', o === 'sat-ir');
     vis('dwd-radar', o === 'dwd-radar');
     vis('imerg', o === 'imerg');
@@ -1213,6 +1227,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)"></div>
         <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">Unwetter</span></div>`;
+    } else if (o === 'sat-hd') {
+      html = `<div class="legend-title">Satellit HD <small>NASA VIIRS · Tagesbild von gestern</small></div>`;
     } else if (o === 'sat-ir') {
       html = `<div class="legend-title">Satellit Infrarot <small>live · hohe, kalte Wolken erscheinen hell</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#111,#777,#fff)"></div>
@@ -1222,9 +1238,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <div class="legend-bar" style="background:linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)"></div>
         <div class="legend-ticks"><span style="left:0">−2</span><span style="left:35%">10</span><span style="left:65%">20</span><span style="left:100%">32</span></div>`;
     } else if (o === 'seaice') {
-      html = `<div class="legend-title">Meereis-Konzentration <small>NASA AMSR2 · vor 2 Tagen</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#0b2a5b,#2d5f9a,#7fa8d6,#d7e6f5,#ffffff)"></div>
-        <div class="legend-ticks"><span style="left:0">15 %</span><span style="left:50%">60 %</span><span style="left:100%">100 %</span></div>`;
+      html = `<div class="legend-title">Meereis-Konzentration <small>NASA GHRSST MUR · vor 2 Tagen</small></div>
+        <div class="legend-bar" style="background:linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)"></div>
+        <div class="legend-ticks"><span style="left:0">gering</span><span style="left:100%">100 %</span></div>`;
     } else if (o === 'imerg') {
       html = `<div class="legend-title">Niederschlag Satellit <small>NASA IMERG · mm/h</small></div>
         <div class="legend-bar" style="background:linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)"></div>
@@ -1415,6 +1431,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
+      void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();
@@ -1516,6 +1533,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       clearInterval(liveTimer);
       liveTimer = window.setInterval(() => {
         if (!map || document.hidden) return;
+        if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
         const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, imerg: IMERG_WMS };
         const url = live[state.overlay];
