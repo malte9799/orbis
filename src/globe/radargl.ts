@@ -1,3 +1,5 @@
+import { LngLat } from 'maplibre-gl';
+import { occlusionTest } from './overlay';
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from 'maplibre-gl';
 
 // WebGL radar layer. Instead of stacking one coloured raster layer per time step, it keeps the
@@ -568,8 +570,21 @@ export class RadarGl implements CustomLayerInterface {
     const now = performance.now();
     let waiting = 0;
     let flowBudget = 4;
+    // globe: tiles entirely behind the horizon are neither fetched nor drawn
+    const occluded = occlusionTest(map);
+    const tileLon = (v: number) => (v / n) * 360 - 180;
+    const tileLat = (v: number) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * v) / n))) * 180) / Math.PI;
+    const tileHidden = (x: number, y: number) => {
+      for (let i = 0; i <= 2; i++) {
+        for (let j = 0; j <= 2; j++) {
+          if (!occluded(new LngLat(tileLon(x + i / 2), tileLat(y + j / 2)))) return false;
+        }
+      }
+      return true;
+    };
     for (let x = x0; x <= x1; x++) {
       for (let y = y0; y <= y1; y++) {
+        if (tileHidden(x, y)) continue;
         const ea = this.entry(a, z, x, y);
         const eb = b ? this.entry(b, z, x, y) : null;
         ea.used = now;
