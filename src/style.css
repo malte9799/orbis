@@ -3083,3 +3083,464 @@ svg.hourly {
   transform: none;
   margin-left: 4px;
 }
+
+/* ---------- Games ---------- */
+.games-view {
+  position: fixed;
+  inset: var(--topbar) 0 0 0;
+}
+.gm-map {
+  position: absolute;
+  inset: 0;
+}
+.gm-panel,
+.gm-result {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  z-index: 5;
+}
+.gm-lead,
+.gm-note {
+  margin: 0;
+  color: var(--text-2);
+}
+.gm-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.gm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gm-field > span {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gm-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.gm-seg button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gm-seg button small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.gm-seg button.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.16);
+}
+.games-view select,
+.gm-input {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+}
+.gm-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.gm-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  z-index: 4;
+}
+.gm-hud > * {
+  pointer-events: auto;
+}
+.gm-stats {
+  display: flex;
+  gap: 14px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.gm-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 22px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+}
+.gm-ask small {
+  color: var(--muted);
+}
+.gm-ask b {
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+}
+.gm-type {
+  width: min(420px, 100%);
+}
+.gm-type .gm-input {
+  width: 100%;
+  height: 46px;
+  font-size: 1.05rem;
+  background: var(--card-solid);
+}
+.gm-feedback {
+  min-height: 1.4em;
+  padding: 2px 12px;
+  border-radius: 8px;
+  background: rgba(11, 16, 32, 0.8);
+  font-weight: 600;
+}
+.gm-feedback:empty {
+  display: none;
+}
+.gm-feedback.ok {
+  color: #43d98a;
+}
+.gm-feedback.bad {
+  color: #ff8a8f;
+}
+.gm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.gm-big {
+  font-size: 2.2rem;
+  font-weight: 700;
+}
+.gm-big span {
+  font-size: 1rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+.gm-missed {
+  color: var(--text-2);
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+@media (max-width: 560px) {
+  .gm-ask b {
+    font-size: 1.3rem;
+  }
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--accent-2);
+}
+.gm-games {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  align-self: flex-start;
+}
+.gm-games button {
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  white-space: nowrap;
+  flex: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.gm-games button.on {
+  background: var(--accent);
+  color: #fff;
+}
+/* street guessing */
+.sg {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: #000;
+}
+.sg-viewer {
+  position: absolute;
+  inset: 0;
+}
+.sg-top {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 999px;
+  background: rgba(11, 16, 32, 0.85);
+  border: 1px solid var(--border);
+  z-index: 3;
+  font-variant-numeric: tabular-nums;
+}
+.sg-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 8, 18, 0.85);
+  z-index: 2;
+  padding: 24px;
+  text-align: center;
+}
+.sg-guess {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 3;
+  transition: width 0.2s, height 0.2s;
+}
+.sg-map {
+  height: 170px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  opacity: 0.85;
+  transition: height 0.2s, opacity 0.2s;
+}
+.sg-guess:hover,
+.sg-guess.big {
+  width: min(560px, calc(100% - 24px));
+}
+.sg-guess:hover .sg-map,
+.sg-guess.big .sg-map {
+  height: min(380px, 55vh);
+  opacity: 1;
+}
+.sg-guess.big .sg-map {
+  height: min(460px, 65vh);
+}
+.sg-result {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+}
+.sg-result b {
+  font-size: 1.2rem;
+}
+.sg-result span {
+  color: #43d98a;
+  font-weight: 650;
+}
+.sg-result.sg-final {
+  pointer-events: auto;
+  width: min(460px, calc(100% - 32px));
+  text-align: center;
+}
+.sg-final h2 {
+  font-size: 2.2rem;
+}
+.sg-final small {
+  font-size: 1rem;
+  color: var(--muted);
+}
+@media (max-width: 560px) {
+  .sg-result:not(.sg-final) {
+    top: 76px;
+    transform: translateX(-50%);
+  }
+  .sg-guess {
+    width: 150px;
+  }
+  .sg-map {
+    height: 110px;
+  }
+}
+/* name quiz (flags, capitals, outlines): same HUD as the map quiz */
+.gm-street-host:empty {
+  display: none;
+}
+.gm-seg.fg-modes {
+  grid-template-columns: repeat(3, 1fr);
+}
+.gm-flagq {
+  height: 76px;
+  width: auto;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  margin-top: 4px;
+}
+.fg {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  background: radial-gradient(circle at 50% 30%, #17224a 0%, #0b1020 75%);
+}
+.fg-hud {
+  padding-bottom: 16px;
+}
+.fg-stage {
+  flex: 1;
+  min-height: 0;
+  width: min(520px, 100%);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+}
+.fg-stage > * {
+  flex: none;
+}
+.fg-flag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 220px;
+  padding: 18px;
+  border-radius: var(--radius);
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+.fg-flag .fg-img {
+  width: min(100%, 360px);
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.45);
+}
+.fg-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.fg-opt {
+  height: 52px;
+  white-space: normal;
+  line-height: 1.15;
+}
+.fg-opt.right {
+  background: #1f7a4a;
+  border-color: #2fbf71;
+  color: #fff;
+}
+.fg-opt.wrong {
+  background: #8f2f35;
+  border-color: #e0555c;
+  color: #fff;
+}
+.fg-type {
+  display: flex;
+  gap: 8px;
+}
+.fg-type .gm-input {
+  flex: 1;
+  height: 46px;
+  font-size: 1.05rem;
+  background: var(--card-solid);
+}
+.fg-stage .gm-feedback {
+  align-self: center;
+  text-align: center;
+}
+.fg-miss {
+  white-space: nowrap;
+}
+.fg-miss .fg-thumb {
+  vertical-align: middle;
+  margin-right: 4px;
+}
+.fg-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+}
+.fg-text small {
+  color: var(--muted);
+}
+.fg-text b {
+  font-size: 1.8rem;
+  letter-spacing: -0.01em;
+}
+.fg-outline {
+  width: min(100%, 380px);
+  max-height: 42vh;
+  fill: #5b9dff;
+  stroke: #0b1020;
+  stroke-width: 0.15;
+  filter: drop-shadow(0 4px 18px rgba(91, 157, 255, 0.35));
+}
+.fg-outline path {
+  vector-effect: non-scaling-stroke;
+  stroke-width: 1px;
+}
+.fg-thumb {
+  width: 28px;
+  border-radius: 3px;
+  flex: none;
+}
