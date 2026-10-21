@@ -135,6 +135,22 @@ small,
   color: #fff;
 }
 
+@media (max-width: 560px) {
+  .topbar {
+    gap: 8px;
+  }
+
+  .tabs {
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .tabs a {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+}
+
 /* ---------- Buttons & inputs ---------- */
 .btn {
   display: inline-flex;
