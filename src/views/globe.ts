@@ -47,8 +47,11 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, BLUE_MARBLE, buildStyle, DWD_RADAR_WMS, EOX_S2, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, OPENTOPO, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
-import { createSearch, locate } from '../search';
+import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
+import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
+import type { Karte, KView } from '../hud/karten';
+import { locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -60,64 +63,7 @@ import { describe, weatherIcon } from '../weather';
 type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
-
-type PanelTab = 'weather' | 'earth' | 'live';
-
-/** Weather layers grouped into families; families with several variants get a switcher. */
-const WX_FAMILIES: { id: string; label: string; hint: string; variants: [OverlayId, string][]; swatch?: string }[] = [
-  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', variants: [['radar', 'Weltweit'], ['dwd-radar', 'Deutschland (DWD)']], swatch: 'linear-gradient(135deg,#88ddee,#0077aa,#ffee00,#ff4400)' },
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']], swatch: 'linear-gradient(135deg,#111,#888,#fff)' },
-  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
-  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
-  { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', variants: [['precip', '']] },
-  { id: 'cloud', label: 'Wolken', hint: 'Vorhersage: Bewölkung', variants: [['cloud', '']] },
-  { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', variants: [['pressure', '']] },
-  { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', variants: [['humidity', '']] },
-  { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', variants: [['snow', '']] },
-  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', variants: [['sst', 'Meerestemperatur'], ['seaice', 'Meereis']], swatch: 'linear-gradient(135deg,#2b2f8f,#2aa8c8,#f6d743,#e2462f)' },
-  { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', variants: [['cape', '']] },
-];
-const familyOf = (o: OverlayId) => WX_FAMILIES.find((f) => f.variants.some(([v]) => v === o));
-
 const isField = (o: string): o is FieldId => o in FIELDS;
-
-/**
- * Panel structure: three top-level tabs; "Erde" and "Live" have a few sub-groups (subtle chips).
- * The extra layers are placed here by id; anything not listed lands in "Erde → Weitere".
- */
-interface SubDef { id: string; label: string; groups?: boolean; extras: ExtraId[] }
-const TABS: { id: PanelTab; label: string; title: string; icon: string; subs: SubDef[] }[] = [
-  { id: 'weather', label: 'Wetter', title: 'Wetter, Radar & Luft', icon: 'M7 18a4 4 0 0 1-.5-8A5.5 5.5 0 0 1 17 8.5 4.5 4.5 0 0 1 17.5 18z', subs: [] },
-  {
-    id: 'earth', label: 'Erde', title: 'Ereignisse, Umwelt & Infrastruktur', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M3 12h18 M12 3c3 3 3 15 0 18 M12 3c-3 3-3 15 0 18',
-    subs: [
-      { id: 'events', label: 'Ereignisse', groups: true, extras: ['dwdwarn', 'nina', 'tsunami'] },
-      { id: 'env', label: 'Umwelt', extras: ['ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'terrain', 'geology', 'plates', 'waves', 'rivers', 'bathymetry', 'chlorophyll'] },
-      {
-        id: 'infra', label: 'Infrastruktur',
-        extras: ['wind', 'solar', 'plants', 'pipelines', 'cables', 'resources', 'airports', 'shipping', 'roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet'],
-      },
-    ],
-  },
-  {
-    id: 'live', label: 'Live', title: 'Verkehr, Messnetze, Kameras & Radio', icon: 'M12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z M7.5 7.5a6 6 0 0 0 0 9 M16.5 7.5a6 6 0 0 1 0 9 M4.5 4.5a10 10 0 0 0 0 15 M19.5 4.5a10 10 0 0 1 0 15',
-    subs: [
-      { id: 'traffic', label: 'Verkehr', extras: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink'] },
-      { id: 'meas', label: 'Messnetze', extras: ['lightning', 'buoys', 'tides', 'gauges', 'radiation'] },
-      { id: 'media', label: 'Medien', extras: ['webcams', 'radio', 'alpr'] },
-    ],
-  },
-];
-/** extras shown on the weather tab (regional radars, city weather, air, aurora) */
-const WEATHER_EXTRAS: ExtraId[] = ['cities', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast', 'aq', 'aurora'];
-/** event groups that also switch an extra layer (one entry in the UI instead of two) */
-const LINKED_EXTRA: Partial<Record<GroupId, ExtraId>> = { fires: 'fireareas', volcanoes: 'gvp' };
-{
-  const placed = new Set<ExtraId>([...WEATHER_EXTRAS, ...Object.values(LINKED_EXTRA), ...TABS.flatMap((t) => t.subs.flatMap((s) => s.extras))]);
-  const rest = EXTRAS.map((d) => d.id).filter((id) => !placed.has(id));
-  if (rest.length) TABS.find((t) => t.id === 'earth')!.subs.push({ id: 'more', label: 'Weitere', extras: rest });
-}
-const tabDef = (id: PanelTab) => TABS.find((t) => t.id === id) ?? TABS[0];
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -125,20 +71,6 @@ const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'clouds_new', label: 'Wolken (OWM)' },
   { id: 'wind_new', label: 'Wind (OWM)' },
   { id: 'pressure_new', label: 'Luftdruck (OWM)' },
-];
-
-type GroupId = 'fires' | 'hotspots' | 'storms' | 'tornado' | 'quakes' | 'volcanoes' | 'floods' | 'ice';
-type FeedId = 'eonet' | 'gdacs' | 'usgs' | 'emsc' | 'nws' | 'spc' | 'firms';
-
-const GROUPS: { id: GroupId; label: string; hint: string; icon: EventKind; feeds: FeedId[] }[] = [
-  { id: 'fires', label: 'Waldbrände', hint: 'NASA EONET, GDACS', icon: 'fire', feeds: ['eonet', 'gdacs'] },
-  { id: 'hotspots', label: 'Feuer-Hotspots', hint: 'NASA FIRMS Satellit (VIIRS)', icon: 'heat', feeds: [] },
-  { id: 'storms', label: 'Stürme & Zyklone', hint: 'mit Zugbahnen – EONET, GDACS', icon: 'storm', feeds: ['eonet', 'gdacs'] },
-  { id: 'tornado', label: 'Tornados & Unwetter (USA)', hint: 'NWS-Warnungen, SPC-Meldungen', icon: 'tornado', feeds: ['nws', 'spc'] },
-  { id: 'quakes', label: 'Erdbeben', hint: '7 Tage – Europa ab M1.5 (EMSC), weltweit ab M2.5 (USGS)', icon: 'quake', feeds: ['usgs', 'emsc'] },
-  { id: 'volcanoes', label: 'Vulkane', hint: 'aktive Ausbrüche (EONET, GDACS) und alle ~1.300 Vulkane (Smithsonian GVP)', icon: 'volcano', feeds: ['eonet', 'gdacs'] },
-  { id: 'floods', label: 'Fluten, Dürren & Erdrutsche', hint: 'GDACS, EONET', icon: 'flood', feeds: ['eonet', 'gdacs'] },
-  { id: 'ice', label: 'Eis, Schnee, Staub & Hitze', hint: 'Eisberge, Sandstürme – EONET', icon: 'ice', feeds: ['eonet'] },
 ];
 
 const KIND_GROUP: Record<EventKind, GroupId> = {
@@ -156,6 +88,7 @@ const KIND_GROUP: Record<EventKind, GroupId> = {
   other: 'ice',
 };
 
+/** The map engine's current settings; derived from the active Karte (see applyKarte). */
 interface GlobeState {
   base: BaseId;
   labels: boolean;
@@ -169,12 +102,6 @@ interface GlobeState {
   projection: 'globe' | 'mercator';
   center: [number, number];
   zoom: number;
-  panelOpen: boolean;
-  panelTab?: PanelTab;
-  /** last chosen sub-group per tab */
-  subTabs?: Partial<Record<PanelTab, string>>;
-  /** last chosen variant per weather family (e.g. temp → feels) */
-  variants?: Partial<Record<string, OverlayId>>;
   version?: number;
 }
 
@@ -182,16 +109,18 @@ const DEFAULT_STATE: GlobeState = {
   base: 'satellite',
   labels: true,
   night: true,
-  overlay: 'wind',
-  wind: true,
+  overlay: 'none',
+  wind: false,
   isobars: false,
-  extras: { cities: true, dwdwarn: true },
-  groups: { fires: true, storms: true, tornado: true, quakes: true, volcanoes: true },
+  extras: {},
+  groups: {},
   projection: 'mercator',
   center: [store.getLastPlace().lon, store.getLastPlace().lat],
   zoom: 5,
-  panelOpen: window.innerWidth > 720,
 };
+
+/** layers whose data keeps flowing in (green dot in the layer list) */
+const LIVE_LAYERS = new Set(['aircraft', 'ships', 'trains', 'transit', 'lightning', 'autobahn', 'dwdwarn', 'nina', 'quakes', 'webcams', 'sondes', 'storms', 'fires']);
 
 const REFRESH_MS = 10 * 60 * 1000;
 
@@ -204,44 +133,23 @@ export interface GlobeView {
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
-  const STATE_VERSION = 3;
+  const STATE_VERSION = 4;
   const saved = store.getGlobeState<Partial<GlobeState>>({});
-  // v2: 2D map became the default view – reset the projection of older saved states once.
-  if ((saved.version ?? 1) < 2) Object.assign(saved, { projection: 'mercator', overlay: 'wind', wind: true });
-  // v3: European data & infrastructure layers – enable city weather and DWD warnings once.
-  if ((saved.version ?? 1) < 3) {
-    const oldDwd = (saved.groups as Record<string, boolean> | undefined)?.dwd;
-    saved.extras = { cities: true, dwdwarn: oldDwd ?? true, ...saved.extras };
-  }
-  saved.version = STATE_VERSION;
-  const state: GlobeState = { ...DEFAULT_STATE, ...saved };
-  state.groups = { ...state.groups };
-  state.extras = { ...state.extras };
-  // "Feuer" combines wildfires and satellite hotspots
-  if (state.groups.fires && state.groups.hotspots === undefined) state.groups.hotspots = true;
-  // panel layout v2: three tabs (old ids map to the new ones)
-  const legacyTab: Record<string, PanelTab> = { events: 'earth', infra: 'earth', traffic: 'live' };
-  if (state.panelTab && legacyTab[state.panelTab]) state.panelTab = legacyTab[state.panelTab];
-  if (!TABS.some((t) => t.id === state.panelTab)) state.panelTab = 'weather';
-  // "Feuer" and "Vulkane" also drive their detail layers
-  for (const [g, x] of Object.entries(LINKED_EXTRA) as [GroupId, ExtraId][]) state.extras[x] = !!state.groups[g];
+  // only the view survives from the old saved state; layers now come from the Karten (src/hud)
+  const state: GlobeState = {
+    ...DEFAULT_STATE,
+    // v2: 2D map became the default view – reset the projection of older saved states once.
+    projection: (saved.version ?? 1) >= 2 && saved.projection === 'globe' ? 'globe' : 'mercator',
+    center: Array.isArray(saved.center) ? saved.center : DEFAULT_STATE.center,
+    zoom: saved.zoom ?? DEFAULT_STATE.zoom,
+    version: STATE_VERSION,
+  };
   const save = () => store.setGlobeState(state);
 
   const el = document.createElement('main');
   el.className = 'view globe-view';
   el.innerHTML = `
     <div class="map" id="map"></div>
-    <div class="globe-top">
-      <button class="btn icon-btn panel-toggle" aria-label="Ebenen" title="Ebenen" aria-expanded="${state.panelOpen}">
-        <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
-      </button>
-      <div class="globe-search"></div>
-      <button class="btn icon-btn settings-btn" aria-label="Einstellungen" title="Einstellungen">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-      </button>
-    </div>
-    <aside class="panel" ${state.panelOpen ? '' : 'hidden'}></aside>
-    <div class="base-switch"></div>
     <dialog class="settings-dialog"></dialog>
     <div class="globe-bottom">
       <div class="legend" hidden></div>
@@ -257,21 +165,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     </div>
     <div class="readout" hidden></div>`;
 
-  const panel = el.querySelector<HTMLElement>('.panel')!;
+  const dockEl = el.querySelector<HTMLElement>('.globe-bottom')!;
   const legend = el.querySelector<HTMLElement>('.legend')!;
   const timeline = el.querySelector<HTMLElement>('.timeline')!;
-  const panelToggle = el.querySelector<HTMLButtonElement>('.panel-toggle')!;
-
-  el.querySelector('.globe-search')!.appendChild(
-    createSearch((p) => { store.setLastPlace(p); focusPlace(p.lat, p.lon, 7, true); }, 'Ort suchen und hinfliegen …'),
-  );
-  panelToggle.addEventListener('click', () => {
-    state.panelOpen = panel.hidden;
-    panel.hidden = !state.panelOpen;
-    panelToggle.setAttribute('aria-expanded', String(state.panelOpen));
-    applyPadding(true);
-    save();
-  });
 
   let map: MlMap | null = null;
   let ready = false;
@@ -287,6 +183,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let refreshTimer = 0;
   let liveTimer = 0;
   let popup: Popup | null = null;
+  let longPressAt = 0;
 
   // ----- feeds -------------------------------------------------------------
   const feedData: Record<FeedId, { at: number; loading: Promise<void> | null; error?: string }> = {
@@ -375,10 +272,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           fd.loading = null;
           if (id === 'firms') applyGroups();
           syncEventSources();
-          renderPanel();
+          refreshHud();
         });
     }
-    renderPanel();
+    refreshHud();
   }
 
   function syncEventSources() {
@@ -422,266 +319,188 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
   }
 
-  // ----- panel -------------------------------------------------------------
-  function renderPanel() {
-    const scrollTop = panel.querySelector('.panel-scroll')?.scrollTop ?? 0;
-    const tab: PanelTab = state.panelTab ?? 'weather';
-    const keys = store.getKeys();
-    const fieldSwatch = (f: FieldId) => {
-      const { stops, gradient } = FIELDS[f].legend;
-      return gradient ?? `linear-gradient(135deg, ${stops.map(([, c]) => c).join(', ')})`;
-    };
-    const famSwatch = (f: (typeof WX_FAMILIES)[number]) => f.swatch ?? fieldSwatch(f.variants[0][0] as FieldId);
-    const activeFam = familyOf(state.overlay);
-    const loading = (g: (typeof GROUPS)[number]) => g.feeds.some((f) => feedData[f].loading);
+  // ----- Karten: applying the active Karte to the map ------------------------
+  // The HUD (src/hud) owns the Karten; the engine below only knows `state`. Whenever the active
+  // Karte changes (switch, edit, reset) applyKarte() derives `state` and brings the map in line.
+  let hud = null as Hud | null;
+  const families = () => (store.getKeys().owm ? [...WX_FAMILIES, OWM_FAMILY] : WX_FAMILIES);
+  const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
 
-    const groupOn = (id: GroupId) => !!state.groups[id];
-    const extraOn = (id: ExtraId) => !!state.extras[id];
-    const groupsOn = GROUPS.filter((g) => g.id !== 'hotspots' && groupOn(g.id)).length;
-    const subCount = (_t: (typeof TABS)[number], sub: SubDef) =>
-      sub.extras.filter(extraOn).length + (sub.groups ? groupsOn : 0);
-    const tabCount = (t: (typeof TABS)[number]) =>
-      t.id === 'weather'
-        ? (state.overlay !== 'none' ? 1 : 0) + (state.wind && !FIELDS[state.overlay as FieldId]?.particles ? 1 : 0) + (state.isobars ? 1 : 0) + WEATHER_EXTRAS.filter(extraOn).length
-        : t.subs.reduce((n, s) => n + subCount(t, s), 0);
+  function applyKarte(k: Karte) {
+    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars };
+    const fam = families().find((f) => f.id === k.main);
+    let overlay: OverlayId = 'none';
+    if (fam) overlay = (fam.variants.find(([v]) => v === k.mainVar) ?? fam.variants[0])[0] as OverlayId;
+    if (overlay.startsWith('owm-') && !store.getKeys().owm) overlay = 'none';
+    state.base = k.base;
+    state.labels = k.labels;
+    state.night = k.night;
+    state.overlay = overlay;
+    // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
+    state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
+    state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
 
-    const tile = (attrs: string, on: boolean, icon: string, label: string, title: string, badge = '') =>
-      `<button type="button" class="ltile ${on ? 'on' : ''}" ${attrs} aria-pressed="${on}" title="${escapeHtml(title)}">
-        ${icon}<span class="ltile-label">${escapeHtml(label)}</span>${badge}</button>`;
-    const extraTile = (id: ExtraId) => {
-      const d = EXTRAS.find((x) => x.id === id);
-      if (!d) return '';
-      return tile(`data-extra="${d.id}"`, extraOn(d.id), glyphSvg(d.glyph, d.color, 20), d.label, `${d.label} – ${d.hint}`, `<span class="ltile-badge" data-badge-for="${d.id}">${extras?.badge(d.id) ?? ''}</span>`);
-    };
-
-    // ----- Wetter
-    const weather = `
-      <div class="tile-grid three">
-        ${WX_FAMILIES.map((f) =>
-          tile(`data-fam="${f.id}"`, activeFam?.id === f.id, `<span class="swatch" style="background:${famSwatch(f)}"></span>`, f.label, f.hint),
-        ).join('')}
-        ${keys.owm ? tile('data-fam="owm"', state.overlay.startsWith('owm-'), '<span class="swatch" style="background:linear-gradient(135deg,#556,#99a)"></span>', 'OWM', 'OpenWeatherMap-Karten') : ''}
-      </div>
-      ${
-        activeFam && activeFam.variants.length > 1
-          ? `<div class="seg-row" role="radiogroup" aria-label="Variante">${activeFam.variants
-              .map(([v, l]) => `<button type="button" class="seg-chip ${state.overlay === v ? 'on' : ''}" data-variant="${v}">${escapeHtml(l)}</button>`)
-              .join('')}</div>`
-          : state.overlay.startsWith('owm-')
-            ? `<div class="seg-row">${OWM_LAYERS.map((l) => `<button type="button" class="seg-chip ${state.overlay === `owm-${l.id}` ? 'on' : ''}" data-variant="owm-${l.id}">${escapeHtml(l.label.replace(' (OWM)', ''))}</button>`).join('')}</div>`
-            : ''
+    const nextExtras: Partial<Record<ExtraId, boolean>> = {};
+    const nextGroups: Partial<Record<GroupId, boolean>> = {};
+    for (const l of k.layers) {
+      if (l.hidden) continue;
+      const c = catalogOf(l.id);
+      if (!c) continue;
+      if (c.kind === 'extra') nextExtras[l.id as ExtraId] = true;
+      else {
+        const g = l.id as GroupId;
+        nextGroups[g] = true;
+        const lg = LINKED_GROUP[g];
+        if (lg) nextGroups[lg] = true;
+        const lx = LINKED_EXTRA[g];
+        if (lx) nextExtras[lx] = true;
       }
-      <div class="seg-row extras-row">
-        <button type="button" class="seg-chip toggle ${state.wind ? 'on' : ''}" data-toggle="wind" aria-pressed="${state.wind}">Windpartikel</button>
-        <button type="button" class="seg-chip toggle ${state.isobars ? 'on' : ''}" data-toggle="isobars" aria-pressed="${state.isobars}">Isobaren</button>
-      </div>
-      <p class="small muted panel-meta">${
-        modelLoading ? 'Vorhersagedaten werden geladen …' : globalModel ? 'Vorhersage bis +5 Tage – Zeitleiste unten' : ''
-      }</p>
-      ${modelErrorText && !globalModel ? `<p class="small panel-error">${escapeHtml(modelErrorText)}</p>` : ''}
-      <h3>Zusätzlich</h3>
-      <div class="tile-grid">${WEATHER_EXTRAS.map(extraTile).join('')}</div>`;
-
-    // ----- sub-grouped tabs
-    const groupTiles = () =>
-      GROUPS.filter((g) => g.id !== 'hotspots')
-        .map((g) => {
-          const on = groupOn(g.id);
-          const count = groupCount(g.id);
-          const label = g.id === 'fires' ? 'Feuer' : g.label.replace(' & Zyklone', '').replace(' & Unwetter (USA)', ' (USA)').replace(', Dürren & Erdrutsche', ' & Dürren').replace(', Schnee, Staub & Hitze', ' & Staub');
-          const hint = g.id === 'fires' ? 'Waldbrände (EONET, GDACS), Satelliten-Hotspots (NASA FIRMS) und Brandflächen USA (NIFC)' : `${g.label} – ${g.hint}`;
-          const badge = `<span class="ltile-badge" data-gbadge="${g.id}">${on && loading(g) ? '…' : on && count != null ? count : ''}</span>`;
-          return tile(`data-group="${g.id}"`, on, glyphSvg(g.icon, kindColor(g.icon), 20), label, hint, badge);
-        })
-        .join('');
-    const curTab = tabDef(tab);
-    const curSub = curTab.subs.find((s) => s.id === state.subTabs?.[tab]) ?? curTab.subs[0];
-    const subBar =
-      curTab.subs.length > 1
-        ? `<div class="subtabs" role="tablist" aria-label="Gruppe">${curTab.subs
-            .map((s) => {
-              const n = subCount(curTab, s);
-              return `<button type="button" role="tab" class="subtab ${s === curSub ? 'on' : ''}" data-sub="${s.id}" aria-selected="${s === curSub}">${escapeHtml(s.label)}${n ? `<i>${n}</i>` : ''}</button>`;
-            })
-            .join('')}</div>`
-        : '';
-    const grouped = curSub
-      ? `${subBar}<div class="tile-grid">${curSub.groups ? groupTiles() : ''}${curSub.extras.map(extraTile).join('')}</div>`
-      : '';
-
-    const tabBtn = (t: (typeof TABS)[number]) => {
-      const n = tabCount(t);
-      return `<button type="button" role="tab" class="ptab ${tab === t.id ? 'on' : ''}" data-tab="${t.id}" aria-selected="${tab === t.id}" aria-label="${t.label}" title="${escapeHtml(t.title)}">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="${t.icon}"/></svg><span class="ptab-label">${t.label}</span>${n ? `<span class="ptab-n">${n}</span>` : ''}</button>`;
-    };
-
-    panel.innerHTML = `
-      <div class="ptabs" role="tablist">${TABS.map(tabBtn).join('')}</div>
-      <div class="panel-scroll">
-        ${tab === 'weather' ? weather : grouped}
-        <div class="panel-notes"></div>
-      </div>`;
-    panel.querySelector('.panel-scroll')!.scrollTop = scrollTop;
-    updateBadges();
-
-    panel.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) =>
-      b.addEventListener('click', () => {
-        state.panelTab = b.dataset.tab as PanelTab;
-        panel.querySelector('.panel-scroll')!.scrollTop = 0;
-        renderPanel();
-        save();
-      }),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-sub]').forEach((b) =>
-      b.addEventListener('click', () => {
-        state.subTabs = { ...state.subTabs, [tab]: b.dataset.sub! };
-        panel.querySelector('.panel-scroll')!.scrollTop = 0;
-        renderPanel();
-        save();
-      }),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-fam]').forEach((b) =>
-      b.addEventListener('click', () => {
-        const fam = b.dataset.fam!;
-        if (fam === 'owm') setOverlay(state.overlay.startsWith('owm-') ? 'none' : (`owm-${OWM_LAYERS[0].id}` as OverlayId));
-        else if (activeFam?.id === fam) setOverlay('none');
-        else {
-          const f = WX_FAMILIES.find((x) => x.id === fam)!;
-          setOverlay(state.variants?.[fam] ?? f.variants[0][0]);
-        }
-      }),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-variant]').forEach((b) =>
-      b.addEventListener('click', () => setOverlay(b.dataset.variant as OverlayId)),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-toggle]').forEach((b) =>
-      b.addEventListener('click', () => {
-        const opt = b.dataset.toggle as 'wind' | 'isobars';
-        state[opt] = !state[opt];
-        applyModelLayers();
-        renderPanel();
-        save();
-      }),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-group]').forEach((b) =>
-      b.addEventListener('click', () => toggleGroup(b.dataset.group as GroupId)),
-    );
-    panel.querySelectorAll<HTMLButtonElement>('[data-extra]').forEach((b) =>
-      b.addEventListener('click', () => toggleExtra(b.dataset.extra as ExtraId)),
-    );
-  }
-
-  function toggleGroup(id: GroupId) {
-    const on = !state.groups[id];
-    state.groups[id] = on;
-    if (id === 'fires') state.groups.hotspots = on; // "Feuer" = Waldbrände + Hotspots
-    const linked = LINKED_EXTRA[id];
-    if (linked) {
-      state.extras[linked] = on;
-      extras?.toggle(linked, on);
     }
-    applyGroups();
-    ensureFeeds();
-    renderPanel();
+    const extrasChanged = !sameKeys(state.extras, nextExtras);
+    const groupsChanged = !sameKeys(state.groups, nextGroups);
+    state.extras = nextExtras;
+    state.groups = nextGroups;
     save();
+    if (!map || !ready) return;
+
+    if (prev.base !== state.base || prev.labels !== state.labels) applyBase();
+    if (prev.night !== state.night) applyNight();
+    if (prev.overlay !== state.overlay) void applyOverlay();
+    else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
+    if (extrasChanged) extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+    if (groupsChanged) {
+      applyGroups();
+      ensureFeeds();
+    }
+    applyLayerOptions(k);
+    applyPadding(true);
+    refreshHud();
   }
 
-  function toggleExtra(id: ExtraId) {
-    const on = !state.extras[id];
-    state.extras[id] = on;
-    extras?.toggle(id, on);
-    renderPanel();
-    save();
+  /** per-layer options: quake magnitude, aircraft kinds, opacity */
+  function applyLayerOptions(k: Karte) {
+    if (!map || !ready) return;
+    const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
+    const minMag = Number(lay('quakes')?.filter) || 0;
+    if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
+    const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
+    if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
+    applyOrder(k);
   }
 
-  function setOverlay(next: OverlayId) {
-    const prev = state.overlay;
-    state.overlay = next;
-    const fam = familyOf(next);
-    if (fam) state.variants = { ...state.variants, [fam.id]: next };
-    // Wind layers bring their particles along (like zoom.earth); leaving them removes them again.
-    const windy = (o: OverlayId) => isField(o) && !!FIELDS[o].particles;
-    if (windy(next) && !windy(prev)) state.wind = true;
-    else if (!windy(next) && windy(prev)) state.wind = false;
-    applyOverlay();
-    renderPanel();
-    save();
-  }
-
-  // ----- base map switcher (Google-Maps style) ------------------------------
-  const baseSwitch = el.querySelector<HTMLDivElement>('.base-switch')!;
-  const BASE_THUMB: Record<BaseId, string> = {
-    satellite: `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`,
-    sentinel: `<img alt="" loading="lazy" src="${EOX_S2.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
-    topo: `<img alt="" loading="lazy" src="${OPENTOPO.replace('{z}/{x}/{y}', '3/4/2')}"/>`,
-    nasa: `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`,
-    blue: `<img alt="" loading="lazy" src="${BLUE_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
-    night: `<img alt="" loading="lazy" src="${BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`,
-    dark: miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a'),
-    light: miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5'),
+  /** map layers behind one entry of a Karte's layer list */
+  const GROUP_LAYERS: Record<GroupId, string[]> = {
+    fires: ['firms', 'hotspots', 'ev-circle', 'ev-glyph'],
+    hotspots: ['firms', 'hotspots'],
+    storms: ['tracks', 'ev-circle', 'ev-glyph'],
+    tornado: ['nws-fill', 'nws-line', 'ev-circle', 'ev-glyph'],
+    quakes: ['quakes'],
+    volcanoes: ['ev-circle', 'ev-glyph'],
+    floods: ['ev-circle', 'ev-glyph'],
+    ice: ['ev-circle', 'ev-glyph'],
   };
-  function miniMap(land: string, water: string, road: string, border: string) {
-    return `<svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" fill="${water}"/>
-      <path d="M0 10 C10 6 18 12 26 9 S40 4 46 12 S56 22 64 18 V64 H34 C30 56 22 58 18 50 S6 46 0 50Z" fill="${land}"/>
-      <path d="M44 40 C50 36 58 40 60 46 S52 58 46 54 S40 44 44 40Z" fill="${water}"/>
-      <path d="M6 30 L24 26 L38 34 L58 30 M20 14 L28 40 L24 62" stroke="${road}" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-      <path d="M2 40 C14 36 20 42 30 38 S44 24 52 26" stroke="${border}" stroke-width="1" stroke-dasharray="3 2" fill="none"/></svg>`;
+  function mapLayersOf(id: string): string[] {
+    const c = catalogOf(id);
+    if (!c) return [];
+    if (c.kind === 'extra') return extras?.layerIds(id as ExtraId) ?? [];
+    const g = id as GroupId;
+    const linked = LINKED_EXTRA[g];
+    return [...GROUP_LAYERS[g], ...(linked ? (extras?.layerIds(linked) ?? []) : [])];
   }
-  function renderBaseSwitch(open = false) {
-    const cur = state.base;
-    baseSwitch.innerHTML = `
-      <button type="button" class="base-current" aria-expanded="${open}" title="Kartentyp wählen">
-        <span class="thumb">${BASE_THUMB[cur]}</span>
-        <span class="base-current-label"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Karte</span>
-      </button>
-      <div class="base-pop" ${open ? '' : 'hidden'}>
-        <div class="base-options">
-          ${BASES.map(
-            (b) => `<button type="button" class="base-opt ${cur === b.id ? 'on' : ''}" data-base="${b.id}" aria-pressed="${cur === b.id}">
-              <span class="thumb">${BASE_THUMB[b.id]}</span><span>${b.label}</span></button>`,
-          ).join('')}
-        </div>
-        <div class="base-toggles">
-          <label><input type="checkbox" data-opt="labels" ${state.labels ? 'checked' : ''}/> Ortsnamen & Grenzen</label>
-          <label><input type="checkbox" data-opt="night" ${state.night ? 'checked' : ''}/> Tag/Nacht</label>
-        </div>
-      </div>`;
-    const pop = baseSwitch.querySelector<HTMLDivElement>('.base-pop')!;
-    const btn = baseSwitch.querySelector<HTMLButtonElement>('.base-current')!;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      pop.hidden = !pop.hidden;
-      btn.setAttribute('aria-expanded', String(!pop.hidden));
-    });
-    baseSwitch.querySelectorAll<HTMLButtonElement>('[data-base]').forEach((b) =>
-      b.addEventListener('click', () => {
-        state.base = b.dataset.base as BaseId;
-        applyBase();
-        renderBaseSwitch(true);
-        save();
-      }),
-    );
-    baseSwitch.querySelectorAll<HTMLInputElement>('input[data-opt]').forEach((i) =>
-      i.addEventListener('change', () => {
-        const opt = i.dataset.opt as 'labels' | 'night';
-        state[opt] = i.checked;
-        if (opt === 'labels') applyBase();
-        else applyNight();
-        save();
-      }),
-    );
-  }
-  renderBaseSwitch();
-  document.addEventListener('click', (e) => {
-    if (!baseSwitch.contains(e.target as Node)) {
-      const pop = baseSwitch.querySelector<HTMLDivElement>('.base-pop');
-      if (pop && !pop.hidden) renderBaseSwitch(false);
+
+  /**
+   * Draw order follows the Karte's layer list (top of the list = drawn on top). Areas (rasters,
+   * fills, lines) and points (circles, symbols) are ordered separately, so areas stay below the
+   * place labels and points above them. The event groups share one point layer, which takes the
+   * position of the topmost group using it.
+   */
+  function applyOrder(k: Karte) {
+    if (!map || !ready) return;
+    const m = map;
+    const seen = new Set<string>();
+    const entries: string[][] = []; // top → bottom
+    for (const l of k.layers) {
+      const ids = mapLayersOf(l.id).filter((id) => !seen.has(id) && m.getLayer(id));
+      ids.forEach((id) => seen.add(id));
+      if (ids.length) entries.push(ids);
     }
-  });
+    if (entries.length < 2) return;
+    const order = m.getStyle().layers.map((l) => l.id);
+    const pos = new Map(order.map((id, i) => [id, i] as const));
+    const isPoint = (id: string) => ['circle', 'symbol', 'heatmap'].includes(m.getLayer(id)!.type);
+    for (const point of [false, true]) {
+      // wanted order, bottom → top; the layers of one entry keep their own relative order
+      const want = [...entries].reverse().flatMap((e) => e.filter((id) => isPoint(id) === point).sort((a, b) => pos.get(a)! - pos.get(b)!));
+      if (want.length < 2) continue;
+      const now = [...want].sort((a, b) => pos.get(a)! - pos.get(b)!);
+      if (now.every((id, i) => id === want[i])) continue;
+      const anchor = order[pos.get(now[now.length - 1])! + 1];
+      for (const id of want) m.moveLayer(id, anchor);
+    }
+  }
+
+  function layerInfo(id: string): LayerInfo {
+    const c = catalogOf(id);
+    if (!c) return { sub: '', live: false, count: null };
+    const live = LIVE_LAYERS.has(id);
+    if (c.kind === 'group') {
+      const g = id as GroupId;
+      if (!state.groups[g]) return { sub: '', live: false, count: null };
+      const n = groupCount(g);
+      const loading = GROUPS.find((x) => x.id === g)!.feeds.some((f) => feedData[f].loading);
+      return { sub: loading && n == null ? 'lädt …' : n != null ? `${fmt.num(n)} aktuell` : '', live: live && n != null, count: n };
+    }
+    const e = id as ExtraId;
+    const n = extras?.count(e);
+    const parts: string[] = [];
+    if (extras?.badge(e) === '…') parts.push('lädt …');
+    else if (n != null) parts.push(`${fmt.num(n)} geladen`);
+    const note = extras?.note(e);
+    if (note) parts.push(note);
+    return { sub: parts.join(' · '), live: live && n != null, count: n ?? null };
+  }
+
+  function eventList(hours: number): HudEvent[] {
+    const cutoff = Date.now() - hours * 3600000;
+    const quakes = emscPoints.length ? [...emscPoints, ...quakePoints.filter((q) => !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1]))] : quakePoints;
+    const items = [...eonetPoints, ...gdacsPoints, ...nwsPoints, ...spcPoints, ...quakes]
+      .filter((f) => state.groups[KIND_GROUP[f.properties.kind]] && f.properties.date && Date.parse(f.properties.date) >= cutoff)
+      .sort((a, b) => Date.parse(b.properties.date!) - Date.parse(a.properties.date!));
+    // a mix of kinds instead of 6 quakes: at most two per kind
+    const perKind: Partial<Record<EventKind, number>> = {};
+    const out: HudEvent[] = [];
+    for (const f of items) {
+      const p = f.properties;
+      if ((perKind[p.kind] ?? 0) >= 2) continue;
+      perKind[p.kind] = (perKind[p.kind] ?? 0) + 1;
+      out.push({ kind: p.kind, color: p.color ?? kindColor(p.kind), title: p.title, sub: p.subtitle ?? p.source, when: fmt.relative(p.date!) });
+      if (out.length >= 6) break;
+    }
+    return out;
+  }
+
+  let hudTimer = 0;
+  /** live numbers changed (feeds, counts): refresh the HUD without rebuilding it */
+  function refreshHud() {
+    if (hudTimer) return;
+    hudTimer = window.setTimeout(() => {
+      hudTimer = 0;
+      hud?.refreshLive();
+    }, 120);
+  }
+
+  /** Keep the globe centred in the free area next to the open Karte stack on wide screens. */
+  function applyPadding(animate = false) {
+    if (!map) return;
+    const left = hud?.stackWidth() ?? 0;
+    if (animate) map.easeTo({ padding: { left, top: 0, right: 0, bottom: 0 }, duration: 300 });
+    else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
+  }
 
   // ----- settings dialog (API keys, sources) --------------------------------
   const settings = el.querySelector<HTMLDialogElement>('.settings-dialog')!;
-  el.querySelector('.settings-btn')!.addEventListener('click', () => {
+  const openSettings = () => {
     const keys = store.getKeys();
     settings.innerHTML = `
       <form method="dialog" class="keys-form" autocomplete="off">
@@ -736,15 +555,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), radarHost: /^https:\/\//.test(get('radarHost') ?? '') ? get('radarHost') : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       firmsOk = false;
-      if (state.overlay.startsWith('owm-') && !get('owm')) state.overlay = 'none';
-      applyOverlay();
+      if (hud) applyKarte(hud.current());
       applyGroups();
       ensureFeeds();
       extras?.resume();
-      renderPanel();
+      refreshHud();
       toast('Einstellungen gespeichert');
     });
-  });
+  };
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
@@ -760,42 +578,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     save();
   }
 
-  /** Keep the globe centred in the free area next to the layer panel on wide screens. */
-  function applyPadding(animate = false) {
-    if (!map) return;
-    const left = state.panelOpen && window.innerWidth > 720 ? panel.offsetWidth + 12 : 0;
-    if (animate) map.easeTo({ padding: { left, top: 0, right: 0, bottom: 0 }, duration: 300 });
-    else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
-  }
-
   const vis = (id: string, on: boolean) => {
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   };
 
-  /** Update counts/notes of the extra layers without re-rendering the whole panel. */
-  function updateBadges() {
-    if (!extras) return;
-    for (const g of GROUPS) {
-      const gb = panel.querySelector(`[data-gbadge="${g.id}"]`);
-      if (!gb) continue;
-      const n = groupCount(g.id);
-      gb.textContent = state.groups[g.id] && n != null ? String(n) : '';
-    }
-    for (const d of EXTRAS) {
-      const badge = panel.querySelector(`[data-badge-for="${d.id}"]`);
-      if (badge) badge.textContent = extras.badge(d.id);
-    }
-    // hints like "zoom in to see aircraft" for the layers on the current tab/sub-group
-    const tab = state.panelTab ?? 'weather';
-    const t = tabDef(tab);
-    const sub = t.subs.find((x) => x.id === state.subTabs?.[tab]) ?? t.subs[0];
-    const ids = tab === 'weather' ? WEATHER_EXTRAS : sub?.extras ?? [];
-    const notes = EXTRAS.filter((d) => ids.includes(d.id))
-      .map((d) => [d.label, extras!.note(d.id)] as const)
-      .filter(([, n]) => n);
-    const box = panel.querySelector('.panel-notes');
-    if (box) box.innerHTML = notes.map(([l, n]) => `<p class="small note">${escapeHtml(l)}: ${escapeHtml(n!)}</p>`).join('');
-  }
+  /** counts/notes of the extra layers changed (layers may also have been added lazily: keep the order) */
+  const reorder = debounce(() => hud && applyOrder(hud.current()), 300);
+  const updateBadges = () => {
+    refreshHud();
+    reorder();
+  };
 
   function applyBase() {
     if (!map) return;
@@ -859,14 +651,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       : 'Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.';
     if (msg !== modelErrorText) toast(msg, 'error');
     modelErrorText = msg;
-    renderPanel();
+    refreshHud();
     renderLegend();
   }
 
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
     if (modelLoading) {
-      renderPanel();
+      refreshHud();
       renderLegend();
     }
     try {
@@ -886,7 +678,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     } finally {
       if (modelLoading) {
         modelLoading = false;
-        renderPanel();
+        refreshHud();
       }
     }
   }
@@ -1112,7 +904,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let timelineKey = '';
   function renderTimeline() {
     const mode = timelineMode();
-    timeline.hidden = mode === 'none';
+    if (timeline.hidden !== (mode === 'none')) {
+      timeline.hidden = mode === 'none';
+      hud?.syncSheet();
+    }
     if (mode === 'none') return;
     const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
     const idx = mode === 'radar' ? radarIdx : timeIdx;
@@ -1211,9 +1006,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   });
 
   // ----- legend & readout --------------------------------------------------
-  function renderLegend() {
+  function legendInfo(): LegendInfo | null {
     const o = state.overlay;
-    let html = '';
+    const t = (title: string, sub: string, gradient: string, ticks: [number, string][]): LegendInfo => ({
+      title, sub, gradient, ticks: ticks.map(([pos, label]) => ({ pos, label })),
+    });
     if (isField(o)) {
       const def = FIELDS[o];
       const { stops, ticks, gradient } = def.legend;
@@ -1221,49 +1018,63 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const hi = stops[stops.length - 1][0];
       const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
       const grad = gradient ?? `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
-      html = `<div class="legend-title">${escapeHtml(def.label)} <small>${def.unit}${
-        sampler ? ` · ${escapeHtml(timeLabel(sampler.time))}` : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${escapeHtml(modelErrorText)}` : ''
-      }</small></div>
-        <div class="legend-bar" style="background:${grad}"></div>
-        <div class="legend-ticks">${ticks.map((t) => `<span style="left:${pct(t)}%">${def.format(t)}</span>`).join('')}</div>`;
-    } else if (o === 'radar') {
-      html = `<div class="legend-title">Niederschlagsradar <small>live</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)"></div>
-        <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">stark</span></div>`;
-    } else if (o === 'dwd-radar') {
-      html = `<div class="legend-title">Radar Deutschland <small>DWD · letzte Messung, alle 5 min aktualisiert</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)"></div>
-        <div class="legend-ticks"><span style="left:0">leicht</span><span style="left:50%">mäßig</span><span style="left:100%">Unwetter</span></div>`;
-    } else if (o === 'sat-hd') {
-      html = `<div class="legend-title">Satellit HD <small>NASA VIIRS · Tagesbild von gestern</small></div>`;
-    } else if (o === 'sat-ir') {
-      html = `<div class="legend-title">Satellit Infrarot <small>live · hohe, kalte Wolken erscheinen hell</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#111,#777,#fff)"></div>
-        <div class="legend-ticks"><span style="left:0">warm/tief</span><span style="left:100%">kalt/hoch</span></div>`;
-    } else if (o === 'sst') {
-      html = `<div class="legend-title">Meerestemperatur <small>NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)"></div>
-        <div class="legend-ticks"><span style="left:0">−2</span><span style="left:35%">10</span><span style="left:65%">20</span><span style="left:100%">32</span></div>`;
-    } else if (o === 'seaice') {
-      html = `<div class="legend-title">Meereis-Konzentration <small>NASA GHRSST MUR · vor 2 Tagen</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)"></div>
-        <div class="legend-ticks"><span style="left:0">gering</span><span style="left:100%">100 %</span></div>`;
-    } else if (o === 'imerg') {
-      html = `<div class="legend-title">Niederschlag Satellit <small>NASA IMERG · mm/h</small></div>
-        <div class="legend-bar" style="background:linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)"></div>
-        <div class="legend-ticks"><span style="left:0">0,1</span><span style="left:50%">5</span><span style="left:100%">50+</span></div>`;
+      const sub = `${def.unit}${sampler ? ` · ${timeLabel(sampler.time)}` : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
+      return t(def.label, sub, grad, ticks.map((v) => [pct(v), def.format(v)]));
     }
-    legend.innerHTML = html;
-    legend.hidden = !html;
+    switch (o) {
+      case 'radar':
+        return t('Niederschlagsradar', 'live', 'linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)', [[0, 'leicht'], [50, 'mäßig'], [100, 'stark']]);
+      case 'dwd-radar':
+        return t('Radar Deutschland', 'DWD · letzte Messung, alle 5 min aktualisiert', 'linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)', [[0, 'leicht'], [50, 'mäßig'], [100, 'Unwetter']]);
+      case 'sat-hd':
+        // a true-colour image: no colour scale
+        return t('Satellit HD', 'NASA VIIRS · Tagesbild von gestern', '', []);
+      case 'sat-ir':
+        return t('Satellit Infrarot', 'live · hohe, kalte Wolken erscheinen hell', 'linear-gradient(90deg,#111,#777,#fff)', [[0, 'warm/tief'], [100, 'kalt/hoch']]);
+      case 'sst':
+        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+      case 'seaice':
+        return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
+      case 'imerg':
+        return t('Niederschlag Satellit', 'NASA IMERG · mm/h', 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, '0,1'], [50, '5'], [100, '50+']]);
+      default:
+        return null;
+    }
+  }
+
+  function renderLegend() {
+    const l = legendInfo();
+    legend.innerHTML = l
+      ? `<div class="legend-title">${escapeHtml(l.title)} <small>${escapeHtml(l.sub)}</small></div>${
+          l.gradient
+            ? `<div class="legend-bar" style="background:${l.gradient}"></div>
+        <div class="legend-ticks">${l.ticks.map((x) => `<span style="left:${x.pos}%">${escapeHtml(x.label)}</span>`).join('')}</div>`
+            : ''
+        }`
+      : '';
+    legend.hidden = !l;
+    // without a colour scale (true-colour image) the phone layouts, which show only the bar, drop it
+    legend.classList.toggle('no-scale', !!l && !l.gradient);
+    hud?.syncSheet();
   }
 
   const readout = el.querySelector<HTMLDivElement>('.readout')!;
   const hideReadout = () => {
     readout.hidden = true;
   };
-  function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }) {
+  function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }, touch = false) {
     const o = state.overlay;
-    if (!isField(o) || !sampler || !matchMedia('(pointer: fine)').matches) return hideReadout();
+    if (touch && o === 'radar') {
+      // long-press on a phone: rain value of the radar under the finger
+      const byte = radarGl?.sample(lngLat.lng, lngLat.lat);
+      if (byte == null) return hideReadout();
+      const rr = rainRate(byte);
+      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${fmt.num(rr, rr < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag';
+      readout.style.transform = `translate(${Math.max(8, point.x - 40)}px, ${Math.max(8, point.y - 64)}px)`;
+      readout.hidden = false;
+      return;
+    }
+    if (!isField(o) || !sampler || (!touch && !matchMedia('(pointer: fine)').matches)) return hideReadout();
     const def = FIELDS[o];
     const v = sampler.sample(def.variable, lngLat.lat, lngLat.lng);
     if (Number.isNaN(v)) return hideReadout();
@@ -1274,7 +1085,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extra = ` ${compass(((Math.atan2(-u, -w) * 180) / Math.PI + 360) % 360)}`;
     }
     readout.textContent = `${def.format(v)} ${def.unit}${extra}`;
-    readout.style.transform = `translate(${point.x + 14}px, ${point.y + 14}px)`;
+    readout.style.transform = touch ? `translate(${Math.max(8, point.x - 40)}px, ${Math.max(8, point.y - 64)}px)` : `translate(${point.x + 14}px, ${point.y + 14}px)`;
     readout.hidden = false;
   }
 
@@ -1305,7 +1116,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // radar read-out of the Orbis composites: available even if the weather request fails
     const radarLine =
       rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${fmt.num(rain, rain < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag')}</b></div>` : '';
-    const node = openPopup({ lng, lat }, `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`);
+    const loadingHtml = `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`;
+    let node: HTMLElement;
+    if (hud?.layout() === 'portrait') {
+      // phone: the place weather fills the bottom sheet instead of a pop-up
+      popup?.remove();
+      node = document.createElement('div');
+      node.innerHTML = loadingHtml;
+      hud.showPlace(node);
+      setData('marker', [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] } as Point, properties: {} }]);
+    } else node = openPopup({ lng, lat }, loadingHtml);
     try {
       const w = await getCurrent(lat, lng);
       const c = w.current;
@@ -1322,9 +1142,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <span>Wolken</span><b>${Math.round(c.cloud_cover)} %</b>
           <span>Druck</span><b>${Math.round(c.pressure_msl)} hPa</b>
         </div>
-        <button class="btn small wide" data-act="open">Vorhersage öffnen →</button>
+        <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
       </div>`;
-      node.querySelector('[data-act=open]')!.addEventListener('click', async () => {
+      node.querySelector('[data-wx=open]')!.addEventListener('click', async () => {
         onOpenForecast(await reverseGeocodePoint(lat, lng));
       });
     } catch {
@@ -1356,8 +1176,21 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       minZoom: 0.3, // below this the 3D globe hands over to the solar system view
       attributionControl: { compact: true },
     });
-    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // bottom right, stacked from the bottom up: zoom/compass, 2D/3D, locate (later controls sit on top)
+    map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
+    el.querySelector('.maplibregl-ctrl-zoom-in')?.parentElement?.classList.add('nav-ctl');
+    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
+
+    // phones: the attribution stays collapsed until the "i" button is tapped (MapLibre opens it
+    // by itself whenever new sources bring attributions)
+    const attrib = el.querySelector<HTMLElement>('.maplibregl-ctrl-attrib');
+    if (attrib) {
+      let tapped = 0;
+      attrib.addEventListener('click', () => (tapped = performance.now()), true);
+      new MutationObserver(() => {
+        if (hud?.layout() !== 'desktop' && attrib.classList.contains('maplibregl-compact-show') && performance.now() - tapped > 400) attrib.classList.remove('maplibregl-compact-show');
+      }).observe(attrib, { attributes: true, attributeFilter: ['class'] });
+    }
 
     // Locate button
     // 2D / 3D switch
@@ -1417,10 +1250,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       },
       { passive: true },
     );
-    map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'top-right');
+    map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'bottom-right');
 
     const locCtl = document.createElement('div');
-    locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+    locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group loc-ctl';
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
     locCtl.querySelector('button')!.addEventListener('click', async () => {
       try {
@@ -1431,7 +1264,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         toast('Standort konnte nicht ermittelt werden.', 'error');
       }
     });
-    map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'top-right');
+    map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
 
     map.on('load', () => {
       ready = true;
@@ -1443,6 +1276,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
+      if (hud) applyLayerOptions(hud.current());
       applyPadding();
       applyBase();
       applyNight();
@@ -1455,6 +1289,59 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         pendingFocus = null;
       }
     });
+
+    // long-press (touch): only the value under the finger
+    {
+      const cont = map.getContainer();
+      let lpTimer = 0;
+      let lpStart: { x: number; y: number } | null = null;
+      let lpShown = false;
+      const lpClear = () => {
+        clearTimeout(lpTimer);
+        lpStart = null;
+      };
+      cont.addEventListener(
+        'touchstart',
+        (e) => {
+          lpClear();
+          lpShown = false;
+          if (e.touches.length !== 1 || !map) return;
+          const t = e.touches[0];
+          lpStart = { x: t.clientX, y: t.clientY };
+          lpTimer = window.setTimeout(() => {
+            if (!lpStart || !map) return;
+            const r = cont.getBoundingClientRect();
+            const pt = { x: lpStart.x - r.left, y: lpStart.y - r.top };
+            lpShown = true;
+            longPressAt = performance.now();
+            updateReadout(pt, map.unproject([pt.x, pt.y]), true);
+          }, 450);
+        },
+        { passive: true },
+      );
+      cont.addEventListener(
+        'touchmove',
+        (e) => {
+          const t = e.touches[0];
+          if (lpStart && t && Math.hypot(t.clientX - lpStart.x, t.clientY - lpStart.y) > 10) lpClear();
+        },
+        { passive: true },
+      );
+      const lpEnd = () => {
+        lpClear();
+        if (lpShown) {
+          longPressAt = performance.now();
+          window.setTimeout(hideReadout, 1500);
+        }
+      };
+      cont.addEventListener('touchend', lpEnd, { passive: true });
+      cont.addEventListener('touchcancel', lpEnd, { passive: true });
+    }
+
+    // the compass appears only when the map is rotated or tilted
+    const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
+    map.on('rotate', syncRotated);
+    map.on('pitch', syncRotated);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     map.on('mouseout', hideReadout);
@@ -1471,6 +1358,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const interactive = ['ev-circle', 'quakes', 'firms', 'nws-fill', ...EXTRA_CLICK_LAYERS];
     const areaLayers = ['nws-fill', 'dwd-warn-fill', 'cables'];
     map.on('click', (e) => {
+      if (longPressAt && performance.now() - longPressAt < 700) return;
+      if (hud?.placeOpen()) {
+        // a second tap on the map closes the place sheet
+        hud.clearPlace();
+        return;
+      }
       const layers = interactive.filter((l) => map!.getLayer(l));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
@@ -1510,6 +1403,50 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
   }
 
+  // ----- the HUD ------------------------------------------------------------
+  hud = createHud({
+    apply: applyKarte,
+    info: layerInfo,
+    legend: legendInfo,
+    events: eventList,
+    families,
+    view: (): KView => {
+      const c = map?.getCenter();
+      return { center: c ? [+c.lng.toFixed(3), +c.lat.toFixed(3)] : [...state.center], zoom: +(map?.getZoom() ?? state.zoom).toFixed(1) };
+    },
+    goTo(v) {
+      if (map && ready) map.flyTo({ center: v.center, zoom: v.zoom, speed: 1.4, essential: true });
+      else {
+        state.center = [...v.center];
+        state.zoom = v.zoom;
+        if (map) pendingFocus = { lat: v.center[1], lon: v.center[0], zoom: v.zoom };
+      }
+    },
+    async placeName(v) {
+      // any point on the map: Nominatim (BigDataCloud may only be asked for the own position)
+      const p = await reverseGeocodePoint(v.center[1], v.center[0]);
+      return p.name && p.name !== 'Ausgewählter Ort' ? p.name : undefined;
+    },
+    onPlace(p) {
+      store.setLastPlace(p);
+      focusPlace(p.lat, p.lon, 7, true);
+    },
+    openSettings,
+    layout: () => applyPadding(true),
+    dock: () => dockEl,
+    placeClosed: () => setData('marker', []),
+  });
+  el.appendChild(hud.el);
+  hud.relayout();
+  {
+    const k = hud.current();
+    if (k.view) {
+      state.center = [...k.view.center];
+      state.zoom = k.view.zoom;
+    }
+    applyKarte(k);
+  }
+
   return {
     el,
     activate(focus) {
@@ -1517,8 +1454,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (map) setProjection(focus.projection);
         else state.projection = focus.projection;
       }
+      hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
-        renderPanel();
         initMap();
       } else {
         map.resize();

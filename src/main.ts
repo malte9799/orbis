@@ -1,5 +1,6 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
+import './hud/hud.css';
 import { setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { store, type Place } from './store';
@@ -81,6 +82,7 @@ function route() {
   globe.el.hidden = next !== 'globe';
   if (space) space.el.hidden = next !== 'space';
   document.body.classList.toggle('mode-globe', next !== 'forecast');
+  document.body.classList.toggle('mode-map', next === 'globe');
   document.querySelectorAll<HTMLAnchorElement>('.tabs a').forEach((a) => {
     const on = a.dataset.route === (next === 'planet' ? 'space' : next);
     a.classList.toggle('active', on);

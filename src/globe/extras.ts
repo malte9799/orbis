@@ -325,7 +325,20 @@ const ALT_COLOR: ExpressionSpecification = [
   ['interpolate', ['linear'], ['get', 'altM'], 0, '#ffd23f', 3000, '#7bd389', 8000, '#4fc3f7', 12000, '#b388ff'],
 ];
 
+/** paint properties that control the opacity of a map layer, by layer type */
+const OPACITY_PROPS: Record<string, string[]> = {
+  raster: ['raster-opacity'],
+  fill: ['fill-opacity'],
+  line: ['line-opacity'],
+  circle: ['circle-opacity', 'circle-stroke-opacity'],
+  symbol: ['icon-opacity', 'text-opacity'],
+  heatmap: ['heatmap-opacity'],
+  'fill-extrusion': ['fill-extrusion-opacity'],
+};
+
 export class ExtraLayers {
+  private opacity: Partial<Record<ExtraId, number>> = {};
+  private baseOpacity = new Map<string, unknown>();
   private on = new Set<ExtraId>();
   private info: Partial<Record<ExtraId, Info>> = {};
   private timers: Partial<Record<string, number>> = {};
@@ -1294,6 +1307,36 @@ export class ExtraLayers {
     if (this.ready) this.apply();
   }
 
+  /** Opacity of a layer in percent (100 = as designed); scales the original paint value of its map layers. */
+  setOpacity(id: ExtraId, percent: number) {
+    const f = Math.max(0.05, Math.min(1, percent / 100));
+    if ((this.opacity[id] ?? 1) === f) return;
+    this.opacity[id] = f;
+    this.applyOpacity(id);
+  }
+
+  private applyOpacity(id: ExtraId) {
+    const f = this.opacity[id] ?? 1;
+    for (const lid of LAYERS[id]) {
+      const type = this.map.getLayer(lid)?.type;
+      const props = type ? OPACITY_PROPS[type] : undefined;
+      if (!props) continue;
+      for (const prop of props) {
+        const key = `${lid}.${prop}`;
+        if (!this.baseOpacity.has(key)) this.baseOpacity.set(key, this.map.getPaintProperty(lid, prop as never));
+        const base = this.baseOpacity.get(key);
+        let next: unknown;
+        if (f === 1) next = base;
+        else if (base == null) next = f;
+        else if (typeof base === 'number') next = base * f;
+        // expressions that depend on the zoom must stay a top-level interpolate/step – leave those alone
+        else if (Array.isArray(base) && !JSON.stringify(base).includes('"zoom"')) next = ['*', f, base];
+        else continue;
+        this.map.setPaintProperty(lid, prop as never, next as never);
+      }
+    }
+  }
+
   /** Badge text in the panel: count, '…' while loading or empty. */
   badge(id: ExtraId): string {
     const i = this.info[id];
@@ -1309,6 +1352,11 @@ export class ExtraLayers {
 
   note(id: ExtraId): string | undefined {
     return this.on.has(id) ? this.info[id]?.note : undefined;
+  }
+
+  /** The map layers of a layer entry (for the draw order), in their style order. */
+  layerIds(id: ExtraId): string[] {
+    return LAYERS[id] ?? [];
   }
 
   stop() {
@@ -1369,6 +1417,8 @@ export class ExtraLayers {
     const visible = new Set<string>();
     for (const id of this.on) LAYERS[id].forEach((l) => visible.add(l));
     for (const l of new Set(Object.values(LAYERS).flat())) this.vis(l, visible.has(l));
+    // layers that were added lazily pick up the chosen opacity now
+    for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
     // power plants share layers – filter by enabled categories
     const cats = (Object.keys(POWER_CAT) as ExtraId[]).filter((id) => this.on.has(id)).map((id) => POWER_CAT[id]!);
     this.map.setFilter('power', ['in', ['get', 'cat'], ['literal', cats]]);
