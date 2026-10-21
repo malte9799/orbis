@@ -6,15 +6,17 @@ set -u
 stage="${1:-}"; final="${2:-}"
 state="${RUNNER_TEMP:-/tmp}/pr-status"
 mkdir -p "$state"
+if [ -z "$final" ]; then echo "$stage" > "$state/stage"; fi
 # re-check while no PR was found: it may be opened while the build is running
-if [ ! -s "$state/pr" ]; then
-  gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number -q '.[0].number' > "$state/pr" 2>/dev/null || true
+# (without a PR gh prints an empty line / "null", so only a number counts as found)
+pr=$(cat "$state/pr" 2>/dev/null || true)
+if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
+  pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
+  [[ "$pr" =~ ^[0-9]+$ ]] || exit 0   # no open PR for this branch (yet)
+  echo "$pr" > "$state/pr"
 fi
-pr=$(cat "$state/pr")
-[ -n "$pr" ] || exit 0   # no open PR for this branch
 
 steps=("Abhängigkeiten installieren" "Texturen & Modelle" "Build" "Veröffentlichen" "Online prüfen")
-if [ -z "$final" ]; then echo "$stage" > "$state/stage"; fi
 cur=$(cat "$state/stage" 2>/dev/null || echo "")
 
 rows=""; seen=0
