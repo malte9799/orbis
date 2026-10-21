@@ -495,6 +495,20 @@ interface Particle {
   visible: boolean;
 }
 
+/** Far side of the globe: MapLibre's own horizon test when available, else a great-circle estimate. */
+export function occlusionTest(map: MlMap): (ll: LngLat) => boolean {
+  const t = (map as unknown as { _camera?: { transform?: { isLocationOccluded?: (l: LngLat) => boolean } } })._camera
+    ?.transform;
+  if (t?.isLocationOccluded) return (ll) => t.isLocationOccluded!(ll);
+  if (map.getProjection?.()?.type !== 'globe') return () => false;
+  const c = map.getCenter();
+  const rad = Math.PI / 180;
+  const sinC = Math.sin(c.lat * rad);
+  const cosC = Math.cos(c.lat * rad);
+  // fallback: great-circle angle from the view centre > ~85°
+  return (ll) => sinC * Math.sin(ll.lat * rad) + cosC * Math.cos(ll.lat * rad) * Math.cos((ll.lng - c.lng) * rad) < 0.09;
+}
+
 export class WindParticles {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -599,20 +613,6 @@ export class WindParticles {
     p.age = 70 + Math.floor(Math.random() * 10);
   }
 
-  /** Far side of the globe must not show particles. Uses MapLibre's own test when available. */
-  private occlusionTest(): (ll: LngLat) => boolean {
-    const t = (this.map as unknown as { _camera?: { transform?: { isLocationOccluded?: (l: LngLat) => boolean } } })._camera
-      ?.transform;
-    if (t?.isLocationOccluded) return (ll) => t.isLocationOccluded!(ll);
-    const c = this.map.getCenter();
-    const rad = Math.PI / 180;
-    const sinC = Math.sin(c.lat * rad);
-    const cosC = Math.cos(c.lat * rad);
-    // fallback: great-circle angle from the view centre > ~85°
-    return (ll) =>
-      sinC * Math.sin(ll.lat * rad) + cosC * Math.cos(ll.lat * rad) * Math.cos((ll.lng - c.lng) * rad) < 0.09;
-  }
-
   private step() {
     const g = this.getSampler();
     if (!g) return;
@@ -627,7 +627,7 @@ export class WindParticles {
 
     const zoom = this.map.getZoom();
     const degPerMs = (0.11 * 360) / (512 * 2 ** zoom); // degrees per frame per (m/s)
-    const occluded = this.occlusionTest();
+    const occluded = occlusionTest(this.map);
     const buckets: Path2D[] = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
     const ll = new LngLat(0, 0);
 
