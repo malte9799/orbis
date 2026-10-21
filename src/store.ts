@@ -67,6 +67,9 @@ export const store = {
   getGlobeState: <T>(fallback: T): T => read('wg.globe', fallback),
   setGlobeState: (s: unknown) => write('wg.globe', s),
 
+  getHud: <T>(fallback: T): T => read('wg.hud', fallback),
+  setHud: (s: unknown) => write('wg.hud', s),
+
   getKeys: (): ApiKeys => read('wg.keys', {}),
   setKeys: (k: ApiKeys) => write('wg.keys', k),
 
