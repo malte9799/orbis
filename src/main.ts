@@ -64,8 +64,21 @@ function loadPlanet(): Promise<PlanetMapView> {
   return planetLoading;
 }
 
+// Games (own map, separate from the layer drawer), loaded on demand
+type GamesView = import('./views/games').GamesView;
+let games: GamesView | null = null;
+let gamesLoading: Promise<GamesView> | null = null;
+function loadGames(): Promise<GamesView> {
+  gamesLoading ??= import('./views/games').then(({ createGamesView }) => {
+    games = createGamesView();
+    app.append(games.el);
+    return games;
+  });
+  return gamesLoading;
+}
+
 let forecastLoaded = false;
-let active: 'forecast' | 'globe' | 'space' | 'planet' | null = null;
+let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | null = null;
 
 function route() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
@@ -73,14 +86,16 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
+  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   if (active === 'space' && next !== 'space') space?.deactivate();
   if (active === 'planet' && next !== 'planet') planet?.deactivate();
+  if (active === 'games' && next !== 'games') games?.deactivate();
   forecast.el.hidden = next !== 'forecast';
   globe.el.hidden = next !== 'globe';
   if (space) space.el.hidden = next !== 'space';
+  if (games) games.el.hidden = next !== 'games';
   document.body.classList.toggle('mode-globe', next !== 'forecast');
   document.body.classList.toggle('mode-map', next === 'globe');
   document.querySelectorAll<HTMLAnchorElement>('.tabs a').forEach((a) => {
@@ -90,7 +105,13 @@ function route() {
     else a.removeAttribute('aria-current');
   });
 
-  if (next === 'space') {
+  if (next === 'games') {
+    loadGames().then((v) => {
+      if (active !== 'games') return;
+      v.el.hidden = false;
+      v.activate();
+    });
+  } else if (next === 'space') {
     const wasActive = active === 'space';
     loadSpace().then((v) => {
       if (active !== 'space') return;

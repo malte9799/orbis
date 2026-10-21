@@ -17,6 +17,8 @@ export interface ApiKeys {
   trafiklab?: string;
   /** US National Park Service API (free) */
   nps?: string;
+  /** Mapillary client token (free) – street photos for the street guessing game */
+  mapillary?: string;
 }
 
 export interface Place {

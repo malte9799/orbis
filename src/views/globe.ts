@@ -539,7 +539,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.
         <a href="https://github.com/malte9799/orbis/blob/main/docs/DATENQUELLEN.md" target="_blank" rel="noopener">Alle Quellen mit Lizenzen</a> ·
         Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
-        <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>.
+        <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>, <a href="./licenses/flag-icons.txt" target="_blank">flag-icons</a>, <a href="./licenses/mapillary-js.txt" target="_blank">mapillary-js</a>.
         Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
         <div class="dialog-actions">
           <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
