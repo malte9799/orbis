@@ -218,10 +218,16 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       b.addEventListener('click', () => {
         const panel = b.nextElementSibling as HTMLElement;
         const open = panel.hidden;
-        if (open && !panel.firstChild) panel.innerHTML = renderDayHours(f, f.daily.time[Number(b.dataset.day)]);
-        panel.hidden = !open;
-        b.setAttribute('aria-expanded', String(open));
-        b.closest('li')!.classList.toggle('open', open);
+        body.querySelectorAll<HTMLButtonElement>('.d-row[aria-expanded=true]').forEach((o) => {
+          o.setAttribute('aria-expanded', 'false');
+          (o.nextElementSibling as HTMLElement).hidden = true;
+          o.closest('li')!.classList.remove('open');
+        });
+        if (!open) return;
+        if (!panel.firstChild) panel.innerHTML = renderDayHours(f, f.daily.time[Number(b.dataset.day)]);
+        panel.hidden = false;
+        b.setAttribute('aria-expanded', 'true');
+        b.closest('li')!.classList.add('open');
       }),
     );
 
@@ -317,22 +323,25 @@ function renderDaily(f: Forecast) {
 
 function renderDayHours(f: Forecast, date: string) {
   const h = f.hourly;
-  const rows: string[] = [];
+  const cols: string[] = [];
   h.time.forEach((t, i) => {
     if (!t.startsWith(date)) return;
     const prob = h.precipitation_probability[i];
     const uv = h.uv_index[i];
-    rows.push(`<tr>
-      <th scope="row">${fmt.hour(t)}</th>
-      <td title="${escapeHtml(describe(h.weather_code[i]))}">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 28)}</td>
-      <td class="h-temp">${fmt.temp(h.temperature_2m[i])}<small>gefühlt ${fmt.temp(h.apparent_temperature[i])}</small></td>
-      <td class="${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : '–'}<small>${h.precipitation[i] > 0 ? `${fmt.num(h.precipitation[i], 1)} mm` : ''}</small></td>
-      <td>${Math.round(h.wind_speed_10m[i])} km/h<small>Böen ${Math.round(h.wind_gusts_10m[i])}</small></td>
-      <td>${uv != null ? fmt.num(uv, 0) : '–'}</td>
-    </tr>`);
+    cols.push(`<div class="h-col">
+      <b>${fmt.hour(t)}</b>
+      <span title="${escapeHtml(describe(h.weather_code[i]))}">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 30)}</span>
+      <span class="h-temp">${fmt.temp(h.temperature_2m[i])}</span>
+      <small>gef. ${fmt.temp(h.apparent_temperature[i])}</small>
+      <span class="h-rain ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : '–'}</span>
+      <small>${h.precipitation[i] > 0 ? `${fmt.num(h.precipitation[i], 1)} mm` : '&nbsp;'}</small>
+      <span>${Math.round(h.wind_speed_10m[i])}<small> km/h</small></span>
+      <small>Böen ${Math.round(h.wind_gusts_10m[i])}</small>
+      <small>UV ${uv != null ? fmt.num(uv, 0) : '–'}</small>
+    </div>`);
   });
-  if (!rows.length) return '<p class="muted small">Keine Stundendaten verfügbar.</p>';
-  return `<table class="hours-table"><thead><tr><th></th><th></th><th>Temp.</th><th>Regen</th><th>Wind</th><th>UV</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  if (!cols.length) return '<p class="muted small">Keine Stundendaten verfügbar.</p>';
+  return `<div class="hours-strip">${cols.join('')}</div>`;
 }
 
 function skeleton() {

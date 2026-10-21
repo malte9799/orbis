@@ -656,97 +656,40 @@ svg.hourly {
   overflow-x: auto;
 }
 
-.hours-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
+.hours-strip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
 }
 
-.hours-table th,
-.hours-table td {
-  padding: 4px 8px;
-  text-align: left;
-  font-weight: 400;
+.h-col {
+  flex: 0 0 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.85rem;
+  scroll-snap-align: start;
+}
+
+.h-col small {
+  color: var(--muted);
+  font-size: 0.72rem;
   white-space: nowrap;
 }
 
-.hours-table thead th {
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.hours-table tbody tr {
-  border-top: 1px solid var(--border);
-}
-
-.hours-table tbody th {
-  color: var(--text-2);
-}
-
-.hours-table small {
-  display: block;
-  color: var(--muted);
-}
-
-.hours-table .wet {
-  color: #6fb6ff;
-  font-weight: 600;
-}
-
-.daily li:first-child {
-  border-top: 0;
-}
-
-.d-day small {
-  color: var(--muted);
-  margin-left: 4px;
-}
-
-.d-prec {
-  display: flex;
-  flex-direction: column;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.2;
-}
-
-.d-prec.wet {
-  color: #6fb6ff;
-  font-weight: 600;
-}
-
-.d-prec small {
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.d-min {
-  color: var(--text-2);
-  text-align: right;
-}
-
-.d-max {
+.h-temp {
   font-weight: 650;
 }
 
-.d-bar {
-  position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.d-bar span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 3px;
-}
-
-.d-wind {
-  font-size: 0.82rem;
-  color: var(--text-2);
-  text-align: right;
+.h-rain.wet {
+  color: #6fb6ff;
+  font-weight: 600;
 }
 
 .skeleton {
