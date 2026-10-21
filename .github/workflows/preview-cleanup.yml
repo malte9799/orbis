@@ -1,0 +1,38 @@
+name: Preview cleanup
+
+# Removes branch previews from gh-pages:
+#  - PR closed (merged or not) → that PR's preview, even if its branch is kept
+#  - branch deleted, weekly, or manually → every preview whose branch no longer exists
+
+on:
+  pull_request:
+    types: [closed]
+  delete:
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preview-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    # `delete` also fires for tags
+    if: github.event_name != 'delete' || github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Remove previews
+        env:
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: bash scripts/gh-pages.sh cleanup ${PR_BRANCH:+"$PR_BRANCH"}

@@ -3,26 +3,27 @@ name: Deploy (main + branch previews)
 # main → https://<owner>.github.io/<repo>/
 # every other branch → https://<owner>.github.io/<repo>/preview/<branch>/
 # Published on the `gh-pages` branch (Settings → Pages → Source: Deploy from a branch → gh-pages / root).
+# Related: pr-preview.yml (status comment on new PRs), preview-cleanup.yml (removes old previews).
 
 on:
   push:
-    branches: ['**']
-  pull_request:
-    types: [opened, reopened, closed]
+    # `data` only holds snapshots, `gh-pages` is the output
+    branches-ignore: [data, gh-pages]
   workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
+# a newer push to the same branch supersedes a running preview build; main deploys always finish
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   deploy:
-    # `data` only holds snapshots, no app
-    if: github.event_name != 'pull_request' && github.ref_name != 'data'
     runs-on: ubuntu-latest
-    concurrency:
-      group: pages
-      cancel-in-progress: false
+    timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -30,18 +31,15 @@ jobs:
       SHA: ${{ github.sha }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
+      - uses: actions/checkout@v4
       - name: Names
         id: n
-        env:
-          BRANCH: ${{ github.ref_name }}
         run: |
-          slug=$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')
-          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          slug=$(bash scripts/gh-pages.sh slug "$BRANCH")
           if [ "$BRANCH" = "main" ]; then echo "dir=." >> "$GITHUB_OUTPUT"; else echo "dir=preview/$slug" >> "$GITHUB_OUTPUT"; fi
           if [ "$BRANCH" != "main" ]; then
             echo "URL=https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/$slug/" >> "$GITHUB_ENV"
           fi
-      - uses: actions/checkout@v4
       - name: 'Status: Abhängigkeiten installieren'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Abhängigkeiten installieren"
@@ -102,31 +100,7 @@ jobs:
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Veröffentlichen"
       - name: Publish to gh-pages
-        env:
-          DIR: ${{ steps.n.outputs.dir }}
-        run: |
-          set -e
-          repo="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          if git ls-remote --exit-code --heads "$repo" gh-pages >/dev/null; then
-            git clone --depth 1 --branch gh-pages "$repo" ../pages
-          else
-            mkdir ../pages && git -C ../pages init -q -b gh-pages
-          fi
-          cd ../pages
-          if [ "$DIR" = "." ]; then
-            # main: replace everything except the previews
-            find . -mindepth 1 -maxdepth 1 ! -name .git ! -name preview -exec rm -rf {} +
-          else
-            rm -rf "$DIR"; mkdir -p "$DIR"
-          fi
-          cp -a "$GITHUB_WORKSPACE/dist/." "$DIR/"
-          # marker so the online check can tell this deploy from a previous one
-          echo "$GITHUB_SHA" > "$DIR/deploy.txt"
-          touch .nojekyll
-          git add -A
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit 2>/dev/null \
-            || git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Deploy ${{ github.sha }}"
-          git push -f "$repo" gh-pages
+        run: bash scripts/gh-pages.sh publish "${{ steps.n.outputs.dir }}" dist
       - name: 'Status: Online prüfen'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Online prüfen"
@@ -152,46 +126,3 @@ jobs:
         if: cancelled() && steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "" cancelled
 
-  announce:
-    # PR opened after its branch's build already finished → that build found no PR, so post the status here.
-    # No build: only checks that the preview serves the PR's head commit. Still building → the build comments itself.
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-      REPO: ${{ github.repository }}
-      BRANCH: ${{ github.event.pull_request.head.ref }}
-      SHA: ${{ github.event.pull_request.head.sha }}
-      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Status comment if the preview is already live
-        run: |
-          slug=$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')
-          export URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/$slug/"
-          got=$(curl -fsS --max-time 10 "${URL}deploy.txt?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
-          if [ "$got" = "$SHA" ]; then bash scripts/pr-status.sh "" done
-          else echo "preview not (yet) at $SHA (${got:-404}) – the running build will comment"; fi
-
-  cleanup:
-    # PR closed (merged or not) → remove its preview
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
-      - name: Remove preview
-        env:
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: |
-          set -e
-          dir="preview/$(echo "$BRANCH" | sed 's#[^A-Za-z0-9._-]#-#g')"
-          repo="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-          git clone --depth 1 --branch gh-pages "$repo" ../pages || exit 0
-          cd ../pages
-          [ -d "$dir" ] || exit 0
-          rm -rf "$dir"
-          git add -A
-          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q --amend --no-edit
-          git push -f "$repo" gh-pages

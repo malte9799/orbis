@@ -1,0 +1,34 @@
+name: PR preview status
+
+# PR opened after its branch's build already finished → that build found no PR, so post the status here.
+# No build: only checks that the preview serves the PR's head commit. Still building → the build comments itself.
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.event.pull_request.head.ref }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - name: Status comment if the preview is already live
+        run: |
+          slug=$(bash scripts/gh-pages.sh slug "$BRANCH")
+          export URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/preview/$slug/"
+          got=$(curl -fsS --max-time 10 "${URL}deploy.txt?t=$(date +%s)" 2>/dev/null | tr -d '[:space:]' || true)
+          if [ "$got" = "$SHA" ]; then bash scripts/pr-status.sh "" done
+          else echo "preview not (yet) at $SHA (${got:-404}) – the running build will comment"; fi
