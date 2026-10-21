@@ -215,8 +215,17 @@ Karte gezeichnet, Isobaren per Marching Squares.
 
 ## 🚢 Deployment
 
-`.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie auf GitHub Pages
-(in den Repo-Einstellungen unter *Pages → Source* „GitHub Actions“ auswählen).
+Alles läuft über GitHub Actions und den Branch `gh-pages` (Repo-Einstellungen → *Pages → Source*: „Deploy from a branch“
+→ `gh-pages` / root):
+
+| Workflow | Auslöser | Aufgabe |
+|---|---|---|
+| `deploy.yml` | Push auf jeden Branch | baut die App; `main` → Seite, andere Branches → `preview/<branch>/`, mit Status-Kommentar im PR |
+| `pr-preview.yml` | PR geöffnet | Status-Kommentar, falls die Vorschau schon fertig war |
+| `preview-cleanup.yml` | PR geschlossen, Branch gelöscht, wöchentlich | entfernt nicht mehr benötigte Vorschauen |
+| `data.yml` | alle 15 min | Daten-Snapshots im Branch `data` |
+
+Alle Änderungen an `gh-pages` laufen über `scripts/gh-pages.sh`, das gleichzeitige Läufe sicher zusammenführt.
 
 <details>
 <summary><b>☁️ Daten-Proxy (Cloudflare Worker, empfohlen)</b></summary>
