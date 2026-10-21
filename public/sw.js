@@ -1,6 +1,6 @@
 // Orbis service worker: offline app shell + runtime caching of same-origin static files.
 // Live data (Wetter, Radar, Flugzeuge, Kartenkacheln …) is cross-origin and always goes to the network.
-const VERSION = 'orbis-v1';
+const VERSION = 'orbis-v2';
 const SHELL = `${VERSION}-shell`;
 const STATIC = `${VERSION}-static`;
 
@@ -28,7 +28,8 @@ self.addEventListener('fetch', (event) => {
   // Navigation: network first, fall back to cached shell when offline.
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      // no-cache: ignore GitHub Pages' 10-min HTTP cache so a fresh deploy shows up on the next launch.
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
           const copy = res.clone();
           caches.open(SHELL).then((c) => c.put('./', copy));
