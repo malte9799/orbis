@@ -629,12 +629,68 @@ svg.hourly {
 }
 
 .daily li {
+  border-top: 1px solid var(--border);
+}
+
+.d-row {
   display: grid;
   grid-template-columns: 110px 40px 70px 44px 1fr 44px 92px;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.d-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.d-hours {
+  padding: 4px 0 10px;
+  overflow-x: auto;
+}
+
+.hours-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.hours-table th,
+.hours-table td {
+  padding: 4px 8px;
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.hours-table thead th {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.hours-table tbody tr {
   border-top: 1px solid var(--border);
+}
+
+.hours-table tbody th {
+  color: var(--text-2);
+}
+
+.hours-table small {
+  display: block;
+  color: var(--muted);
+}
+
+.hours-table .wet {
+  color: #6fb6ff;
+  font-weight: 600;
 }
 
 .daily li:first-child {
@@ -1147,7 +1203,7 @@ svg.hourly {
     grid-column: span 2;
   }
 
-  .daily li {
+  .d-row {
     grid-template-columns: 74px 34px 50px 36px 1fr 36px;
     gap: 6px;
   }
