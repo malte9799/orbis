@@ -629,68 +629,78 @@ svg.hourly {
 }
 
 .daily li {
+  border-top: 1px solid var(--border);
+}
+
+.d-row {
   display: grid;
   grid-template-columns: 110px 40px 70px 44px 1fr 44px 92px;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 6px 0;
-  border-top: 1px solid var(--border);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.daily li:first-child {
-  border-top: 0;
+.d-row:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.d-day small {
-  color: var(--muted);
-  margin-left: 4px;
+.d-hours {
+  padding: 4px 0 10px;
+  overflow-x: auto;
 }
 
-.d-prec {
+.hours-strip {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+}
+
+.h-col {
+  flex: 0 0 96px;
   display: flex;
   flex-direction: column;
-  font-size: 0.82rem;
-  color: var(--muted);
-  line-height: 1.2;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.95rem;
+  scroll-snap-align: start;
 }
 
-.d-prec.wet {
+.h-col small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.h-col.now {
+  border-color: #6fb6ff;
+  background: rgba(111, 182, 255, 0.12);
+}
+
+.h-col.now b {
   color: #6fb6ff;
-  font-weight: 600;
 }
 
-.d-prec small {
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.d-min {
-  color: var(--text-2);
-  text-align: right;
-}
-
-.d-max {
+.h-temp {
   font-weight: 650;
 }
 
-.d-bar {
-  position: relative;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.d-bar span {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border-radius: 3px;
-}
-
-.d-wind {
-  font-size: 0.82rem;
-  color: var(--text-2);
-  text-align: right;
+.h-rain.wet {
+  color: #6fb6ff;
+  font-weight: 600;
 }
 
 .skeleton {
@@ -1147,7 +1157,7 @@ svg.hourly {
     grid-column: span 2;
   }
 
-  .daily li {
+  .d-row {
     grid-template-columns: 74px 34px 50px 36px 1fr 36px;
     gap: 6px;
   }

@@ -214,6 +214,26 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
             : ''
         }</p>`;
 
+    body.querySelectorAll<HTMLButtonElement>('.d-row').forEach((b) =>
+      b.addEventListener('click', () => {
+        const panel = b.nextElementSibling as HTMLElement;
+        const open = panel.hidden;
+        body.querySelectorAll<HTMLButtonElement>('.d-row[aria-expanded=true]').forEach((o) => {
+          o.setAttribute('aria-expanded', 'false');
+          (o.nextElementSibling as HTMLElement).hidden = true;
+          o.closest('li')!.classList.remove('open');
+        });
+        if (!open) return;
+        if (!panel.firstChild) panel.innerHTML = renderDayHours(f, f.daily.time[Number(b.dataset.day)]);
+        panel.hidden = false;
+        b.setAttribute('aria-expanded', 'true');
+        b.closest('li')!.classList.add('open');
+        const strip = panel.querySelector<HTMLElement>('.hours-strip');
+        const now = strip?.querySelector<HTMLElement>('.now');
+        if (strip) strip.scrollLeft = now ? Math.max(0, now.offsetLeft - strip.clientWidth / 2 + now.offsetWidth / 2) : 0;
+      }),
+    );
+
     renderHourlyChart(body.querySelector<HTMLElement>('.hourly-wrap')!, f);
     fcMap?.destroy();
     const mapCard = body.querySelector<HTMLElement>('.fc-map-card')!;
@@ -289,6 +309,7 @@ function renderDaily(f: Forecast) {
       const width = Math.max(4, ((max - min) / span) * 100);
       const prob = d.precipitation_probability_max[i];
       return `<li>
+        <button type="button" class="d-row" aria-expanded="false" aria-controls="d-hours-${i}" data-day="${i}">
         <span class="d-day"><b>${i === 0 ? 'Heute' : escapeHtml(fmt.weekday(t))}</b> <small>${escapeHtml(fmt.dayMonth(t))}</small></span>
         <span class="d-icon" title="${escapeHtml(describe(d.weather_code[i]))}">${weatherIcon(d.weather_code[i], true, 34)}</span>
         <span class="d-prec ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : ''}<small>${d.precipitation_sum[i] > 0 ? `${fmt.num(d.precipitation_sum[i], 1)} mm` : ''}</small></span>
@@ -296,9 +317,34 @@ function renderDaily(f: Forecast) {
         <span class="d-bar"><span style="left:${left}%;width:${width}%;background:linear-gradient(90deg, ${tempColor(min)}, ${tempColor(max)})"></span></span>
         <span class="d-max">${fmt.temp(max)}</span>
         <span class="d-wind"><span class="wind-arrow" style="transform:rotate(${d.wind_direction_10m_dominant[i] + 180}deg)">↑</span> ${Math.round(d.wind_speed_10m_max[i])} km/h</span>
+        </button>
+        <div class="d-hours" id="d-hours-${i}" hidden></div>
       </li>`;
     })
     .join('')}</ol>`;
+}
+
+function renderDayHours(f: Forecast, date: string) {
+  const h = f.hourly;
+  const cols: string[] = [];
+  h.time.forEach((t, i) => {
+    if (!t.startsWith(date)) return;
+    const prob = h.precipitation_probability[i];
+    const uv = h.uv_index[i];
+    cols.push(`<div class="h-col${t.slice(0, 13) === f.current.time.slice(0, 13) ? ' now' : ''}">
+      <b>${t.slice(0, 13) === f.current.time.slice(0, 13) ? 'Jetzt' : fmt.hour(t)}</b>
+      <span title="${escapeHtml(describe(h.weather_code[i]))}">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 30)}</span>
+      <span class="h-temp">${fmt.temp(h.temperature_2m[i])}</span>
+      <small>gef. ${fmt.temp(h.apparent_temperature[i])}</small>
+      <span class="h-rain ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : '–'}</span>
+      <small>${h.precipitation[i] > 0 ? `${fmt.num(h.precipitation[i], 1)} mm` : '&nbsp;'}</small>
+      <span>${Math.round(h.wind_speed_10m[i])}<small> km/h</small></span>
+      <small>Böen ${Math.round(h.wind_gusts_10m[i])}</small>
+      <small>UV ${uv != null ? fmt.num(uv, 0) : '–'}</small>
+    </div>`);
+  });
+  if (!cols.length) return '<p class="muted small">Keine Stundendaten verfügbar.</p>';
+  return `<div class="hours-strip">${cols.join('')}</div>`;
 }
 
 function skeleton() {
