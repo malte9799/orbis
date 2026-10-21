@@ -657,30 +657,41 @@ svg.hourly {
 }
 
 .hours-strip {
+  position: relative;
   display: flex;
-  gap: 4px;
+  gap: 6px;
   overflow-x: auto;
   scroll-snap-type: x proximity;
   padding-bottom: 6px;
 }
 
 .h-col {
-  flex: 0 0 66px;
+  flex: 0 0 96px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 6px 2px;
-  border-radius: 8px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.04);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   scroll-snap-align: start;
 }
 
 .h-col small {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   white-space: nowrap;
+}
+
+.h-col.now {
+  border-color: #6fb6ff;
+  background: rgba(111, 182, 255, 0.12);
+}
+
+.h-col.now b {
+  color: #6fb6ff;
 }
 
 .h-temp {

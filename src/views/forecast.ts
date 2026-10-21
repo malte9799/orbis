@@ -228,6 +228,9 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
         panel.hidden = false;
         b.setAttribute('aria-expanded', 'true');
         b.closest('li')!.classList.add('open');
+        const strip = panel.querySelector<HTMLElement>('.hours-strip');
+        const now = strip?.querySelector<HTMLElement>('.now');
+        if (strip) strip.scrollLeft = now ? Math.max(0, now.offsetLeft - strip.clientWidth / 2 + now.offsetWidth / 2) : 0;
       }),
     );
 
@@ -328,8 +331,8 @@ function renderDayHours(f: Forecast, date: string) {
     if (!t.startsWith(date)) return;
     const prob = h.precipitation_probability[i];
     const uv = h.uv_index[i];
-    cols.push(`<div class="h-col">
-      <b>${fmt.hour(t)}</b>
+    cols.push(`<div class="h-col${t.slice(0, 13) === f.current.time.slice(0, 13) ? ' now' : ''}">
+      <b>${t.slice(0, 13) === f.current.time.slice(0, 13) ? 'Jetzt' : fmt.hour(t)}</b>
       <span title="${escapeHtml(describe(h.weather_code[i]))}">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 30)}</span>
       <span class="h-temp">${fmt.temp(h.temperature_2m[i])}</span>
       <small>gef. ${fmt.temp(h.apparent_temperature[i])}</small>
