@@ -62,7 +62,7 @@ const ratioF = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () => void): SizeDuel {
   const val = (i: SizeItem) => (o.metric === 'area' ? i.area : i.pop!);
   const fmt = (i: SizeItem) => (o.metric === 'area' ? `${nf.format(Math.round(i.area))} km²` : `${cf.format(i.pop!)} Einwohner`);
-  const total = o.rounds > 0 ? Math.min(o.rounds, Math.floor(o.items.length / 2)) : 0;
+  const total = o.rounds > 0 ? Math.min(o.rounds, o.items.length - 1) : 0;
   const used = new Set<string>();
 
   const root = document.createElement('div');
@@ -95,6 +95,7 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
   let best = 0;
   let answered = true;
   let pair: [SizeItem, SizeItem] | null = null;
+  let carry: SizeItem | null = null;
   const t0 = Date.now();
   const wrong: [SizeItem, SizeItem][] = [];
 
@@ -118,13 +119,15 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
       used.clear();
       fresh = o.items;
     }
-    const a = shuffle(fresh)[0];
+    // the winner of the last round stays and meets a new opponent
+    const a = carry ?? shuffle(fresh)[0];
     const maxRatio = Math.max(1.4, 10 - round * 0.7);
     const ratio = (b: SizeItem) => Math.max(val(a), val(b)) / Math.min(val(a), val(b));
-    const others = shuffle(o.items.filter((i) => i !== a));
+    const others = shuffle(fresh.filter((i) => i !== a));
     const b = others.find((i) => ratio(i) >= 1.15 && ratio(i) <= maxRatio) ?? others.find((i) => ratio(i) > 1.02) ?? others[0];
     used.add(a.id);
     used.add(b.id);
+    carry = null;
     return shuffle([a, b]) as [SizeItem, SizeItem];
   }
 
@@ -156,6 +159,7 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
       v.hidden = false;
     });
     const [big, small] = win === 0 ? [a, b] : [b, a];
+    carry = big;
     const x = ratioF.format(val(big) / val(small));
     const detail = `${big.name} ist ${x}× so ${o.metric === 'area' ? 'groß' : 'bevölkerungsreich'} wie ${small.name}.`;
     if (ok) {
