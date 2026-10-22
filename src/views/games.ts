@@ -278,7 +278,7 @@ export function createGamesView(): GamesView {
       <p class="gm-lead">Wie groß ist ein Land im Vergleich zu einem anderen? Im Duell werden die Paare mit der Zeit immer knapper.</p>
       <div class="gm-field"><span>Spielart</span>
         <div class="gm-seg" data-k="smode">
-          <button type="button" data-v="duel" class="on">Duell<small>Der Sieger bleibt – gegen immer neue Gebiete</small></button>
+          <button type="button" data-v="duel" class="on">Duell<small>Zwei Gebiete – welches ist größer?</small></button>
           <button type="button" data-v="scale">Maßstab<small>Ein Gebiet fest, das andere ziehst du auf die richtige Größe</small></button>
         </div>
       </div>
