@@ -4,6 +4,7 @@ import { escapeHtml, toast } from '../util';
 import { store } from '../store';
 import type { StreetGame } from '../games/streetguess';
 import type { NameQuiz } from '../games/namequiz';
+import type { SizeDuel } from '../games/sizeduel';
 
 // Games – deliberately separate from the layer drawer of the main map: own tab, own (label-free) map.
 // Country / region quiz: a name pops up and you click it ("Anklicken"), or you type all names ("Eintippen").
@@ -156,6 +157,7 @@ const GAME_TABS: { id: string; label: string }[] = [
   { id: 'flags', label: 'Flaggen' },
   { id: 'capitals', label: 'Hauptstädte' },
   { id: 'outline', label: 'Umrisse' },
+  { id: 'size', label: 'Größe' },
   { id: 'street', label: 'Straßen' },
 ];
 
@@ -269,6 +271,27 @@ export function createGamesView(): GamesView {
       <p class="gm-note">Grenzen: Natural Earth (gemeinfrei). Sehr kleine Länder fehlen.</p>
     </div>
 
+    <div class="gm-panel" data-game="size" hidden>
+      <div class="gm-games"></div>
+      <h2>Größenvergleich</h2>
+      <p class="gm-lead">Zwei Gebiete stehen zur Wahl – welches ist größer? Die Paare werden mit der Zeit immer knapper.</p>
+      <div class="gm-field"><span>Vergleich</span>
+        <div class="gm-seg" data-k="smetric">
+          <button type="button" data-v="area" class="on">Fläche<small>Welches ist größer?</small></button>
+          <button type="button" data-v="pop">Einwohner<small>Wo leben mehr Menschen?</small></button>
+        </div>
+      </div>
+      <div class="gm-field"><span>Gebiet</span>
+        <select class="sz-scope"></select>
+        <select class="sz-region" hidden></select>
+        <small class="gm-note">Bei Regionen eines Landes ist nur der Flächenvergleich möglich.</small>
+      </div>
+      <div class="gm-field"><span>Runden</span><select class="sz-rounds"><option value="10">10 Duelle</option><option value="20">20 Duelle</option><option value="0">Bis zum ersten Fehler</option></select></div>
+      <button class="btn btn-primary sz-start" type="button">Spiel starten</button>
+      <p class="gm-note sz-err"></p>
+      <p class="gm-note">Flächen aus den Grenzdaten berechnet (Natural Earth), daher nur ungefähr.</p>
+    </div>
+
     <div class="gm-panel" data-game="street" hidden>
       <div class="gm-games"></div>
       <h2>Straßen-Rater</h2>
@@ -330,6 +353,7 @@ export function createGamesView(): GamesView {
   fill('.cp-scope');
   fill('.sg-scope');
   fill('.ol-scope', [REGIONS_OPT]);
+  fill('.sz-scope', [REGIONS_OPT]);
   const scopeSel = $<HTMLSelectElement>('.gm-scope');
   scopeSel.innerHTML = [`<option value="world">${SCOPES[0].label}</option>`, '<option value="continents">Kontinente</option>', ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${s.label}</option>`), REGIONS_OPT].join('');
   const sovBox = $<HTMLInputElement>('.gm-sov');
@@ -364,6 +388,7 @@ export function createGamesView(): GamesView {
   });
   $('.gm-scope-note').textContent = SCOPE_NOTE[scopeSel.value] ?? '';
   bindRegions($<HTMLSelectElement>('.ol-scope'), $<HTMLSelectElement>('.ol-region'));
+  bindRegions($<HTMLSelectElement>('.sz-scope'), $<HTMLSelectElement>('.sz-region'));
 
   // ----- name quizzes without a map (flags, capitals, outlines) -----------------------------
   let nq: NameQuiz | null = null;
@@ -414,6 +439,32 @@ export function createGamesView(): GamesView {
       return { items: await outlineItems(scope), mode: segVal.omode as 'choice' | 'type', rounds: Number(val('.ol-rounds')), placeholder: 'Wie heißt das?' };
     }),
   );
+
+  // ----- size duel ------------------------------------------------------------------------
+  let duel: SizeDuel | null = null;
+  const leaveDuel = () => {
+    duel?.destroy();
+    duel = null;
+    showPanel('size');
+  };
+  $('.sz-start').addEventListener('click', async () => {
+    const err = $('.sz-err');
+    err.textContent = 'Lade …';
+    try {
+      const regions = val('.sz-scope') === 'regions';
+      const metric = regions ? 'area' : (segVal.smetric as 'area' | 'pop');
+      const [{ startSizeDuel, sizeItems }] = await Promise.all([import('../games/sizeduel')]);
+      const items = await sizeItems(regions ? `regions:${val('.sz-region')}` : val('.sz-scope'), metric);
+      if (items.length < 4) throw new Error('zu wenige Einträge in diesem Gebiet');
+      duel?.destroy();
+      err.textContent = '';
+      showPanel('none');
+      duel = startSizeDuel(host, { items, metric, rounds: Number(val('.sz-rounds')) }, leaveDuel);
+    } catch (e) {
+      showPanel('size');
+      err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+    }
+  });
 
   // ----- street game ----------------------------------------------------------------------
   const tokenInput = $<HTMLInputElement>('.sg-token');
@@ -766,6 +817,8 @@ export function createGamesView(): GamesView {
       street = null;
       nq?.destroy();
       nq = null;
+      duel?.destroy();
+      duel = null;
       clearInterval(timer);
       if (playing) toMenu();
       else if (panels.get('quiz')!.hidden && Array.from(panels.values()).every((p) => p.hidden)) showPanel('quiz');

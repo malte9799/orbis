@@ -3324,3 +3324,54 @@ svg.hourly {
   border-radius: 3px;
   flex: none;
 }
+
+/* size duel */
+.sd-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sd-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 210px;
+  padding: 12px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.sd-card .fg-outline {
+  max-height: 120px;
+  width: 100%;
+}
+.sd-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  text-align: center;
+}
+.sd-val {
+  color: var(--muted);
+}
+.sd-card:disabled {
+  cursor: default;
+  color: var(--text);
+}
+.sd-card.right {
+  background: #1f7a4a;
+  border-color: #2fbf71;
+}
+.sd-card.wrong {
+  background: #8f2f35;
+  border-color: #e0555c;
+}
+.sd-hint {
+  text-align: center;
+}
