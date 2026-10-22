@@ -57,7 +57,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
       <div class="gm-stats"><span class="sc-score"></span><span class="sc-time">0:00</span></div>
       <div class="fg-stage">
         <div class="fg-text"><small class="sc-ask"></small></div>
-        <div class="sc-scene"><svg class="sc-svg" role="img" aria-label="Größenvergleich" preserveAspectRatio="xMidYMax meet"></svg></div>
+        <svg class="sc-svg" role="img" aria-label="Größenvergleich" preserveAspectRatio="xMidYMax meet"></svg>
         <div class="gm-feedback" aria-live="polite"></div>
         <button class="btn btn-primary sc-check" type="button">Prüfen</button>
         <button class="btn btn-primary sc-next" type="button" hidden>Weiter</button>
@@ -154,7 +154,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     bx = W / 2 - bw;
     svg.setAttribute('viewBox', `${-W / 2 - padX} ${-top} ${W + padX * 2} ${top + ground}`);
     svg.innerHTML = `
-      <rect class="sc-ground" x="${-W / 2 - padX}" y="0" width="${W + padX * 2}" height="${ground}" />
+      <line class="sc-ground" x1="${-W / 2 - padX}" x2="${W / 2 + padX}" y1="0" y2="0" />
       <g transform="translate(${ax} ${-sa.h / 2})"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
       <g class="sc-chip-g" transform="translate(${ax} ${-sa.h - fs * 0.6})">${chip(a.name, 'sc-na', 'Fläche ?')}</g>
       <g class="sc-true" style="display:none" transform="translate(${bx + sb.w / 2} ${-sb.h / 2})"><path d="${sb.d}" fill-rule="evenodd" /></g>

@@ -3377,15 +3377,6 @@ svg.hourly {
 }
 
 /* size scale */
-.sc-scene {
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  overflow: hidden;
-  background:
-    linear-gradient(rgba(91, 157, 255, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
-    linear-gradient(90deg, rgba(91, 157, 255, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
-    linear-gradient(#0e1a3a, #1d3b6b);
-}
 .sc-svg {
   display: block;
   width: 100%;
@@ -3396,9 +3387,8 @@ svg.hourly {
   -webkit-user-select: none;
 }
 .sc-ground {
-  fill: #141c2e;
-  stroke: rgba(255, 255, 255, 0.18);
-  stroke-width: 1px;
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1.5px;
   vector-effect: non-scaling-stroke;
 }
 .sc-a {
