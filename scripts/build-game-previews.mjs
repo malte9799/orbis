@@ -111,4 +111,35 @@ const save = (name, body) => writeFileSync(OUT + name + '.svg', svg(body));
     <g transform="translate(560 78)"><rect x="-42" y="-30" width="84" height="64" rx="12" fill="#0b1020" opacity=".78"/><path d="M-28 22L-10 4L4 14L16 -6L30 22Z" fill="#2a3a66"/><g transform="translate(12 -8)"><path d="M0 14C-9 2 -9 -12 0 -12S9 2 0 14Z" fill="#ff5a5f" transform="translate(0 0)"/><circle cy="-4" r="3" fill="#fff"/></g></g>`;
   save('street', body);
 }
+// 5) Größe – France (blue) vs. Algeria (red) at the same scale, dashed frame + handle like the scale mode
+{
+  const KM = 111.195;
+  const shapeOf = (f) => {
+    const rings = polys(f.geometry).map((p) => p[0]).filter((r) => r.length > 20);
+    const xs = rings.flat().map((p) => p[0]), ys = rings.flat().map((p) => p[1]);
+    return { f, bb: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] };
+  };
+  const draw = (f, bb, ox, base, k, fill, stroke) => {
+    const kx = Math.cos(((bb[1] + bb[3]) / 2) * Math.PI / 180);
+    const pt = ([x, y]) => [Math.round(ox + (x - bb[0]) * kx * KM * k), Math.round(base - (y - bb[1]) * KM * k)].join(' ');
+    // main land mass only (overseas parts of France would shrink the picture)
+    const main = polys(f.geometry).map((p) => p[0]).filter((r) => r.some(([x, y]) => x > bb[0] && x < bb[2] && y > bb[1] && y < bb[3]));
+    return { d: main.map((r) => 'M' + r.filter((_, i) => i % 2 === 0).map(pt).join('L') + 'Z').join(''), fill, stroke };
+  };
+  const fr = byEn('France'), dz = byEn('Algeria');
+  const fb = [-5.2, 41.3, 9.6, 51.2], db = (() => { const s = shapeOf(dz); return s.bb; })();
+  const k = 0.115;
+  const fw = (fb[2] - fb[0]) * Math.cos(46 * Math.PI / 180) * KM * k, dh = (db[3] - db[1]) * KM * k;
+  const base = 360, A = draw(fr, fb, 70, base, k, '#3b82f6', '#cfe3ff');
+  const bx = 70 + fw + 70;
+  const B = draw(dz, db, bx, base, k, '#ef4444', '#ffd0d0');
+  const bw = (db[2] - db[0]) * Math.cos(28 * Math.PI / 180) * KM * k;
+  let body = defs('g', '#1c2f66', '#0a1126') + `<rect width="${W}" height="${H}" fill="url(#g)"/>`;
+  body += `<line x1="30" y1="${base}" x2="${W - 30}" y2="${base}" stroke="rgba(255,255,255,.25)" stroke-width="1.5"/>`;
+  body += `<path d="${A.d}" fill="${A.fill}" stroke="${A.stroke}" stroke-width="1.2" stroke-linejoin="round"/>`;
+  body += `<path d="${B.d}" fill="${B.fill}" stroke="${B.stroke}" stroke-width="1.2" stroke-linejoin="round"/>`;
+  body += `<rect x="${bx}" y="${base - dh}" width="${bw}" height="${dh}" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+  body += `<g transform="translate(${bx + bw} ${base - dh})"><circle r="11" fill="#ef4444" stroke="#fff" stroke-width="1.5"/><path d="M-4 4L4 -4M4 -1V-4H1M-4 1V4H-1" stroke="#fff" stroke-width="1.5" fill="none"/></g>`;
+  save('size', body);
+}
 console.log('previews written to', OUT);

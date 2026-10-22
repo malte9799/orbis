@@ -4,6 +4,8 @@ import { escapeHtml, toast } from '../util';
 import { store } from '../store';
 import type { StreetGame } from '../games/streetguess';
 import type { NameQuiz } from '../games/namequiz';
+import type { SizeDuel } from '../games/sizeduel';
+import type { SizeScale } from '../games/sizescale';
 
 // Games – deliberately separate from the layer drawer of the main map: own tab, own (label-free) map.
 // Country / region quiz: a name pops up and you click it ("Anklicken"), or you type all names ("Eintippen").
@@ -179,6 +181,7 @@ const GAME_CARDS: GameCard[] = [
   { id: 'flags', label: 'Flaggen-Rater', tag: 'Flaggen', blurb: 'Welche Flagge gehört zu welchem Land?', chips: ['Auswahl', 'Eintippen', 'Karte'] },
   { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
   { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
+  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Duell', 'Maßstab'] },
   { id: 'street', label: 'Straßen-Rater', tag: 'Straßenfotos', blurb: 'Ein zufälliges Straßenfoto – tippe auf der Karte, wo es aufgenommen wurde. 5 Runden, bis zu 5000 Punkte.', chips: ['5 Runden', 'Punkte'] },
 ];
 
@@ -321,6 +324,33 @@ export function createGamesView(): GamesView {
       <p class="gm-note">Grenzen: Natural Earth (gemeinfrei). Sehr kleine Länder fehlen.</p>
     </div>
 
+    <div class="gm-panel" data-game="size" hidden>
+      <div class="gm-games"></div>
+      <h2>Größenvergleich</h2>
+      <p class="gm-lead">Wie groß ist ein Land im Vergleich zu einem anderen? Im Duell werden die Paare mit der Zeit immer knapper.</p>
+      <div class="gm-field"><span>Spielart</span>
+        <div class="gm-seg" data-k="smode">
+          <button type="button" data-v="duel" class="on">Duell<small>Zwei Gebiete – welches ist größer?</small></button>
+          <button type="button" data-v="scale">Maßstab<small>Ein Gebiet fest, das andere ziehst du auf die richtige Größe</small></button>
+        </div>
+      </div>
+      <div class="gm-field sz-metric"><span>Vergleich</span>
+        <div class="gm-seg" data-k="smetric">
+          <button type="button" data-v="area" class="on">Fläche<small>Welches ist größer?</small></button>
+          <button type="button" data-v="pop">Einwohner<small>Wo leben mehr Menschen?</small></button>
+        </div>
+      </div>
+      <div class="gm-field"><span>Gebiet</span>
+        <select class="sz-scope"></select>
+        <select class="sz-region" hidden></select>
+        <small class="gm-note">Bei Regionen eines Landes und im Maßstab-Modus zählt nur die Fläche.</small>
+      </div>
+      <div class="gm-field"><span>Runden</span><select class="sz-rounds"><option value="10">10 Runden</option><option value="20">20 Runden</option><option value="5">5 Runden</option><option value="0" class="sz-endless">Bis zum ersten Fehler (Duell)</option></select></div>
+      <button class="btn btn-primary sz-start" type="button">Spiel starten</button>
+      <p class="gm-note sz-err"></p>
+      <p class="gm-note">Flächen aus den Grenzdaten berechnet (Natural Earth), daher nur ungefähr.</p>
+    </div>
+
     <div class="gm-panel" data-game="street" hidden>
       <div class="gm-games"></div>
       <h2>Straßen-Rater</h2>
@@ -387,6 +417,7 @@ export function createGamesView(): GamesView {
   fill('.cp-scope');
   fill('.sg-scope');
   fill('.ol-scope', [REGIONS_OPT]);
+  fill('.sz-scope', [REGIONS_OPT]);
   const scopeSel = $<HTMLSelectElement>('.gm-scope');
   scopeSel.innerHTML = [`<option value="world">${SCOPES[0].label}</option>`, '<option value="continents">Kontinente</option>', ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${s.label}</option>`), REGIONS_OPT].join('');
   const sovBox = $<HTMLInputElement>('.gm-sov');
@@ -421,6 +452,7 @@ export function createGamesView(): GamesView {
   });
   $('.gm-scope-note').textContent = SCOPE_NOTE[scopeSel.value] ?? '';
   bindRegions($<HTMLSelectElement>('.ol-scope'), $<HTMLSelectElement>('.ol-region'));
+  bindRegions($<HTMLSelectElement>('.sz-scope'), $<HTMLSelectElement>('.sz-region'));
 
   // ----- name quizzes without a map (flags, capitals, outlines) -----------------------------
   let nq: NameQuiz | null = null;
@@ -471,6 +503,42 @@ export function createGamesView(): GamesView {
       return { items: await outlineItems(scope), mode: segVal.omode as 'choice' | 'type', rounds: Number(val('.ol-rounds')), placeholder: 'Wie heißt das?' };
     }),
   );
+
+  // ----- size duel ------------------------------------------------------------------------
+  let duel: SizeDuel | SizeScale | null = null;
+  const leaveDuel = () => {
+    duel?.destroy();
+    duel = null;
+    showPanel('size');
+  };
+  const syncSize = () => {
+    const scale = segVal.smode === 'scale';
+    $('.sz-metric').hidden = scale;
+    $<HTMLOptionElement>('.sz-endless').hidden = scale;
+    if (scale && val('.sz-rounds') === '0') $<HTMLSelectElement>('.sz-rounds').value = '10';
+  };
+  el.querySelectorAll('[data-k="smode"] button').forEach((b) => b.addEventListener('click', syncSize));
+  $('.sz-start').addEventListener('click', async () => {
+    const err = $('.sz-err');
+    err.textContent = 'Lade …';
+    try {
+      const regions = val('.sz-scope') === 'regions';
+      const scale = segVal.smode === 'scale';
+      const metric = regions || scale ? 'area' : (segVal.smetric as 'area' | 'pop');
+      const { sizeItems } = await import('../games/sizeduel');
+      const items = await sizeItems(regions ? `regions:${val('.sz-region')}` : val('.sz-scope'), metric);
+      if (items.length < 4) throw new Error('zu wenige Einträge in diesem Gebiet');
+      const rounds = Number(val('.sz-rounds')) || (scale ? 10 : 0);
+      duel?.destroy();
+      err.textContent = '';
+      showPanel('none');
+      if (scale) duel = (await import('../games/sizescale')).startSizeScale(host, { items, rounds }, leaveDuel);
+      else duel = (await import('../games/sizeduel')).startSizeDuel(host, { items, metric, rounds }, leaveDuel);
+    } catch (e) {
+      showPanel('size');
+      err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+    }
+  });
 
   // ----- street game ----------------------------------------------------------------------
   const tokenInput = $<HTMLInputElement>('.sg-token');
@@ -824,6 +892,8 @@ export function createGamesView(): GamesView {
       street = null;
       nq?.destroy();
       nq = null;
+      duel?.destroy();
+      duel = null;
       clearInterval(timer);
       if (playing) toMenu();
       else if (Array.from(panels.values()).every((p) => p.hidden)) showPanel('hub');

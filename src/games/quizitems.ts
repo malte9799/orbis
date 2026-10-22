@@ -57,13 +57,13 @@ function box(r: Ring): [number, number, number, number] {
 }
 const diag = (b: number[]) => Math.hypot(b[2] - b[0], b[3] - b[1]);
 
-/** SVG silhouette; far-flung parts (Guyana, Hawaii, Svalbard …) are left out so the main shape stays big */
-export function outlineSvg(g: Geometry): string {
+/** the parts that make up a silhouette; far-flung ones (Guyana, Hawaii, Svalbard …) are left out so the main shape stays big */
+export function outlineShape(g: Geometry) {
   const parts = partsOf(g)
     .map((p) => ({ p, b: box(p[0]) }))
     .map((x) => ({ ...x, a: (x.b[2] - x.b[0]) * (x.b[3] - x.b[1]) }))
     .sort((x, y) => y.a - x.a);
-  if (!parts.length) return '';
+  if (!parts.length) return null;
   const keep = [parts[0]];
   const bb = [...parts[0].b];
   const mainDiag = diag(parts[0].b);
@@ -75,11 +75,17 @@ export function outlineSvg(g: Geometry): string {
     }
   }
   const k = Math.cos((((bb[1] + bb[3]) / 2) * Math.PI) / 180);
-  const w = (bb[2] - bb[0]) * k;
-  const h = bb[3] - bb[1];
+  return { keep: keep.map((q) => q.p), bb, k, w: (bb[2] - bb[0]) * k, h: bb[3] - bb[1] };
+}
+
+/** SVG silhouette */
+export function outlineSvg(g: Geometry): string {
+  const sh = outlineShape(g);
+  if (!sh) return '';
+  const { keep, bb, k, w, h } = sh;
   const pad = Math.max(w, h) * 0.06;
   const pt = ([x, y]: Position) => `${((x - bb[0]) * k).toFixed(3)} ${(bb[3] - y).toFixed(3)}`;
-  const d = keep.flatMap((q) => q.p.map((r) => `M${r.map(pt).join('L')}Z`)).join('');
+  const d = keep.flatMap((p) => p.map((r) => `M${r.map(pt).join('L')}Z`)).join('');
   return `<svg class="fg-outline" viewBox="${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}" role="img" aria-label="Umriss"><path d="${d}" fill-rule="evenodd" /></svg>`;
 }
 

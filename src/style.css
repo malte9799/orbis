@@ -3163,12 +3163,12 @@ svg.hourly {
   max-width: 1180px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(12, 1fr);
   gap: clamp(12px, 1.8vw, 20px);
 }
 .gm-card {
   position: relative;
-  grid-column: span 2;
+  grid-column: span 3;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -3199,13 +3199,13 @@ svg.hourly {
   aspect-ratio: 16 / 10;
 }
 .gm-card-quiz {
-  grid-column: span 4;
+  grid-column: span 8;
 }
 .gm-card-quiz .gm-pv {
   aspect-ratio: 16 / 8;
 }
 .gm-card-flags {
-  grid-column: span 2;
+  grid-column: span 4;
 }
 .gm-card-flags .gm-pvflag {
   width: 38%;
@@ -3546,4 +3546,129 @@ svg.hourly {
   width: 28px;
   border-radius: 3px;
   flex: none;
+}
+
+/* size duel */
+.sd-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sd-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 210px;
+  padding: 12px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.sd-card .fg-outline {
+  max-height: 120px;
+  width: 100%;
+}
+.sd-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  text-align: center;
+}
+.sd-val {
+  color: var(--muted);
+}
+.sd-card:disabled {
+  cursor: default;
+  color: var(--text);
+}
+.sd-card.right {
+  background: #1f7a4a;
+  border-color: #2fbf71;
+}
+.sd-card.wrong {
+  background: #8f2f35;
+  border-color: #e0555c;
+}
+.sd-hint {
+  text-align: center;
+}
+
+/* size scale */
+.sc-svg {
+  display: block;
+  width: 100%;
+  height: 48vh;
+  min-height: 260px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sc-ground {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sc-a {
+  fill: #3b82f6;
+}
+.sc-b path {
+  fill: #ef4444;
+  cursor: grab;
+}
+.sc-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-dasharray: 5 4;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.sc-true path {
+  fill: rgba(47, 191, 113, 0.4);
+  stroke: #2fbf71;
+  stroke-dasharray: 5 4;
+  stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.sc-chip {
+  fill: rgba(8, 12, 26, 0.88);
+}
+.sc-chip-name {
+  font-weight: 700;
+}
+.sc-na {
+  fill: #8fbaff;
+}
+.sc-nb {
+  fill: #ffb0b0;
+}
+.sc-chip-area {
+  fill: #c9d3ea;
+  font-weight: 600;
+}
+.sc-handle {
+  cursor: nwse-resize;
+}
+.sc-handle circle {
+  fill: #ef4444;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sc-handle path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sc-ask b {
+  font-size: 1.15rem;
+  color: var(--text);
 }
