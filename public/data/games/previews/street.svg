@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice"><defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d6fd6"/><stop offset="1" stop-color="#bfe0ff"/></linearGradient>
+    <linearGradient id="rd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5c6577"/><stop offset="1" stop-color="#2a2f3b"/></linearGradient></defs>
+    <rect width="640" height="400" fill="url(#sky)"/>
+    <ellipse cx="470" cy="70" rx="70" ry="18" fill="#fff" opacity=".75"/><ellipse cx="150" cy="110" rx="90" ry="20" fill="#fff" opacity=".6"/>
+    <path d="M0 215L90 175L170 205L250 160L330 200L420 170L520 205L640 175V240H0Z" fill="#6b8bb5"/>
+    <path d="M0 235L120 205L220 230L330 200L450 232L560 210L640 230V250H0Z" fill="#46665a"/>
+    <rect y="235" width="640" height="165" fill="#4c7a48"/>
+    <path d="M300 238H340L640 400H0Z" fill="url(#rd)"/>
+    <path d="M318 240L322 240L330 400H310Z" fill="#f2c94c" opacity=".0"/>
+    <rect x="319.25" y="248" width="1.5" height="4" fill="#f4f1e6"/><rect x="318" y="257.375" width="4" height="9.5" fill="#f4f1e6"/><rect x="316.75" y="285.5" width="6.5" height="15" fill="#f4f1e6"/><rect x="315.5" y="332.375" width="9" height="20.5" fill="#f4f1e6"/><rect x="314.25" y="398" width="11.5" height="26" fill="#f4f1e6"/>
+    <path d="M300 238L0 400H70L306 238Z" fill="#d9d9d9" opacity=".55"/><path d="M340 238L640 400H570L334 238Z" fill="#d9d9d9" opacity=".55"/>
+    <g fill="#2d3a2c"><rect x="86" y="165" width="12" height="80"/><circle cx="92" cy="150" r="34"/><rect x="520" y="175" width="10" height="70"/><circle cx="525" cy="162" r="28"/></g>
+    <g><rect x="212" y="160" width="5" height="82" fill="#9aa3b2"/><rect x="186" y="150" width="58" height="34" rx="4" fill="#1b66c8" stroke="#fff" stroke-width="2.5"/><path d="M198 168H232M226 161l7 7-7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g transform="translate(560 78)"><rect x="-42" y="-30" width="84" height="64" rx="12" fill="#0b1020" opacity=".78"/><path d="M-28 22L-10 4L4 14L16 -6L30 22Z" fill="#2a3a66"/><g transform="translate(12 -8)"><path d="M0 14C-9 2 -9 -12 0 -12S9 2 0 14Z" fill="#ff5a5f" transform="translate(0 0)"/><circle cy="-4" r="3" fill="#fff"/></g></g></svg>
