@@ -257,6 +257,24 @@ eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen 
 </details>
 
 <details>
+<summary><b>📷 Mapillary-Token für den Straßen-Rater einbauen</b></summary>
+
+<br>
+
+Ohne Token muss jeder Spieler selbst einen eintragen. Mit eingebautem Token läuft das Spiel sofort; ein im Spiel eingetragener
+eigener Token hat Vorrang.
+
+1. Auf [mapillary.com/dashboard/developers](https://www.mapillary.com/dashboard/developers) eine Anwendung registrieren und den
+   *Client-Token* (`MLY|…`) kopieren.
+2. Im GitHub-Repo *Settings → Secrets and variables → Actions → Variables → New repository variable*, Name `MAPILLARY_TOKEN`,
+   Wert = Token. Danach *Actions → Deploy to GitHub Pages → Run workflow*.
+
+Der Token landet im ausgelieferten Code und ist damit öffentlich sichtbar. Alle Spieler teilen sich das Kontingent der Anwendung
+(laut Mapillary-Forum ca. 10.000 Suchanfragen/Minute, 60.000 Abrufe/Minute); die Nutzungsbedingungen von Mapillary bitte vorher prüfen.
+
+</details>
+
+<details>
 <summary><b>📦 Daten-Snapshots (<code>data</code>-Branch)</b></summary>
 
 <br>

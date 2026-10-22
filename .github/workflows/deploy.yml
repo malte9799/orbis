@@ -96,6 +96,8 @@ jobs:
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
+          # optional Mapillary client token for the street game (public by nature, it ends up in the bundle) – same place, Variables
+          VITE_MAPILLARY_TOKEN: ${{ vars.MAPILLARY_TOKEN }}
       - name: 'Status: Veröffentlichen'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Veröffentlichen"
