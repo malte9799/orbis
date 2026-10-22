@@ -109,7 +109,8 @@ const save = (name, body) => writeFileSync(OUT + name + '.svg', svg(body));
     <g fill="#2d3a2c"><rect x="86" y="165" width="12" height="80"/><circle cx="92" cy="150" r="34"/><rect x="520" y="175" width="10" height="70"/><circle cx="525" cy="162" r="28"/></g>
     <g><rect x="212" y="160" width="5" height="82" fill="#9aa3b2"/><rect x="186" y="150" width="58" height="34" rx="4" fill="#1b66c8" stroke="#fff" stroke-width="2.5"/><path d="M198 168H232M226 161l7 7-7 7" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
     <g transform="translate(560 78)"><rect x="-42" y="-30" width="84" height="64" rx="12" fill="#0b1020" opacity=".78"/><path d="M-28 22L-10 4L4 14L16 -6L30 22Z" fill="#2a3a66"/><g transform="translate(12 -8)"><path d="M0 14C-9 2 -9 -12 0 -12S9 2 0 14Z" fill="#ff5a5f" transform="translate(0 0)"/><circle cy="-4" r="3" fill="#fff"/></g></g>`;
-  save('street', body);
+  // 360° badge: the street game shows panoramas
+  save('street', body + `<g transform="translate(76 76)"><circle r="46" fill="#0b1020" opacity=".78"/><ellipse rx="46" ry="15" fill="none" stroke="#5b9dff" stroke-width="2.5" opacity=".9"/><text y="10" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="26" fill="#fff">360°</text></g>`);
 }
 // 5) Größe – France (blue) vs. Algeria (red) at the same scale, dashed frame + handle like the scale mode
 {

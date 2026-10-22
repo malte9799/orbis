@@ -191,7 +191,7 @@ const GAME_CARDS: GameCard[] = [
   { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
   { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
   { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Maßstab', 'Higher Lower'] },
-  { id: 'street', label: 'Straßen-Rater', tag: 'Straßenfotos', blurb: 'Ein zufälliges Straßenfoto – tippe auf der Karte, wo es aufgenommen wurde. 5 Runden, bis zu 5000 Punkte.', chips: ['5 Runden', 'Punkte'] },
+  { id: 'street', label: 'Straßen-Rater', tag: '360°', blurb: 'Echte 360°-Straßenfotos – schau dich um und tippe auf der Karte, wo du stehst. 5 Runden, bis zu 5000 Punkte.', chips: ['360°', '5 Runden', 'Punkte'] },
 ];
 
 /** preview picture of a game: static SVG (scripts/build-game-previews.mjs) or a fan of real flags */
@@ -430,7 +430,7 @@ export function createGamesView(): GamesView {
     <div class="gm-panel" data-game="street" hidden>
       <div class="gm-games"></div>
       <h2>Straßen-Rater</h2>
-      <p class="gm-lead">Du siehst ein zufälliges Straßenfoto und tippst auf der Karte, wo es ist. 5 Runden, bis zu 5000 Punkte pro Runde.</p>
+      <p class="gm-lead">Du stehst mitten in einer 360°-Aufnahme, schaust dich um und tippst auf der Karte, wo du bist. 5 Runden, bis zu 5000 Punkte pro Runde.</p>
       <div class="gm-field"><span>Gebiet</span><select class="sg-scope"></select></div>
       <div class="gm-field"><span>Bewegung</span>
         <div class="gm-seg" data-k="move">
@@ -932,7 +932,7 @@ export function createGamesView(): GamesView {
       street?.destroy();
       showPanel('none');
       err.textContent = '';
-      street = await startStreetGame(host, { token, scope: val('.sg-scope'), move: segVal.move === '1', rounds: 5 }, leaveStreet);
+      street = await startStreetGame(host, { token, scope: val('.sg-scope'), move: segVal.move === '1', rounds: 5, panos: true }, leaveStreet);
     } catch (e) {
       showPanel('street');
       err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
