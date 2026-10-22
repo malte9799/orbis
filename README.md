@@ -269,6 +269,8 @@ eigener Token hat Vorrang.
 2. Im GitHub-Repo *Settings → Secrets and variables → Actions → Variables → New repository variable*, Name `MAPILLARY_TOKEN`,
    Wert = Token. Danach *Actions → Deploy to GitHub Pages → Run workflow*.
 
+Dieselbe Variable nutzt die Data-Action einmal im Monat, um die Orte mit 360°-Fotos für den Panorama-Rater zu sammeln (`street/panos.json` im `data`-Branch). Nach dem ersten Eintragen die Action *Update data snapshots* einmal manuell starten.
+
 Der Token landet im ausgelieferten Code und ist damit öffentlich sichtbar. Alle Spieler teilen sich das Kontingent der Anwendung
 (laut Mapillary-Forum ca. 10.000 Suchanfragen/Minute, 60.000 Abrufe/Minute); die Nutzungsbedingungen von Mapillary bitte vorher prüfen.
 

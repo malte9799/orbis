@@ -266,5 +266,22 @@ await task('cams', DAY, async () => {
   if (!ok) throw new Error('no camera feed reachable');
 });
 
+// places with Mapillary 360° photos for the panorama game; the long crawl runs once a month
+await task('street-panos', 29 * DAY, async () => {
+  const token = process.env.MAPILLARY_TOKEN;
+  if (!token) {
+    console.log('  no MAPILLARY_TOKEN secret – skipping');
+    return;
+  }
+  // @ts-expect-error plain JS module shared with the local generator
+  const { buildStreetPanos, landTiles } = await import('./street-panos.mjs');
+  // the Action runs from the repository root (this file is bundled to ../fetch-data.mjs)
+  const countries = JSON.parse(readFileSync(join(process.cwd(), 'public/data/games/countries.json'), 'utf8'));
+  const data = await buildStreetPanos({ token, tiles: landTiles(countries), log: (m: string) => console.log(`  ${m}`) });
+  if (data.points.length < 1000) throw new Error(`only ${data.points.length} points – keeping previous data`);
+  write('street/panos.json', data);
+  console.log(`  ${data.points.length} points`);
+});
+
 meta.updated = new Date().toISOString();
 write('meta.json', meta);
