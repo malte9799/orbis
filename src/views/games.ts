@@ -595,6 +595,8 @@ export function createGamesView(): GamesView {
         m.addLayer({ id: 'areas-line', type: 'line', source: 'areas', paint: { 'line-color': '#0d1530', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] } });
         m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
         m.on('click', onMapClick);
+        // typing mode: the input stays ready after panning/zooming the map
+        m.on('moveend', focusInput);
         m.on('mousemove', (e) => {
           if (!playing || mode !== 'click') return;
           m.getCanvas().style.cursor = m.queryRenderedFeatures(e.point, { layers: ['marks-circle', 'areas-fill'] }).length ? 'pointer' : '';
@@ -681,7 +683,7 @@ export function createGamesView(): GamesView {
       // what is asked: continents (world / continents) and countries (everything but "continents")
       const countries: Target[] = scope === 'continents' ? [] : feats.map((f) => ({ id: f.properties.id, kind: 'country', name: f.properties.name, en: f.properties.en, ids: [f.properties.id], feat: f }));
       const conts: Target[] =
-        (scope === 'world' || scope === 'continents') && !cfg.flag
+        (scope === 'continents' || (scope === 'world' && cfg.mode === 'click')) && !cfg.flag
           ? CONTINENTS.map((c) => ({ id: `c:${c.key}`, kind: 'continent' as const, name: c.de, en: c.en, cont: c.key, ids: feats.filter((f) => f.properties.cont === c.key).map((f) => f.properties.id) })).filter((c) => c.ids.length)
           : [];
       targets = [...conts, ...countries];
@@ -820,6 +822,15 @@ export function createGamesView(): GamesView {
   });
 
   // ----- typing mode ------------------------------------------------------------
+  function focusInput() {
+    if (playing && mode === 'type' && document.activeElement !== input) input.focus({ preventScroll: true });
+  }
+  // typing anywhere on the page goes into the input
+  document.addEventListener('keydown', (e) => {
+    if (el.hidden || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    if (/^(input|textarea|select)$/i.test((document.activeElement as HTMLElement | null)?.tagName ?? '')) return;
+    focusInput();
+  });
   typeForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!playing || mode !== 'type') return;
