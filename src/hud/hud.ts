@@ -18,7 +18,7 @@ import {
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -947,7 +947,7 @@ export function createHud(host: HudHost): Hud {
       if (!k || !window.confirm(`Karte „${k.name}“ löschen?`)) return;
       st.own = st.own.filter((x) => x.id !== id);
       st.pinned = st.pinned.filter((x) => x !== id);
-      if (!st.pinned.length) st.pinned = STANDARD.map((s) => s.id);
+      if (!st.pinned.length) st.pinned = [...DEFAULT_PINNED];
       delete st.drafts[id];
       if (cur === id) {
         persist();

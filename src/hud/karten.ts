@@ -4,7 +4,7 @@ import { catalogOf } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
-// ordered list of overlay layers. Orbis ships three standard Karten; users can change any of them
+// ordered list of overlay layers. Orbis ships four standard Karten; users can change any of them
 // (the change lives in a per-Karte draft) and save the result as their own Karte.
 
 export interface KLayer {
@@ -53,6 +53,11 @@ export const STANDARD: Karte[] = [
     layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
   },
   {
+    id: 'wind', name: 'Wind', icon: 'wind', color: '#36c2a8', std: true,
+    base: 'dark', labels: true, night: true, main: 'wind', mainVar: 'wind',
+    layers: [{ id: 'cities' }],
+  },
+  {
     id: 'gefahren', name: 'Gefahren', icon: 'warn', color: '#e53935', std: true,
     base: 'dark', labels: true, night: true, main: null,
     layers: ['dwdwarn', 'nina', 'quakes', 'fires', 'storms', 'volcanoes', 'floods', 'tsunami'].map((id) => ({ id })),
@@ -63,6 +68,9 @@ export const STANDARD: Karte[] = [
     layers: ['aircraft', 'ships', 'trains', 'autobahn'].map((id) => ({ id })),
   },
 ];
+
+/** standard Karten shown in the bar until the user pins something else */
+export const DEFAULT_PINNED = STANDARD.filter((k) => k.id !== 'verkehr').map((k) => k.id);
 
 export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
@@ -172,7 +180,7 @@ export function loadKarten(): KartenState {
     }
   }
   const last = typeof p.last === 'string' && known.has(p.last) ? p.last : 'wetter';
-  return { own, pinned: pinned.length ? pinned : STANDARD.map((k) => k.id), last, drafts };
+  return { own, pinned: pinned.length ? pinned : [...DEFAULT_PINNED], last, drafts };
 }
 
 export function saveKarten(s: KartenState) {
