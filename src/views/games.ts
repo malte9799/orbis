@@ -115,31 +115,33 @@ export function bboxOf(fs: Feat[]): BBox {
   return b;
 }
 
-/** a point inside/near the feature: centre of its biggest part's bounding box */
-function anchor(f: Feat): [number, number] {
+/** bounding box of the feature's biggest part */
+function mainBox(f: Feat): BBox {
   const g = f.geometry;
   const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-  let best: Position[] | null = null;
+  let best: BBox = [0, 0, 0, 0];
   let area = -1;
   for (const p of parts) {
-    const r = p[0];
-    const xs = r.map((q) => q[0]);
-    const ys = r.map((q) => q[1]);
-    const a = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
-    if (a > area) { area = a; best = r; }
+    const xs = p[0].map((q) => q[0]);
+    const ys = p[0].map((q) => q[1]);
+    const b: BBox = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    const a = (b[2] - b[0]) * (b[3] - b[1]);
+    if (a > area) { area = a; best = b; }
   }
-  const xs = best!.map((q) => q[0]);
-  const ys = best!.map((q) => q[1]);
-  return [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  return best;
 }
 
-/** bbox around the anchors – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
+/** a point inside/near the feature: centre of its biggest part's bounding box */
+function anchor(f: Feat): [number, number] {
+  const b = mainBox(f);
+  return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+}
+
+/** bbox around the biggest part of every feature – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
 function anchorView(fs: Feat[]): BBox {
-  const pts = fs.map(anchor);
+  const boxes = fs.map(mainBox);
   const pad = 1.5;
-  const lng = pts.map((q) => q[0]);
-  const lat = pts.map((q) => q[1]);
-  return [Math.min(...lng) - pad, Math.min(...lat) - pad, Math.max(...lng) + pad, Math.max(...lat) + pad];
+  return [Math.min(...boxes.map((b) => b[0])) - pad, Math.min(...boxes.map((b) => b[1])) - pad, Math.max(...boxes.map((b) => b[2])) + pad, Math.max(...boxes.map((b) => b[3])) + pad];
 }
 
 /** span (degrees) of the biggest single part – an archipelago like Hawaii is as hard to spot as its biggest island */
@@ -593,6 +595,8 @@ export function createGamesView(): GamesView {
         m.addLayer({ id: 'areas-line', type: 'line', source: 'areas', paint: { 'line-color': '#0d1530', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] } });
         m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
         m.on('click', onMapClick);
+        // typing mode: the input stays ready after panning/zooming the map
+        m.on('moveend', focusInput);
         m.on('mousemove', (e) => {
           if (!playing || mode !== 'click') return;
           m.getCanvas().style.cursor = m.queryRenderedFeatures(e.point, { layers: ['marks-circle', 'areas-fill'] }).length ? 'pointer' : '';
@@ -679,7 +683,7 @@ export function createGamesView(): GamesView {
       // what is asked: continents (world / continents) and countries (everything but "continents")
       const countries: Target[] = scope === 'continents' ? [] : feats.map((f) => ({ id: f.properties.id, kind: 'country', name: f.properties.name, en: f.properties.en, ids: [f.properties.id], feat: f }));
       const conts: Target[] =
-        (scope === 'world' || scope === 'continents') && !cfg.flag
+        (scope === 'continents' || (scope === 'world' && cfg.mode === 'click')) && !cfg.flag
           ? CONTINENTS.map((c) => ({ id: `c:${c.key}`, kind: 'continent' as const, name: c.de, en: c.en, cont: c.key, ids: feats.filter((f) => f.properties.cont === c.key).map((f) => f.properties.id) })).filter((c) => c.ids.length)
           : [];
       targets = [...conts, ...countries];
@@ -687,7 +691,8 @@ export function createGamesView(): GamesView {
 
       // tiny areas get a clickable dot
       view = scope === 'regions' ? anchorView(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
-      const smallThreshold = (view[2] - view[0]) / 30;
+      // absolute size, so big countries get no dot on the world map; tiny views (regions of a small country) stay relative
+      const smallThreshold = Math.min(2, (view[2] - view[0]) / 20);
       const marks: Feature<Point>[] = feats
         .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
         .map((f) => ({ type: 'Feature', properties: { id: f.properties.id }, geometry: { type: 'Point', coordinates: anchor(f) } }));
@@ -817,6 +822,15 @@ export function createGamesView(): GamesView {
   });
 
   // ----- typing mode ------------------------------------------------------------
+  function focusInput() {
+    if (playing && mode === 'type' && document.activeElement !== input) input.focus({ preventScroll: true });
+  }
+  // typing anywhere on the page goes into the input
+  document.addEventListener('keydown', (e) => {
+    if (el.hidden || e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+    if (/^(input|textarea|select)$/i.test((document.activeElement as HTMLElement | null)?.tagName ?? '')) return;
+    focusInput();
+  });
   typeForm.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!playing || mode !== 'type') return;
