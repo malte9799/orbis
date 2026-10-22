@@ -62,14 +62,15 @@ interface Photo {
   lngLat: [number, number];
 }
 
-async function searchPhoto(token: string, [lng, lat]: [number, number]): Promise<Photo | null> {
+/** strict: only photos with a 3D mesh – MapillaryJS draws the picture onto that mesh, so a photo without one stays blank */
+async function searchPhoto(token: string, [lng, lat]: [number, number], strict: boolean): Promise<Photo | null> {
   const bbox = [lng - HALF, lat - HALF, lng + HALF, lat + HALF].map((n) => n.toFixed(5)).join(',');
   try {
-    const r = await fetch(`${API}?access_token=${encodeURIComponent(token)}&fields=id,computed_geometry&bbox=${bbox}&limit=40`);
+    const r = await fetch(`${API}?access_token=${encodeURIComponent(token)}&fields=id,computed_geometry,mesh&bbox=${bbox}&limit=40`);
     if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error('Mapillary lehnt den Token ab (bitte prüfen).');
     if (!r.ok) return null;
-    const j = (await r.json()) as { data?: { id: string; computed_geometry?: { coordinates: [number, number] } }[] };
-    const list = (j.data ?? []).filter((d) => d.computed_geometry);
+    const j = (await r.json()) as { data?: { id: string; computed_geometry?: { coordinates: [number, number] }; mesh?: { url?: string | null } | null }[] };
+    const list = (j.data ?? []).filter((d) => d.computed_geometry && (!strict || d.mesh?.url));
     if (!list.length) return null;
     const d = list[Math.floor(Math.random() * list.length)];
     return { id: d.id, lngLat: d.computed_geometry!.coordinates };
@@ -138,8 +139,10 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
   });
 
   async function loadPhoto(): Promise<Photo | null> {
-    for (let attempt = 0; attempt < 6 && !dead; attempt++) {
-      const batch = await Promise.all(Array.from({ length: 6 }, () => searchPhoto(o.token, randomPoint(feats, boxes, weights, total))));
+    for (let attempt = 0; attempt < 8 && !dead; attempt++) {
+      // the last attempts take any photo, in case the API never reports meshes for this token
+      const strict = attempt < 6;
+      const batch = await Promise.all(Array.from({ length: 6 }, () => searchPhoto(o.token, randomPoint(feats, boxes, weights, total), strict)));
       const hit = batch.find(Boolean);
       if (hit) return hit;
     }
