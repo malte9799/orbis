@@ -1,5 +1,5 @@
 import type { Geometry, Position } from 'geojson';
-import { bboxOf, loadData, SCOPES, type Feat } from '../views/games';
+import { bboxOf, loadData, SCOPES, scopeOf, type Feat } from '../views/games';
 import type { QuizItem } from './namequiz';
 
 // Question sets for the name quiz: flags, capitals and outlines.
@@ -10,7 +10,7 @@ const flagImg = (code: string, cls = 'fg-img') => `<img class="${cls}" alt="Flag
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 async function countries(scopeId: string, keep: (f: Feat) => boolean): Promise<Feat[]> {
-  const scope = SCOPES.find((s) => s.id === scopeId) ?? SCOPES[0];
+  const scope = scopeOf(scopeId) ?? SCOPES[0];
   const all = (await loadData('countries.json')).features as Feat[];
   return all.filter((f) => f.properties.sov && keep(f) && (!scope.filter || scope.filter(f.properties)));
 }
