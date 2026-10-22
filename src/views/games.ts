@@ -664,8 +664,9 @@ export function createGamesView(): GamesView {
     } else {
       tries++;
       wrongTotal++;
+      const before = (map!.getFeatureState({ source: 'areas', id }).status as Status | undefined) ?? null;
       setStatus(id, 'wrong');
-      window.setTimeout(() => setStatus(id, found.has(id) ? 'found' : null), 600);
+      window.setTimeout(() => setStatus(id, found.has(id) ? 'found' : before === 'wrong' ? null : before), 600);
       say(`Das war ${clicked.properties.name}.`, 'bad');
       if (tries >= MAX_TRIES) reveal(cur);
     }
