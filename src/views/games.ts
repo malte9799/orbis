@@ -131,16 +131,13 @@ function anchor(f: Feat): [number, number] {
   return [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
 }
 
-/** bbox around the anchors, ignoring far-away outliers (Alaska/Hawaii, Gotland-like exclaves stay inside) */
-function anchorView(fs: Feat[], trim: boolean): BBox {
+/** bbox around the anchors – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
+function anchorView(fs: Feat[]): BBox {
   const pts = fs.map(anchor);
-  const cut = trim ? Math.floor(pts.length * 0.06) : 0;
-  const pick = (i: 0 | 1, lo: boolean) => {
-    const v = pts.map((q) => q[i]).sort((a, b) => a - b);
-    return lo ? v[cut] : v[v.length - 1 - cut];
-  };
   const pad = 1.5;
-  return [pick(0, true) - pad, pick(1, true) - pad, pick(0, false) + pad, pick(1, false) + pad];
+  const lng = pts.map((q) => q[0]);
+  const lat = pts.map((q) => q[1]);
+  return [Math.min(...lng) - pad, Math.min(...lat) - pad, Math.max(...lng) + pad, Math.max(...lat) + pad];
 }
 
 /** span (degrees) of the biggest part – used to give tiny features a clickable marker */
@@ -519,7 +516,6 @@ export function createGamesView(): GamesView {
   let lookup = new Map<string, Target>();
   let bounds: BBox | null = null;
   let view: BBox = [-180, -90, 180, 90];
-  let fullView: BBox = view;
   let phaseNoted = false;
 
   const clock = () => {
@@ -574,8 +570,7 @@ export function createGamesView(): GamesView {
       if (targets.length < 2) throw new Error('zu wenige Gebiete');
 
       // tiny areas get a clickable dot
-      view = scope === 'regions' ? anchorView(feats, true) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
-      fullView = scope === 'regions' ? anchorView(feats, false) : view;
+      view = scope === 'regions' ? anchorView(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
       const smallThreshold = (view[2] - view[0]) / 40;
       const marks: Feature<Point>[] = feats
         .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
@@ -624,13 +619,6 @@ export function createGamesView(): GamesView {
     }
   }
 
-  const inView = (p: [number, number]) => p[0] >= view[0] && p[0] <= view[2] && p[1] >= view[1] && p[1] <= view[3];
-  /** default view, or the whole spread when the asked area lies outside it (Alaska, Hawaii …) */
-  function frame(duration: number) {
-    const far = current?.kind === 'country' && current.feat && !inView(anchor(current.feat));
-    map!.fitBounds(far ? fullView : bounds!, { ...FIT, duration });
-  }
-
   /** a continent that was skipped / missed is asked again before the countries start */
   function requeue(t: Target) {
     if (t.kind === 'continent') {
@@ -654,7 +642,6 @@ export function createGamesView(): GamesView {
     } else if (prev) say('');
     if (promptFlag) $('.gm-target').innerHTML = `<img class="gm-flagq" alt="Flagge" src="${DATA}flags/${current.feat!.properties.flag}.svg" />`;
     else $('.gm-target').textContent = current.name;
-    if (mode === 'click' && (prev || current.kind === 'country')) frame(600);
     $('.gm-ask small').textContent = promptFlag ? 'Zu welchem Land gehört diese Flagge?' : current.kind === 'continent' ? 'Wo liegt der Kontinent …' : 'Wo liegt …';
   }
 
@@ -699,7 +686,7 @@ export function createGamesView(): GamesView {
       paint(t, t.kind === 'continent' ? null : 'missed');
       requeue(t); // asked again later
       next();
-      frame(600);
+      map!.fitBounds(bounds!, { ...FIT, duration: 600 });
     }, 1500);
   }
 
