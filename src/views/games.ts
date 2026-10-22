@@ -578,7 +578,7 @@ export function createGamesView(): GamesView {
       fullView = scope === 'regions' ? anchorView(feats, false) : view;
       const smallThreshold = (view[2] - view[0]) / 40;
       const marks: Feature<Point>[] = feats
-        .filter((f) => span(f) < Math.max(smallThreshold, 0.01) || (scope === 'regions' && !inView(anchor(f))))
+        .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
         .map((f) => ({ type: 'Feature', properties: { id: f.properties.id }, geometry: { type: 'Point', coordinates: anchor(f) } }));
       markIds = new Set(marks.map((m) => m.properties!.id as string));
       (map!.getSource('areas') as GeoJSONSource).setData(data as FeatureCollection);
