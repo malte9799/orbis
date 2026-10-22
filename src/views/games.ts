@@ -131,10 +131,26 @@ function anchor(f: Feat): [number, number] {
   return [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
 }
 
-/** span (degrees) of the biggest part – used to give tiny features a clickable marker */
+/** bbox around the anchors – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
+function anchorView(fs: Feat[]): BBox {
+  const pts = fs.map(anchor);
+  const pad = 1.5;
+  const lng = pts.map((q) => q[0]);
+  const lat = pts.map((q) => q[1]);
+  return [Math.min(...lng) - pad, Math.min(...lat) - pad, Math.max(...lng) + pad, Math.max(...lat) + pad];
+}
+
+/** span (degrees) of the biggest single part – an archipelago like Hawaii is as hard to spot as its biggest island */
 function span(f: Feat): number {
-  const b = bboxOf([f]);
-  return Math.max(b[2] - b[0], b[3] - b[1]);
+  const g = f.geometry;
+  const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+  let best = 0;
+  for (const p of parts) {
+    const xs = p[0].map((q) => q[0]);
+    const ys = p[0].map((q) => q[1]);
+    best = Math.max(best, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  }
+  return best;
 }
 
 const cache = new Map<string, Promise<FeatureCollection<Geometry, Props>>>();
@@ -466,7 +482,7 @@ export function createGamesView(): GamesView {
         ];
         m.addLayer({ id: 'areas-fill', type: 'fill', source: 'areas', paint: { 'fill-color': color as never, 'fill-opacity': 0.95 } });
         m.addLayer({ id: 'areas-line', type: 'line', source: 'areas', paint: { 'line-color': '#0d1530', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] } });
-        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': 5, 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
+        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
         m.on('click', onMapClick);
         m.on('mousemove', (e) => {
           if (!playing || mode !== 'click') return;
@@ -561,8 +577,8 @@ export function createGamesView(): GamesView {
       if (targets.length < 2) throw new Error('zu wenige Gebiete');
 
       // tiny areas get a clickable dot
-      view = scope === 'regions' ? bboxOf(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
-      const smallThreshold = (view[2] - view[0]) / 150;
+      view = scope === 'regions' ? anchorView(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
+      const smallThreshold = (view[2] - view[0]) / 30;
       const marks: Feature<Point>[] = feats
         .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
         .map((f) => ({ type: 'Feature', properties: { id: f.properties.id }, geometry: { type: 'Point', coordinates: anchor(f) } }));
@@ -655,8 +671,9 @@ export function createGamesView(): GamesView {
     } else {
       tries++;
       wrongTotal++;
+      const before = (map!.getFeatureState({ source: 'areas', id }).status as Status | undefined) ?? null;
       setStatus(id, 'wrong');
-      window.setTimeout(() => setStatus(id, found.has(id) ? 'found' : null), 600);
+      window.setTimeout(() => setStatus(id, found.has(id) ? 'found' : before === 'wrong' ? null : before), 600);
       say(`Das war ${clicked.properties.name}.`, 'bad');
       if (tries >= MAX_TRIES) reveal(cur);
     }
