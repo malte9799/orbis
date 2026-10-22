@@ -131,6 +131,18 @@ function anchor(f: Feat): [number, number] {
   return [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
 }
 
+/** bbox around the anchors, ignoring far-away outliers (Alaska/Hawaii, Gotland-like exclaves stay inside) */
+function anchorView(fs: Feat[], trim: boolean): BBox {
+  const pts = fs.map(anchor);
+  const cut = trim ? Math.floor(pts.length * 0.06) : 0;
+  const pick = (i: 0 | 1, lo: boolean) => {
+    const v = pts.map((q) => q[i]).sort((a, b) => a - b);
+    return lo ? v[cut] : v[v.length - 1 - cut];
+  };
+  const pad = 1.5;
+  return [pick(0, true) - pad, pick(1, true) - pad, pick(0, false) + pad, pick(1, false) + pad];
+}
+
 /** span (degrees) of the biggest part – used to give tiny features a clickable marker */
 function span(f: Feat): number {
   const b = bboxOf([f]);
@@ -466,7 +478,7 @@ export function createGamesView(): GamesView {
         ];
         m.addLayer({ id: 'areas-fill', type: 'fill', source: 'areas', paint: { 'fill-color': color as never, 'fill-opacity': 0.95 } });
         m.addLayer({ id: 'areas-line', type: 'line', source: 'areas', paint: { 'line-color': '#0d1530', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] } });
-        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': 5, 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
+        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
         m.on('click', onMapClick);
         m.on('mousemove', (e) => {
           if (!playing || mode !== 'click') return;
@@ -507,6 +519,7 @@ export function createGamesView(): GamesView {
   let lookup = new Map<string, Target>();
   let bounds: BBox | null = null;
   let view: BBox = [-180, -90, 180, 90];
+  let fullView: BBox = view;
   let phaseNoted = false;
 
   const clock = () => {
@@ -561,10 +574,11 @@ export function createGamesView(): GamesView {
       if (targets.length < 2) throw new Error('zu wenige Gebiete');
 
       // tiny areas get a clickable dot
-      view = scope === 'regions' ? bboxOf(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
-      const smallThreshold = (view[2] - view[0]) / 150;
+      view = scope === 'regions' ? anchorView(feats, true) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
+      fullView = scope === 'regions' ? anchorView(feats, false) : view;
+      const smallThreshold = (view[2] - view[0]) / 40;
       const marks: Feature<Point>[] = feats
-        .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
+        .filter((f) => span(f) < Math.max(smallThreshold, 0.01) || (scope === 'regions' && !inView(anchor(f))))
         .map((f) => ({ type: 'Feature', properties: { id: f.properties.id }, geometry: { type: 'Point', coordinates: anchor(f) } }));
       markIds = new Set(marks.map((m) => m.properties!.id as string));
       (map!.getSource('areas') as GeoJSONSource).setData(data as FeatureCollection);
@@ -610,6 +624,13 @@ export function createGamesView(): GamesView {
     }
   }
 
+  const inView = (p: [number, number]) => p[0] >= view[0] && p[0] <= view[2] && p[1] >= view[1] && p[1] <= view[3];
+  /** default view, or the whole spread when the asked area lies outside it (Alaska, Hawaii …) */
+  function frame(duration: number) {
+    const far = current?.kind === 'country' && current.feat && !inView(anchor(current.feat));
+    map!.fitBounds(far ? fullView : bounds!, { ...FIT, duration });
+  }
+
   /** a continent that was skipped / missed is asked again before the countries start */
   function requeue(t: Target) {
     if (t.kind === 'continent') {
@@ -633,6 +654,7 @@ export function createGamesView(): GamesView {
     } else if (prev) say('');
     if (promptFlag) $('.gm-target').innerHTML = `<img class="gm-flagq" alt="Flagge" src="${DATA}flags/${current.feat!.properties.flag}.svg" />`;
     else $('.gm-target').textContent = current.name;
+    if (mode === 'click' && (prev || current.kind === 'country')) frame(600);
     $('.gm-ask small').textContent = promptFlag ? 'Zu welchem Land gehört diese Flagge?' : current.kind === 'continent' ? 'Wo liegt der Kontinent …' : 'Wo liegt …';
   }
 
@@ -677,7 +699,7 @@ export function createGamesView(): GamesView {
       paint(t, t.kind === 'continent' ? null : 'missed');
       requeue(t); // asked again later
       next();
-      map!.fitBounds(bounds!, { ...FIT, duration: 600 });
+      frame(600);
     }, 1500);
   }
 
