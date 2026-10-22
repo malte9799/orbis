@@ -79,6 +79,19 @@ async function searchPhoto(token: string, [lng, lat]: [number, number]): Promise
   }
 }
 
+/** resolves with the first search that finds a photo (null if none does); a rejected search (bad token) rejects at once */
+function firstHit(searches: Promise<Photo | null>[]): Promise<Photo | null> {
+  return new Promise((resolve, reject) => {
+    let open = searches.length;
+    for (const s of searches) {
+      s.then((p) => {
+        if (p) resolve(p);
+        else if (--open === 0) resolve(null);
+      }, reject);
+    }
+  });
+}
+
 export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExit: () => void): Promise<StreetGame> {
   const scope = SCOPES.find((s) => s.id === o.scope) ?? SCOPES[0];
   const all = (await loadData('countries.json')).features as Feat[];
@@ -112,6 +125,8 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
   let guess: [number, number] | null = null;
   let truth: [number, number] | null = null;
   let round = 0;
+  /** search for the next round, started while the current one is played */
+  let upcoming: Promise<Photo | null> | null = null;
   let sum = 0;
   let marker: Marker | null = null;
   let truthMarker: Marker | null = null;
@@ -139,8 +154,7 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
 
   async function loadPhoto(): Promise<Photo | null> {
     for (let attempt = 0; attempt < 6 && !dead; attempt++) {
-      const batch = await Promise.all(Array.from({ length: 6 }, () => searchPhoto(o.token, randomPoint(feats, boxes, weights, total))));
-      const hit = batch.find(Boolean);
+      const hit = await firstHit(Array.from({ length: 6 }, () => searchPhoto(o.token, randomPoint(feats, boxes, weights, total))));
       if (hit) return hit;
     }
     return null;
@@ -153,12 +167,10 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     }
     viewer = new Viewer({ accessToken: o.token, container: $('.sg-viewer'), imageId: id, component: { cover: false, attribution: true } });
     if (!o.move) {
-      for (const c of ['direction', 'sequence', 'spatial', 'bearing', 'image', 'slider'] as const) {
+      for (const c of ['direction', 'sequence', 'spatial', 'bearing', 'slider'] as const) {
         try { viewer.deactivateComponent(c); } catch { /* component absent */ }
       }
       viewer.getComponent<KeyboardComponent>('keyboard').configure({ keySequenceNavigation: false, keySpatialNavigation: false });
-    } else {
-      try { viewer.deactivateComponent('image'); } catch { /* absent */ }
     }
   }
 
@@ -181,12 +193,17 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     map.resize();
     map.fitBounds(view, { padding: 10, duration: 0 });
     try {
-      const photo = await loadPhoto();
+      const photo = await (upcoming ?? loadPhoto());
+      upcoming = null;
       if (dead) return;
       if (!photo) throw new Error('Kein Foto gefunden – in diesem Gebiet gibt es offenbar wenig Mapillary-Abdeckung.');
       truth = photo.lngLat;
       mountViewer(photo.id);
       loading.hidden = true;
+      if (round < o.rounds) {
+        upcoming = loadPhoto();
+        upcoming.catch(() => {}); // a failure shows up when the next round awaits it
+      }
     } catch (e) {
       if (dead) return;
       loading.textContent = (e as Error).message;

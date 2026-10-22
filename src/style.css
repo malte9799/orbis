@@ -3313,7 +3313,8 @@ svg.hourly {
   z-index: 6;
   background: #000;
 }
-.sg-viewer {
+/* .sg prefix: mapillary.css (loaded later) sets .mapillary-viewer to position: relative, which would collapse the box to height 0 */
+.sg .sg-viewer {
   position: absolute;
   inset: 0;
 }
@@ -3331,6 +3332,11 @@ svg.hourly {
   border: 1px solid var(--border);
   z-index: 3;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Mapillary's play/step bar sits at top: 14px and would overlap .sg-top */
+.sg .mapillary-sequence-container {
+  top: 68px;
 }
 .sg-loading {
   position: absolute;
