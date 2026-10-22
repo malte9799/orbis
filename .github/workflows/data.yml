@@ -14,7 +14,7 @@ on:
         default: true
   push:
     branches: [main]
-    paths: ['scripts/fetch-data.ts', 'scripts/mars-traverse.mjs', 'src/api/camfeeds.ts', 'src/api/earth.ts', '.github/workflows/data.yml']
+    paths: ['scripts/fetch-data.ts', 'scripts/mars-traverse.mjs', 'scripts/street-panos.mjs', 'src/api/camfeeds.ts', 'src/api/earth.ts', '.github/workflows/data.yml']
 
 permissions:
   contents: write
@@ -50,6 +50,7 @@ jobs:
           VICTORIA_KEY: ${{ secrets.VICTORIA_KEY }}
           CTA_KEY: ${{ secrets.CTA_KEY }}
           TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
+          MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN || vars.MAPILLARY_TOKEN }}
         run: |
           npx esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
           node ../fetch-data.mjs ../data-out ../data-prev

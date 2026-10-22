@@ -17,7 +17,9 @@
     "three": "^0.183.2"
   },
   "devDependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
     "@types/three": "^0.183.1",
+    "pbf": "^5.1.2",
     "typescript": "^5.9.3",
     "vite": "^7.3.7"
   }

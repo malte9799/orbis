@@ -4,6 +4,7 @@ import { Viewer, type KeyboardComponent } from 'mapillary-js';
 import 'mapillary-js/dist/mapillary.css';
 import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from '../views/games';
 import { escapeHtml } from '../util';
+import { snapshotJson } from '../api/data';
 
 // Street guessing (GeoGuessr light) on Mapillary's open street-level photos.
 // A random place in the chosen area is searched for a photo; you place a guess on a map.
@@ -14,6 +15,8 @@ export interface StreetOptions {
   /** false: no way to move away from the start position */
   move: boolean;
   rounds: number;
+  /** only 360° photos, taken from the places listed in the data branch (street/panos.json) */
+  panos?: boolean;
 }
 
 export interface StreetGame {
@@ -62,10 +65,10 @@ interface Photo {
   lngLat: [number, number];
 }
 
-async function searchPhoto(token: string, [lng, lat]: [number, number]): Promise<Photo | null> {
-  const bbox = [lng - HALF, lat - HALF, lng + HALF, lat + HALF].map((n) => n.toFixed(5)).join(',');
+async function searchPhoto(token: string, [lng, lat]: [number, number], pano = false, half = HALF): Promise<Photo | null> {
+  const bbox = [lng - half, lat - half, lng + half, lat + half].map((n) => n.toFixed(5)).join(',');
   try {
-    const r = await fetch(`${API}?access_token=${encodeURIComponent(token)}&fields=id,computed_geometry&bbox=${bbox}&limit=40`);
+    const r = await fetch(`${API}?access_token=${encodeURIComponent(token)}&fields=id,computed_geometry&bbox=${bbox}${pano ? '&is_pano=true' : ''}&limit=40`);
     if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error('Mapillary lehnt den Token ab (bitte prüfen).');
     if (!r.ok) return null;
     const j = (await r.json()) as { data?: { id: string; computed_geometry?: { coordinates: [number, number] } }[] };
@@ -101,6 +104,18 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
   const total = weights.reduce((a, b) => a + b, 0);
   const view = scope.view ?? ([-168, -56, 180, 80] as BBox);
   const scale = Math.min(1500, Math.max(250, distanceKm([view[0], view[1]], [view[2], view[3]]) / 8));
+
+  // panorama mode: places with 360° photos, listed monthly by the data Action. Without the list (not built yet) or
+  // with too few places in the chosen area the game falls back to a random search for any photo.
+  let pool: [number, number][] = [];
+  if (o.panos) {
+    const list = await snapshotJson<{ points: [number, number][] }>('street/panos.json').catch(() => null);
+    const inScope = ([x, y]: [number, number]) => feats.some((f, i) => x >= boxes[i][0] && x <= boxes[i][2] && y >= boxes[i][1] && y <= boxes[i][3] && inGeometry([x, y], f.geometry));
+    const points = list?.points ?? [];
+    pool = scope.filter ? points.filter(inScope) : points;
+    if (pool.length < 20) pool = [];
+  }
+  const panos = pool.length > 0;
 
   const root = document.createElement('div');
   root.className = 'sg';
@@ -154,7 +169,9 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
 
   async function loadPhoto(): Promise<Photo | null> {
     for (let attempt = 0; attempt < 6 && !dead; attempt++) {
-      const hit = await firstHit(Array.from({ length: 6 }, () => searchPhoto(o.token, randomPoint(feats, boxes, weights, total))));
+      const hit = await firstHit(
+        Array.from({ length: 6 }, () => (panos ? searchPhoto(o.token, pool[Math.floor(Math.random() * pool.length)], true, 0.02) : searchPhoto(o.token, randomPoint(feats, boxes, weights, total)))),
+      );
       if (hit) return hit;
     }
     return null;
