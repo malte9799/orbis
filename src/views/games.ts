@@ -40,17 +40,20 @@ export const SCOPES: Scope[] = [
   { id: 'South America', view: [-83, -56, -34, 13], label: 'Südamerika', filter: (p) => p.cont === 'South America' },
   { id: 'Oceania', view: [110, -48, 180, 0], label: 'Ozeanien', filter: (p) => p.cont === 'Oceania' },
 ];
-const MAX_TRIES = 3;
-
-/** continents as quiz targets (Natural Earth names → German, English) */
-const CONTINENTS: { key: string; de: string; en: string }[] = [
-  { key: 'Europe', de: 'Europa', en: 'Europe' },
-  { key: 'Asia', de: 'Asien', en: 'Asia' },
-  { key: 'Africa', de: 'Afrika', en: 'Africa' },
-  { key: 'North America', de: 'Nordamerika', en: 'North America' },
-  { key: 'South America', de: 'Südamerika', en: 'South America' },
-  { key: 'Oceania', de: 'Ozeanien', en: 'Oceania' },
-];
+/** a SCOPES id, or `conts:Europe,Asia` for several continents at once */
+export function scopeOf(id: string): Scope | undefined {
+  if (!id.startsWith('conts:')) return SCOPES.find((s) => s.id === id);
+  const keys = id.slice(6).split(',');
+  const parts = SCOPES.filter((s) => keys.includes(s.id));
+  const views = parts.map((s) => s.view!);
+  return {
+    id,
+    label: parts.map((s) => s.label).join(', '),
+    filter: (p) => keys.includes(p.cont ?? ''),
+    view: [Math.min(...views.map((v) => v[0])), Math.min(...views.map((v) => v[1])), Math.max(...views.map((v) => v[2])), Math.max(...views.map((v) => v[3]))],
+  };
+}
+const MAX_TRIES = 1; // one try on the map, then the solution is shown
 
 /** one thing to find: a country/region (one feature) or a continent (all its countries) */
 interface Target {
@@ -68,6 +71,10 @@ interface QuizConfig {
   scope: string;
   region?: string;
   sov: boolean;
+  /** flag game: four answers to pick from as an extra */
+  choice?: boolean;
+  /** flag game: number of flags (0 = all) */
+  rounds?: number;
   /** map variant of the flag game: the question is a flag instead of a name */
   flag: boolean;
   mode: Mode;
@@ -183,7 +190,7 @@ const GAME_CARDS: GameCard[] = [
   { id: 'flags', label: 'Flaggen-Rater', tag: 'Flaggen', blurb: 'Welche Flagge gehört zu welchem Land?', chips: ['Auswahl', 'Eintippen', 'Karte'] },
   { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
   { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
-  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Duell', 'Maßstab'] },
+  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Maßstab', 'Higher Lower'] },
   { id: 'street', label: 'Straßen-Rater', tag: 'Straßenfotos', blurb: 'Ein zufälliges Straßenfoto – tippe auf der Karte, wo es aufgenommen wurde. 5 Runden, bis zu 5000 Punkte.', chips: ['5 Runden', 'Punkte'] },
 ];
 
@@ -194,6 +201,72 @@ function previewHtml(id: string): string {
     return `<div class="gm-pv gm-pv-flags">${fl.map((f, i) => `<img class="gm-pvflag f${i}" alt="" loading="lazy" src="${DATA}flags/${f}.svg" />`).join('')}</div>`;
   }
   return `<div class="gm-pv"><img alt="" loading="lazy" src="${DATA}previews/${id}.svg" /></div>`;
+}
+
+/** little picture per menu option (viewBox 160×100): see .gm-opt-pv in style.css for the colour classes */
+const BLOB_A = 'M14 62L30 36L58 28L84 40L78 64L46 74Z';
+const BLOB_B = 'M92 30L128 24L146 44L130 70L100 62Z';
+const PIN = 'M0 12C-10-2-10-16 0-16S10-2 0 12Z';
+const OPT_ICONS: Record<string, string> = {
+  click: `<path class="m" d="${BLOB_A}"/><path class="a" d="${BLOB_B}"/><path class="w" d="M118 46L118 74L126 67L131 79L137 77L132 65L142 65Z"/>`,
+  type: `<rect class="o" x="14" y="36" width="132" height="30" rx="8"/><text class="t" x="26" y="57">Bras</text><rect class="a" x="62" y="44" width="2.5" height="14"/><g class="m"><rect x="14" y="76" width="34" height="9" rx="4.5"/><rect x="54" y="76" width="44" height="9" rx="4.5"/></g>`,
+  choice: `<g class="m"><rect x="12" y="14" width="64" height="32" rx="7"/><rect x="84" y="14" width="64" height="32" rx="7"/><rect x="12" y="54" width="64" height="32" rx="7"/></g><rect class="a" x="84" y="54" width="64" height="32" rx="7"/><path class="wl" d="M104 70L113 78L130 62"/>`,
+  map: `<rect class="w" x="12" y="14" width="46" height="32" rx="4"/><rect class="a" x="12" y="14" width="46" height="11"/><rect fill="#e5484d" x="12" y="36" width="46" height="10"/><path class="m" d="M70 46L88 30L116 26L140 38L132 66L98 78L74 68Z"/><g transform="translate(112 56)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g>`,
+  cap: `<path class="a" d="M10 62L26 36L52 30L72 42L66 64L36 74Z"/><path class="wl" d="M78 52H100M94 45L101 52L94 59"/><g transform="translate(130 50)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g><rect class="o" x="108" y="68" width="44" height="14" rx="5"/>`,
+  land: `<g transform="translate(30 50)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g><rect class="o" x="8" y="68" width="44" height="14" rx="5"/><path class="wl" d="M62 52H84M78 45L85 52L78 59"/><path class="a" d="M96 62L112 36L138 30L154 42L148 64L120 74Z"/>`,
+  duel: `<path class="a" d="M12 74L18 40L44 26L66 40L62 70L36 80Z"/><path class="r" d="M96 70L102 48L124 34L148 46L146 68L120 78Z"/><circle class="o" cx="80" cy="52" r="13"/><text class="t" x="80" y="57" text-anchor="middle" font-size="13">VS</text>`,
+  scale: `<path class="m" d="M16 70L22 36L50 22L72 36L68 66L42 76Z"/><rect class="dash" x="76" y="20" width="70" height="60" rx="3"/><path class="a" d="M88 64L94 44L112 34L128 44L126 62L106 70Z"/><circle class="w" cx="146" cy="80" r="6"/>`,
+  area: `<rect class="a" x="14" y="22" width="76" height="62" rx="4"/><rect class="r" x="104" y="54" width="42" height="30" rx="4"/><path class="wl" d="M14 14H90M14 11V17M90 11V17"/>`,
+  pop: `<g class="a">${Array.from({ length: 24 }, (_, i) => `<circle cx="${18 + (i % 6) * 11}" cy="${26 + Math.floor(i / 6) * 14}" r="4"/>`).join('')}</g><g class="r">${Array.from({ length: 6 }, (_, i) => `<circle cx="${100 + (i % 3) * 14}" cy="${58 + Math.floor(i / 3) * 14}" r="4.5"/>`).join('')}</g>`,
+  move1: `<path class="road" d="M70 30H90L150 90H10Z"/><path class="wl" d="M80 38V90" stroke-dasharray="6 6"/><path class="w" d="M30 20L20 30L30 40M130 20L140 30L130 40" fill="none" stroke-width="4"/>`,
+  move0: `<path class="road" d="M70 30H90L150 90H10Z"/><path class="wl" d="M80 38V90" stroke-dasharray="6 6"/><g transform="translate(80 40)"><rect class="a" x="-14" y="-4" width="28" height="22" rx="4"/><path class="wl" d="M-8 -4V-12a8 8 0 0116 0V-4"/></g>`,
+};
+const OPT_BASE: Record<string, string> = { mode: 'previews/quiz.svg', fhelp: 'flags/br.svg', cmode: 'previews/capitals.svg', omode: 'previews/outline.svg' };
+const OPT_OVERLAY: Record<string, string> = {
+  click: '<circle class="wl" cx="92" cy="40" r="11" stroke-width="2.5" opacity=".85"/><path class="w" d="M92 40L92 70L100 63L105 76L112 73L107 60L118 60Z"/>',
+  type: '<rect class="bg" x="22" y="62" width="116" height="26" rx="10"/><text class="t" x="36" y="80" font-size="14">Bras</text><rect class="a" x="76" y="69" width="2.5" height="12"/>',
+  choice: '<g class="bg"><rect x="12" y="56" width="68" height="18" rx="7"/><rect x="84" y="56" width="68" height="18" rx="7"/><rect x="12" y="78" width="68" height="18" rx="7"/></g><rect class="a" x="84" y="78" width="68" height="18" rx="7"/>',
+};
+/** picture of a menu option: the game's map/flag image with a little overlay, or a drawing */
+const optIcon = (k: string, v: string): string => {
+  if (k === 'smode' && (v === 'duel' || v === 'scale')) return `<img class="gm-opt-bg" alt="" src="${DATA}previews/${v === 'duel' ? 'higherlower' : 'scale'}.svg" />`;
+  if (OPT_BASE[k] && OPT_OVERLAY[v]) return `<img class="gm-opt-bg${k === 'fmode' ? ' dim' : ''}" alt="" src="${DATA}${OPT_BASE[k]}" /><svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet">${OPT_OVERLAY[v]}</svg>`;
+  const d = OPT_ICONS[k === 'move' ? 'move' + v : v];
+  return d ? `<svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet">${d}</svg>` : '';
+};
+const slug = (s: string) => s.toLowerCase().replace(/ /g, '-');
+
+const HIST_KEY = 'orbis-gm-region-history';
+/** countries picked in the "Regional" grid, most recent first */
+function regionHistory(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HIST_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+function saveRegionHistory(id: string) {
+  try {
+    localStorage.setItem(HIST_KEY, JSON.stringify([id, ...regionHistory().filter((x) => x !== id)].slice(0, 8)));
+  } catch {
+    /* private mode */
+  }
+}
+/** km² per ISO code, to sort the countries by size */
+let areasP: Promise<Map<string, number>> | null = null;
+function countryAreas(): Promise<Map<string, number>> {
+  areasP ??= (async () => {
+    const { areaKm2 } = await import('../games/sizeduel');
+    const m = new Map<string, number>();
+    for (const f of (await loadData('countries.json')).features as Feat[]) {
+      const iso = (f.properties as Props & { iso?: string }).iso;
+      if (iso) m.set(iso, (m.get(iso) ?? 0) + areaKm2(f.geometry));
+    }
+    return m;
+  })();
+  areasP.catch(() => (areasP = null));
+  return areasP;
 }
 
 const regionIndexP: { p: Promise<{ id: string; name: string; n: number }[]> | null } = { p: null };
@@ -217,6 +290,7 @@ export function createGamesView(): GamesView {
       <div class="gm-ask" hidden><small>Wo liegt …</small><b class="gm-target"></b></div>
       <form class="gm-type" hidden autocomplete="off"><input class="gm-input" type="text" placeholder="Name eintippen …" autocapitalize="off" autocorrect="off" spellcheck="false" /></form>
       <div class="gm-feedback" aria-live="polite"></div>
+      <div class="gm-choices" hidden></div>
       <div class="gm-actions">
         <button class="btn gm-skip" type="button">Überspringen</button>
         <button class="btn gm-giveup" type="button">Aufgeben</button>
@@ -257,9 +331,7 @@ export function createGamesView(): GamesView {
       <div class="gm-field"><span>Gebiet</span>
         <select class="gm-scope"></select>
         <select class="gm-region" hidden></select>
-        <small class="gm-note gm-scope-note"></small>
       </div>
-      <label class="gm-check"><input type="checkbox" class="gm-sov" checked /> Nur souveräne Staaten (ohne Gebiete wie Grönland oder Puerto Rico)</label>
       <button class="btn btn-primary gm-start" type="button">Spiel starten</button>
       <p class="gm-note gm-err"></p>
       <p class="gm-note">Kartendaten: Natural Earth (gemeinfrei).</p>
@@ -269,11 +341,10 @@ export function createGamesView(): GamesView {
       <div class="gm-games"></div>
       <h2>Flaggen-Rater</h2>
       <p class="gm-lead">Welche Flagge gehört zu welchem Land?</p>
-      <div class="gm-field"><span>Spielart</span>
-        <div class="gm-seg fg-modes" data-k="fmode">
-          <button type="button" data-v="choice" class="on">Auswahl<small>4 Antworten</small></button>
-          <button type="button" data-v="type">Eintippen<small>Name selbst schreiben</small></button>
-          <button type="button" data-v="map">Auf der Karte<small>Land anklicken</small></button>
+      <div class="gm-field"><span>Antworten</span>
+        <div class="gm-seg" data-k="fhelp">
+          <button type="button" data-v="type" class="on">Karte &amp; Eingabe<small>Land anklicken oder Namen tippen – beides immer möglich</small></button>
+          <button type="button" data-v="choice">Zusätzlich Auswahl<small>Dazu 4 Antworten zum Antippen</small></button>
         </div>
       </div>
       <div class="gm-field"><span>Gebiet</span><select class="fg-scope"></select></div>
@@ -329,11 +400,11 @@ export function createGamesView(): GamesView {
     <div class="gm-panel" data-game="size" hidden>
       <div class="gm-games"></div>
       <h2>Größenvergleich</h2>
-      <p class="gm-lead">Wie groß ist ein Land im Vergleich zu einem anderen? Im Duell werden die Paare mit der Zeit immer knapper.</p>
+      <p class="gm-lead">Wie groß ist ein Land im Vergleich zu einem anderen? Bei Higher Lower werden die Paare mit der Zeit immer knapper; im Maßstab ziehst du ein Gebiet auf die richtige Größe.</p>
       <div class="gm-field"><span>Spielart</span>
         <div class="gm-seg" data-k="smode">
-          <button type="button" data-v="duel" class="on">Duell<small>Zwei Gebiete – welches ist größer?</small></button>
-          <button type="button" data-v="scale">Maßstab<small>Ein Gebiet fest, das andere ziehst du auf die richtige Größe</small></button>
+          <button type="button" data-v="scale" class="on">Maßstab<small>Ein Gebiet fest, das andere ziehst du auf die richtige Größe</small></button>
+          <button type="button" data-v="duel">Higher Lower<small>Zwei Gebiete – welches ist größer?</small></button>
         </div>
       </div>
       <div class="gm-field sz-metric"><span>Vergleich</span>
@@ -347,7 +418,7 @@ export function createGamesView(): GamesView {
         <select class="sz-region" hidden></select>
         <small class="gm-note">Bei Regionen eines Landes und im Maßstab-Modus zählt nur die Fläche.</small>
       </div>
-      <div class="gm-field"><span>Runden</span><select class="sz-rounds"><option value="10">10 Runden</option><option value="20">20 Runden</option><option value="5">5 Runden</option><option value="0" class="sz-endless">Bis zum ersten Fehler (Duell)</option></select></div>
+      <div class="gm-field"><span>Runden</span><select class="sz-rounds"><option value="10">10 Runden</option><option value="20">20 Runden</option><option value="5">5 Runden</option><option value="0" class="sz-endless">Bis zum ersten Fehler (Higher Lower)</option></select></div>
       <button class="btn btn-primary sz-start" type="button">Spiel starten</button>
       <p class="gm-note sz-err"></p>
       <p class="gm-note">Flächen aus den Grenzdaten berechnet (Natural Earth), daher nur ungefähr.</p>
@@ -381,6 +452,7 @@ export function createGamesView(): GamesView {
   const result = $('.gm-result');
   const ask = $('.gm-ask');
   const typeForm = $<HTMLFormElement>('.gm-type');
+  const choicesEl = $('.gm-choices');
   const input = $<HTMLInputElement>('.gm-input');
   const host = $('.gm-street-host');
   const feedback = $('.gm-feedback');
@@ -392,12 +464,157 @@ export function createGamesView(): GamesView {
     panels.forEach((p, k) => (p.hidden = k !== id));
     panels.get(id)?.scrollTo({ top: 0 });
   };
+  // settings panel = hero (preview, title, lead) + options
+  // ----- settings layout: every field is a "section" (head in the nav, body in the stage); three flows show them ----
+  const LAYOUTS = [
+    { id: 'split', label: 'Geteilt' },
+    { id: 'rail', label: 'Übersicht' },
+    { id: 'steps', label: 'Schritte' },
+    { id: 'accordion', label: 'Akkordeon' },
+  ];
+  const narrow = window.matchMedia('(max-width: 819px)');
+  let layout = (() => {
+    try {
+      return localStorage.getItem('orbis-gm-layout2') || 'split';
+    } catch {
+      return 'split';
+    }
+  })();
+  const applyLayout = () => {
+    const eff = (layout === 'rail' || layout === 'split') && narrow.matches ? 'accordion' : layout;
+    LAYOUTS.forEach((l) => el.classList.toggle(`gml-${l.id}`, l.id === eff));
+    el.querySelectorAll<HTMLElement>('.gm-variants button').forEach((b) => b.classList.toggle('on', b.dataset.v === layout));
+    el.querySelectorAll<HTMLElement>('.gm-panel').forEach((p) => p.dispatchEvent(new Event('relayout')));
+  };
+  narrow.addEventListener('change', applyLayout);
+  const label = (b: Element) => Array.from((b.querySelector('.gm-opt-tx') ?? b).childNodes).find((n) => n.nodeType === 3 && n.textContent!.trim())?.textContent?.trim() ?? '';
+
+  function buildOpts(p: HTMLElement, gameId: string): HTMLElement {
+    const opts = document.createElement('div');
+    opts.className = 'gm-opts';
+    const nav = document.createElement('div');
+    nav.className = 'gm-nav';
+    const stage = document.createElement('div');
+    stage.className = 'gm-stage';
+    const foot = document.createElement('div');
+    foot.className = 'gm-foot';
+    const secs: { field: HTMLElement; head: HTMLElement; sum: HTMLElement; th: HTMLElement; key: string }[] = [];
+    for (const k of Array.from(p.children) as HTMLElement[]) {
+      if (k.classList.contains('gm-field')) {
+        const t = k.querySelector(':scope > span');
+        const title = t?.textContent ?? '';
+        t?.remove();
+        k.dataset.title = title;
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'gm-sechead';
+        head.innerHTML = `<span class="gm-sh-th"></span><span class="gm-sh-tx"><small>${secs.length + 1} · ${escapeHtml(title)}</small><b class="gm-sh-v"></b></span><i class="gm-sh-chev">›</i>`;
+        nav.append(head);
+        stage.append(k);
+        head.style.order = String(secs.length * 2);
+        k.style.order = String(secs.length * 2 + 1);
+        head.querySelector<HTMLElement>('.gm-sh-th')!.hidden = true;
+        secs.push({ field: k, head, sum: head.querySelector('.gm-sh-v')!, th: head.querySelector('.gm-sh-th')!, key: '' });
+      } else foot.append(k);
+    }
+    foot.insertAdjacentHTML('afterbegin', '<div class="gm-stepnav"><button type="button" class="btn gm-prev">← Zurück</button><button type="button" class="btn gm-next">Weiter →</button></div>');
+    const variants = document.createElement('div');
+    variants.className = 'gm-variants';
+    variants.innerHTML = LAYOUTS.map((x) => `<button type="button" data-v="${x.id}">${x.label}</button>`).join('');
+    variants.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (!b) return;
+      layout = b.dataset.v!;
+      try {
+        localStorage.setItem('orbis-gm-layout2', layout);
+      } catch {
+        /* private mode */
+      }
+      applyLayout();
+    });
+    opts.append(nav, stage, foot, variants);
+
+    let cur = 0;
+    const visible = () => secs.map((x, i) => (x.field.hidden ? -1 : i)).filter((i) => i >= 0);
+    const accordion = () => el.classList.contains('gml-accordion');
+    const show = (i: number) => {
+      cur = i;
+      secs.forEach((x, j) => {
+        x.head.classList.toggle('cur', j === i);
+        x.field.classList.toggle('cur', j === i);
+      });
+      refresh();
+    };
+    secs.forEach((x, i) => x.head.addEventListener('click', () => show(accordion() && cur === i ? -1 : i)));
+    foot.querySelector('.gm-prev')!.addEventListener('click', () => show(visible().filter((i) => i < cur).pop() ?? cur));
+    foot.querySelector('.gm-next')!.addEventListener('click', () => show(visible().find((i) => i > cur) ?? cur));
+
+    const summary = (f: HTMLElement): string => {
+      const parts: string[] = [];
+      const main = f.querySelector('.gm-scopes-main .on b')?.textContent;
+      if (main === 'Welt') {
+        const c = Array.from(f.querySelectorAll('.gm-scopes-conts .on b')).map((b) => b.textContent);
+        parts.push(c.length >= 6 || !c.length ? 'Welt' : c.join(', '));
+      } else if (main === 'Regional') parts.push(f.querySelector('.gm-regs .on b')?.textContent ?? 'Regional');
+      else if (main) parts.push(main);
+      f.querySelectorAll('.gm-seg .on').forEach((b) => parts.push(label(b)));
+      f.querySelectorAll<HTMLSelectElement>('select:not([hidden])').forEach((x) => parts.push(x.selectedOptions[0]?.textContent ?? ''));
+      const tok = f.querySelector<HTMLInputElement>('.sg-token');
+      if (tok) parts.push(tok.value ? 'Token gespeichert' : 'Token fehlt');
+      return parts.filter(Boolean).join(' · ');
+    };
+    function refresh() {
+      const vis = visible();
+      if (cur >= 0 && secs[cur]?.field.hidden) cur = vis[0] ?? 0;
+      if (cur < 0 && !accordion()) cur = vis[0] ?? 0;
+      secs.forEach((x, j) => {
+        if (x.head.hidden !== x.field.hidden) x.head.hidden = x.field.hidden;
+        x.head.classList.toggle('cur', j === cur);
+        x.field.classList.toggle('cur', j === cur);
+        const t = summary(x.field);
+        if (x.sum.textContent !== t) x.sum.textContent = t;
+        const pv = x.field.querySelector('.gm-regs .on .gm-opt-pv') ?? x.field.querySelector('.gm-scopes-main .on .gm-opt-pv') ?? x.field.querySelector('.gm-seg .on .gm-opt-pv') ?? x.field.querySelector('.on .gm-opt-pv');
+        const html = pv?.innerHTML ?? '';
+        if (x.key !== html) {
+          x.key = html;
+          x.th.innerHTML = html ? `<span class="gm-opt-pv">${html}</span>` : '';
+          x.th.hidden = !html;
+        }
+      });
+      (foot.querySelector('.gm-prev') as HTMLButtonElement).disabled = !vis.some((i) => i < cur);
+      (foot.querySelector('.gm-next') as HTMLElement).hidden = !vis.some((i) => i > cur);
+    }
+    let raf = 0;
+    new MutationObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(refresh);
+    }).observe(p, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden'], characterData: true });
+    p.addEventListener('input', () => requestAnimationFrame(refresh));
+    p.addEventListener('relayout', () => {
+      if (!accordion() && cur < 0) cur = 0;
+      requestAnimationFrame(refresh);
+    });
+    cur = 0;
+    requestAnimationFrame(refresh);
+    void gameId;
+    return opts;
+  }
+
   for (const [id, p] of panels) {
     if (id === 'hub') continue;
-    const bar = p.querySelector('.gm-games')!;
-    bar.outerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}<button type="button" class="gm-backhub">← Alle Spiele</button>`;
-    p.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
+    const card = GAME_CARDS.find((g) => g.id === id)!;
+    p.querySelector('.gm-games')!.remove();
+    const h2 = p.querySelector('h2')!;
+    const lead = p.querySelector('.gm-lead')!;
+    const hero = document.createElement('div');
+    hero.className = 'gm-hero';
+    hero.innerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}
+      <div class="gm-hero-txt"><button type="button" class="gm-backhub">← Alle Spiele</button><span class="gm-card-tag">${card.tag}</span></div>`;
+    hero.querySelector('.gm-hero-txt')!.append(h2, lead);
+    p.append(hero, buildOpts(p, id));
+    hero.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
   }
+  applyLayout();
   el.querySelectorAll<HTMLElement>('.gm-card').forEach((c) => c.addEventListener('click', () => showPanel(c.dataset.g!)));
 
   const segVal: Record<string, string> = {};
@@ -421,40 +638,192 @@ export function createGamesView(): GamesView {
   fill('.ol-scope', [REGIONS_OPT]);
   fill('.sz-scope', [REGIONS_OPT]);
   const scopeSel = $<HTMLSelectElement>('.gm-scope');
-  scopeSel.innerHTML = [`<option value="world">${SCOPES[0].label}</option>`, '<option value="continents">Kontinente</option>', ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${s.label}</option>`), REGIONS_OPT].join('');
-  const sovBox = $<HTMLInputElement>('.gm-sov');
-  const SCOPE_NOTE: Record<string, string> = {
-    world: 'Erst die 6 Kontinente, danach alle Länder – in einem Durchgang.',
-    continents: 'Nur die 6 Kontinente.',
-  };
+  scopeSel.innerHTML = [`<option value="world">${SCOPES[0].label}</option>`, ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${s.label}</option>`), REGIONS_OPT].join('');
 
   /** "Regionen eines Landes …" shows a country picker (list loaded on demand) */
   function bindRegions(scope: HTMLSelectElement, region: HTMLSelectElement, onChange?: () => void) {
+    // the country select stays as the value holder; a search field + grid of flags is what people see
+    const pick = document.createElement('div');
+    pick.className = 'gm-regpick';
+    pick.hidden = true;
+    pick.innerHTML = '<input class="gm-input gm-regsearch" type="search" placeholder="Land suchen …" autocomplete="off" spellcheck="false" /><div class="gm-regs"></div><small class="gm-note gm-regempty" hidden>Kein Land gefunden.</small>';
+    region.hidden = true;
+    region.before(pick);
+    const grid = pick.querySelector<HTMLElement>('.gm-regs')!;
+    const search = pick.querySelector<HTMLInputElement>('.gm-regsearch')!;
+    const empty = pick.querySelector<HTMLElement>('.gm-regempty')!;
+    const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const markRegion = () => grid.querySelectorAll<HTMLElement>('button').forEach((b) => b.classList.toggle('on', b.dataset.v === region.value));
+    // order (only when the grid opens, never while picking): the chosen country, then the ones picked before, then by size
+    const sortGrid = () => {
+      const bs = Array.from(grid.querySelectorAll<HTMLElement>('button'));
+      const hist = regionHistory();
+      const rank = (b: HTMLElement) => (b.dataset.v === region.value ? -1e6 : hist.includes(b.dataset.v!) ? -1e3 + hist.indexOf(b.dataset.v!) : Number(b.dataset.i));
+      bs.sort((a, b) => rank(a) - rank(b));
+      grid.append(...bs);
+      grid.scrollTop = 0;
+    };
+    search.addEventListener('input', () => {
+      const q = norm(search.value.trim());
+      let n = 0;
+      grid.querySelectorAll<HTMLElement>('button').forEach((b) => {
+        const show = !q || b.dataset.n!.includes(q);
+        b.hidden = !show;
+        if (show) n++;
+      });
+      empty.hidden = n > 0;
+    });
+    grid.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (!b) return;
+      region.value = b.dataset.v!;
+      saveRegionHistory(region.value);
+      markRegion();
+      region.dispatchEvent(new Event('change'));
+    });
     scope.addEventListener('change', async () => {
       const regions = scope.value === 'regions';
-      region.hidden = !regions;
+      pick.hidden = !regions;
+      if (regions && grid.childElementCount) sortGrid();
       onChange?.();
       if (regions && !region.options.length) {
         try {
-          const sorted = [...(await loadRegionIndex())].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+          const area = await countryAreas();
+          const sorted = [...(await loadRegionIndex())].sort((a, b) => (area.get(b.id) ?? 0) - (area.get(a.id) ?? 0) || a.name.localeCompare(b.name, 'de'));
           region.innerHTML = sorted.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} (${c.n})</option>`).join('');
-          region.value = sorted.some((c) => c.id === 'DE') ? 'DE' : sorted[0].id;
+          const last = regionHistory().find((id) => sorted.some((c) => c.id === id));
+          region.value = last ?? (sorted.some((c) => c.id === 'DE') ? 'DE' : sorted[0].id);
+          grid.innerHTML = sorted
+            .map((c, i) => `<button type="button" data-v="${c.id}" data-i="${i}" data-n="${escapeHtml(norm(c.name))}"><span class="gm-opt-pv"><img alt="" loading="lazy" src="${DATA}previews/regions/${c.id}.svg" /></span><b>${escapeHtml(c.name)}</b><small>${c.n} Regionen</small></button>`)
+            .join('');
+          sortGrid();
+          markRegion();
         } catch (e) {
-          region.hidden = true;
+          pick.hidden = true;
           scope.value = 'world';
+          scope.dispatchEvent(new Event('sync'));
           toast((e as Error).message, 'error');
         }
       }
     });
   }
   const regionSel = $<HTMLSelectElement>('.gm-region');
-  bindRegions(scopeSel, regionSel, () => {
-    sovBox.parentElement!.hidden = scopeSel.value === 'regions';
-    $('.gm-scope-note').textContent = SCOPE_NOTE[scopeSel.value] ?? '';
-  });
-  $('.gm-scope-note').textContent = SCOPE_NOTE[scopeSel.value] ?? '';
+  bindRegions(scopeSel, regionSel);
   bindRegions($<HTMLSelectElement>('.ol-scope'), $<HTMLSelectElement>('.ol-region'));
   bindRegions($<HTMLSelectElement>('.sz-scope'), $<HTMLSelectElement>('.sz-region'));
+
+  // pictures instead of words: every segmented button gets a little drawing, every area select a map picker
+  el.querySelectorAll<HTMLElement>('.gm-seg').forEach((g) =>
+    g.querySelectorAll<HTMLElement>('button').forEach((b) => {
+      const ic = optIcon(g.dataset.k!, b.dataset.v!);
+      const tx = document.createElement('span');
+      tx.className = 'gm-opt-tx';
+      while (b.firstChild) tx.append(b.firstChild);
+      b.append(tx);
+      if (ic) b.insertAdjacentHTML('afterbegin', `<span class="gm-opt-pv">${ic}</span>`);
+    }),
+  );
+  // area picker: Welt / Kontinente / Regional – with "Kontinente" a second row of toggles (all on at first;
+  // the first click picks just that one, after that it toggles). The hidden select keeps the value: world, a SCOPES id,
+  // `conts:A,B` or regions.
+  el.querySelectorAll<HTMLSelectElement>('select[class$="-scope"]').forEach((sel) => {
+    const hasRegions = Array.from(sel.options).some((o) => o.value === 'regions');
+    const conts = SCOPES.slice(1);
+    const card = (v: string, img: string, label: string) =>
+      `<button type="button" data-v="${v}"><span class="gm-opt-pv"><img alt="" loading="lazy" src="${DATA}previews/scope-${img}.svg" /></span><b>${label}</b></button>`;
+    const wrap = document.createElement('div');
+    wrap.className = 'gm-scope-pick';
+    wrap.innerHTML = `<div class="gm-scopes gm-scopes-main">${card('world', 'world', 'Welt')}${hasRegions ? card('regions', 'regions', 'Regional') : ''}</div>
+      <div class="gm-scopes gm-scopes-conts">${conts.map((c) => card(c.id, slug(c.id), c.label)).join('')}</div><button type="button" class="gm-all" hidden>Alle</button>`;
+    const main = wrap.querySelector<HTMLElement>('.gm-scopes-main')!;
+    const row = wrap.querySelector<HTMLElement>('.gm-scopes-conts')!;
+    const all = wrap.querySelector<HTMLElement>('.gm-all')!;
+    const panel = sel.closest<HTMLElement>('.gm-panel')!;
+    let kind = 'world';
+    let picked = new Set(conts.map((c) => c.id));
+    // "Regional": the area cards shrink by exactly the height of the search bar, so the grid starts where the big cards ended
+    let compactNow = false;
+    let bigH = 0;
+    const fitMain = (regional: boolean) => {
+      const pvs = Array.from(main.querySelectorAll<HTMLElement>('.gm-opt-pv'));
+      if (!pvs.length || !pvs[0].offsetParent || regional === compactNow) return;
+      compactNow = regional;
+      if (regional) {
+        bigH = pvs[0].offsetHeight;
+        const field = sel.closest<HTMLElement>('.gm-field');
+        const extra = 44 + (parseFloat(field ? getComputedStyle(field).rowGap : '12') || 12);
+        pvs.forEach((x) => {
+          x.style.aspectRatio = 'auto';
+          x.style.height = `${bigH}px`;
+        });
+        const btn = pvs[0].closest<HTMLElement>('button')!;
+        const bigBtn = btn.offsetHeight;
+        void main.offsetHeight;
+        pvs.forEach((x) => (x.style.height = `${bigH - extra}px`));
+        // the search bar plus the gaps must end exactly where the big cards ended: correct what the estimate missed
+        setTimeout(() => {
+          const bar = wrap.querySelector<HTMLElement>('.gm-regsearch') ?? sel.closest('.gm-field')?.querySelector<HTMLElement>('.gm-regsearch');
+          if (!compactNow || !bar || bar.offsetParent === null) return;
+          const diff = bar.getBoundingClientRect().bottom - btn.getBoundingClientRect().top - bigBtn;
+          if (Math.abs(diff) > 0.5 && Math.abs(diff) < 60) pvs.forEach((x) => (x.style.height = `${bigH - extra - diff}px`));
+        }, 450);
+      } else {
+        pvs.forEach((x) => (x.style.height = `${bigH}px`));
+        setTimeout(() => {
+          if (compactNow) return;
+          pvs.forEach((x) => {
+            x.style.height = '';
+            x.style.aspectRatio = '';
+          });
+        }, 380);
+      }
+    };
+    const apply = () => {
+      const ids = conts.map((c) => c.id).filter((id) => picked.has(id));
+      const v = kind === 'regions' ? 'regions' : ids.length === conts.length ? 'world' : ids.length === 1 ? ids[0] : `conts:${ids.join(',')}`;
+      if (!Array.from(sel.options).some((o) => o.value === v)) sel.add(new Option(v, v));
+      sel.value = v;
+      main.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === kind));
+      row.classList.toggle('open', kind === 'world');
+      panel.classList.toggle('gm-compact', kind === 'regions');
+      fitMain(kind === 'regions');
+      row.querySelectorAll<HTMLElement>('button[data-v]').forEach((b) => b.classList.toggle('on', picked.has(b.dataset.v!)));
+      all.hidden = picked.size === conts.length;
+      sel.dispatchEvent(new Event('change'));
+    };
+    main.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (!b) return;
+      kind = b.dataset.v!;
+      apply();
+    });
+    all.addEventListener('click', () => {
+      picked = new Set(conts.map((c) => c.id));
+      apply();
+    });
+    row.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+      if (!b) return;
+      const id = b.dataset.v!;
+      if (picked.size === conts.length) picked = new Set([id]);
+      else if (picked.has(id)) picked.size > 1 && picked.delete(id);
+      else picked.add(id);
+      apply();
+    });
+    // the select was reset from outside (region list failed to load)
+    sel.addEventListener('sync', () => {
+      kind = 'world';
+      main.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.v === kind));
+      row.classList.add('open');
+      panel.classList.remove('gm-compact');
+    });
+    sel.hidden = true;
+    sel.before(wrap);
+    main.querySelector('button')!.classList.add('on');
+    main.hidden = !hasRegions; // "Welt" alone is no choice – just show the continents
+    row.classList.add('open');
+    row.querySelectorAll('button[data-v]').forEach((b) => b.classList.add('on'));
+  });
 
   // ----- name quizzes without a map (flags, capitals, outlines) -----------------------------
   let nq: NameQuiz | null = null;
@@ -481,15 +850,8 @@ export function createGamesView(): GamesView {
   const val = (sel: string) => $<HTMLSelectElement>(sel).value;
 
   $('.fg-start').addEventListener('click', () => {
-    if (segVal.fmode === 'map') {
-      showPanel('none');
-      void start({ scope: val('.fg-scope'), sov: true, flag: true, mode: 'click' });
-      return;
-    }
-    void launchNameQuiz('flags', '.fg-err', async () => {
-      const { flagItems } = await import('../games/quizitems');
-      return { items: await flagItems(val('.fg-scope')), mode: segVal.fmode as 'choice' | 'type', rounds: Number(val('.fg-rounds')), placeholder: 'Welches Land?' };
-    });
+    showPanel('none');
+    void start({ scope: val('.fg-scope'), sov: true, flag: true, mode: 'click', choice: segVal.fhelp === 'choice', rounds: Number(val('.fg-rounds')) });
   });
   $('.cp-start').addEventListener('click', () =>
     launchNameQuiz('capitals', '.cp-err', async () => {
@@ -520,6 +882,7 @@ export function createGamesView(): GamesView {
     if (scale && val('.sz-rounds') === '0') $<HTMLSelectElement>('.sz-rounds').value = '10';
   };
   el.querySelectorAll('[data-k="smode"] button').forEach((b) => b.addEventListener('click', syncSize));
+  syncSize();
   $('.sz-start').addEventListener('click', async () => {
     const err = $('.sz-err');
     err.textContent = 'Lade …';
@@ -591,22 +954,46 @@ export function createGamesView(): GamesView {
           'found', '#2fbf71', 'missed', '#e0555c', 'wrong', '#ff8a3d', 'target', '#ffd23f', 'hint', '#6aa9ff',
           '#2a3a66',
         ];
-        m.addLayer({ id: 'areas-fill', type: 'fill', source: 'areas', paint: { 'fill-color': color as never, 'fill-opacity': 0.95 } });
+        m.addLayer({ id: 'areas-fill', type: 'fill', source: 'areas', paint: { 'fill-color': color as never, 'fill-color-transition': { duration: 300, delay: 0 }, 'fill-opacity': 0.95 } });
         m.addLayer({ id: 'areas-line', type: 'line', source: 'areas', paint: { 'line-color': '#0d1530', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.4, 6, 1.2] } });
-        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
+        // faint outline of the area under the cursor
+        m.addLayer({ id: 'hover-line', type: 'line', source: 'areas', layout: { 'line-join': 'round' }, paint: { 'line-color': '#e9eef8', 'line-width': 1.6, 'line-opacity': ['case', ['boolean', ['feature-state', 'hover'], false], 0.6, 0], 'line-opacity-transition': { duration: 120, delay: 0 } } });
+        // the right answer after a failed guess: a strong outline
+        m.addLayer({ id: 'target-line', type: 'line', source: 'areas', layout: { 'line-join': 'round' }, paint: { 'line-color': '#fff3c4', 'line-width': 3.2, 'line-opacity': ['case', ['==', ['feature-state', 'status'], 'target'], 1, 0], 'line-opacity-transition': { duration: 300, delay: 0 } } });
+        // small areas (islands) get a clickable dot, a bit smaller when zoomed far out
+        m.addLayer({ id: 'marks-circle', type: 'circle', source: 'marks', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 3.5, 6, 8], 'circle-color': color as never, 'circle-stroke-color': '#e9eef8', 'circle-stroke-width': 1.2 } });
+        // reveal: dashed lines from the wrong clicks to the right spot
+        m.addSource('reveal', { type: 'geojson', data: empty });
+        m.addLayer({ id: 'reveal-line', type: 'line', source: 'reveal', filter: ['==', ['geometry-type'], 'LineString'], paint: { 'line-color': '#e9eef8', 'line-width': 2, 'line-dasharray': [2, 2] } });
+        m.addLayer({ id: 'reveal-pts', type: 'circle', source: 'reveal', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': ['get', 'color'], 'circle-stroke-color': '#0d1530', 'circle-stroke-width': 1.5 } });
         m.on('click', onMapClick);
+        m.on('move', () => {
+          placeAnswer();
+          placeFloats();
+          placePop();
+        });
         // typing mode: the input stays ready after panning/zooming the map
         m.on('moveend', focusInput);
         m.on('mousemove', (e) => {
-          if (!playing || mode !== 'click') return;
-          m.getCanvas().style.cursor = m.queryRenderedFeatures(e.point, { layers: ['marks-circle', 'areas-fill'] }).length ? 'pointer' : '';
+          if (!playing || mode !== 'click') return setHover(null);
+          const hit = m.queryRenderedFeatures(e.point, { layers: ['marks-circle', 'areas-fill'] })[0];
+          m.getCanvas().style.cursor = hit ? 'pointer' : '';
+          setHover(hit ? String(hit.properties?.id) : null);
         });
+        m.on('mouseout', () => setHover(null));
         res();
       });
     });
     return mapReady;
   }
 
+  let hoverId: string | null = null;
+  function setHover(id: string | null) {
+    if (id === hoverId || !map) return;
+    if (hoverId !== null) map.setFeatureState({ source: 'areas', id: hoverId }, { hover: false });
+    hoverId = id;
+    if (id !== null) map.setFeatureState({ source: 'areas', id }, { hover: true });
+  }
   function setStatus(id: string, status: Status | null) {
     for (const src of ['areas', 'marks']) {
       if (src === 'marks' && !markIds.has(id)) continue;
@@ -624,6 +1011,7 @@ export function createGamesView(): GamesView {
   let byId = new Map<string, Feat>();
   let markIds = new Set<string>();
   let targets: Target[] = [];
+  let allCountries: Target[] = [];
   let queue: Target[] = [];
   let current: Target | null = null;
   let tries = 0;
@@ -653,7 +1041,7 @@ export function createGamesView(): GamesView {
 
   $('.gm-start').addEventListener('click', () => {
     $('.gm-err').textContent = '';
-    void start({ scope: scopeSel.value, region: regionSel.value, sov: sovBox.checked, flag: false, mode: segVal.mode as Mode });
+    void start({ scope: scopeSel.value, region: regionSel.value, sov: true, flag: false, mode: segVal.mode as Mode });
   });
 
   async function start(cfg: QuizConfig | null = lastCfg) {
@@ -669,10 +1057,10 @@ export function createGamesView(): GamesView {
       if (scope === 'regions') data = await loadData(`admin1/${cfg.region}.json`);
       else {
         data = await loadData('countries.json');
-        const sc = SCOPES.find((s) => s.id === scope);
+        const sc = scopeOf(scope);
         let list = data.features as Feat[];
         // continents contain the dependencies too (Greenland is part of North America)
-        if ((cfg.sov && scope !== 'continents') || cfg.flag) list = list.filter((f) => f.properties.sov && (!cfg.flag || f.properties.flag));
+        if (cfg.sov || cfg.flag) list = list.filter((f) => f.properties.sov && (!cfg.flag || f.properties.flag));
         if (sc?.filter) list = list.filter((f) => sc.filter!(f.properties));
         data = { type: 'FeatureCollection', features: list };
       }
@@ -680,17 +1068,16 @@ export function createGamesView(): GamesView {
       if (feats.length < 2) throw new Error('zu wenige Gebiete');
       byId = new Map(feats.map((f) => [f.properties.id, f]));
 
-      // what is asked: continents (world / continents) and countries (everything but "continents")
-      const countries: Target[] = scope === 'continents' ? [] : feats.map((f) => ({ id: f.properties.id, kind: 'country', name: f.properties.name, en: f.properties.en, ids: [f.properties.id], feat: f }));
-      const conts: Target[] =
-        (scope === 'continents' || (scope === 'world' && cfg.mode === 'click')) && !cfg.flag
-          ? CONTINENTS.map((c) => ({ id: `c:${c.key}`, kind: 'continent' as const, name: c.de, en: c.en, cont: c.key, ids: feats.filter((f) => f.properties.cont === c.key).map((f) => f.properties.id) })).filter((c) => c.ids.length)
-          : [];
-      targets = [...conts, ...countries];
+      // what is asked: every country / region of the chosen area
+      const countries: Target[] = feats.map((f) => ({ id: f.properties.id, kind: 'country', name: f.properties.name, en: f.properties.en, ids: [f.properties.id], feat: f }));
+      allCountries = countries;
+      queue = shuffle(countries);
+      if (cfg.rounds) queue = queue.slice(0, cfg.rounds);
+      targets = cfg.rounds ? queue.slice() : countries;
       if (targets.length < 2) throw new Error('zu wenige Gebiete');
 
       // tiny areas get a clickable dot
-      view = scope === 'regions' ? anchorView(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
+      view = scope === 'regions' ? anchorView(feats) : scopeOf(scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
       // absolute size, so big countries get no dot on the world map; tiny views (regions of a small country) stay relative
       const smallThreshold = Math.min(2, (view[2] - view[0]) / 20);
       const marks: Feature<Point>[] = feats
@@ -702,7 +1089,7 @@ export function createGamesView(): GamesView {
       for (const f of feats) setStatus(f.properties.id, null);
 
       lookup = new Map();
-      for (const t of targets) for (const n of [t.name, t.en]) lookup.set(norm(n), t);
+      for (const t of allCountries) for (const n of [t.name, t.en]) lookup.set(norm(n), t);
       bounds = view;
       map!.fitBounds(bounds, { ...FIT, duration: 800 });
 
@@ -711,14 +1098,14 @@ export function createGamesView(): GamesView {
       wrongTotal = 0;
       phaseNoted = false;
       current = null;
-      // click mode: continents first (shuffled), then the countries (shuffled)
-      queue = [...shuffle(conts), ...shuffle(countries)];
       playing = true;
       showPanel('none');
       result.hidden = true;
       hud.hidden = false;
       ask.hidden = mode !== 'click';
-      typeForm.hidden = mode !== 'type';
+      typeForm.hidden = mode !== 'type' && !promptFlag;
+      hud.classList.toggle('gm-flagmode', promptFlag);
+      choicesEl.hidden = true;
       $('.gm-skip').hidden = mode !== 'click';
       t0 = Date.now();
       clearInterval(timer);
@@ -730,7 +1117,7 @@ export function createGamesView(): GamesView {
       else {
         input.value = '';
         input.focus();
-        say(`${targets.length} Namen warten auf dich${conts.length && countries.length ? ' (Kontinente und Länder)' : ''}.`);
+        say(`${targets.length} Namen warten auf dich.`);
       }
     } catch (e) {
       errEl.textContent = `Konnte nicht starten: ${(e as Error).message}`;
@@ -754,6 +1141,7 @@ export function createGamesView(): GamesView {
     current = queue.shift() ?? null;
     if (!current) return finish();
     tries = 0;
+    wrongPts = [];
     // continents done → clear the map for the country round
     if (current.kind === 'country' && !phaseNoted && targets.some((t) => t.kind === 'continent')) {
       phaseNoted = true;
@@ -764,9 +1152,150 @@ export function createGamesView(): GamesView {
     if (promptFlag) $('.gm-target').innerHTML = `<img class="gm-flagq" alt="Flagge" src="${DATA}flags/${current.feat!.properties.flag}.svg" />`;
     else $('.gm-target').textContent = current.name;
     $('.gm-ask small').textContent = promptFlag ? 'Zu welchem Land gehört diese Flagge?' : current.kind === 'continent' ? 'Wo liegt der Kontinent …' : 'Wo liegt …';
+    if (promptFlag) {
+      input.value = '';
+      input.focus({ preventScroll: true });
+      choicesEl.hidden = !lastCfg?.choice;
+      if (lastCfg?.choice) {
+        const cur = current;
+        const rest = shuffle(allCountries.filter((t) => t.id !== cur.id));
+        const near = rest.filter((t) => t.feat!.properties.cont === cur.feat!.properties.cont);
+        const others = [...near, ...rest.filter((t) => !near.includes(t))].slice(0, 3);
+        choicesEl.innerHTML = shuffle([cur, ...others]).map((t) => `<button type="button" class="btn" data-id="${t.id}">${escapeHtml(t.name)}</button>`).join('');
+      }
+    }
   }
 
-  function onMapClick(e: { point: { x: number; y: number } }) {
+  /** the question was answered right (click, typed or picked) */
+  function solved(cur: Target) {
+    found.add(cur.id);
+    if (tries === 0) firstTry++;
+    paint(cur, 'found');
+    say(tries === 0 ? 'Richtig!' : `Richtig – nach ${tries + 1} Versuchen.`, 'ok');
+    scoreText();
+    next();
+  }
+  /** a wrong typed / picked answer (wrong clicks are handled in onMapClick); the third one shows the solution */
+  function failedAnswer(cur: Target) {
+    tries++;
+    wrongTotal++;
+    if (tries >= MAX_TRIES) {
+      current = null;
+      reveal(cur);
+    }
+  }
+  choicesEl.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
+    if (!b || b.disabled || !playing || !current) return;
+    if (b.dataset.id === current.id) return solved(current);
+    b.disabled = true;
+    b.classList.add('bad');
+    say(`${b.textContent} ist falsch.`, 'bad');
+    failedAnswer(current);
+  });
+
+  /** name of the wrongly clicked country, right at the cursor */
+  const popEl = document.createElement('div');
+  popEl.className = 'gm-pop';
+  el.append(popEl);
+  let popTimer = 0;
+  /** how long the red area and its name stay (the area then fades out, see fill-color-transition) */
+  const WRONG_SHOW_MS = 1500;
+  let popAt: [number, number] | null = null;
+  function placePop() {
+    if (!popAt || !map) return;
+    const pt = map.project(popAt);
+    const w = el.clientWidth;
+    popEl.style.left = `${Math.min(Math.max(pt.x, 80), w - 80)}px`;
+    popEl.style.top = `${pt.y}px`;
+    popEl.classList.toggle('below', pt.y < 70);
+  }
+  function pop(text: string, at: [number, number]) {
+    popEl.textContent = text;
+    popAt = at;
+    placePop();
+    popEl.classList.add('show');
+    clearTimeout(popTimer);
+    popTimer = window.setTimeout(() => popEl.classList.remove('show'), WRONG_SHOW_MS);
+  }
+
+  /** name of the right answer, sitting on its area and following the map while it zooms there */
+  const answerEl = document.createElement('div');
+  answerEl.className = 'gm-pop gm-answer';
+  el.append(answerEl);
+  let answerAt: [number, number] | null = null;
+  let answerBox: BBox | null = null;
+  function placeAnswer() {
+    if (!answerAt || !map) return;
+    const p = map.project(answerAt);
+    answerEl.style.left = `${p.x}px`;
+    answerEl.style.top = `${p.y}px`;
+    // small areas (islands): the label sits above them instead of covering them
+    if (answerBox) {
+      const a = map.project([answerBox[0], answerBox[1]]);
+      const b = map.project([answerBox[2], answerBox[3]]);
+      answerEl.classList.toggle('above', Math.max(Math.abs(b.x - a.x), Math.abs(b.y - a.y)) < 80);
+    }
+  }
+  function showAnswer(t: Target) {
+    const b = t.kind === 'continent' ? bboxOf(t.ids.map((i) => byId.get(i)!)) : null;
+    answerAt = b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : anchor(t.feat!);
+    answerBox = bboxOf(t.ids.map((i) => byId.get(i)!));
+    answerEl.textContent = t.name;
+    placeAnswer();
+    answerEl.classList.add('show');
+  }
+  function hideAnswer() {
+    answerEl.classList.remove('show');
+  }
+  /** the clicks of the current question that went wrong – kept for the reveal */
+  let wrongPts: { ll: [number, number]; name: string }[] = [];
+  /** labels pinned to map positions (names of the wrong clicks during the reveal) */
+  const floats: { el: HTMLElement; at: [number, number] }[] = [];
+  function placeFloats() {
+    if (!map) return;
+    for (const f of floats) {
+      const p = map.project(f.at);
+      f.el.style.left = `${p.x}px`;
+      f.el.style.top = `${p.y}px`;
+    }
+  }
+  function addFloat(text: string, at: [number, number]) {
+    const e = document.createElement('div');
+    e.className = 'gm-pop show';
+    e.textContent = text;
+    el.append(e);
+    floats.push({ el: e, at });
+    placeFloats();
+  }
+  function clearReveal() {
+    floats.forEach((f) => f.el.remove());
+    floats.length = 0;
+    (map?.getSource('reveal') as GeoJSONSource | undefined)?.setData(empty);
+  }
+  const wrongTimers = new Map<string, number>();
+  const wrongBefore = new Map<string, Status | null>();
+  /** a wrong guess (click or typed name): the area flashes, its name floats there, and it counts as a try */
+  function flashWrong(id: string, name: string, at: [number, number]) {
+    tries++;
+    wrongTotal++;
+    // the area stays red as long as the name is shown, then fades back (fill-color-transition)
+    const prev = (map!.getFeatureState({ source: 'areas', id }).status as Status | undefined) ?? null;
+    const before = prev === 'wrong' ? wrongBefore.get(id) ?? null : prev;
+    wrongBefore.set(id, before);
+    setStatus(id, 'wrong');
+    clearTimeout(wrongTimers.get(id));
+    wrongTimers.set(
+      id,
+      window.setTimeout(() => {
+        wrongBefore.delete(id);
+        setStatus(id, found.has(id) ? 'found' : before);
+      }, WRONG_SHOW_MS),
+    );
+    wrongPts.push({ ll: at, name });
+    pop(name, at);
+  }
+  function onMapClick(e: { point: { x: number; y: number }; lngLat: { lng: number; lat: number } }) {
     if (!playing || mode !== 'click' || !current) return;
     const hit = map!.queryRenderedFeatures(e.point as never, { layers: ['marks-circle', 'areas-fill'] })[0];
     if (!hit) return;
@@ -776,40 +1305,47 @@ export function createGamesView(): GamesView {
     if (!clicked || (cur.kind === 'country' && found.has(id))) return;
     const ok = cur.kind === 'continent' ? clicked.properties.cont === cur.cont : id === cur.id;
     if (ok) {
-      found.add(cur.id);
-      if (tries === 0) firstTry++;
-      paint(cur, 'found');
-      say(tries === 0 ? 'Richtig!' : `Richtig – nach ${tries + 1} Versuchen.`, 'ok');
-      scoreText();
-      next();
+      solved(cur);
     } else {
-      tries++;
-      wrongTotal++;
-      const before = (map!.getFeatureState({ source: 'areas', id }).status as Status | undefined) ?? null;
-      setStatus(id, 'wrong');
-      window.setTimeout(() => setStatus(id, found.has(id) ? 'found' : before === 'wrong' ? null : before), 600);
-      say(`Das war ${clicked.properties.name}.`, 'bad');
-      if (tries >= MAX_TRIES) reveal(cur);
+      flashWrong(id, clicked.properties.name, [e.lngLat.lng, e.lngLat.lat]);
+      if (tries >= MAX_TRIES) {
+        // right after the third click: colour the answer, dashed lines from all clicks, zoom so every point is in view
+        const t = cur;
+        current = null;
+        reveal(t);
+      }
     }
   }
 
-  /** after too many wrong clicks: show the answer, then move on */
+  /** after too many wrong clicks: dashed lines from every wrong click to the right spot, zoomed so all of them are in view */
   function reveal(t: Target) {
     paint(t, 'target');
-    if (t.kind === 'continent') map!.fitBounds(bboxOf(t.ids.map((i) => byId.get(i)!)), { ...FIT, duration: 700, maxZoom: 5 });
-    else {
-      const [lng, lat] = anchor(t.feat!);
-      map!.easeTo({ center: [lng, lat], zoom: Math.max(map!.getZoom(), 3), duration: 700 });
-    }
-    say(`${t.kind === 'continent' ? 'Das ist' : 'Hier liegt'} ${t.name}.`, 'bad');
+    showAnswer(t);
+    popEl.classList.remove('show'); // the wrong names are pinned to their clicks now
+    const goal = answerAt!;
+    const pts = wrongPts;
+    const feats: Feature[] = [
+      ...pts.map((w) => ({ type: 'Feature' as const, properties: {}, geometry: { type: 'LineString' as const, coordinates: [w.ll, goal] } })),
+      ...pts.map((w) => ({ type: 'Feature' as const, properties: { color: '#ff8a3d' }, geometry: { type: 'Point' as const, coordinates: w.ll } })),
+      { type: 'Feature' as const, properties: { color: '#ffd23f' }, geometry: { type: 'Point' as const, coordinates: goal } },
+    ];
+    (map!.getSource('reveal') as GeoJSONSource).setData({ type: 'FeatureCollection', features: feats });
+    pts.forEach((w) => addFloat(w.name, w.ll));
+    // frame the whole right country plus every click
+    const own = bboxOf(t.ids.map((i) => byId.get(i)!));
+    const all = [goal, ...pts.map((w) => w.ll), [own[0], own[1]], [own[2], own[3]]];
+    const box: BBox = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1])), Math.max(...all.map((p) => p[0])), Math.max(...all.map((p) => p[1]))];
+    map!.fitBounds(box, { ...FIT, padding: { top: 120, bottom: 160, left: 90, right: 90 }, duration: 900, maxZoom: 6 });
     current = null;
     window.setTimeout(() => {
       if (!playing) return;
+      clearReveal();
+      hideAnswer();
       paint(t, t.kind === 'continent' ? null : 'missed');
       requeue(t); // asked again later
       next();
       map!.fitBounds(bounds!, { ...FIT, duration: 600 });
-    }, 1500);
+    }, 3200);
   }
 
   $('.gm-skip').addEventListener('click', () => {
@@ -823,7 +1359,7 @@ export function createGamesView(): GamesView {
 
   // ----- typing mode ------------------------------------------------------------
   function focusInput() {
-    if (playing && mode === 'type' && document.activeElement !== input) input.focus({ preventScroll: true });
+    if (playing && (mode === 'type' || promptFlag) && document.activeElement !== input) input.focus({ preventScroll: true });
   }
   // typing anywhere on the page goes into the input
   document.addEventListener('keydown', (e) => {
@@ -831,11 +1367,53 @@ export function createGamesView(): GamesView {
     if (/^(input|textarea|select)$/i.test((document.activeElement as HTMLElement | null)?.tagName ?? '')) return;
     focusInput();
   });
+  // Esc in a settings panel goes back to the games hub
+  document.addEventListener('keydown', (e) => {
+    if (el.hidden || e.key !== 'Escape') return;
+    const open = Array.from(panels).find(([k, p]) => k !== 'hub' && !p.hidden);
+    if (!open) return;
+    const t = e.target as HTMLElement;
+    if (t instanceof HTMLInputElement && t.type === 'search' && t.value) {
+      t.value = '';
+      t.dispatchEvent(new Event('input'));
+      return;
+    }
+    showPanel('hub');
+  });
   typeForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!playing || mode !== 'type') return;
+    if (!playing) return;
     const q = norm(input.value);
     if (!q) return;
+    if (promptFlag) {
+      // flag game: the typed name has to match the current flag; the typed country lights up either way
+      if (!current) return;
+      let t = lookup.get(q);
+      if (!t && q.length >= 6) {
+        let best = 2;
+        for (const [k, v] of lookup) {
+          if (k.length < 6) continue;
+          const d = lev(q, k);
+          if (d < best) { best = d; t = v; }
+        }
+      }
+      if (!t) {
+        say(`„${input.value.trim()}“ kenne ich nicht.`, 'bad');
+        input.select();
+        return;
+      }
+      input.value = '';
+      if (t.id === current.id) return solved(current);
+      if (found.has(t.id)) return say(`${t.name} hattest du schon.`);
+      const cur = current;
+      flashWrong(t.id, t.name, anchor(t.feat!));
+      if (tries >= MAX_TRIES) {
+        current = null;
+        reveal(cur);
+      }
+      return;
+    }
+    if (mode !== 'type') return;
     let t = lookup.get(q);
     if (!t && q.length >= 6) {
       let best = 2;
@@ -887,6 +1465,9 @@ export function createGamesView(): GamesView {
 
   function toMenu() {
     playing = false;
+    setHover(null);
+    hideAnswer();
+    clearReveal();
     clearInterval(timer);
     result.hidden = true;
     hud.hidden = true;

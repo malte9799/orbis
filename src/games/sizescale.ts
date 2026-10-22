@@ -16,13 +16,13 @@ export interface SizeScale {
 
 const KM = 111.195; // km per degree
 const F_MIN = 0.15;
-const F_ROOM = 1.8; // up to this size B fits the scene; beyond it the scene zooms out (A shrinks on screen)
-const F_MAX = 10;
+const F_ROOM = 2.4; // minimum room of the scene: B can be pulled up to this size (more if the right answer needs it) – the view never zooms
 const POINTS_RANGE = 2.2; // |ln(area ratio error)| at which a round is worth 0 points
 
 const shuffle = <T>(a: T[]): T[] => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
 const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 const nfa = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
 
 /** silhouette in km, centred on its bounding box, plus its visible area (km²) */
 function shape(item: SizeItem) {
@@ -57,7 +57,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     <div class="gm-hud fg-hud">
       <div class="gm-stats"><span class="sc-score"></span><span class="sc-time">0:00</span></div>
       <div class="fg-stage">
-        <div class="fg-text"><small class="sc-ask"></small></div>
+        <div class="sc-vs"><small class="sc-vs-label">Fläche</small><div class="sc-vs-names"></div><small class="sc-vs-areas"></small></div>
         <svg class="sc-svg" role="img" aria-label="Größenvergleich" preserveAspectRatio="xMidYMax meet"></svg>
         <div class="gm-feedback" aria-live="polite"></div>
         <button class="btn btn-primary sc-check" type="button">Prüfen</button>
@@ -115,34 +115,42 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   let sb: ReturnType<typeof shape> = null;
   let bG: SVGGElement | null = null;
   let handle: SVGGElement | null = null;
-  let chipB: SVGGElement | null = null;
-  let chipA: SVGGElement | null = null;
   let ground: SVGLineElement | null = null;
   let bx = 0; // left edge of B
   let fs = 1; // font size / handle size in scene units
+  let roomMax = F_ROOM; // how far B can be pulled in this round (fixed scene, no zooming)
 
   /** B grows from its bottom-left corner; the handle sits on the top-right corner of its frame */
   function setF(v: number) {
-    f = Math.min(F_MAX, Math.max(F_MIN, v));
+    f = Math.min(roomMax, Math.max(F_MIN, v));
     if (!sa || !sb) return;
     bG?.setAttribute('transform', `translate(${bx} 0) scale(${f}) translate(${sb.w / 2} ${-sb.h / 2})`);
-    // zoom out once B outgrows the scene; tags and handle grow with it so they keep their on-screen size
-    const room = Math.max(f, F_ROOM);
-    const z = room / F_ROOM;
+    // the scene is sized once per round for the largest B, so nothing zooms while dragging
+    const room = roomMax;
+    const z = 1;
     const right = bx + sb.w * room;
     const top = Math.max(sa.h, sb.h * room) + fs * 5 * z;
     svg.setAttribute('viewBox', `${-fs * 2} ${-top} ${right + fs * 4 * z} ${top + fs * 2.2 * z}`);
     ground?.setAttribute('x2', String(right + fs * 2 * z));
     handle?.setAttribute('transform', `translate(${bx + sb.w * f} ${-sb.h * f}) scale(${z})`);
-    chipB?.setAttribute('transform', `translate(${bx + (sb.w * f) / 2} ${-sb.h * f - fs * 0.6 * z}) scale(${z})`);
-    chipA?.setAttribute('transform', `translate(${sa.w / 2} ${-sa.h - fs * 0.6 * z}) scale(${z})`);
   }
 
-  /** name tag with the area line, anchored at its bottom centre */
-  const chip = (name: string, cls: string, line: string) => {
-    const w = Math.max(name.length * 0.62, line.length * 0.5, 4) * fs + fs;
-    return `<rect x="${-w / 2}" y="${-fs * 3.1}" width="${w}" height="${fs * 3.1}" rx="${fs * 0.5}" class="sc-chip" /><text class="sc-chip-name ${cls}" font-size="${fs * 1.15}" y="${-fs * 1.85}" text-anchor="middle">${escapeHtml(name)}</text><text class="sc-chip-area" font-size="${fs * 0.95}" y="${-fs * 0.55}" text-anchor="middle">${escapeHtml(line)}</text>`;
+  /** "Land vs Land" stays on one line: shrink the font until it fits the width */
+  function fitNames() {
+    const n = $<HTMLElement>('.sc-vs-names');
+    n.style.fontSize = '';
+    const avail = n.parentElement!.clientWidth;
+    let size = parseFloat(getComputedStyle(n).fontSize);
+    while (n.scrollWidth > avail && size > 14) {
+      size -= 1;
+      n.style.fontSize = `${size}px`;
+    }
+  }
+  const onResize = () => {
+    fitNames();
+    setF(f);
   };
+  window.addEventListener('resize', onResize);
 
   function next() {
     if (round >= total) return finish();
@@ -152,26 +160,31 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     if (!sa || !sb) return next();
     cur = { a, b, ratio: sb.area / sa.area };
     checked = false;
-    const bw = sb.w * F_ROOM;
+    roomMax = Math.max(F_ROOM, Math.sqrt(cur.ratio) * 1.4);
+    const bw = sb.w * roomMax;
     const gap = (sa.w + bw) * 0.1;
-    fs = Math.max(sa.w + gap + bw, sa.h, sb.h * F_ROOM) * 0.035;
+    fs = Math.max(sa.w + gap + bw, sa.h, sb.h * roomMax) * 0.035;
     bx = sa.w + gap;
     svg.innerHTML = `
       <line class="sc-ground" x1="${-fs * 2}" x2="0" y1="0" y2="0" />
       <g transform="translate(${sa.w / 2} ${-sa.h / 2})"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
-      <g class="sc-chip-a">${chip(a.name, 'sc-na', 'Fläche ?')}</g>
       <g class="sc-true" style="display:none" transform="translate(${bx + sb.w / 2} ${-sb.h / 2})"><path d="${sb.d}" fill-rule="evenodd" /></g>
       <g class="sc-b"></g>
-      <g class="sc-chip-g sc-chip-b">${chip(b.name, 'sc-nb', 'Fläche ?')}</g>
       <g class="sc-handle"><circle r="${fs * 0.9}" /><path d="M${-fs * 0.35} ${fs * 0.35}L${fs * 0.35} ${-fs * 0.35}M${fs * 0.35} ${-fs * 0.05}V${-fs * 0.35}H${-fs * 0.05}M${-fs * 0.35} ${fs * 0.05}V${fs * 0.35}H${fs * 0.05}" /></g>`;
     ground = svg.querySelector<SVGLineElement>('.sc-ground');
-    chipA = svg.querySelector<SVGGElement>('.sc-chip-a');
     bG = svg.querySelector<SVGGElement>('.sc-b');
     bG!.innerHTML = `<path d="${sb.d}" fill-rule="evenodd" /><rect class="sc-frame" x="${-sb.w / 2}" y="${-sb.h / 2}" width="${sb.w}" height="${sb.h}" />`;
-    chipB = svg.querySelector<SVGGElement>('.sc-chip-b');
     handle = svg.querySelector<SVGGElement>('.sc-handle');
-    setF(Math.exp((Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.5)));
-    $('.sc-ask').innerHTML = `Ziehe <b>${escapeHtml(b.name)}</b> an der Ecke auf die richtige Größe – <b>${escapeHtml(a.name)}</b> bleibt, wie es ist.`;
+    // unpredictable start size (log scale): sometimes close to right (but never exact), mostly medium off,
+    // now and then far off – too small or too big
+    const roll = Math.random();
+    const off = roll < 0.25 ? 0.03 + Math.random() * 0.15 : roll < 0.7 ? 0.25 + Math.random() * 0.5 : 0.8 + Math.random() * 0.8;
+    let dir = Math.random() < 0.5 ? -1 : 1;
+    if (Math.exp(dir * off) > roomMax * 0.92) dir = -1; // would not fit the scene: go small instead
+    setF(Math.exp(dir * off));
+    $('.sc-vs-names').innerHTML = `<span class="sc-na">${escapeHtml(a.name)}</span> <i>vs</i> <span class="sc-nb">${escapeHtml(b.name)}</span>`;
+    $('.sc-vs-areas').textContent = '';
+    fitNames();
     checkBtn.hidden = false;
     nextBtn.hidden = true;
     say('');
@@ -210,10 +223,12 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     svg.querySelector<SVGGElement>('.sc-true')!.style.display = '';
     handle!.style.display = 'none';
     const trueArea = `${nfa.format(Math.round(cur.b.area))} km²`;
-    chipB!.querySelector('.sc-chip-area')!.textContent = trueArea;
-    svg.querySelector('.sc-chip-a .sc-chip-area')!.textContent = `${nfa.format(Math.round(cur.a.area))} km²`;
-    const rel = cur.ratio >= 1 ? `${nf.format(cur.ratio)}× so groß wie` : `${nf.format(1 / cur.ratio)}× kleiner als`;
-    say(`${pts} Punkte – du lagst bei ${nf.format(f * f * cur.ratio)}× (Fläche von ${cur.a.name}). Richtig: ${cur.b.name} ist ${rel} ${cur.a.name}.`, pts >= 60 ? 'ok' : 'bad');
+    $('.sc-vs-areas').textContent = `${nfa.format(Math.round(cur.a.area))} km² vs ${trueArea}`;
+    const r = cur.ratio; // B's real area relative to A
+    const mine = f * f * r; // what the drawing shows
+    const x = (v: number) => (v >= 10 ? nfa : v >= 1 ? nf : nf2).format(v) + '×';
+    const verdict = pts >= 90 ? 'Volltreffer!' : pts >= 60 ? 'Nah dran.' : pts >= 30 ? 'Knapp daneben.' : 'Weit daneben.';
+    say(`${verdict} +${pts} Punkte. ${cur.b.name} ist ${r >= 1 ? `${x(r)} so groß wie` : `nur ${x(r)} so groß wie`} ${cur.a.name} – bei dir waren es ${x(mine)}.`, pts >= 60 ? 'ok' : 'bad');
     checkBtn.hidden = true;
     nextBtn.hidden = false;
     nextBtn.focus();
@@ -244,6 +259,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
 
   function destroy() {
     clearInterval(timer);
+    window.removeEventListener('resize', onResize);
     root.remove();
   }
 

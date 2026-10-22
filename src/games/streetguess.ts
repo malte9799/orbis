@@ -2,7 +2,7 @@ import { Map as MlMap, Marker, type GeoJSONSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
 import { Viewer, type KeyboardComponent } from 'mapillary-js';
 import 'mapillary-js/dist/mapillary.css';
-import { bboxOf, loadData, SCOPES, STYLE, type BBox, type Feat } from '../views/games';
+import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from '../views/games';
 import { escapeHtml } from '../util';
 
 // Street guessing (GeoGuessr light) on Mapillary's open street-level photos.
@@ -80,7 +80,7 @@ async function searchPhoto(token: string, [lng, lat]: [number, number]): Promise
 }
 
 export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExit: () => void): Promise<StreetGame> {
-  const scope = SCOPES.find((s) => s.id === o.scope) ?? SCOPES[0];
+  const scope = scopeOf(o.scope) ?? SCOPES[0];
   const all = (await loadData('countries.json')).features as Feat[];
   const feats = all.filter((f) => f.properties.sov && (!scope.filter || scope.filter(f.properties)));
   const boxes = feats.map((f) => bboxOf([f]));

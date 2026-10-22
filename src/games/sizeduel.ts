@@ -1,5 +1,5 @@
 import type { Geometry, Position } from 'geojson';
-import { loadData, SCOPES, type Feat } from '../views/games';
+import { loadData, SCOPES, scopeOf, type Feat } from '../views/games';
 import { escapeHtml } from '../util';
 import { flagUrl, outlineSvg } from './quizitems';
 
@@ -48,7 +48,7 @@ export async function sizeItems(scope: string, metric: Metric): Promise<SizeItem
     id: f.properties.id, name: f.properties.name, flag: f.properties.flag, svg: outlineSvg(f.geometry), geom: f.geometry, area: areaKm2(f.geometry), pop: f.properties.pop,
   });
   if (scope.startsWith('regions:')) return ((await loadData(`admin1/${scope.slice(8)}.json`)).features as Feat[]).map(toItem).filter((i) => i.area > 0);
-  const sc = SCOPES.find((s) => s.id === scope) ?? SCOPES[0];
+  const sc = scopeOf(scope) ?? SCOPES[0];
   return ((await loadData('countries.json')).features as Feat[])
     .filter((f) => f.properties.sov && (!sc.filter || sc.filter(f.properties)) && (metric === 'area' || f.properties.pop))
     .map(toItem);
