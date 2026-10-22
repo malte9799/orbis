@@ -171,14 +171,30 @@ export function loadData(file: string) {
   return p;
 }
 
-const GAME_TABS: { id: string; label: string }[] = [
-  { id: 'quiz', label: 'Länder' },
-  { id: 'flags', label: 'Flaggen' },
-  { id: 'capitals', label: 'Hauptstädte' },
-  { id: 'outline', label: 'Umrisse' },
-  { id: 'size', label: 'Größe' },
-  { id: 'street', label: 'Straßen' },
+interface GameCard {
+  id: string;
+  label: string;
+  tag: string;
+  blurb: string;
+  chips: string[];
+}
+const GAME_CARDS: GameCard[] = [
+  { id: 'quiz', label: 'Länder-Rater', tag: 'Karte', blurb: 'Ein Name erscheint – klick das Land auf der Weltkarte an. Oder tipp alle Namen aus dem Kopf. Auch Kontinente und Regionen.', chips: ['Anklicken', 'Eintippen', 'Regionen'] },
+  { id: 'flags', label: 'Flaggen-Rater', tag: 'Flaggen', blurb: 'Welche Flagge gehört zu welchem Land?', chips: ['Auswahl', 'Eintippen', 'Karte'] },
+  { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
+  { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
+  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Duell', 'Maßstab'] },
+  { id: 'street', label: 'Straßen-Rater', tag: 'Straßenfotos', blurb: 'Ein zufälliges Straßenfoto – tippe auf der Karte, wo es aufgenommen wurde. 5 Runden, bis zu 5000 Punkte.', chips: ['5 Runden', 'Punkte'] },
 ];
+
+/** preview picture of a game: static SVG (scripts/build-game-previews.mjs) or a fan of real flags */
+function previewHtml(id: string): string {
+  if (id === 'flags') {
+    const fl = ['jp', 'br', 'de', 'ca', 'za'];
+    return `<div class="gm-pv gm-pv-flags">${fl.map((f, i) => `<img class="gm-pvflag f${i}" alt="" loading="lazy" src="${DATA}flags/${f}.svg" />`).join('')}</div>`;
+  }
+  return `<div class="gm-pv"><img alt="" loading="lazy" src="${DATA}previews/${id}.svg" /></div>`;
+}
 
 const regionIndexP: { p: Promise<{ id: string; name: string; n: number }[]> | null } = { p: null };
 function loadRegionIndex() {
@@ -208,7 +224,27 @@ export function createGamesView(): GamesView {
       </div>
     </div>
 
-    <div class="gm-panel" data-game="quiz">
+    <div class="gm-hub" data-game="hub">
+      <header class="gm-hub-head">
+        <h1>Spiele</h1>
+        <p>Teste dein Weltwissen – such dir einen Modus aus.</p>
+      </header>
+      <div class="gm-cards">${GAME_CARDS.map(
+        (g) => `
+        <button type="button" class="gm-card gm-card-${g.id}" data-g="${g.id}">
+          ${previewHtml(g.id)}
+          <span class="gm-card-tag">${g.tag}</span>
+          <span class="gm-card-body">
+            <b>${g.label}</b>
+            <span>${g.blurb}</span>
+            <span class="gm-card-foot"><span class="gm-chips">${g.chips.map((c) => `<i>${c}</i>`).join('')}</span><em>Spielen →</em></span>
+          </span>
+        </button>`,
+      ).join('')}
+      </div>
+    </div>
+
+    <div class="gm-panel" data-game="quiz" hidden>
       <div class="gm-games"></div>
       <h2>Länder-Rater</h2>
       <p class="gm-lead">Kennst du alle Namen? Wähle Spielart und Gebiet.</p>
@@ -351,13 +387,18 @@ export function createGamesView(): GamesView {
 
   // ----- menu: game tabs, segmented buttons, scope selects ------------------------------
   const panels = new Map<string, HTMLElement>();
-  el.querySelectorAll<HTMLElement>('.gm-panel').forEach((p) => panels.set(p.dataset.game!, p));
-  const showPanel = (id: string) => panels.forEach((p, k) => (p.hidden = k !== id));
+  el.querySelectorAll<HTMLElement>('.gm-panel, .gm-hub').forEach((p) => panels.set(p.dataset.game!, p));
+  const showPanel = (id: string) => {
+    panels.forEach((p, k) => (p.hidden = k !== id));
+    panels.get(id)?.scrollTo({ top: 0 });
+  };
   for (const [id, p] of panels) {
+    if (id === 'hub') continue;
     const bar = p.querySelector('.gm-games')!;
-    bar.innerHTML = GAME_TABS.map((t) => `<button type="button" data-g="${t.id}"${t.id === id ? ' class="on"' : ''}>${t.label}</button>`).join('');
-    bar.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.addEventListener('click', () => showPanel(b.dataset.g!)));
+    bar.outerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}<button type="button" class="gm-backhub">← Alle Spiele</button>`;
+    p.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
   }
+  el.querySelectorAll<HTMLElement>('.gm-card').forEach((c) => c.addEventListener('click', () => showPanel(c.dataset.g!)));
 
   const segVal: Record<string, string> = {};
   el.querySelectorAll<HTMLElement>('.gm-seg').forEach((g) => {
@@ -858,7 +899,7 @@ export function createGamesView(): GamesView {
       duel = null;
       clearInterval(timer);
       if (playing) toMenu();
-      else if (panels.get('quiz')!.hidden && Array.from(panels.values()).every((p) => p.hidden)) showPanel('quiz');
+      else if (Array.from(panels.values()).every((p) => p.hidden)) showPanel('hub');
     },
   };
 }
