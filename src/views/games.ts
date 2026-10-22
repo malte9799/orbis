@@ -646,7 +646,8 @@ export function createGamesView(): GamesView {
 
       // tiny areas get a clickable dot
       view = scope === 'regions' ? anchorView(feats) : SCOPES.find((x) => x.id === scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
-      const smallThreshold = (view[2] - view[0]) / 30;
+      // absolute size, so big countries get no dot on the world map; tiny views (regions of a small country) stay relative
+      const smallThreshold = Math.min(2, (view[2] - view[0]) / 20);
       const marks: Feature<Point>[] = feats
         .filter((f) => span(f) < Math.max(smallThreshold, 0.01))
         .map((f) => ({ type: 'Feature', properties: { id: f.properties.id }, geometry: { type: 'Point', coordinates: anchor(f) } }));
