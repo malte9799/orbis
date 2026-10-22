@@ -206,6 +206,9 @@ function loadRegionIndex() {
   return regionIndexP.p;
 }
 
+/** token baked in at build time (Actions variable MAPILLARY_TOKEN → VITE_MAPILLARY_TOKEN); a token typed in below overrides it */
+const BUILT_IN_TOKEN = (import.meta.env?.VITE_MAPILLARY_TOKEN as string | undefined)?.trim() || '';
+
 export function createGamesView(): GamesView {
   const el = document.createElement('div');
   el.className = 'view games-view';
@@ -364,9 +367,9 @@ export function createGamesView(): GamesView {
           <button type="button" data-v="0">Gesperrt<small>Nur umschauen und zoomen</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Mapillary-Token (kostenlos)</span>
+      <div class="gm-field"><span>Mapillary-Token (${BUILT_IN_TOKEN ? 'optional' : 'kostenlos'})</span>
         <input class="gm-input sg-token" type="password" placeholder="MLY|…" autocomplete="off" spellcheck="false" />
-        <small class="gm-note">Client-Token aus <a href="https://www.mapillary.com/dashboard/developers" target="_blank" rel="noopener">mapillary.com/dashboard/developers</a> (Anwendung registrieren). Bleibt nur in diesem Browser gespeichert.</small>
+        <small class="gm-note">Client-Token aus <a href="https://www.mapillary.com/dashboard/developers" target="_blank" rel="noopener">mapillary.com/dashboard/developers</a> (Anwendung registrieren). Bleibt nur in diesem Browser gespeichert.${BUILT_IN_TOKEN ? ' Ohne eigenen Token nutzt das Spiel den Token dieser Seite.' : ''}</small>
       </div>
       <button class="btn btn-primary sg-start" type="button">Spiel starten</button>
       <p class="gm-note sg-err"></p>
@@ -552,13 +555,14 @@ export function createGamesView(): GamesView {
     showPanel('street');
   };
   $('.sg-start').addEventListener('click', async () => {
-    const token = tokenInput.value.trim();
+    const own = tokenInput.value.trim();
+    const token = own || BUILT_IN_TOKEN;
     const err = $('.sg-err');
     if (!token) {
       err.textContent = 'Bitte zuerst einen Mapillary-Token eintragen.';
       return;
     }
-    store.setKeys({ ...store.getKeys(), mapillary: token });
+    if (own) store.setKeys({ ...store.getKeys(), mapillary: own });
     err.textContent = 'Lade …';
     try {
       const { startStreetGame } = await import('../games/streetguess');
