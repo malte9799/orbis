@@ -16,7 +16,8 @@ export interface SizeScale {
 
 const KM = 111.195; // km per degree
 const F_MIN = 0.15;
-const F_MAX = 1.8; // the scene reserves exactly this much room for B
+const F_ROOM = 1.8; // up to this size B fits the scene; beyond it the scene zooms out (A shrinks on screen)
+const F_MAX = 10;
 const POINTS_RANGE = 2.2; // |ln(area ratio error)| at which a round is worth 0 points
 
 const shuffle = <T>(a: T[]): T[] => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
@@ -115,16 +116,26 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   let bG: SVGGElement | null = null;
   let handle: SVGGElement | null = null;
   let chipB: SVGGElement | null = null;
+  let chipA: SVGGElement | null = null;
+  let ground: SVGLineElement | null = null;
   let bx = 0; // left edge of B
   let fs = 1; // font size / handle size in scene units
 
   /** B grows from its bottom-left corner; the handle sits on the top-right corner of its frame */
   function setF(v: number) {
     f = Math.min(F_MAX, Math.max(F_MIN, v));
-    if (!sb) return;
+    if (!sa || !sb) return;
     bG?.setAttribute('transform', `translate(${bx} 0) scale(${f}) translate(${sb.w / 2} ${-sb.h / 2})`);
-    handle?.setAttribute('transform', `translate(${bx + sb.w * f} ${-sb.h * f})`);
-    chipB?.setAttribute('transform', `translate(${bx + (sb.w * f) / 2} ${-sb.h * f - fs * 0.6})`);
+    // zoom out once B outgrows the scene; tags and handle grow with it so they keep their on-screen size
+    const room = Math.max(f, F_ROOM);
+    const z = room / F_ROOM;
+    const right = bx + sb.w * room;
+    const top = Math.max(sa.h, sb.h * room) + fs * 5 * z;
+    svg.setAttribute('viewBox', `${-fs * 2} ${-top} ${right + fs * 4 * z} ${top + fs * 2.2 * z}`);
+    ground?.setAttribute('x2', String(right + fs * 2 * z));
+    handle?.setAttribute('transform', `translate(${bx + sb.w * f} ${-sb.h * f}) scale(${z})`);
+    chipB?.setAttribute('transform', `translate(${bx + (sb.w * f) / 2} ${-sb.h * f - fs * 0.6 * z}) scale(${z})`);
+    chipA?.setAttribute('transform', `translate(${sa.w / 2} ${-sa.h - fs * 0.6 * z}) scale(${z})`);
   }
 
   /** name tag with the area line, anchored at its bottom centre */
@@ -141,26 +152,20 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     if (!sa || !sb) return next();
     cur = { a, b, ratio: sb.area / sa.area };
     checked = false;
-    const bw = sb.w * F_MAX;
-    const bh = sb.h * F_MAX;
+    const bw = sb.w * F_ROOM;
     const gap = (sa.w + bw) * 0.1;
-    const W = sa.w + gap + bw;
-    const H = Math.max(sa.h, bh);
-    fs = Math.max(W, H) * 0.035;
-    const padX = fs * 2;
-    const top = H + fs * 5;
-    const ground = fs * 2.2;
-    const ax = -W / 2 + sa.w / 2;
-    bx = W / 2 - bw;
-    svg.setAttribute('viewBox', `${-W / 2 - padX} ${-top} ${W + padX * 2} ${top + ground}`);
+    fs = Math.max(sa.w + gap + bw, sa.h, sb.h * F_ROOM) * 0.035;
+    bx = sa.w + gap;
     svg.innerHTML = `
-      <line class="sc-ground" x1="${-W / 2 - padX}" x2="${W / 2 + padX}" y1="0" y2="0" />
-      <g transform="translate(${ax} ${-sa.h / 2})"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
-      <g class="sc-chip-g" transform="translate(${ax} ${-sa.h - fs * 0.6})">${chip(a.name, 'sc-na', 'Fläche ?')}</g>
+      <line class="sc-ground" x1="${-fs * 2}" x2="0" y1="0" y2="0" />
+      <g transform="translate(${sa.w / 2} ${-sa.h / 2})"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
+      <g class="sc-chip-a">${chip(a.name, 'sc-na', 'Fläche ?')}</g>
       <g class="sc-true" style="display:none" transform="translate(${bx + sb.w / 2} ${-sb.h / 2})"><path d="${sb.d}" fill-rule="evenodd" /></g>
       <g class="sc-b"></g>
       <g class="sc-chip-g sc-chip-b">${chip(b.name, 'sc-nb', 'Fläche ?')}</g>
       <g class="sc-handle"><circle r="${fs * 0.9}" /><path d="M${-fs * 0.35} ${fs * 0.35}L${fs * 0.35} ${-fs * 0.35}M${fs * 0.35} ${-fs * 0.05}V${-fs * 0.35}H${-fs * 0.05}M${-fs * 0.35} ${fs * 0.05}V${fs * 0.35}H${fs * 0.05}" /></g>`;
+    ground = svg.querySelector<SVGLineElement>('.sc-ground');
+    chipA = svg.querySelector<SVGGElement>('.sc-chip-a');
     bG = svg.querySelector<SVGGElement>('.sc-b');
     bG!.innerHTML = `<path d="${sb.d}" fill-rule="evenodd" /><rect class="sc-frame" x="${-sb.w / 2}" y="${-sb.h / 2}" width="${sb.w}" height="${sb.h}" />`;
     chipB = svg.querySelector<SVGGElement>('.sc-chip-b');
@@ -174,19 +179,22 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   }
 
   // dragging the corner handle (or the shape itself) scales B around its bottom-left corner
-  let drag: { left: number; bottom: number; w: number; h: number; f0: number } | null = null;
+  let drag = 0; // pointer position relative to B's frame when grabbed (≈1 on the handle), so nothing jumps
+  const rel = (e: PointerEvent) => {
+    const r = bG!.getBoundingClientRect();
+    return ((e.clientX - r.left) / r.width + (r.bottom - e.clientY) / r.height) / 2;
+  };
   svg.addEventListener('pointerdown', (e) => {
     if (checked || !(e.target as Element).closest('.sc-b, .sc-handle')) return;
-    const r = bG!.getBoundingClientRect();
-    drag = { left: r.left, bottom: r.bottom, w: r.width, h: r.height, f0: f };
+    drag = rel(e);
     svg.setPointerCapture(e.pointerId);
   });
   svg.addEventListener('pointermove', (e) => {
     if (!drag) return;
-    const k = ((e.clientX - drag.left) / drag.w + (drag.bottom - e.clientY) / drag.h) / 2;
-    setF(drag.f0 * k);
+    // measured against B as it is drawn right now, because zooming out changes its on-screen size
+    setF((f * rel(e)) / drag);
   });
-  const endDrag = () => (drag = null);
+  const endDrag = () => (drag = 0);
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
 
@@ -203,7 +211,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     handle!.style.display = 'none';
     const trueArea = `${nfa.format(Math.round(cur.b.area))} km²`;
     chipB!.querySelector('.sc-chip-area')!.textContent = trueArea;
-    svg.querySelector('.sc-chip-g:not(.sc-chip-b) .sc-chip-area')!.textContent = `${nfa.format(Math.round(cur.a.area))} km²`;
+    svg.querySelector('.sc-chip-a .sc-chip-area')!.textContent = `${nfa.format(Math.round(cur.a.area))} km²`;
     const rel = cur.ratio >= 1 ? `${nf.format(cur.ratio)}× so groß wie` : `${nf.format(1 / cur.ratio)}× kleiner als`;
     say(`${pts} Punkte – du lagst bei ${nf.format(f * f * cur.ratio)}× (Fläche von ${cur.a.name}). Richtig: ${cur.b.name} ist ${rel} ${cur.a.name}.`, pts >= 60 ? 'ok' : 'bad');
     checkBtn.hidden = true;
