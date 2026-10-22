@@ -115,31 +115,33 @@ export function bboxOf(fs: Feat[]): BBox {
   return b;
 }
 
-/** a point inside/near the feature: centre of its biggest part's bounding box */
-function anchor(f: Feat): [number, number] {
+/** bounding box of the feature's biggest part */
+function mainBox(f: Feat): BBox {
   const g = f.geometry;
   const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-  let best: Position[] | null = null;
+  let best: BBox = [0, 0, 0, 0];
   let area = -1;
   for (const p of parts) {
-    const r = p[0];
-    const xs = r.map((q) => q[0]);
-    const ys = r.map((q) => q[1]);
-    const a = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
-    if (a > area) { area = a; best = r; }
+    const xs = p[0].map((q) => q[0]);
+    const ys = p[0].map((q) => q[1]);
+    const b: BBox = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    const a = (b[2] - b[0]) * (b[3] - b[1]);
+    if (a > area) { area = a; best = b; }
   }
-  const xs = best!.map((q) => q[0]);
-  const ys = best!.map((q) => q[1]);
-  return [(Math.max(...xs) + Math.min(...xs)) / 2, (Math.max(...ys) + Math.min(...ys)) / 2];
+  return best;
 }
 
-/** bbox around the anchors – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
+/** a point inside/near the feature: centre of its biggest part's bounding box */
+function anchor(f: Feat): [number, number] {
+  const b = mainBox(f);
+  return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+}
+
+/** bbox around the biggest part of every feature – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
 function anchorView(fs: Feat[]): BBox {
-  const pts = fs.map(anchor);
+  const boxes = fs.map(mainBox);
   const pad = 1.5;
-  const lng = pts.map((q) => q[0]);
-  const lat = pts.map((q) => q[1]);
-  return [Math.min(...lng) - pad, Math.min(...lat) - pad, Math.max(...lng) + pad, Math.max(...lat) + pad];
+  return [Math.min(...boxes.map((b) => b[0])) - pad, Math.min(...boxes.map((b) => b[1])) - pad, Math.max(...boxes.map((b) => b[2])) + pad, Math.max(...boxes.map((b) => b[3])) + pad];
 }
 
 /** span (degrees) of the biggest single part – an archipelago like Hawaii is as hard to spot as its biggest island */
