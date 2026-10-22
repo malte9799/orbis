@@ -3377,50 +3377,83 @@ svg.hourly {
 }
 
 /* size scale */
+.sc-scene {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(91, 157, 255, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(90deg, rgba(91, 157, 255, 0.07) 1px, transparent 1px) 0 0 / 40px 40px,
+    linear-gradient(#0e1a3a, #1d3b6b);
+}
 .sc-svg {
+  display: block;
   width: 100%;
-  min-height: 240px;
-  max-height: 46vh;
+  height: 48vh;
+  min-height: 260px;
+  touch-action: none;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: none;
-  overflow: visible;
 }
-.sc-a {
-  fill: #5b9dff;
-}
-.sc-b path {
-  fill: #ffb454;
-  cursor: grab;
-}
-.sc-b path:active {
-  cursor: grabbing;
-}
-.sc-a,
-.sc-b path {
-  stroke: #0b1020;
+.sc-ground {
+  fill: #141c2e;
+  stroke: rgba(255, 255, 255, 0.18);
   stroke-width: 1px;
-}
-.sc-a,
-.sc-b path,
-.sc-true path {
   vector-effect: non-scaling-stroke;
 }
+.sc-a {
+  fill: #3b82f6;
+}
+.sc-b path {
+  fill: #ef4444;
+  cursor: grab;
+}
+.sc-frame {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-dasharray: 5 4;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
 .sc-true path {
-  fill: rgba(47, 191, 113, 0.35);
+  fill: rgba(47, 191, 113, 0.4);
   stroke: #2fbf71;
   stroke-dasharray: 5 4;
   stroke-width: 2px;
+  vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
-.sc-label {
-  fill: #5b9dff;
+.sc-chip {
+  fill: rgba(8, 12, 26, 0.88);
 }
-.sc-label-b {
-  fill: #ffb454;
+.sc-chip-name {
+  font-weight: 700;
 }
-.sc-slider {
-  width: 100%;
+.sc-na {
+  fill: #8fbaff;
+}
+.sc-nb {
+  fill: #ffb0b0;
+}
+.sc-chip-area {
+  fill: #c9d3ea;
+  font-weight: 600;
+}
+.sc-handle {
+  cursor: nwse-resize;
+}
+.sc-handle circle {
+  fill: #ef4444;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+.sc-handle path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 .sc-ask b {
   font-size: 1.15rem;

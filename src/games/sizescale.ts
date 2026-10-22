@@ -3,7 +3,7 @@ import { escapeHtml } from '../util';
 import { outlineShape } from './quizitems';
 import { ringArea, type SizeItem } from './sizeduel';
 
-// Size scale: country A stays as it is, country B starts at a wrong size – drag it (or use the slider) until it fits.
+// Size scale: country A stays as it is, country B starts at a wrong size – drag its corner handle until it fits.
 
 export interface SizeScaleOptions {
   items: SizeItem[];
@@ -15,13 +15,13 @@ export interface SizeScale {
 }
 
 const KM = 111.195; // km per degree
-const F_MIN = 0.2;
-const F_MAX = 2.5;
-const F_ROOM = 2; // B can be dragged beyond this, the scene just overflows a little
+const F_MIN = 0.15;
+const F_MAX = 1.8; // the scene reserves exactly this much room for B
 const POINTS_RANGE = 2.2; // |ln(area ratio error)| at which a round is worth 0 points
 
 const shuffle = <T>(a: T[]): T[] => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
 const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+const nfa = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
 
 /** silhouette in km, centred on its bounding box, plus its visible area (km²) */
 function shape(item: SizeItem) {
@@ -57,8 +57,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
       <div class="gm-stats"><span class="sc-score"></span><span class="sc-time">0:00</span></div>
       <div class="fg-stage">
         <div class="fg-text"><small class="sc-ask"></small></div>
-        <svg class="sc-svg" role="img" aria-label="Größenvergleich"></svg>
-        <input class="sc-slider" type="range" min="${Math.log(F_MIN)}" max="${Math.log(F_MAX)}" step="0.005" aria-label="Größe" />
+        <div class="sc-scene"><svg class="sc-svg" role="img" aria-label="Größenvergleich" preserveAspectRatio="xMidYMax meet"></svg></div>
         <div class="gm-feedback" aria-live="polite"></div>
         <button class="btn btn-primary sc-check" type="button">Prüfen</button>
         <button class="btn btn-primary sc-next" type="button" hidden>Weiter</button>
@@ -71,7 +70,6 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   host.append(root);
   const $ = <T extends Element>(s: string) => root.querySelector<T>(s)!;
   const svg = $<SVGSVGElement>('.sc-svg');
-  const slider = $<HTMLInputElement>('.sc-slider');
   const msg = $<HTMLElement>('.gm-feedback');
   const checkBtn = $<HTMLButtonElement>('.sc-check');
   const nextBtn = $<HTMLButtonElement>('.sc-next');
@@ -115,13 +113,25 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   let sa: ReturnType<typeof shape> = null;
   let sb: ReturnType<typeof shape> = null;
   let bG: SVGGElement | null = null;
+  let handle: SVGGElement | null = null;
+  let chipB: SVGGElement | null = null;
+  let bx = 0; // left edge of B
+  let fs = 1; // font size / handle size in scene units
 
+  /** B grows from its bottom-left corner; the handle sits on the top-right corner of its frame */
   function setF(v: number) {
     f = Math.min(F_MAX, Math.max(F_MIN, v));
-    slider.value = String(Math.log(f));
-    bG?.setAttribute('transform', `translate(${bx} 0) scale(${f})`);
+    if (!sb) return;
+    bG?.setAttribute('transform', `translate(${bx} 0) scale(${f}) translate(${sb.w / 2} ${-sb.h / 2})`);
+    handle?.setAttribute('transform', `translate(${bx + sb.w * f} ${-sb.h * f})`);
+    chipB?.setAttribute('transform', `translate(${bx + (sb.w * f) / 2} ${-sb.h * f - fs * 0.6})`);
   }
-  let bx = 0;
+
+  /** name tag with the area line, anchored at its bottom centre */
+  const chip = (name: string, cls: string, line: string) => {
+    const w = Math.max(name.length * 0.62, line.length * 0.5, 4) * fs + fs;
+    return `<rect x="${-w / 2}" y="${-fs * 3.1}" width="${w}" height="${fs * 3.1}" rx="${fs * 0.5}" class="sc-chip" /><text class="sc-chip-name ${cls}" font-size="${fs * 1.15}" y="${-fs * 1.85}" text-anchor="middle">${escapeHtml(name)}</text><text class="sc-chip-area" font-size="${fs * 0.95}" y="${-fs * 0.55}" text-anchor="middle">${escapeHtml(line)}</text>`;
+  };
 
   function next() {
     if (round >= total) return finish();
@@ -131,50 +141,54 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     if (!sa || !sb) return next();
     cur = { a, b, ratio: sb.area / sa.area };
     checked = false;
-    const bw = sb.w * F_ROOM;
-    const bh = sb.h * F_ROOM;
-    const gap = (sa.w + bw) * 0.08;
+    const bw = sb.w * F_MAX;
+    const bh = sb.h * F_MAX;
+    const gap = (sa.w + bw) * 0.1;
     const W = sa.w + gap + bw;
     const H = Math.max(sa.h, bh);
-    const fs = Math.max(W, H) * 0.05;
-    const pad = fs * 2.5;
+    fs = Math.max(W, H) * 0.035;
+    const padX = fs * 2;
+    const top = H + fs * 5;
+    const ground = fs * 2.2;
     const ax = -W / 2 + sa.w / 2;
-    bx = W / 2 - bw / 2;
-    svg.setAttribute('viewBox', `${-W / 2 - pad} ${-H / 2 - pad} ${W + pad * 2} ${H + pad * 2 + fs * 1.6}`);
+    bx = W / 2 - bw;
+    svg.setAttribute('viewBox', `${-W / 2 - padX} ${-top} ${W + padX * 2} ${top + ground}`);
     svg.innerHTML = `
-      <g transform="translate(${ax} 0)"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
-      <g class="sc-b"><path d="${sb.d}" fill-rule="evenodd" /></g>
-      <g class="sc-true" style="display:none" transform="translate(${bx} 0)"><path d="${sb.d}" fill-rule="evenodd" /></g>
-      <text class="sc-label" font-size="${fs}" x="${ax}" y="${H / 2 + fs * 1.2}" text-anchor="middle">${escapeHtml(a.name)}</text>
-      <text class="sc-label sc-label-b" font-size="${fs}" x="${bx}" y="${H / 2 + fs * 1.2}" text-anchor="middle">${escapeHtml(b.name)}</text>`;
+      <rect class="sc-ground" x="${-W / 2 - padX}" y="0" width="${W + padX * 2}" height="${ground}" />
+      <g transform="translate(${ax} ${-sa.h / 2})"><path class="sc-a" d="${sa.d}" fill-rule="evenodd" /></g>
+      <g class="sc-chip-g" transform="translate(${ax} ${-sa.h - fs * 0.6})">${chip(a.name, 'sc-na', 'Fläche ?')}</g>
+      <g class="sc-true" style="display:none" transform="translate(${bx + sb.w / 2} ${-sb.h / 2})"><path d="${sb.d}" fill-rule="evenodd" /></g>
+      <g class="sc-b"></g>
+      <g class="sc-chip-g sc-chip-b">${chip(b.name, 'sc-nb', 'Fläche ?')}</g>
+      <g class="sc-handle"><circle r="${fs * 0.9}" /><path d="M${-fs * 0.35} ${fs * 0.35}L${fs * 0.35} ${-fs * 0.35}M${fs * 0.35} ${-fs * 0.05}V${-fs * 0.35}H${-fs * 0.05}M${-fs * 0.35} ${fs * 0.05}V${fs * 0.35}H${fs * 0.05}" /></g>`;
     bG = svg.querySelector<SVGGElement>('.sc-b');
-    const start = Math.exp((Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.5));
-    setF(start);
-    $('.sc-ask').innerHTML = `Ziehe <b>${escapeHtml(b.name)}</b> auf die richtige Größe – <b>${escapeHtml(a.name)}</b> bleibt, wie es ist.`;
-    slider.disabled = false;
+    bG!.innerHTML = `<path d="${sb.d}" fill-rule="evenodd" /><rect class="sc-frame" x="${-sb.w / 2}" y="${-sb.h / 2}" width="${sb.w}" height="${sb.h}" />`;
+    chipB = svg.querySelector<SVGGElement>('.sc-chip-b');
+    handle = svg.querySelector<SVGGElement>('.sc-handle');
+    setF(Math.exp((Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.5)));
+    $('.sc-ask').innerHTML = `Ziehe <b>${escapeHtml(b.name)}</b> an der Ecke auf die richtige Größe – <b>${escapeHtml(a.name)}</b> bleibt, wie es ist.`;
     checkBtn.hidden = false;
     nextBtn.hidden = true;
     say('');
     score();
   }
 
-  // dragging B away from / towards its centre scales it
-  let drag: { cx: number; cy: number; r0: number; f0: number } | null = null;
+  // dragging the corner handle (or the shape itself) scales B around its bottom-left corner
+  let drag: { left: number; bottom: number; w: number; h: number; f0: number } | null = null;
   svg.addEventListener('pointerdown', (e) => {
-    if (checked || !(e.target as Element).closest('.sc-b')) return;
+    if (checked || !(e.target as Element).closest('.sc-b, .sc-handle')) return;
     const r = bG!.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    drag = { cx, cy, r0: Math.max(30, Math.hypot(e.clientX - cx, e.clientY - cy)), f0: f };
+    drag = { left: r.left, bottom: r.bottom, w: r.width, h: r.height, f0: f };
     svg.setPointerCapture(e.pointerId);
   });
   svg.addEventListener('pointermove', (e) => {
-    if (drag) setF(drag.f0 * (Math.hypot(e.clientX - drag.cx, e.clientY - drag.cy) / drag.r0));
+    if (!drag) return;
+    const k = ((e.clientX - drag.left) / drag.w + (drag.bottom - e.clientY) / drag.h) / 2;
+    setF(drag.f0 * k);
   });
   const endDrag = () => (drag = null);
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', endDrag);
-  slider.addEventListener('input', () => setF(Math.exp(Number(slider.value))));
 
   checkBtn.addEventListener('click', () => {
     if (checked || !cur) return;
@@ -186,7 +200,10 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     points += pts;
     log.push({ a: cur.a.name, b: cur.b.name, f, pts });
     svg.querySelector<SVGGElement>('.sc-true')!.style.display = '';
-    slider.disabled = true;
+    handle!.style.display = 'none';
+    const trueArea = `${nfa.format(Math.round(cur.b.area))} km²`;
+    chipB!.querySelector('.sc-chip-area')!.textContent = trueArea;
+    svg.querySelector('.sc-chip-g:not(.sc-chip-b) .sc-chip-area')!.textContent = `${nfa.format(Math.round(cur.a.area))} km²`;
     const rel = cur.ratio >= 1 ? `${nf.format(cur.ratio)}× so groß wie` : `${nf.format(1 / cur.ratio)}× kleiner als`;
     say(`${pts} Punkte – du lagst bei ${nf.format(f * f * cur.ratio)}× (Fläche von ${cur.a.name}). Richtig: ${cur.b.name} ist ${rel} ${cur.a.name}.`, pts >= 60 ? 'ok' : 'bad');
     checkBtn.hidden = true;
@@ -212,7 +229,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
       </div>`;
     root.querySelector('.sc-again')!.addEventListener('click', () => {
       destroy();
-      Object.assign(handle, startSizeScale(host, o, onExit));
+      Object.assign(api, startSizeScale(host, o, onExit));
     });
     root.querySelector('.sc-menu')!.addEventListener('click', onExit);
   }
@@ -222,7 +239,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     root.remove();
   }
 
-  const handle: SizeScale = { destroy };
+  const api: SizeScale = { destroy };
   next();
-  return handle;
+  return api;
 }
