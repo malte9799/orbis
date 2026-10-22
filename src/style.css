@@ -3375,3 +3375,54 @@ svg.hourly {
 .sd-hint {
   text-align: center;
 }
+
+/* size scale */
+.sc-svg {
+  width: 100%;
+  min-height: 240px;
+  max-height: 46vh;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  overflow: visible;
+}
+.sc-a {
+  fill: #5b9dff;
+}
+.sc-b path {
+  fill: #ffb454;
+  cursor: grab;
+}
+.sc-b path:active {
+  cursor: grabbing;
+}
+.sc-a,
+.sc-b path {
+  stroke: #0b1020;
+  stroke-width: 1px;
+}
+.sc-a,
+.sc-b path,
+.sc-true path {
+  vector-effect: non-scaling-stroke;
+}
+.sc-true path {
+  fill: rgba(47, 191, 113, 0.35);
+  stroke: #2fbf71;
+  stroke-dasharray: 5 4;
+  stroke-width: 2px;
+  pointer-events: none;
+}
+.sc-label {
+  fill: #5b9dff;
+}
+.sc-label-b {
+  fill: #ffb454;
+}
+.sc-slider {
+  width: 100%;
+}
+.sc-ask b {
+  font-size: 1.15rem;
+  color: var(--text);
+}

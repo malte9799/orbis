@@ -12,6 +12,7 @@ export interface SizeItem {
   name: string;
   flag?: string;
   svg: string;
+  geom: Geometry;
   /** km² */
   area: number;
   pop?: number;
@@ -31,7 +32,7 @@ export interface SizeDuel {
 const R = 6371.0088;
 const rad = Math.PI / 180;
 /** area (km²) of a ring on the sphere */
-function ringArea(r: Position[]): number {
+export function ringArea(r: Position[]): number {
   let s = 0;
   for (let i = 0; i < r.length - 1; i++) s += (r[i + 1][0] - r[i][0]) * rad * (2 + Math.sin(r[i][1] * rad) + Math.sin(r[i + 1][1] * rad));
   return Math.abs((s * R * R) / 2);
@@ -44,7 +45,7 @@ export function areaKm2(g: Geometry): number {
 /** scope = a SCOPES id, or `regions:<ISO>`; population is only known for countries */
 export async function sizeItems(scope: string, metric: Metric): Promise<SizeItem[]> {
   const toItem = (f: Feat): SizeItem => ({
-    id: f.properties.id, name: f.properties.name, flag: f.properties.flag, svg: outlineSvg(f.geometry), area: areaKm2(f.geometry), pop: f.properties.pop,
+    id: f.properties.id, name: f.properties.name, flag: f.properties.flag, svg: outlineSvg(f.geometry), geom: f.geometry, area: areaKm2(f.geometry), pop: f.properties.pop,
   });
   if (scope.startsWith('regions:')) return ((await loadData(`admin1/${scope.slice(8)}.json`)).features as Feat[]).map(toItem).filter((i) => i.area > 0);
   const sc = SCOPES.find((s) => s.id === scope) ?? SCOPES[0];
