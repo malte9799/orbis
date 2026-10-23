@@ -1,12 +1,12 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
-import { emptyFc, loadAirportBuildings, loadAirportLayout, loadAirportLights, type Bounds } from '../api/airport';
+import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, staticAirports, type Bounds, type StaticAirport } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import { FONT_BOLD } from './vector';
 
-// "Flughafen 3D": taxiways, aprons, terminals and gates from OpenStreetMap plus aircraft as 3D
+// "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
 // models with trails and callsign labels. Everything lives in its own sources/layers (ap3d-*).
 
 /** From this zoom on the layout is loaded and aircraft are drawn as models. */
@@ -21,7 +21,7 @@ const LIGHT_ZOOM = 16;
 const GRID = 0.04;
 const MAX_FEATURES = 25000;
 
-export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-centerline', 'ap3d-bld', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate', 'ap3d-trail', 'ap3d-label', 'ap3d-hit'];
+export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-centerline', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate', 'ap3d-trail', 'ap3d-label', 'ap3d-hit'];
 export const AP3D_HIT_LAYER = 'ap3d-hit';
 
 const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B762', 'B763', 'B764', 'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B788', 'B789', 'B78X', 'A306', 'A30B', 'A310', 'A332', 'A333', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K', 'A388', 'MD11', 'DC10', 'IL96', 'A124', 'AN12', 'C5M', 'C17', 'A225', 'BLCF', 'BSCA', 'B74F']);
@@ -57,10 +57,11 @@ export class Airport3D {
   private lines = new Map<string, Line>();
   private points = new Map<string, Pt>();
   private retry: number | undefined;
+  private staticLoaded = new Set<string>();
+  private viewSeq = 0;
   private selected: string | null = null;
   private covered: Bounds[] = [];
   private lightsCovered: Bounds[] = [];
-  private bldCovered: Bounds[] = [];
   private tracker = new PlaneTracker();
   private layer: PlanesLayer;
   private lastTrails = 0;
@@ -137,20 +138,6 @@ export class Airport3D {
       layout: { ...hidden, 'line-cap': 'round' },
       paint: { 'line-color': '#f4f6f8', 'line-width': 1.6, 'line-dasharray': [0.01, 5] },
     } as LayerSpecification);
-    add({
-      id: 'ap3d-bld',
-      type: 'fill-extrusion',
-      source: 'ap3d-poly',
-      minzoom: AIRPORT_ZOOM,
-      filter: ['in', ['get', 'kind'], ['literal', ['terminal', 'hangar', 'building']]],
-      layout: hidden,
-      paint: {
-        'fill-extrusion-color': ['match', ['get', 'kind'], 'terminal', '#8e958f', 'hangar', '#767d85', '#6d737a'],
-        'fill-extrusion-height': ['get', 'h'],
-        'fill-extrusion-base': ['get', 'minh'],
-        'fill-extrusion-opacity': 0.96,
-      },
-    });
     add({
       id: 'ap3d-light',
       type: 'circle',
@@ -251,6 +238,36 @@ export class Airport3D {
     }
     clearTimeout(this.retry);
     const b = this.viewBox();
+    const seq = ++this.viewSeq;
+    // airports with a pre-built layout come from our own files; Overpass only for the rest
+    staticAirports().then(async (list) => {
+      if (seq !== this.viewSeq || !this.enabled) return;
+      const view = this.map.getBounds();
+      const hit = list.filter((a) => a.bbox[0] <= view.getEast() && a.bbox[2] >= view.getWest() && a.bbox[1] <= view.getNorth() && a.bbox[3] >= view.getSouth());
+      if (!hit.length) return this.loadLive(b);
+      this.loading = true;
+      this.hooks.info({ loading: true });
+      await Promise.all(hit.map((a) => this.loadStatic(a)));
+      this.loading = false;
+      this.summary();
+    });
+  }
+
+  private async loadStatic(a: StaticAirport) {
+    if (this.staticLoaded.has(a.icao)) return;
+    this.staticLoaded.add(a.icao);
+    try {
+      const layout = await loadStaticAirport(a);
+      this.merge(layout.polygons, layout.lines, layout.points);
+    } catch (e) {
+      this.staticLoaded.delete(a.icao);
+      console.warn('airport layout', e);
+      this.retry = window.setTimeout(() => this.onMoveEnd(), RETRY_MS);
+    }
+  }
+
+  /** Live from Overpass: for airports that are not pre-built. */
+  private loadLive(b: Bounds) {
     if (this.covered.some((c) => contains(c, b))) {
       this.summary();
       this.loadDetails(b);
@@ -269,7 +286,7 @@ export class Airport3D {
           this.points.clear();
           this.covered = [b];
           this.lightsCovered = [];
-          this.bldCovered = [];
+          this.staticLoaded.clear();
         }
         this.merge(layout.polygons, layout.lines, layout.points);
         this.summary();
@@ -293,19 +310,9 @@ export class Airport3D {
     this.setData('ap3d-pt', emptyFc([...this.points.values()]));
   }
 
-  /** Buildings and lights of a box whose layout is loaded – slow, big, and optional. */
+  /** Lights of a box whose layout is loaded – many nodes, optional. */
   private loadDetails(b: Bounds) {
     if (!this.covered.some((c) => contains(c, b))) return;
-    if (!this.bldCovered.some((c) => contains(c, b))) {
-      loadAirportBuildings(b)
-        .then((polys) => {
-          this.bldCovered.push(b);
-          this.merge(polys, [], []);
-        })
-        .catch((e) => {
-          if (!isSuperseded(e)) console.warn('Overpass airport3d buildings', e);
-        });
-    }
     if (this.map.getZoom() >= LIGHT_ZOOM && !this.lightsCovered.some((c) => contains(c, b))) {
       loadAirportLights(b)
         .then((lights) => {
