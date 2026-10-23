@@ -2546,6 +2546,7 @@ export class ExtraLayers {
         ].filter(([, v]) => v);
         const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
         const hex = String(p.hex);
+        if (f.layer.id === AP3D_HIT_LAYER) this.airport3d?.select(hex);
         return {
           type: 'html',
           html: cardHtml({
@@ -2904,5 +2905,6 @@ export class ExtraLayers {
 
   clearSelection() {
     this.setData('sat-track', empty());
+    this.airport3d?.select(null);
   }
 }

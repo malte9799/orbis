@@ -1,6 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
-import { emptyFc, loadAirportLayout, loadAirportLights, runwayCenters, type Bounds } from '../api/airport';
+import { emptyFc, loadAirportBuildings, loadAirportLayout, loadAirportLights, type Bounds } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
@@ -11,8 +11,10 @@ import { FONT_BOLD } from './vector';
 
 /** From this zoom on the layout is loaded and aircraft are drawn as models. */
 export const AIRPORT_ZOOM = 13;
-/** Aircraft further than this from every known runway stay 2D icons. */
-const NEAR_KM = 8;
+/** Aircraft above this height (m) stay 2D icons; the models are for taxiing, take-off, approach. */
+const MODEL_MAX_ALT = 3000;
+/** Retry after a failed load (the public Overpass servers are often at capacity). */
+const RETRY_MS = 20000;
 /** Lights (thousands of nodes at a big airport) are loaded from this zoom on. */
 const LIGHT_ZOOM = 16;
 /** Grid of the requested boxes (degrees): a pan inside a loaded box costs no request. */
@@ -54,9 +56,11 @@ export class Airport3D {
   private polys = new Map<string, Poly>();
   private lines = new Map<string, Line>();
   private points = new Map<string, Pt>();
-  private centers: [number, number][] = [];
+  private retry: number | undefined;
+  private selected: string | null = null;
   private covered: Bounds[] = [];
   private lightsCovered: Bounds[] = [];
+  private bldCovered: Bounds[] = [];
   private tracker = new PlaneTracker();
   private layer: PlanesLayer;
   private lastTrails = 0;
@@ -188,7 +192,8 @@ export class Airport3D {
       type: 'line',
       source: 'ap3d-trail',
       layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#ff6a2b', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.5, 18, 3.5], 'line-opacity': 0.95 },
+      // all trails faint, the one of the selected aircraft at full strength
+      paint: { 'line-color': '#ff6a2b', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 18, 6], 'line-opacity': ['case', ['get', 'sel'], 1, 0.3] },
     });
     add({
       id: 'ap3d-label',
@@ -199,9 +204,9 @@ export class Airport3D {
         'text-field': ['step', ['zoom'], ['get', 'callsign'], 16, ['concat', ['get', 'callsign'], ['case', ['!=', ['get', 'icao'], ''], ['concat', '\n', ['get', 'icao']], '']]],
         'text-font': FONT_BOLD,
         'text-size': 12,
-        // the model grows with the zoom: lift the label with it
-        'text-offset': ['interpolate', ['linear'], ['zoom'], 15, ['literal', [0, -1.4]], 18.5, ['literal', [0, -3.4]]],
-        'text-anchor': 'bottom',
+        // the label sits above the model: `lift` (em) grows with the zoom and the altitude
+        'text-variable-anchor': ['bottom'],
+        'text-radial-offset': ['get', 'lift'],
         'text-allow-overlap': true,
         'text-padding': 4,
       },
@@ -222,6 +227,7 @@ export class Airport3D {
     if (on === this.enabled) return;
     this.enabled = on;
     if (!on) {
+      clearTimeout(this.retry);
       this.tracker.clear();
       this.setData('ap3d-trail', emptyFc());
       this.setData('ap3d-label', emptyFc());
@@ -243,10 +249,11 @@ export class Airport3D {
       this.hooks.info({ loading: false, note: `ab Zoomstufe ${AIRPORT_ZOOM} sichtbar – zu einem Flughafen zoomen` });
       return;
     }
+    clearTimeout(this.retry);
     const b = this.viewBox();
-    if (this.map.getZoom() >= LIGHT_ZOOM) this.loadLights(b);
     if (this.covered.some((c) => contains(c, b))) {
       this.summary();
+      this.loadDetails(b);
       return;
     }
     if (b.east - b.west > 0.6 || b.north - b.south > 0.6) return;
@@ -262,24 +269,53 @@ export class Airport3D {
           this.points.clear();
           this.covered = [b];
           this.lightsCovered = [];
+          this.bldCovered = [];
         }
-        for (const f of layout.polygons) this.polys.set(String(f.id), f);
-        for (const f of layout.lines) this.lines.set(String(f.id), f);
-        for (const f of layout.points) this.points.set(String(f.id), f);
-        this.centers = runwayCenters([...this.lines.values()]);
-        this.setData('ap3d-poly', emptyFc([...this.polys.values()]));
-        this.setData('ap3d-line', emptyFc([...this.lines.values()]));
-        this.setData('ap3d-pt', emptyFc([...this.points.values()]));
+        this.merge(layout.polygons, layout.lines, layout.points);
         this.summary();
-        // the lights of the box we are looking at
-        if (this.map.getZoom() >= LIGHT_ZOOM) this.loadLights(this.viewBox());
+        this.loadDetails(this.viewBox());
       })
       .catch((e) => {
         if (isSuperseded(e)) return;
         this.loading = false;
         console.warn('Overpass airport3d', e);
-        this.hooks.info({ loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+        this.hooks.info({ loading: false, note: 'OpenStreetMap (Overpass) gerade nicht erreichbar – neuer Versuch in Kürze' });
+        this.retry = window.setTimeout(() => this.onMoveEnd(), RETRY_MS);
       });
+  }
+
+  private merge(polys: Poly[], lines: Line[], points: Pt[]) {
+    for (const f of polys) this.polys.set(String(f.id), f);
+    for (const f of lines) this.lines.set(String(f.id), f);
+    for (const f of points) this.points.set(String(f.id), f);
+    this.setData('ap3d-poly', emptyFc([...this.polys.values()]));
+    this.setData('ap3d-line', emptyFc([...this.lines.values()]));
+    this.setData('ap3d-pt', emptyFc([...this.points.values()]));
+  }
+
+  /** Buildings and lights of a box whose layout is loaded – slow, big, and optional. */
+  private loadDetails(b: Bounds) {
+    if (!this.covered.some((c) => contains(c, b))) return;
+    if (!this.bldCovered.some((c) => contains(c, b))) {
+      loadAirportBuildings(b)
+        .then((polys) => {
+          this.bldCovered.push(b);
+          this.merge(polys, [], []);
+        })
+        .catch((e) => {
+          if (!isSuperseded(e)) console.warn('Overpass airport3d buildings', e);
+        });
+    }
+    if (this.map.getZoom() >= LIGHT_ZOOM && !this.lightsCovered.some((c) => contains(c, b))) {
+      loadAirportLights(b)
+        .then((lights) => {
+          this.lightsCovered.push(b);
+          this.merge([], [], lights);
+        })
+        .catch((e) => {
+          if (!isSuperseded(e)) console.warn('Overpass airport3d lights', e);
+        });
+    }
   }
 
   /** The visible map box on the request grid. */
@@ -287,20 +323,6 @@ export class Airport3D {
     const v = this.map.getBounds();
     const snap = (x: number, f: (n: number) => number) => f(x / GRID) * GRID;
     return { west: snap(v.getWest(), Math.floor), south: snap(v.getSouth(), Math.floor), east: snap(v.getEast(), Math.ceil), north: snap(v.getNorth(), Math.ceil) };
-  }
-
-  private loadLights(b: Bounds) {
-    // only where a layout is loaded – elsewhere there is no airport
-    if (!this.covered.some((c) => contains(c, b)) || this.lightsCovered.some((c) => contains(c, b))) return;
-    loadAirportLights(b)
-      .then((lights) => {
-        this.lightsCovered.push(b);
-        for (const f of lights) this.points.set(String(f.id), f);
-        this.setData('ap3d-pt', emptyFc([...this.points.values()]));
-      })
-      .catch((e) => {
-        if (!isSuperseded(e)) console.warn('Overpass airport3d lights', e);
-      });
   }
 
   private summary() {
@@ -316,14 +338,6 @@ export class Airport3D {
   owns(hex: string) {
     if (!this.enabled || !this.is3d()) return false;
     return !!this.tracker.planes.get(hex)?.near;
-  }
-
-  private nearAirport(lon: number, lat: number) {
-    const k = Math.cos((lat * Math.PI) / 180);
-    for (const [cLon, cLat] of this.centers) {
-      if (Math.hypot((cLon - lon) * k, cLat - lat) * 111.32 <= NEAR_KM) return true;
-    }
-    return false;
   }
 
   /** Fresh aircraft positions from the data source. */
@@ -350,7 +364,7 @@ export class Airport3D {
         ground,
         model,
         emergency: !!p.emergency,
-        near: this.nearAirport(lon, lat),
+        near: ground || (Number(p.altM) || 0) < MODEL_MAX_ALT,
         props: p,
       });
     }
@@ -359,14 +373,32 @@ export class Airport3D {
     if (this.enabled && this.is3d()) this.map.triggerRepaint();
   }
 
+  /** Label distance above the ground point in em: the model's size plus its altitude on screen. */
+  private lift(altM: number, lat: number) {
+    const m = this.map;
+    const zoom = m.getZoom();
+    const base = 1.4 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 2;
+    if (altM < 1) return base;
+    const metresPerPx = (40075016 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+    const heightPx = (altM * Math.sin((m.getPitch() * Math.PI) / 180)) / metresPerPx;
+    return base + Math.min(heightPx, 4000) / 12;
+  }
+
   private updateLabels(planes: PlaneState[]) {
     const features: Feature<Point>[] = planes.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.dLon, p.dLat] },
-      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? '') },
+      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? ''), lift: this.lift(p.dAlt, p.dLat) },
     }));
     this.setData('ap3d-label', emptyFc(features));
     if (performance.now() - this.lastTrails > 1000) this.updateTrails();
+  }
+
+  /** The aircraft whose trail is drawn at full strength (null: none). */
+  select(hex: string | null) {
+    if (hex === this.selected) return;
+    this.selected = hex;
+    this.updateTrails();
   }
 
   private updateTrails() {
@@ -374,8 +406,10 @@ export class Airport3D {
     const features: Feature<LineString>[] = [];
     for (const p of this.tracker.planes.values()) {
       if (!p.near || p.trail.length < 2) continue;
-      features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [...p.trail, [p.dLon, p.dLat]] }, properties: { hex: p.hex } });
+      features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [...p.trail, [p.dLon, p.dLat]] }, properties: { hex: p.hex, sel: p.hex === this.selected } });
     }
+    // drawn in order: the selected trail on top
+    features.sort((a, b) => Number(a.properties?.sel) - Number(b.properties?.sel));
     this.setData('ap3d-trail', emptyFc(features));
   }
 

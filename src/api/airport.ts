@@ -129,21 +129,30 @@ export function parseAirport(elements: OsmElement[]): AirportLayout {
   return out;
 }
 
-/** Ground layout in the box: aeroway ways, gates, and buildings inside any aerodrome area in it. */
+/** Ground layout in the box: aeroway ways (runways, taxiways, aprons, terminals …) and gates. */
 export async function loadAirportLayout(b: Bounds): Promise<AirportLayout> {
   const bbox = `${b.south},${b.west},${b.north},${b.east}`;
   const query = `[out:json][timeout:35];
-nwr["aeroway"="aerodrome"](${bbox});
-map_to_area->.a;
 (
   way["aeroway"~"^(runway|taxiway|taxilane|apron|terminal|hangar|helipad)$"](${bbox});
   way["aeroway"~"^(gate|parking_position)$"](${bbox});
   node["aeroway"~"^(gate|parking_position|helipad)$"](${bbox});
-  way["building"](area.a)(${bbox});
 );
 out geom qt;`;
   const json = await overpass<{ elements?: OsmElement[] }>(query, 'airport3d', 45000);
   return parseAirport(json.elements ?? []);
+}
+
+/** Other buildings inside aerodrome areas (separate request: it is the slow part). */
+export async function loadAirportBuildings(b: Bounds): Promise<Feature<Polygon>[]> {
+  const bbox = `${b.south},${b.west},${b.north},${b.east}`;
+  const query = `[out:json][timeout:35];
+nwr["aeroway"="aerodrome"](${bbox});
+map_to_area->.a;
+way["building"](area.a)(${bbox});
+out geom qt;`;
+  const json = await overpass<{ elements?: OsmElement[] }>(query, 'airport3d-bld', 45000);
+  return parseAirport(json.elements ?? []).polygons;
 }
 
 /** Runway, taxiway and approach lights (a big airport maps thousands of nodes – loaded only when zoomed in). */
@@ -157,14 +166,3 @@ out qt;`;
 }
 
 export const emptyFc = <G extends Polygon | LineString | Point>(features: Feature<G>[] = []): FeatureCollection<G> => ({ type: 'FeatureCollection', features });
-
-/** Mid-points of runways: used to tell which aircraft are close to an airport. */
-export function runwayCenters(lines: Feature<LineString>[]): [number, number][] {
-  const out: [number, number][] = [];
-  for (const f of lines) {
-    if (f.properties?.kind !== 'runway') continue;
-    const c = f.geometry.coordinates;
-    out.push(centroid(c.map(([lon, lat]) => ({ lon, lat }))));
-  }
-  return out;
-}
