@@ -467,139 +467,23 @@ export function createGamesView(): GamesView {
     panels.forEach((p, k) => (p.hidden = k !== id));
     panels.get(id)?.scrollTo({ top: 0 });
   };
-  // settings panel = hero (preview, title, lead) + options
-  // ----- settings layout: every field is a "section" (head in the nav, body in the stage); three flows show them ----
-  const LAYOUTS = [
-    { id: 'split', label: 'Geteilt' },
-    { id: 'rail', label: 'Übersicht' },
-    { id: 'steps', label: 'Schritte' },
-    { id: 'accordion', label: 'Akkordeon' },
-  ];
-  const narrow = window.matchMedia('(max-width: 819px)');
-  let layout = (() => {
-    try {
-      return localStorage.getItem('orbis-gm-layout2') || 'split';
-    } catch {
-      return 'split';
-    }
-  })();
-  const applyLayout = () => {
-    const eff = (layout === 'rail' || layout === 'split') && narrow.matches ? 'accordion' : layout;
-    LAYOUTS.forEach((l) => el.classList.toggle(`gml-${l.id}`, l.id === eff));
-    el.querySelectorAll<HTMLElement>('.gm-variants button').forEach((b) => b.classList.toggle('on', b.dataset.v === layout));
-    el.querySelectorAll<HTMLElement>('.gm-panel').forEach((p) => p.dispatchEvent(new Event('relayout')));
-  };
-  narrow.addEventListener('change', applyLayout);
-  const label = (b: Element) => Array.from((b.querySelector('.gm-opt-tx') ?? b).childNodes).find((n) => n.nodeType === 3 && n.textContent!.trim())?.textContent?.trim() ?? '';
-
-  function buildOpts(p: HTMLElement, gameId: string): HTMLElement {
+  // settings panel = hero (preview, title, lead) + options (stage with every field, foot with start button)
+  function buildOpts(p: HTMLElement): HTMLElement {
     const opts = document.createElement('div');
     opts.className = 'gm-opts';
-    const nav = document.createElement('div');
-    nav.className = 'gm-nav';
     const stage = document.createElement('div');
     stage.className = 'gm-stage';
     const foot = document.createElement('div');
     foot.className = 'gm-foot';
-    const secs: { field: HTMLElement; head: HTMLElement; sum: HTMLElement; th: HTMLElement; key: string }[] = [];
     for (const k of Array.from(p.children) as HTMLElement[]) {
       if (k.classList.contains('gm-field')) {
         const t = k.querySelector(':scope > span');
-        const title = t?.textContent ?? '';
+        k.dataset.title = t?.textContent ?? '';
         t?.remove();
-        k.dataset.title = title;
-        const head = document.createElement('button');
-        head.type = 'button';
-        head.className = 'gm-sechead';
-        head.innerHTML = `<span class="gm-sh-th"></span><span class="gm-sh-tx"><small>${secs.length + 1} · ${escapeHtml(title)}</small><b class="gm-sh-v"></b></span><i class="gm-sh-chev">›</i>`;
-        nav.append(head);
         stage.append(k);
-        head.style.order = String(secs.length * 2);
-        k.style.order = String(secs.length * 2 + 1);
-        head.querySelector<HTMLElement>('.gm-sh-th')!.hidden = true;
-        secs.push({ field: k, head, sum: head.querySelector('.gm-sh-v')!, th: head.querySelector('.gm-sh-th')!, key: '' });
       } else foot.append(k);
     }
-    foot.insertAdjacentHTML('afterbegin', '<div class="gm-stepnav"><button type="button" class="btn gm-prev">← Zurück</button><button type="button" class="btn gm-next">Weiter →</button></div>');
-    const variants = document.createElement('div');
-    variants.className = 'gm-variants';
-    variants.innerHTML = LAYOUTS.map((x) => `<button type="button" data-v="${x.id}">${x.label}</button>`).join('');
-    variants.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLElement>('button');
-      if (!b) return;
-      layout = b.dataset.v!;
-      try {
-        localStorage.setItem('orbis-gm-layout2', layout);
-      } catch {
-        /* private mode */
-      }
-      applyLayout();
-    });
-    opts.append(nav, stage, foot, variants);
-
-    let cur = 0;
-    const visible = () => secs.map((x, i) => (x.field.hidden ? -1 : i)).filter((i) => i >= 0);
-    const accordion = () => el.classList.contains('gml-accordion');
-    const show = (i: number) => {
-      cur = i;
-      secs.forEach((x, j) => {
-        x.head.classList.toggle('cur', j === i);
-        x.field.classList.toggle('cur', j === i);
-      });
-      refresh();
-    };
-    secs.forEach((x, i) => x.head.addEventListener('click', () => show(accordion() && cur === i ? -1 : i)));
-    foot.querySelector('.gm-prev')!.addEventListener('click', () => show(visible().filter((i) => i < cur).pop() ?? cur));
-    foot.querySelector('.gm-next')!.addEventListener('click', () => show(visible().find((i) => i > cur) ?? cur));
-
-    const summary = (f: HTMLElement): string => {
-      const parts: string[] = [];
-      const main = f.querySelector('.gm-scopes-main .on b')?.textContent;
-      if (main === 'Welt') {
-        const c = Array.from(f.querySelectorAll('.gm-scopes-conts .on b')).map((b) => b.textContent);
-        parts.push(c.length >= 6 || !c.length ? 'Welt' : c.join(', '));
-      } else if (main === 'Regional') parts.push(f.querySelector('.gm-regs .on b')?.textContent ?? 'Regional');
-      else if (main) parts.push(main);
-      f.querySelectorAll('.gm-seg .on').forEach((b) => parts.push(label(b)));
-      f.querySelectorAll<HTMLSelectElement>('select:not([hidden])').forEach((x) => parts.push(x.selectedOptions[0]?.textContent ?? ''));
-      const tok = f.querySelector<HTMLInputElement>('.sg-token');
-      if (tok) parts.push(tok.value ? 'Token gespeichert' : 'Token fehlt');
-      return parts.filter(Boolean).join(' · ');
-    };
-    function refresh() {
-      const vis = visible();
-      if (cur >= 0 && secs[cur]?.field.hidden) cur = vis[0] ?? 0;
-      if (cur < 0 && !accordion()) cur = vis[0] ?? 0;
-      secs.forEach((x, j) => {
-        if (x.head.hidden !== x.field.hidden) x.head.hidden = x.field.hidden;
-        x.head.classList.toggle('cur', j === cur);
-        x.field.classList.toggle('cur', j === cur);
-        const t = summary(x.field);
-        if (x.sum.textContent !== t) x.sum.textContent = t;
-        const pv = x.field.querySelector('.gm-regs .on .gm-opt-pv') ?? x.field.querySelector('.gm-scopes-main .on .gm-opt-pv') ?? x.field.querySelector('.gm-seg .on .gm-opt-pv') ?? x.field.querySelector('.on .gm-opt-pv');
-        const html = pv?.innerHTML ?? '';
-        if (x.key !== html) {
-          x.key = html;
-          x.th.innerHTML = html ? `<span class="gm-opt-pv">${html}</span>` : '';
-          x.th.hidden = !html;
-        }
-      });
-      (foot.querySelector('.gm-prev') as HTMLButtonElement).disabled = !vis.some((i) => i < cur);
-      (foot.querySelector('.gm-next') as HTMLElement).hidden = !vis.some((i) => i > cur);
-    }
-    let raf = 0;
-    new MutationObserver(() => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(refresh);
-    }).observe(p, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden'], characterData: true });
-    p.addEventListener('input', () => requestAnimationFrame(refresh));
-    p.addEventListener('relayout', () => {
-      if (!accordion() && cur < 0) cur = 0;
-      requestAnimationFrame(refresh);
-    });
-    cur = 0;
-    requestAnimationFrame(refresh);
-    void gameId;
+    opts.append(stage, foot);
     return opts;
   }
 
@@ -614,10 +498,9 @@ export function createGamesView(): GamesView {
     hero.innerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}
       <div class="gm-hero-txt"><button type="button" class="gm-backhub">← Alle Spiele</button><span class="gm-card-tag">${card.tag}</span></div>`;
     hero.querySelector('.gm-hero-txt')!.append(h2, lead);
-    p.append(hero, buildOpts(p, id));
+    p.append(hero, buildOpts(p));
     hero.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
   }
-  applyLayout();
   el.querySelectorAll<HTMLElement>('.gm-card').forEach((c) => c.addEventListener('click', () => showPanel(c.dataset.g!)));
 
   const segVal: Record<string, string> = {};
