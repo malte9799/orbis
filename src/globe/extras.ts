@@ -972,8 +972,8 @@ export class ExtraLayers {
       layout: {
         ...hidden,
         'icon-image': 'glyph-airport',
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.5, 9, 0.8],
-        'text-field': ['step', ['zoom'], '', 5, ['get', 'iata']],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 3, 1, 9, 1.3],
+        'text-field': ['step', ['zoom'], '', 4, ['get', 'iata']],
         'text-font': FONT_BOLD,
         'text-size': 10,
         'text-offset': [0, 1.1],
@@ -982,7 +982,7 @@ export class ExtraLayers {
       },
       paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
     });
-    add(airportLayer('airports', 3, ['international']), 'marker');
+    add(airportLayer('airports', 1, ['international']), 'marker');
     // 3D buildings everywhere, from city zoom on (the map has to be tilted to see them)
     add(
       {
@@ -1001,7 +1001,7 @@ export class ExtraLayers {
       },
       'marker',
     );
-    add(airportLayer('airports-minor', 7, ['public', 'regional', 'other', 'military', 'private']), 'marker');
+    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private']), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
         type: 'raster',
