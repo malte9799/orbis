@@ -33,8 +33,8 @@ export interface PlaneState extends PlaneReport {
   /** when the last report arrived (ms) */
   at: number;
   seen: number;
-  /** [lon, lat, altitude m] of the positions reported so far */
-  trail: [number, number, number][];
+  /** [lon, lat, altitude m, time (performance.now ms)] of the positions reported so far */
+  trail: [number, number, number, number][];
   obj?: THREE.Object3D;
   objModel?: PlaneModel;
   objEmergency?: boolean;
@@ -50,6 +50,11 @@ export interface PlaneState extends PlaneReport {
 const EXPIRE_MS = 60000;
 const PULSE_MS = 1300;
 const TRAIL_MAX = 150;
+/** a trail fades out over this time (the one of the selected aircraft stays complete) */
+const TRAIL_FADE_MS = 60000;
+/** the wall below a trail only exists at low altitude (take-off, landing, helicopters): full below, gone above */
+const WALL_FULL_M = 800;
+const WALL_MAX_M = 1500;
 /** share of the reported ground speed used to move an aircraft between two reports */
 const EXTRAPOLATE = 0.9;
 const M_PER_DEG = 111320;
@@ -72,13 +77,13 @@ export class PlaneTracker {
     for (const r of reports) {
       const prev = this.planes.get(r.hex);
       if (!prev) {
-        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, trail: [[r.lon, r.lat, trailAlt(r)]] });
+        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, trail: [[r.lon, r.lat, trailAlt(r), now]] });
         continue;
       }
       // a plane that did not move since the last report keeps its old fix time → no new trail point
       const last = prev.trail[prev.trail.length - 1];
       if (metres(last[0], last[1], r.lon, r.lat) >= (r.ground ? 5 : 30)) {
-        prev.trail.push([r.lon, r.lat, trailAlt(r)]);
+        prev.trail.push([r.lon, r.lat, trailAlt(r), now]);
         if (prev.trail.length > TRAIL_MAX) prev.trail.shift();
       }
       Object.assign(prev, r, { at: now, seen: now, pulseAt: now });
@@ -237,7 +242,6 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 // ---------------------------------------------------------------------------
 
-const TRAIL_COLOUR = 0xff6a2b;
 
 // Thick lines of constant pixel width. Each segment is a quad (4 vertices) that carries both of
 // its end points; the vertex shader projects them and pushes the corners sideways in screen space.
@@ -245,9 +249,17 @@ const LINE_VERTEX = `
 attribute vec3 aStart;
 attribute vec3 aEnd;
 attribute vec2 aCorner;
+attribute vec2 aT; // report time of start / end (end < 0: the moving head = now)
 uniform vec2 uRes;
 uniform float uWidth;
+uniform float uNow;
+uniform float uFade; // 0: no fading
+varying float vFade;
+varying float vD;
 void main() {
+  vD = mix(aT.x, aT.y, aCorner.x); // distance along a dashed line (forecast)
+  float te = aT.y < 0.0 ? uNow : aT.y;
+  vFade = uFade > 0.0 ? clamp(1.0 - (uNow - mix(aT.x, te, aCorner.x)) / uFade, 0.0, 1.0) : 1.0;
   vec4 cs = projectionMatrix * modelViewMatrix * vec4(aStart, 1.0);
   vec4 ce = projectionMatrix * modelViewMatrix * vec4(aEnd, 1.0);
   if (cs.w <= 0.0 || ce.w <= 0.0) {
@@ -264,36 +276,69 @@ void main() {
 }`;
 const LINE_FRAGMENT = `
 uniform float uOpacity;
+uniform vec3 uColor;
+uniform float uDash; // dash period in metres, 0: solid
+varying float vFade;
+varying float vD;
 void main() {
-  gl_FragColor = vec4(1.0, 0.416, 0.169, uOpacity);
+  if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard;
+  gl_FragColor = vec4(uColor, uOpacity * vFade);
+}`;
+const WALL_VERTEX = `
+attribute float aT;
+uniform float uNow;
+uniform float uFade;
+varying float vFade;
+varying float vD;
+void main() {
+  vD = 0.0;
+  float t = aT < 0.0 ? uNow : aT;
+  vFade = uFade > 0.0 ? clamp(1.0 - (uNow - t) / uFade, 0.0, 1.0) : 1.0;
+  vFade *= 1.0 - smoothstep(${WALL_FULL_M.toFixed(1)}, ${WALL_MAX_M.toFixed(1)}, position.z);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
 interface Mats {
   line: THREE.ShaderMaterial;
   lineSel: THREE.ShaderMaterial;
-  wall: THREE.MeshBasicMaterial;
-  wallSel: THREE.MeshBasicMaterial;
+  wall: THREE.ShaderMaterial;
+  wallSel: THREE.ShaderMaterial;
+  /** grey dashed line to the airports of the route */
+  forecast: THREE.ShaderMaterial;
+  /** current time (performance.now ms), shared by the trail shaders */
+  now: { value: number };
   shadow: THREE.MeshBasicMaterial;
   drop: THREE.LineBasicMaterial;
 }
 
 function makeMats(): Mats {
   const dpr = window.devicePixelRatio || 1;
-  const line = (width: number, opacity: number) =>
+  const now = { value: 0 };
+  const line = (width: number, opacity: number, fade: number, colour = new THREE.Vector3(1, 0.416, 0.169)) =>
     new THREE.ShaderMaterial({
       vertexShader: LINE_VERTEX,
       fragmentShader: LINE_FRAGMENT,
-      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: width * dpr }, uOpacity: { value: opacity } },
+      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: width * dpr }, uOpacity: { value: opacity }, uNow: now, uFade: { value: fade }, uColor: { value: colour }, uDash: { value: 0 } },
       transparent: true,
       depthWrite: false,
     });
-  const wall = (opacity: number) => new THREE.MeshBasicMaterial({ color: TRAIL_COLOUR, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
+  const wall = (opacity: number, fade: number) =>
+    new THREE.ShaderMaterial({
+      vertexShader: WALL_VERTEX,
+      fragmentShader: LINE_FRAGMENT,
+      uniforms: { uOpacity: { value: opacity }, uNow: now, uFade: { value: fade }, uColor: { value: new THREE.Vector3(1, 0.416, 0.169) }, uDash: { value: 0 } },
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
   return {
-    // all trails faint, the one of the selected aircraft at full strength
-    line: line(2, 0.55),
-    lineSel: line(3, 1),
-    wall: wall(0.06),
-    wallSel: wall(0.15),
+    now,
+    // all trails faint and fading out, the one of the selected aircraft complete and at full strength
+    line: line(2, 0.55, TRAIL_FADE_MS),
+    lineSel: line(3, 1, 0),
+    wall: wall(0.06, TRAIL_FADE_MS),
+    wallSel: wall(0.15, 0),
+    forecast: line(2.5, 0.85, 0, new THREE.Vector3(0.72, 0.75, 0.8)),
     shadow: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }),
     drop: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }),
   };
@@ -331,7 +376,7 @@ class TrailRig {
     return [(lon - this.lon0) * Math.cos(rad(this.lat0)) * M_PER_DEG, (lat - this.lat0) * M_PER_DEG, alt];
   }
 
-  private build(trail: [number, number, number][], flat: boolean) {
+  private build(trail: [number, number, number, number][], flat: boolean) {
     this.lon0 = trail[0][0];
     this.lat0 = trail[0][1];
     const pts = trail.map((t) => this.local(t[0], t[1], flat ? 0.3 : t[2]));
@@ -342,12 +387,14 @@ class TrailRig {
     const start = new Float32Array(segs * 12);
     const end = new Float32Array(segs * 12);
     const corner = new Float32Array(segs * 8);
+    const times = new Float32Array(segs * 8);
     const index = new Uint32Array(segs * 6);
     for (let i = 0; i < segs; i++) {
       for (let v = 0; v < 4; v++) {
         start.set(pts[i], (i * 4 + v) * 3);
         end.set(pts[i + 1], (i * 4 + v) * 3);
         corner.set([v >> 1, v & 1 ? 1 : -1], (i * 4 + v) * 2);
+        times.set([trail[i][3], i + 1 < trail.length ? trail[i + 1][3] : -1], (i * 4 + v) * 2);
       }
       index.set([0, 1, 2, 2, 1, 3].map((k) => i * 4 + k), i * 6);
     }
@@ -358,18 +405,25 @@ class TrailRig {
     this.aEnd = new THREE.BufferAttribute(end, 3);
     g.setAttribute('aEnd', this.aEnd);
     g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
+    g.setAttribute('aT', new THREE.BufferAttribute(times, 2));
     g.setIndex(new THREE.BufferAttribute(index, 1));
     this.line.geometry = g;
     // wall: two triangles per segment, from the trail down to z = 0
     const w = new Float32Array(segs * 18);
+    const wt = new Float32Array(segs * 6);
     for (let i = 0; i < segs; i++) {
       const [ax, ay, az] = pts[i];
       const [bx, by, bz] = pts[i + 1];
       w.set([ax, ay, az, bx, by, bz, ax, ay, 0, bx, by, bz, bx, by, 0, ax, ay, 0], i * 18);
+      const ta = trail[i][3];
+      const tb = i + 1 < trail.length ? trail[i + 1][3] : -1;
+      wt.set([ta, tb, ta, tb, tb, ta], i * 6);
     }
     this.wallPos = w;
     this.wall.geometry.dispose();
-    this.wall.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(w, 3));
+    this.wall.geometry = new THREE.BufferGeometry()
+      .setAttribute('position', new THREE.BufferAttribute(w, 3))
+      .setAttribute('aT', new THREE.BufferAttribute(wt, 1));
     this.count = trail.length;
     this.flatBuilt = flat;
   }
@@ -395,6 +449,119 @@ class TrailRig {
   dispose() {
     this.line.geometry.dispose();
     this.wall.geometry.dispose();
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+interface ForecastLeg {
+  /** [lon, lat, altitude m] */
+  from: [number, number, number];
+  to: [number, number, number];
+  /** dashes are anchored at the airport end so they stay put while the aircraft moves */
+  anchor: 'from' | 'to';
+}
+
+const FC_SEGS = 48; // straight pieces per leg
+const FC_LEGS = 2;
+
+/** Great circle between two points, `n` pieces, with altitude ramped linearly; lon unwrapped around `refLon`. */
+function greatCircle(a: [number, number, number], b: [number, number, number], n: number, refLon: number) {
+  const [lo1, la1] = [rad(a[0]), rad(a[1])];
+  const [lo2, la2] = [rad(b[0]), rad(b[1])];
+  const h = Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2;
+  const delta = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    let lon: number;
+    let lat: number;
+    if (delta < 1e-9) {
+      lon = a[0];
+      lat = a[1];
+    } else {
+      const k1 = Math.sin((1 - t) * delta) / Math.sin(delta);
+      const k2 = Math.sin(t * delta) / Math.sin(delta);
+      const x = k1 * Math.cos(la1) * Math.cos(lo1) + k2 * Math.cos(la2) * Math.cos(lo2);
+      const y = k1 * Math.cos(la1) * Math.sin(lo1) + k2 * Math.cos(la2) * Math.sin(lo2);
+      const z = k1 * Math.sin(la1) + k2 * Math.sin(la2);
+      lat = (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI;
+      lon = (Math.atan2(y, x) * 180) / Math.PI;
+    }
+    lon += 360 * Math.round((refLon - lon) / 360);
+    pts.push([lon, lat, a[2] + (b[2] - a[2]) * t]);
+  }
+  return { pts, metres: delta * 6371008.8 };
+}
+
+/**
+ * Grey dashed lines of the selected aircraft: from the departure airport to where its trail
+ * begins (no data there) and from its position to the destination airport. Positions are in
+ * Mercator units relative to the aircraft, so far-away airports keep their precision.
+ */
+class ForecastRig {
+  line: THREE.Mesh;
+  private start = new Float32Array(FC_LEGS * FC_SEGS * 12);
+  private end = new Float32Array(FC_LEGS * FC_SEGS * 12);
+  private times = new Float32Array(FC_LEGS * FC_SEGS * 8);
+  private aStart: THREE.BufferAttribute;
+  private aEnd: THREE.BufferAttribute;
+  private aT: THREE.BufferAttribute;
+
+  constructor(material: THREE.Material) {
+    const total = FC_LEGS * FC_SEGS;
+    const corner = new Float32Array(total * 8);
+    const index = new Uint32Array(total * 6);
+    for (let i = 0; i < total; i++) {
+      for (let v = 0; v < 4; v++) corner.set([v >> 1, v & 1 ? 1 : -1], (i * 4 + v) * 2);
+      index.set([0, 1, 2, 2, 1, 3].map((k) => i * 4 + k), i * 6);
+    }
+    const g = new THREE.BufferGeometry();
+    const dyn = (a: Float32Array, n: number) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
+    this.aStart = dyn(this.start, 3);
+    this.aEnd = dyn(this.end, 3);
+    this.aT = dyn(this.times, 2);
+    g.setAttribute('position', this.aStart);
+    g.setAttribute('aStart', this.aStart);
+    g.setAttribute('aEnd', this.aEnd);
+    g.setAttribute('aT', this.aT);
+    g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
+    g.setDrawRange(0, 0);
+    this.line = new THREE.Mesh(g, material);
+    this.line.matrixAutoUpdate = false;
+    this.line.frustumCulled = false;
+    this.line.renderOrder = 2;
+  }
+
+  /** `origin`: the aircraft [lon, lat]; `mpu`: Mercator units per metre there. Returns the Mercator origin. */
+  update(origin: [number, number], legs: ForecastLeg[], mpu: number): MercatorCoordinate {
+    const o = MercatorCoordinate.fromLngLat(origin, 0);
+    let seg = 0;
+    for (const leg of legs) {
+      const { pts, metres: total } = greatCircle(leg.from, leg.to, FC_SEGS, origin[0]);
+      const m = pts.map(([lon, lat, alt]) => {
+        const c = MercatorCoordinate.fromLngLat([lon, lat], 0);
+        return [c.x - o.x, c.y - o.y, alt * mpu];
+      });
+      for (let k = 0; k < FC_SEGS; k++, seg++) {
+        const d0 = leg.anchor === 'from' ? (total * k) / FC_SEGS : (total * (FC_SEGS - k)) / FC_SEGS;
+        const d1 = leg.anchor === 'from' ? (total * (k + 1)) / FC_SEGS : (total * (FC_SEGS - k - 1)) / FC_SEGS;
+        for (let v = 0; v < 4; v++) {
+          this.start.set(m[k], (seg * 4 + v) * 3);
+          this.end.set(m[k + 1], (seg * 4 + v) * 3);
+          this.times.set([d0, d1], (seg * 4 + v) * 2);
+        }
+      }
+    }
+    for (const a of [this.aStart, this.aEnd, this.aT]) a.needsUpdate = true;
+    this.line.geometry.setDrawRange(0, seg * 6);
+    this.line.visible = seg > 0;
+    return o;
+  }
+
+  dispose() {
+    this.line.geometry.dispose();
   }
 }
 
@@ -429,6 +596,15 @@ export class PlanesLayer implements CustomLayerInterface {
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** hex of the aircraft whose trail is drawn at full strength */
   selected: string | null = null;
+  /** departure / destination airport [lon, lat] of the selected aircraft, if known */
+  private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
+  private forecast?: ForecastRig;
+
+  /** Route of an aircraft (null: none): a grey dashed line is drawn while it is the selected one. */
+  setRoute(hex: string, route: { origin: [number, number]; destination: [number, number] } | null) {
+    this.route = route ? { hex, ...route } : null;
+    this.map?.triggerRepaint();
+  }
 
   constructor(
     readonly tracker: PlaneTracker,
@@ -452,7 +628,8 @@ export class PlanesLayer implements CustomLayerInterface {
     this.renderer?.dispose();
     this.drop.dispose();
     this.pulseGeo.dispose();
-    for (const m of Object.values(this.mats ?? {})) m.dispose();
+    for (const m of Object.values(this.mats ?? {})) if ('dispose' in m) m.dispose();
+    this.forecast?.dispose();
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
@@ -531,6 +708,8 @@ export class PlanesLayer implements CustomLayerInterface {
       this.syncTrail(p, elev, flat);
       this.syncPulse(p, now, mpp, elev, flat);
     }
+    this.mats.now.value = now;
+    this.syncForecast(mpp, flat);
     for (const mat of [this.mats.line, this.mats.lineSel]) mat.uniforms.uRes.value.set(map.getCanvas().width, map.getCanvas().height);
     this.camera.projectionMatrix.copy(this.proj);
     this.renderer.resetState();
@@ -570,6 +749,7 @@ export class PlanesLayer implements CustomLayerInterface {
       const d3 = d(c, a);
       return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
     };
+    const now = performance.now();
     let best: string | null = null;
     let bestD = Infinity;
     const consider = (hex: string, d: number) => {
@@ -586,16 +766,17 @@ export class PlanesLayer implements CustomLayerInterface {
         const c = screen(p.dLon, p.dLat, flat ? 1 : p.dAlt);
         if (c) consider(p.hex, Math.max(0, Math.hypot(x - c[0], y - c[1]) - 14));
       }
-      const pts: [number, number, number][] = [...p.trail.map((t) => [t[0], t[1], flat ? 0.3 : t[2]] as [number, number, number]), [p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt]];
+      const pts: [number, number, number, number][] = [...p.trail.map((t) => [t[0], t[1], flat ? 0.3 : t[2], t[3]] as [number, number, number, number]), [p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt, now]];
       let prevTop: [number, number] | null = null;
       let prevBot: [number, number] | null = null;
-      for (const [lon, lat, alt] of pts) {
+      for (const [lon, lat, alt, t] of pts) {
         const top = screen(lon, lat, alt);
         const bot = air ? screen(lon, lat, 0) : null;
-        if (top && prevTop) {
+        // faded-out parts of a trail cannot be picked
+        if (top && prevTop && (this.selected === p.hex || now - t < TRAIL_FADE_MS)) {
           consider(p.hex, Math.max(0, segDist(prevTop, top) - 5));
           // the wall: two triangles between the trail and the ground
-          if (bot && prevBot && (inTri(prevTop, top, prevBot) || inTri(top, bot, prevBot))) consider(p.hex, 12);
+          if (bot && prevBot && alt < WALL_MAX_M && (inTri(prevTop, top, prevBot) || inTri(top, bot, prevBot))) consider(p.hex, 12);
         }
         prevTop = top;
         prevBot = bot;
@@ -643,9 +824,11 @@ export class PlanesLayer implements CustomLayerInterface {
       this.scene.add(p.pulse);
     }
     (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
-    // radius in screen pixels; the further out, the smaller (35 % at zoom 6.5, full size from zoom 13)
-    const zoomK = 0.35 + 0.65 * Math.min(1, Math.max(0, (this.map.getZoom() - 6.5) / 6.5));
-    const px = (8 + 38 * (1 - (1 - t) ** 2)) * zoomK;
+    // radius in screen pixels; the further out, the smaller (20 % at zoom 6.5, full size from zoom 13),
+    // and smaller again with many aircraft (they all flash at once, so it need not be big)
+    const zoomK = 0.2 + 0.8 * Math.min(1, Math.max(0, (this.map.getZoom() - 6.5) / 6.5)) ** 1.5;
+    const crowdK = Math.min(1, Math.max(0.45, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
+    const px = (8 + 38 * (1 - (1 - t) ** 2)) * zoomK * crowdK;
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
     const s = mc.meterInMercatorCoordinateUnits() * px * mpp;
     p.pulse.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, s, s));
@@ -666,6 +849,32 @@ export class PlanesLayer implements CustomLayerInterface {
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], elev);
     const s = mc.meterInMercatorCoordinateUnits();
     p.drop.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s * p.dAlt));
+  }
+
+  /** Grey dashed line from the departure airport to the start of the trail and on to the destination. */
+  private syncForecast(mpp: number, flat: boolean) {
+    const p = this.selected ? this.tracker.planes.get(this.selected) : undefined;
+    const r = this.route;
+    if (!p || !r || r.hex !== p.hex) {
+      if (this.forecast) this.forecast.line.visible = false;
+      return;
+    }
+    if (!this.forecast) {
+      this.forecast = new ForecastRig(this.mats.forecast);
+      this.scene.add(this.forecast.line);
+    }
+    const alt = (a: number) => (flat || p.ground ? 0.3 : a);
+    const legs: ForecastLeg[] = [];
+    const first = p.trail[0];
+    // the departure airport is only drawn to the trail when the data begins far away from it
+    if (metres(r.origin[0], r.origin[1], first[0], first[1]) > 15000) legs.push({ from: [r.origin[0], r.origin[1], 0.3], to: [first[0], first[1], alt(first[2])], anchor: 'from' });
+    if (metres(p.dLon, p.dLat, r.destination[0], r.destination[1]) > 3000) legs.push({ from: [p.dLon, p.dLat, alt(p.dAlt)], to: [r.destination[0], r.destination[1], 0.3], anchor: 'to' });
+    const mpu = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], 0).meterInMercatorCoordinateUnits();
+    const o = this.forecast.update([p.dLon, p.dLat], legs, mpu);
+    this.forecast.line.matrix.makeTranslation(o.x - this.cx, o.y - this.cy, 0);
+    const cw = this.map.getCanvas();
+    this.mats.forecast.uniforms.uRes.value.set(cw.width, cw.height);
+    this.mats.forecast.uniforms.uDash.value = 14 * mpp; // one dash period = 14 screen px
   }
 
   private syncTrail(p: PlaneState, elev: number, flat: boolean) {

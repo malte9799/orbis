@@ -122,8 +122,15 @@ export class FlightPanel {
     sub.innerHTML = [i.type && escapeHtml(i.type), i.reg && `<b>${escapeHtml(i.reg)}</b>`].filter(Boolean).join(' · ');
     const num = (n: number | null, unit: string, d = 0) => (n == null ? '–' : `${fmt.num(n, d)} ${unit}`);
     const cell = (label: string, value: string, cls = '') => `<div class="fp-cell ${cls}"><span>${label}</span><b>${value}</b></div>`;
+    const place = (a: { icao: string; iata: string; city: string; name: string }) => `${escapeHtml(a.iata || a.icao)}<small>${escapeHtml(a.city || a.name)}</small>`;
+    const route =
+      i.route === undefined
+        ? cell('Route', 'wird geladen …', 'wide')
+        : i.route === null
+          ? cell('Route', 'unbekannt', 'wide')
+          : cell('Von', place(i.route.origin)) + cell('Nach', place(i.route.destination));
     const sections: Record<string, string> = {
-      flight: cell('Betreiber', escapeHtml(i.operator || '–'), 'wide') + cell('Typ', escapeHtml(i.type || '–'), 'wide') + cell('ICAO-Typ', escapeHtml(i.icao || '–')) + cell('Notfall', escapeHtml(i.emergency || 'keiner'), i.emergency ? 'warn' : ''),
+      flight: route + cell('Betreiber', escapeHtml(i.operator || '–'), 'wide') + cell('Typ', escapeHtml(i.type || '–'), 'wide') + cell('ICAO-Typ', escapeHtml(i.icao || '–')) + cell('Notfall', escapeHtml(i.emergency || 'keiner'), i.emergency ? 'warn' : ''),
       position:
         cell('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`) +
         cell('Geschwindigkeit', num(i.speedKmh, 'km/h')) +
@@ -137,6 +144,6 @@ export class FlightPanel {
     const source = i.source ? `${escapeHtml(i.source)} · ` : '';
     this.body.innerHTML =
       SECTIONS.map((s) => `<details data-key="${s.key}" ${this.closed.has(s.key) ? '' : 'open'}><summary>${s.title}</summary><div class="fp-grid">${sections[s.key]}</div></details>`).join('') +
-      `<details data-key="source" ${this.closed.has('source') ? '' : 'open'}><summary>Datenquelle</summary><div class="fp-note">${source}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
+      `<details data-key="source" ${this.closed.has('source') ? '' : 'open'}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> (Schätzung nach Callsign, gestrichelt auf der Karte) · ' : ''}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
   }
 }

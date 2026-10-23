@@ -1363,6 +1363,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('pitch', syncRotated);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
+    // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
+    let flightHover = false;
+    let lastFlightPick = 0;
+    map.on('mousemove', (e) => {
+      const now = performance.now();
+      if (now - lastFlightPick < 40) return;
+      lastFlightPick = now;
+      const over = !!extras?.pickFlight(e.point.x, e.point.y);
+      if (over) map!.getCanvas().style.cursor = 'pointer';
+      else if (flightHover) map!.getCanvas().style.cursor = '';
+      flightHover = over;
+    });
     map.on('mouseout', hideReadout);
     map.on('movestart', hideReadout);
     map.on('moveend', () => {

@@ -2,6 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, staticAirports, type Bounds, type StaticAirport } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
+import { loadRoute, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
@@ -434,7 +435,36 @@ export class Airport3D {
   select(hex: string | null) {
     if (hex === this.layer.selected) return;
     this.layer.selected = hex;
+    if (hex) void this.fetchRoute(hex);
     this.map.triggerRepaint();
+  }
+
+  /** hex → route of the aircraft (null: unknown / not plausible, missing: still loading) */
+  private routes = new Map<string, FlightRoute | null>();
+
+  route(hex: string): FlightRoute | null | undefined {
+    return this.routes.get(hex);
+  }
+
+  /** Route of the selected aircraft by its callsign (adsbdb) → grey dashed line to the airports. */
+  private async fetchRoute(hex: string) {
+    const p = this.tracker.planes.get(hex);
+    const known = this.routes.get(hex);
+    if (known !== undefined) {
+      this.applyRoute(hex, known);
+      return;
+    }
+    const found = await loadRoute(String(p?.props.callsign ?? ''));
+    const now = this.tracker.planes.get(hex);
+    // the callsign of the route must still fit the aircraft's position
+    const route = found && now && plausible(found, now.dLon, now.dLat) ? found : null;
+    this.routes.set(hex, route);
+    this.applyRoute(hex, route);
+  }
+
+  private applyRoute(hex: string, route: FlightRoute | null) {
+    if (this.layer.selected !== hex) return;
+    this.layer.setRoute(hex, route ? { origin: [route.origin.lon, route.origin.lat], destination: [route.destination.lon, route.destination.lat] } : null);
   }
 
   /** Displayed state of an aircraft (smoothed position, trail), if it is tracked. */

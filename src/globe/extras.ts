@@ -2,6 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
+import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
@@ -336,6 +337,8 @@ export interface FlightInfo {
   lon: number;
   lat: number;
   source: string;
+  /** departure / destination (adsbdb); null: unknown, undefined: still loading */
+  route?: FlightRoute | null;
 }
 
 interface Info {
@@ -1912,6 +1915,7 @@ export class ExtraLayers {
       lon: live ? live.lon : lon,
       lat: live ? live.lat : lat,
       source: this.lastAircraft?.source ?? '',
+      route: this.airport3d?.route(hex),
     };
   }
 

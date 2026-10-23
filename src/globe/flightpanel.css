@@ -156,6 +156,12 @@
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
+.fp-cell b small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+}
 .fp-cell.warn {
   border-color: color-mix(in srgb, var(--danger) 60%, transparent);
 }
