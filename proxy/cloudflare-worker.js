@@ -16,6 +16,8 @@
 // host → seconds an answer stays cached
 const HOSTS = {
   'api.adsb.lol': 8,
+  // route of a callsign (adsbdb.com), changes rarely
+  'api.adsbdb.com': 3600,
   'opendata.adsb.fi': 8,
   'api.airplanes.live': 8,
   'opensky-network.org': 30,

@@ -34,6 +34,7 @@ import {
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
+import { FlightPanel } from '../globe/flightpanel';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
@@ -207,6 +208,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let quakePoints: EventFeature[] = [];
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
+  let flightPanel: FlightPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
 
@@ -1286,6 +1288,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
       extras.init();
+      flightPanel = new FlightPanel(el, {
+        info: (hex) => extras?.flightInfo(hex) ?? null,
+        select: (hex) => extras?.selectFlight(hex),
+        fit: (hex) => extras?.fitFlight(hex),
+        map: () => map,
+      });
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1355,6 +1363,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('pitch', syncRotated);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
+    // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
+    let flightHover = false;
+    let lastFlightPick = 0;
+    map.on('mousemove', (e) => {
+      const now = performance.now();
+      if (now - lastFlightPick < 40) return;
+      lastFlightPick = now;
+      const over = !!extras?.pickFlight(e.point.x, e.point.y);
+      if (over) map!.getCanvas().style.cursor = 'pointer';
+      else if (flightHover) map!.getCanvas().style.cursor = '';
+      flightHover = over;
+    });
     map.on('mouseout', hideReadout);
     map.on('movestart', hideReadout);
     map.on('moveend', () => {
@@ -1383,9 +1403,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       ];
       const hits = map!.queryRenderedFeatures(box, { layers });
       const hit = hits.find((h) => !areaLayers.includes(h.layer.id)) ?? hits[0];
+      // an aircraft's 3D trail or the wall below it (MapLibre cannot pick those)
+      const picked = hit ? null : extras?.pickFlight(e.point.x, e.point.y);
+      if (picked) {
+        flightPanel?.open(picked);
+        return;
+      }
       extras?.clearSelection();
       const extraResult = hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null;
-      if (extraResult?.type === 'weather') {
+      if (extraResult?.type === 'flight') {
+        flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'weather') {
         weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {
         const node = openPopup({ lng: extraResult.lng, lat: extraResult.lat }, extraResult.html);
