@@ -338,6 +338,8 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
         callsign: (a.flight ?? '').trim() || a.r || a.hex.toUpperCase(),
         reg: a.r ?? '',
         type: a.desc || a.t || '',
+        icao: a.t ?? '',
+        cat: a.category ?? '',
         operator: a.ownOp ?? '',
         altM: onGround ? 0 : Math.round(altFt * 0.3048),
         speedKmh: a.gs != null ? Math.round(a.gs * 1.852) : null,

@@ -114,6 +114,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [adsb.fi](https://adsb.fi) · [OpenData](https://opendata.adsb.fi) | Flugzeuge live, Rückfall | 🟢 🌐 |
 | [airplanes.live](https://airplanes.live) | Flugzeuge live, Rückfall | 🟢 🚫 🌐 |
 | [OpenSky Network](https://opensky-network.org) | Flugzeuge (Weltübersicht alle 2 min), Flughafen-Abflüge/-Ankünfte vom Vortag | 🟢 🌐 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Flughafen 3D (ab Zoom 13): Start- und Landebahnen, Rollwege, Vorfelder, Gates, Befeuerung (Gebäude liefert die Grundkarte) (`aeroway=*`); große Flughäfen liegen vorab erzeugt in `public/data/airports/` (`scripts/airports.ts`), alle anderen kommen live von Overpass; die Flugzeuge dazu kommen von den ADS-B-Quellen oben | 🟢 ODbL, 🌐, 📦 |
 | [SondeHub](https://sondehub.org) | Wetterballons (Radiosonden) | 🟢 |
 | [The Space Devs – Launch Library 2](https://thespacedevs.com) | Raketenstarts mit Countdown & Livestream-Link | 🟢 |
 | [CelesTrak](https://celestrak.org) + [satellite.js](https://github.com/shashwatak/satellite-js) (SGP4) | Satelliten (ISS, Wetter-, GPS-, Galileo-Satelliten, Starlink), Bodenspur | 🟢 |
