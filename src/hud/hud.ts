@@ -219,17 +219,19 @@ export function createHud(host: HudHost): Hud {
    */
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
-      const fams = host.families();
       const f = mainFam(k);
       const variantId = f ? (k.mainVar ?? f.variants[0][0]) : '';
-      const subs: string[] = [];
-      if (f && f.variants.length > 1) subs.push(...f.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}" aria-pressed="${variantId === v}">${esc(t)}</button>`));
-      if (f && WIND_OPTION_MAINS.includes(f.id) && f.variants.some(([v]) => v === variantId)) subs.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
-      if (f && ISOBAR_OPTION_MAINS.includes(f.id)) subs.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
-      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene">
-        <div class="mrow cats">${fams.map((x) => `<button type="button" data-act="wxcat" data-id="${esc(x.id)}" class="${f?.id === x.id ? 'on' : ''}" aria-pressed="${f?.id === x.id}" style="--lc:${esc(x.color)}" title="${esc(x.hint)}"><i>${ico(x.icon, 2)}</i><span>${esc(x.label)}</span></button>`).join('')}</div>
-        ${subs.length ? `<div class="mrow subs">${subs.join('')}</div>` : ''}
-      </div>`;
+      const subs = (x: WxFamily): string => {
+        const rows: string[] = [];
+        if (x.variants.length > 1) rows.push(...x.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}" aria-pressed="${variantId === v}">${esc(t)}</button>`));
+        if (WIND_OPTION_MAINS.includes(x.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
+        if (ISOBAR_OPTION_MAINS.includes(x.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+        return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
+      };
+      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${host
+        .families()
+        .map((x) => `<button type="button" data-act="wxcat" data-id="${esc(x.id)}" class="${f?.id === x.id ? 'on' : ''}" aria-pressed="${f?.id === x.id}" style="--lc:${esc(x.color)}" title="${esc(x.hint)}"><i>${ico(x.icon, 2)}</i><span>${esc(x.label)}</span></button>${f?.id === x.id ? subs(x) : ''}`)
+        .join('')}</div></div>`;
     }
     return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MODES.map((m) => {
       const c = catalogOf(m.id);
@@ -240,29 +242,16 @@ export function createHud(host: HudHost): Hud {
   }
   function renderModes() {
     const r = reg('modes');
-    if (!view(cur).menu) {
+    // beside the editing stack the weather controls of the stack take over
+    if (!view(cur).menu || (ui.edit && layout !== 'portrait')) {
       r.innerHTML = '';
       return;
     }
-    const left = r.querySelector('.cats')?.scrollLeft ?? 0;
+    const left = r.querySelector('.wxm')?.scrollTop ?? 0;
     r.innerHTML = modesInner(view(cur));
-    const sc = r.querySelector<HTMLElement>('.cats');
-    if (!sc) return;
-    sc.scrollLeft = left;
-    // keep the chosen category visible in the scrolling row
-    const on = sc.querySelector<HTMLElement>('button.on');
-    if (on && on.offsetLeft < sc.scrollLeft) sc.scrollLeft = Math.max(0, on.offsetLeft - 10);
-    else if (on && on.offsetLeft + on.offsetWidth > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = on.offsetLeft + on.offsetWidth - sc.clientWidth + 10;
-    alignSubs();
+    const m = r.querySelector('.wxm');
+    if (m) m.scrollTop = left;
   }
-  /** the vertical list hangs under the chosen category */
-  function alignSubs() {
-    const sc = reg('modes').querySelector<HTMLElement>('.cats');
-    const subs = reg('modes').querySelector<HTMLElement>('.subs');
-    const on = sc?.querySelector<HTMLElement>('button.on');
-    if (sc && subs && on) subs.style.marginLeft = `${Math.max(0, Math.min(on.offsetLeft - sc.scrollLeft, sc.clientWidth - subs.offsetWidth))}px`;
-  }
-  reg('modes').addEventListener('scroll', alignSubs, true);
 
   /** keep the active pill visible in the scrolling Karten bar */
   function revealActive() {
@@ -746,20 +735,6 @@ export function createHud(host: HudHost): Hud {
       ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a></div>` : ''}`;
   }
 
-  /** --menu-h = room the menu takes under the bar; follows the menu while it lays out or changes rows */
-  let menuObserved: HTMLElement | null = null;
-  const menuObserver = new ResizeObserver(() => syncMenuH());
-  function syncMenuH() {
-    const el = reg('modes').firstElementChild as HTMLElement | null;
-    if (el !== menuObserved) {
-      menuObserver.disconnect();
-      menuObserved = el;
-      if (el) menuObserver.observe(el);
-    }
-    const h = el ? el.offsetHeight + 8 : 0;
-    if (root.style.getPropertyValue('--menu-h') !== `${h}px`) root.style.setProperty('--menu-h', `${h}px`);
-  }
-
   let lastShift = '';
   let lastEdit = false;
   let hadPlace = false;
@@ -779,6 +754,7 @@ export function createHud(host: HudHost): Hud {
     hadPlace = !!placeNode;
     renderBar();
     renderModes();
+    root.classList.toggle('has-menu', !!reg('modes').firstElementChild);
     renderMenu();
     renderMain();
     renderSheet();
@@ -786,8 +762,6 @@ export function createHud(host: HudHost): Hud {
     renderGallery();
     renderDialog();
     renderContent();
-    // the Karte card and the stack sit below the menu
-    syncMenuH();
     const sw = layout === 'portrait' ? 0 : ui.edit && (layout === 'landscape' || window.innerWidth > 900) ? (layout === 'landscape' ? 316 : 362) : 0;
     const s = `${sw / 2}px`;
     if (s !== lastShift) {
