@@ -42,9 +42,6 @@
 .hud .subs button { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px; background: transparent; font-size: 13px; color: var(--text-2); cursor: pointer; text-align: left; }
 .hud .subs button:hover { background: var(--card); color: var(--text); }
 .hud .subs button.on { background: #fff; border-color: #fff; color: #0b1020; font-weight: 600; }
-.hud .subs .glabel { font: 600 10px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 7px 8px 2px; }
-.hud .subs .radios { display: flex; flex-wrap: wrap; gap: 3px; padding: 1px 0 3px; }
-.hud .subs .radios button { height: 28px; padding: 0 10px; font-size: 12px; border-color: var(--border-2); justify-content: center; }
 .hud .subs .n { margin-left: auto; font: 600 11px ui-monospace, Menlo, monospace; font-style: normal; color: var(--muted); }
 .hud .subs .n:empty { display: none; }
 .hud .subs button.tgl { margin-top: 0; }

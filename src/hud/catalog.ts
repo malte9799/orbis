@@ -84,49 +84,29 @@ export const OWM_FAMILY: WxFamily = {
 };
 
 /**
- * The Verkehr menu: one category at a time (radio); inside it every row switches one layer
- * (toggle) and a `choices` row picks at most one of its layers (radio, side by side).
+ * The Verkehr menu: one category at a time (radio). `defaults` are switched on with the category
+ * and always stay on; every row inside switches one more layer (toggle).
  */
-export type TrafficRow = { label: string; layer: string } | { label: string; choices: { label: string; layer: string }[] };
 export interface TrafficCat {
   id: string;
   label: string;
   icon: string;
-  /** layers switched on when the category is chosen */
   defaults: string[];
-  groups: { label?: string; rows: TrafficRow[] }[];
+  rows: { label: string; layer: string }[];
 }
 export const TRAFFIC_MENU: TrafficCat[] = [
-  {
-    id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'],
-    groups: [{ rows: [{ label: 'Straßen', layer: 'roadnet' }, { label: 'Staus & Baustellen', layer: 'autobahn' }] }],
-  },
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layer: 'roadnet' }, { label: 'Staus & Baustellen', layer: 'autobahn' }] },
   {
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
-    groups: [
-      { label: 'Bus', rows: [{ label: 'Live', layer: 'transit' }, { label: 'Netz', layer: 'busnet' }] },
-      {
-        label: 'Zug',
-        rows: [
-          { label: 'Live', layer: 'trains' },
-          { label: 'Netz', choices: [{ label: 'Bahnnetz', layer: 'railmap' }, { label: 'Geschwindigkeit', layer: 'railspeed' }, { label: 'Elektro', layer: 'railelec' }] },
-        ],
-      },
-    ],
+    rows: [{ label: 'Busse live', layer: 'transit' }, { label: 'Busnetz', layer: 'busnet' }, { label: 'Züge live', layer: 'trains' }, { label: 'Zugnetz', layer: 'railspeed' }],
   },
-  {
-    id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'],
-    groups: [{ rows: [{ label: 'Flugzeuge & Hubschrauber', layer: 'aircraft' }, { label: 'Flughäfen (3D beim Heranzoomen)', layer: 'airports' }] }],
-  },
-  {
-    id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'],
-    groups: [{ rows: [{ label: 'Live', layer: 'ships' }, { label: 'Netz', layer: 'shipping' }] }],
-  },
+  // aircraft always on; the airports bring 3D buildings when zoomed in close
+  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layer: 'airports' }] },
+  { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layer: 'shipping' }] },
 ];
-const trafficLayers = (c: TrafficCat) => c.groups.flatMap((g) => g.rows.flatMap((r) => ('layer' in r ? [r.layer] : r.choices.map((x) => x.layer))));
 /** every layer the Verkehr menu manages */
-export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap(trafficLayers));
-export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => trafficLayers(c).includes(layer));
+export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.map((r) => r.layer)]));
+export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layer === layer));
 
 /** families whose forecast model provides wind particles / isobars as options */
 export const WIND_OPTION_MAINS = ['wind'];

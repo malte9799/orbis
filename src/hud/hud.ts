@@ -19,7 +19,6 @@ import {
   WIND_OPTION_MAINS,
   WX_MENU,
   type CatalogEntry,
-  type TrafficRow,
   type WxMenuItem,
   type WxFamily,
 } from './catalog';
@@ -244,13 +243,9 @@ export function createHud(host: HudHost): Hud {
       const n = have(layer) ? host.info(layer).count : null;
       return `<button type="button" class="tgl ${have(layer) ? 'on' : ''}" data-act="ttog" data-id="${esc(layer)}" aria-pressed="${have(layer)}"><span>${esc(label)}</span><em class="n" data-n="${esc(layer)}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
     };
-    const row = (r: TrafficRow) =>
-      'layer' in r
-        ? toggle(r.label, r.layer)
-        : `<div class="glabel">${esc(r.label)}</div><div class="radios">${r.choices.map((c) => `<button type="button" data-act="trad" data-id="${esc(c.layer)}" class="${have(c.layer) ? 'on' : ''}" aria-pressed="${have(c.layer)}">${esc(c.label)}</button>`).join('')}</div>`;
     return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.groups.map((g) => `${g.label ? `<div class="glabel">${esc(g.label)}</div>` : ''}${g.rows.map(row).join('')}`).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layer)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
   /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
@@ -931,15 +926,6 @@ export function createHud(host: HudHost): Hud {
       const d = edit();
       if (d.layers.some((l) => l.id === id)) d.layers = d.layers.filter((l) => l.id !== id);
       else d.layers.unshift({ id });
-      afterEdit();
-    },
-    trad: (id) => {
-      const d = edit();
-      const row = trafficCatOf(id)?.groups.flatMap((g) => g.rows).find((r) => 'choices' in r && r.choices.some((c) => c.layer === id));
-      const mine = d.layers.some((l) => l.id === id);
-      const others = row && 'choices' in row ? row.choices.map((c) => c.layer) : [id];
-      d.layers = d.layers.filter((l) => !others.includes(l.id));
-      if (!mine) d.layers.unshift({ id });
       afterEdit();
     },
     var: (_, v) => {
