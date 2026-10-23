@@ -1,3 +1,5 @@
+import { mountRawDataLink } from '../inspector/inspector';
+import { tileRecorder } from '../inspector/tiles';
 import {
   addProtocol,
   Map as MlMap,
@@ -415,6 +417,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     <div class="pm-active" aria-label="Angezeigte Ebenen"></div>
     <section class="space-info pm-info" hidden></section>`;
 
+  mountRawDataLink(el.querySelector<HTMLElement>('.globe-top')!, 'button', { cls: 'btn icon-btn' });
   const mapEl = el.querySelector<HTMLElement>('.map')!;
   const panel = el.querySelector<HTMLElement>('.pm-panel')!;
   const searchEl = el.querySelector<HTMLInputElement>('.pm-search')!;
@@ -732,6 +735,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       maxZoom: MAX_ZOOM,
       minZoom: 0.3, // below this the 3D globe hands over to the solar system
       attributionControl: { compact: true },
+      transformRequest: tileRecorder(() => map),
     });
     map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');

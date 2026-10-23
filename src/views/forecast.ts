@@ -1,6 +1,7 @@
 import { getAlerts, type Alert } from '../api/alerts';
 import { getAirQuality, getForecast, reverseGeocode, type AirQuality, type Forecast } from '../api/openmeteo';
 import { renderHourlyChart } from '../chart';
+import { mountRawDataLink } from '../inspector/inspector';
 import { createForecastMap, type ForecastMap } from './fcmap';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
@@ -52,6 +53,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
     <nav class="favs" aria-label="Favoriten"></nav>
     <div class="fc-body" aria-live="polite"></div>`;
   el.querySelector('.fc-search')!.appendChild(createSearch((p) => show(p)));
+  mountRawDataLink(el, 'fab');
 
   const body = el.querySelector<HTMLDivElement>('.fc-body')!;
   const favs = el.querySelector<HTMLElement>('.favs')!;

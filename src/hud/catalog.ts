@@ -37,8 +37,8 @@ export interface WxFamily {
 }
 
 export const WX_FAMILIES: WxFamily[] = [
-  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', icon: 'radar', color: '#4f8dff', variants: [['radar', 'Regen'], ['dwd-radar', 'Deutschland (DWD)']] },
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']] },
+  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', icon: 'radar', color: '#4f8dff', variants: [['radar', 'Regen (RainViewer)'], ['dwd-radar', 'Deutschland (DWD)']] },
+  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag'], ['sat-storm', 'Gewitter live']] },
   { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
   { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund', icon: 'thermo', color: '#ff8a4c', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
   { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', icon: 'drop', color: '#3db8ff', variants: [['precip', '']] },
@@ -46,8 +46,32 @@ export const WX_FAMILIES: WxFamily[] = [
   { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', icon: 'gauge', color: '#a58bff', variants: [['pressure', '']] },
   { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', icon: 'humid', color: '#4fc3c8', variants: [['humidity', '']] },
   { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', icon: 'snow', color: '#d8e8ff', variants: [['snow', '']] },
-  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', icon: 'ocean', color: '#2aa8c8', variants: [['sst', 'Meerestemperatur'], ['seaice', 'Meereis']] },
+  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', icon: 'ocean', color: '#2aa8c8', variants: [['water', 'Meer + Eis'], ['sst', 'Meerestemperatur'], ['seaice', 'Meereis']] },
   { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', icon: 'bolt', color: '#ffcc33', variants: [['cape', '']] },
+];
+
+/**
+ * The curated weather menu under the Karten bar. Every entry points at a weather layer of
+ * WX_FAMILIES (family + variant), so the menu and the editing stack always show the same choice.
+ * A single entry without a label switches directly.
+ */
+export interface WxMenuItem {
+  id: string;
+  label: string;
+  hint: string;
+  icon: string;
+  color: string;
+  subs: { label: string; main: string; mainVar: string }[];
+}
+export const WX_MENU: WxMenuItem[] = [
+  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Wolken (IR)', icon: 'sat', color: '#8a94a8', subs: [{ label: 'HD', main: 'sat', mainVar: 'sat-hd' }, { label: 'Wolken', main: 'sat', mainVar: 'sat-ir' }] },
+  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar (RainViewer)', icon: 'radar', color: '#4f8dff', subs: [{ label: '', main: 'radar', mainVar: 'radar' }] },
+  { id: 'precip', label: 'Niederschlag', hint: 'Satellit (NASA IMERG) und Schneehöhe', icon: 'drop', color: '#3db8ff', subs: [{ label: 'Satellit', main: 'sat', mainVar: 'imerg' }, { label: 'Schnee', main: 'snow', mainVar: 'snow' }] },
+  { id: 'storm', label: 'Gewitter', hint: 'CAPE-Vorhersage und Satellit live (Meteosat)', icon: 'bolt', color: '#ffcc33', subs: [{ label: 'Vorhersage', main: 'cape', mainVar: 'cape' }, { label: 'Live', main: 'sat', mainVar: 'sat-storm' }] },
+  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', subs: [{ label: 'Stärke', main: 'wind', mainVar: 'wind' }, { label: 'Böen', main: 'wind', mainVar: 'gusts' }] },
+  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund; Wasser: Satellit (NASA)', icon: 'thermo', color: '#ff8a4c', subs: [{ label: 'Luft', main: 'temp', mainVar: 'temp' }, { label: 'Gefühlt', main: 'temp', mainVar: 'feels' }, { label: 'Wasser', main: 'ocean', mainVar: 'water' }] },
+  { id: 'humid', label: 'Feuchtigkeit', hint: 'Vorhersage', icon: 'humid', color: '#4fc3c8', subs: [{ label: 'Relativ', main: 'humidity', mainVar: 'humidity' }, { label: 'Taupunkt', main: 'temp', mainVar: 'dewpoint' }] },
+  { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', icon: 'gauge', color: '#a58bff', subs: [{ label: '', main: 'pressure', mainVar: 'pressure' }] },
 ];
 
 export const OWM_FAMILY: WxFamily = {
@@ -58,6 +82,32 @@ export const OWM_FAMILY: WxFamily = {
   color: '#9aa3b5',
   variants: [['owm-temp_new', 'Temperatur'], ['owm-precipitation_new', 'Niederschlag'], ['owm-clouds_new', 'Wolken'], ['owm-wind_new', 'Wind'], ['owm-pressure_new', 'Luftdruck']],
 };
+
+/**
+ * The Verkehr menu: one category at a time (radio). `defaults` are switched on with the category
+ * and always stay on; every row inside switches one more layer (toggle).
+ */
+export interface TrafficCat {
+  id: string;
+  label: string;
+  icon: string;
+  defaults: string[];
+  /** a row switches one or more layers together */
+  rows: { label: string; layers: string[] }[];
+}
+export const TRAFFIC_MENU: TrafficCat[] = [
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
+  {
+    id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
+    rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
+  },
+  // aircraft always on; "Flughäfen" = the airport symbols plus the airports in 3D when zoomed in close
+  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
+  { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
+];
+/** every layer the Verkehr menu manages */
+export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.flatMap((r) => r.layers)]));
+export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
 /** families whose forecast model provides wind particles / isobars as options */
 export const WIND_OPTION_MAINS = ['wind'];
@@ -94,7 +144,7 @@ const CAT_OF: Record<CatId, string[]> = {
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
   verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
-  erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
+  erde: ['terrain', 'buildings3d', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
   netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'plants'],
   medien: ['webcams', 'radio', 'alpr'],
 };
@@ -103,7 +153,7 @@ const ICON_OF: Record<string, string> = {
   cities: 'city', dwdwarn: 'warn', gauges: 'gauge', nina: 'warn', aq: 'air', aurora: 'aurora', tsunami: 'tsunami', lightning: 'bolt', radiation: 'radiation',
   resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
-  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
+  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain', buildings3d: 'city',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
   autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', webcams: 'cam', radio: 'radio',

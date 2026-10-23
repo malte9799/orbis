@@ -41,6 +41,10 @@ export const gibsFires = (date: string) =>
 export const EUMETSAT_IR =
   'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=mumi:worldcloudmap_ir108&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
+/** Convection RGB of the Meteosat disk (Europe, Africa): developing thunderstorms show bright yellow. */
+export const EUMETSAT_STORM =
+  'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=msg_fes:rgb_convection&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+
 /** NASA GPM IMERG satellite precipitation rate (30 min, latest available). */
 export const IMERG_WMS =
   'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=IMERG_Precipitation_Rate&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
@@ -144,6 +148,14 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         maxzoom: 7,
         attribution: `Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a> ${new Date().getUTCFullYear()}`,
       },
+      'sat-storm': {
+        type: 'raster',
+        tiles: [EUMETSAT_STORM],
+        tileSize: 256,
+        maxzoom: 7,
+        bounds: [-77, -77, 77, 77],
+        attribution: `Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a> ${new Date().getUTCFullYear()}`,
+      },
       imerg: {
         type: 'raster',
         tiles: [IMERG_WMS],
@@ -223,6 +235,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       },
       { id: 'dwd-radar', type: 'raster', source: 'dwd-radar', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85 } },
       { id: 'sat-ir', type: 'raster', source: 'sat-ir', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
+      { id: 'sat-storm', type: 'raster', source: 'sat-storm', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       { id: 'imerg', type: 'raster', source: 'imerg', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },
       { id: 'sst', type: 'raster', source: 'sst', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.85 } },
       { id: 'seaice', type: 'raster', source: 'seaice', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.9 } },

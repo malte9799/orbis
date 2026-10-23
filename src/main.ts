@@ -1,11 +1,15 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import './hud/hud.css';
+import './inspector/inspector.css';
+import { installCapture } from './inspector/capture';
 import { setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { store, type Place } from './store';
 import { createForecastView } from './views/forecast';
 import { createGlobeView } from './views/globe';
+
+installCapture();
 
 // Bundlers move the library, so tell MapLibre explicitly where its worker lives.
 setWorkerUrl(workerUrl);
