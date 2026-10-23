@@ -35,7 +35,7 @@ import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
-import { Airport3D, AP3D_HIT_LAYER, AP3D_LAYERS } from './airport3d';
+import { AIRPORT_ZOOM, Airport3D, AP3D_HIT_LAYER, AP3D_LAYERS } from './airport3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
@@ -1481,6 +1481,9 @@ export class ExtraLayers {
     // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
     this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
     this.refreshAircraftIcons();
+    // the airport symbols make room for the 3D airport once it is drawn
+    const maxZoom = this.on.has('airport3d') ? AIRPORT_ZOOM : 24;
+    for (const [id, min] of [['airports', 1], ['airports-minor', 5.5]] as const) if (this.map.getLayer(id)) this.map.setLayerZoomRange(id, min, maxZoom);
 
     for (const def of EXTRAS) {
       const on = this.on.has(def.id);
