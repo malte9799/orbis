@@ -37,9 +37,10 @@ export interface WxFamily {
 }
 
 export const WX_FAMILIES: WxFamily[] = [
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS), Wolken und Gewitter live', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken'], ['sat-storm', 'Gewitter']] },
+  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS), Bewölkung (Vorhersage) und Gewitter live (Satellit)', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['cloud', 'Wolken'], ['sat-storm', 'Gewitter live']] },
   { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar (RainViewer)', icon: 'radar', color: '#4f8dff', variants: [['radar', 'RainViewer']] },
-  { id: 'precip', label: 'Niederschlag', hint: 'Satellit (NASA IMERG) und Schneefall (Vorhersage)', icon: 'drop', color: '#3db8ff', variants: [['imerg', 'Satellit'], ['snowfall', 'Schnee']] },
+  { id: 'precip', label: 'Niederschlag', hint: 'Satellit (NASA IMERG), Schneefall und Niederschlag (Vorhersage)', icon: 'drop', color: '#3db8ff', variants: [['imerg', 'Satellit'], ['snowfall', 'Schnee'], ['precip', 'Vorhersage']] },
+  { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', icon: 'bolt', color: '#ffcc33', variants: [['cape', '']] },
   { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', variants: [['wind', 'Stärke'], ['gusts', 'Böen']] },
   { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund; Wasser: Satellit (NASA)', icon: 'thermo', color: '#ff8a4c', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['water', 'Wasser']] },
   { id: 'humidity', label: 'Feuchtigkeit', hint: 'Vorhersage', icon: 'humid', color: '#4fc3c8', variants: [['humidity', 'Relativ'], ['dewpoint', 'Taupunkt']] },
@@ -48,13 +49,12 @@ export const WX_FAMILIES: WxFamily[] = [
 
 /** [family, variant] for the weather layers of earlier versions (saved Karten, shared links) */
 const LEGACY_WX: Record<string, [string, string]> = {
-  cloud: ['sat', 'sat-ir'],
-  cape: ['sat', 'sat-storm'],
+  cloud: ['sat', 'cloud'],
   snow: ['precip', 'snowfall'],
   ocean: ['temp', 'water'],
   dewpoint: ['humidity', 'dewpoint'],
   imerg: ['precip', 'imerg'],
-  'sat-ir': ['sat', 'sat-ir'],
+  'sat-ir': ['sat', 'cloud'],
   sst: ['temp', 'water'],
   seaice: ['temp', 'water'],
   feels: ['temp', 'feels'],
