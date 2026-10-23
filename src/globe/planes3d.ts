@@ -643,7 +643,9 @@ export class PlanesLayer implements CustomLayerInterface {
       this.scene.add(p.pulse);
     }
     (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
-    const px = 8 + 38 * (1 - (1 - t) ** 2); // radius in screen pixels
+    // radius in screen pixels; the further out, the smaller (35 % at zoom 6.5, full size from zoom 13)
+    const zoomK = 0.35 + 0.65 * Math.min(1, Math.max(0, (this.map.getZoom() - 6.5) / 6.5));
+    const px = (8 + 38 * (1 - (1 - t) ** 2)) * zoomK;
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
     const s = mc.meterInMercatorCoordinateUnits() * px * mpp;
     p.pulse.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, s, s));
