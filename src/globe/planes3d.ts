@@ -1,8 +1,5 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { Line2 } from 'three/examples/jsm/lines/Line2.js';
-import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
-import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 
 // 3D aircraft: a three.js layer inside MapLibre's GL context. Positions are
@@ -237,9 +234,38 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 const TRAIL_COLOUR = 0xff6a2b;
 
+// Thick lines of constant pixel width. Each segment is a quad (4 vertices) that carries both of
+// its end points; the vertex shader projects them and pushes the corners sideways in screen space.
+const LINE_VERTEX = `
+attribute vec3 aStart;
+attribute vec3 aEnd;
+attribute vec2 aCorner;
+uniform vec2 uRes;
+uniform float uWidth;
+void main() {
+  vec4 cs = projectionMatrix * modelViewMatrix * vec4(aStart, 1.0);
+  vec4 ce = projectionMatrix * modelViewMatrix * vec4(aEnd, 1.0);
+  if (cs.w <= 0.0 || ce.w <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  vec2 d = (ce.xy / ce.w - cs.xy / cs.w) * uRes;
+  float len = length(d);
+  vec2 dir = len > 0.0001 ? d / len : vec2(1.0, 0.0);
+  vec2 nrm = vec2(-dir.y, dir.x);
+  vec4 c = mix(cs, ce, aCorner.x);
+  c.xy += nrm * aCorner.y * uWidth / uRes * c.w;
+  gl_Position = c;
+}`;
+const LINE_FRAGMENT = `
+uniform float uOpacity;
+void main() {
+  gl_FragColor = vec4(1.0, 0.416, 0.169, uOpacity);
+}`;
+
 interface Mats {
-  line: LineMaterial;
-  lineSel: LineMaterial;
+  line: THREE.ShaderMaterial;
+  lineSel: THREE.ShaderMaterial;
   wall: THREE.MeshBasicMaterial;
   wallSel: THREE.MeshBasicMaterial;
   shadow: THREE.MeshBasicMaterial;
@@ -248,7 +274,14 @@ interface Mats {
 
 function makeMats(): Mats {
   const dpr = window.devicePixelRatio || 1;
-  const line = (width: number, opacity: number) => new LineMaterial({ color: TRAIL_COLOUR, linewidth: width * dpr, transparent: true, opacity, depthWrite: false });
+  const line = (width: number, opacity: number) =>
+    new THREE.ShaderMaterial({
+      vertexShader: LINE_VERTEX,
+      fragmentShader: LINE_FRAGMENT,
+      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: width * dpr }, uOpacity: { value: opacity } },
+      transparent: true,
+      depthWrite: false,
+    });
   const wall = (opacity: number) => new THREE.MeshBasicMaterial({ color: TRAIL_COLOUR, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false });
   return {
     // all trails faint, the one of the selected aircraft at full strength
@@ -270,14 +303,14 @@ const dropGeometry = () => new THREE.BufferGeometry().setAttribute('position', n
  * every frame; the rest is rebuilt only when a new position was reported.
  */
 class TrailRig {
-  line = new Line2(new LineGeometry());
+  line = new THREE.Mesh(new THREE.BufferGeometry());
   wall = new THREE.Mesh(new THREE.BufferGeometry());
   lon0 = 0;
   lat0 = 0;
   private count = -1;
   private flatBuilt = false;
   private points = 0;
-  private seg: THREE.InterleavedBuffer | null = null;
+  private aEnd: THREE.BufferAttribute | null = null;
   private wallPos: Float32Array = new Float32Array(0);
 
   constructor() {
@@ -299,14 +332,32 @@ class TrailRig {
     const pts = trail.map((t) => this.local(t[0], t[1], flat ? 0.3 : t[2]));
     pts.push(pts[pts.length - 1]); // the head, moved every frame
     this.points = pts.length;
+    const segs = pts.length - 1;
+    // line: one quad per segment, corners (along, side) = (0,-1) (0,1) (1,-1) (1,1)
+    const start = new Float32Array(segs * 12);
+    const end = new Float32Array(segs * 12);
+    const corner = new Float32Array(segs * 8);
+    const index = new Uint32Array(segs * 6);
+    for (let i = 0; i < segs; i++) {
+      for (let v = 0; v < 4; v++) {
+        start.set(pts[i], (i * 4 + v) * 3);
+        end.set(pts[i + 1], (i * 4 + v) * 3);
+        corner.set([v >> 1, v & 1 ? 1 : -1], (i * 4 + v) * 2);
+      }
+      index.set([0, 1, 2, 2, 1, 3].map((k) => i * 4 + k), i * 6);
+    }
     this.line.geometry.dispose();
-    const g = new LineGeometry();
-    g.setPositions(pts.flat());
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(start, 3));
+    g.setAttribute('aStart', new THREE.BufferAttribute(start, 3));
+    this.aEnd = new THREE.BufferAttribute(end, 3);
+    g.setAttribute('aEnd', this.aEnd);
+    g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
+    g.setIndex(new THREE.BufferAttribute(index, 1));
     this.line.geometry = g;
-    this.seg = (g.attributes.instanceStart as THREE.InterleavedBufferAttribute).data;
     // wall: two triangles per segment, from the trail down to z = 0
-    const w = new Float32Array((pts.length - 1) * 18);
-    for (let i = 0; i < pts.length - 1; i++) {
+    const w = new Float32Array(segs * 18);
+    for (let i = 0; i < segs; i++) {
       const [ax, ay, az] = pts[i];
       const [bx, by, bz] = pts[i + 1];
       w.set([ax, ay, az, bx, by, bz, ax, ay, 0, bx, by, bz, bx, by, 0, ax, ay, 0], i * 18);
@@ -322,16 +373,14 @@ class TrailRig {
   sync(p: PlaneState, flat: boolean) {
     if (p.trail.length !== this.count || flat !== this.flatBuilt) this.build(p.trail, flat);
     const [x, y, z] = this.local(p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt);
-    const seg = this.seg!;
-    const a = seg.array as Float32Array;
-    const base = (this.points - 2) * 6;
-    a[base + 3] = x;
-    a[base + 4] = y;
-    a[base + 5] = z;
-    seg.needsUpdate = true;
+    // the last quad's four vertices end at the head
+    const end = this.aEnd!;
+    const first = (this.points - 2) * 4;
+    for (let v = 0; v < 4; v++) end.setXYZ(first + v, x, y, z);
+    end.needsUpdate = true;
     const w = this.wallPos;
     const wb = (this.points - 2) * 18;
-    // head vertices of the last quad: B top (1st triangle 2nd, 2nd triangle 1st), B bottom
+    // head vertices of the last wall quad: B top (1st triangle 2nd, 2nd triangle 1st), B bottom
     for (const v of [1, 3]) w.set([x, y, z], wb + v * 3);
     w.set([x, y, 0], wb + 12);
     (this.wall.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
@@ -458,7 +507,7 @@ export class PlanesLayer implements CustomLayerInterface {
       }
       this.syncTrail(p, elev, flat);
     }
-    for (const mat of [this.mats.line, this.mats.lineSel]) mat.resolution.set(map.getCanvas().width, map.getCanvas().height);
+    for (const mat of [this.mats.line, this.mats.lineSel]) mat.uniforms.uRes.value.set(map.getCanvas().width, map.getCanvas().height);
     this.camera.projectionMatrix.fromArray(args.defaultProjectionData.mainMatrix as number[]);
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);

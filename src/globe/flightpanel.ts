@@ -1,6 +1,7 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
+import { glyphSvg } from './icons';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected aircraft (everything ADS-B delivers) and
@@ -39,7 +40,7 @@ export class FlightPanel {
     this.root.className = 'fp';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head"><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head"><i class="fp-ic">${glyphSvg('plane', 'currentColor', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>
       <div class="fp-actions">
