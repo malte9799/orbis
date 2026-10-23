@@ -1,6 +1,6 @@
 import { store } from '../store';
 import { BASES, type BaseId } from '../globe/style';
-import { catalogOf, migrateWx } from './catalog';
+import { catalogOf, TRAFFIC_LAYER_IDS } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
@@ -44,6 +44,8 @@ export interface Karte {
    * switches the traffic modes. What the menu picks is remembered but never counts as a change.
    */
   menu?: 'wx' | 'traffic';
+  /** traffic menu: id of the chosen category ('' = none) */
+  tmode?: string;
   layers: KLayer[];
   view?: KView;
   savedAt?: number;
@@ -60,7 +62,7 @@ export const STANDARD: Karte[] = [
   {
     id: 'verkehr', name: 'Verkehr', icon: 'plane2', color: '#ffb547', std: true, menu: 'traffic',
     base: 'dark', labels: true, night: true, main: null,
-    layers: ['autobahn', 'trains', 'aircraft', 'ships'].map((id) => ({ id })),
+    tmode: 'air', layers: [{ id: 'aircraft' }],
   },
 ];
 
@@ -83,17 +85,19 @@ const wxState = (k: Karte) => [k.main, k.mainVar ?? '', !!k.wind, !!k.isobars];
 
 /**
  * Everything that makes two Karten "different" for the changed-marker (the view only by presence).
- * What a menu steers (weather layer, traffic modes) is left out.
+ * Left out: what a menu steers (weather layer, traffic categories and their layers) and the
+ * display preferences day/night and place names, which are simply kept.
  */
 export function signature(k: Karte): string {
   return JSON.stringify([
-    k.name, k.icon, k.color, k.base, k.labels, k.night, ...(k.menu === 'wx' ? [] : wxState(k)),
-    k.layers.map((l) => [l.id, k.menu === 'traffic' ? false : !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
+    k.name, k.icon, k.color, k.base, ...(k.menu === 'wx' ? [] : wxState(k)),
+    k.layers.filter((l) => k.menu !== 'traffic' || !TRAFFIC_LAYER_IDS.has(l.id)).map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
   ]);
 }
 
-/** signature plus what the menu picked: two equal ones need no draft */
-export const fullSignature = (k: Karte): string => JSON.stringify([signature(k), wxState(k), k.layers.map((l) => !!l.hidden)]);
+/** signature plus everything remembered silently: two equal ones need no draft */
+export const fullSignature = (k: Karte): string =>
+  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.layers.map((l) => [l.id, !!l.hidden])]);
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -143,13 +147,12 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
     base: BASES.some((b) => b.id === r.base) ? (r.base as BaseId) : 'satellite',
     labels: r.labels !== false,
     night: r.night !== false,
-    main: null,
+    main: typeof r.main === 'string' && r.main ? r.main : null,
     layers,
   };
-  const wx = migrateWx(typeof r.main === 'string' && r.main ? r.main : null, typeof r.mainVar === 'string' ? r.mainVar : undefined);
-  k.main = wx.main;
-  if (wx.main && wx.mainVar) k.mainVar = wx.mainVar;
+  if (k.main && typeof r.mainVar === 'string') k.mainVar = r.mainVar;
   if (r.menu === 'wx' || r.menu === 'traffic') k.menu = r.menu;
+  if (typeof r.tmode === 'string') k.tmode = r.tmode.slice(0, 20);
   if (r.std === true) k.std = true;
   if (r.wind === false) k.wind = false;
   if (r.isobars === true) k.isobars = true;

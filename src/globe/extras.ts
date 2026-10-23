@@ -210,7 +210,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   lightning: ['lightning-glow', 'lightning'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
-  airports: ['airports', 'airports-minor'],
+  airports: ['airports', 'airports-minor', 'airports-3d'],
   ships: ['ships'],
   trains: ['trains', 'trains-label'],
   transit: ['transit-veh', 'transit-label'],
@@ -952,6 +952,24 @@ export class ExtraLayers {
       paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
     });
     add(airportLayer('airports', 3, ['international']), 'marker');
+    // 3D buildings, only close up: they show once the map is zoomed in and tilted
+    add(
+      {
+        id: 'airports-3d',
+        type: 'fill-extrusion',
+        source: 'ofm',
+        'source-layer': 'building',
+        minzoom: 14,
+        layout: hidden,
+        paint: {
+          'fill-extrusion-color': '#9fb4d0',
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.8,
+        },
+      },
+      'marker',
+    );
     add(airportLayer('airports-minor', 7, ['public', 'regional', 'other', 'military', 'private']), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {

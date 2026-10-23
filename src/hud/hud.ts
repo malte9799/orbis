@@ -13,9 +13,14 @@ import {
   catalogOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
-  TRAFFIC_MODES,
+  TRAFFIC_LAYER_IDS,
+  TRAFFIC_MENU,
+  trafficCatOf,
   WIND_OPTION_MAINS,
+  WX_MENU,
   type CatalogEntry,
+  type TrafficRow,
+  type WxMenuItem,
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
@@ -220,25 +225,37 @@ export function createHud(host: HudHost): Hud {
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
       const f = mainFam(k);
-      const variantId = f ? (k.mainVar ?? f.variants[0][0]) : '';
-      const subs = (x: WxFamily): string => {
-        const rows: string[] = [];
-        if (x.variants.length > 1) rows.push(...x.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}" aria-pressed="${variantId === v}">${esc(t)}</button>`));
-        if (WIND_OPTION_MAINS.includes(x.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
-        if (ISOBAR_OPTION_MAINS.includes(x.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+      const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
+      const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
+      const subs = (it: WxMenuItem): string => {
+        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
+        if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
+        if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
-      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${host
-        .families()
-        .map((x) => `<button type="button" data-act="wxcat" data-id="${esc(x.id)}" class="${f?.id === x.id ? 'on' : ''}" aria-pressed="${f?.id === x.id}" style="--lc:${esc(x.color)}" title="${esc(x.hint)}"><i>${ico(x.icon, 2)}</i><span>${esc(x.label)}</span></button>${f?.id === x.id ? subs(x) : ''}`)
-        .join('')}</div></div>`;
+      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
+        const on = it.subs.some(isOn);
+        return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
+      }).join('')}</div></div>`;
     }
-    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MODES.map((m) => {
-      const c = catalogOf(m.id);
-      const on = !!k.layers.find((l) => l.id === m.id && !l.hidden);
-      const n = on ? host.info(m.id).count : null;
-      return `<button type="button" data-act="tmode" data-id="${esc(m.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(c?.color ?? '#9aa3b5')}" title="${esc(c?.hint ?? m.label)}"><i>${ico(m.icon, 2)}</i><span>${esc(m.label)}</span><em class="n" data-n="${esc(m.id)}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+    const cur = tmodeOf(k);
+    const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
+    const toggle = (label: string, layer: string) => {
+      const n = have(layer) ? host.info(layer).count : null;
+      return `<button type="button" class="tgl ${have(layer) ? 'on' : ''}" data-act="ttog" data-id="${esc(layer)}" aria-pressed="${have(layer)}"><span>${esc(label)}</span><em class="n" data-n="${esc(layer)}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+    };
+    const row = (r: TrafficRow) =>
+      'layer' in r
+        ? toggle(r.label, r.layer)
+        : `<div class="glabel">${esc(r.label)}</div><div class="radios">${r.choices.map((c) => `<button type="button" data-act="trad" data-id="${esc(c.layer)}" class="${have(c.layer) ? 'on' : ''}" aria-pressed="${have(c.layer)}">${esc(c.label)}</button>`).join('')}</div>`;
+    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+      const on = c.id === cur;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.groups.map((g) => `${g.label ? `<div class="glabel">${esc(g.label)}</div>` : ''}${g.rows.map(row).join('')}`).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
+  }
+  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  function tmodeOf(k: Karte): string {
+    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
   }
   function renderModes() {
     const r = reg('modes');
@@ -352,7 +369,7 @@ export function createHud(host: HudHost): Hud {
     return `${
         dirty(cur)
           ? `<span class="st" title="Geändert"><i></i><span class="stl">Geändert</span></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Zurücksetzen" aria-label="Zurücksetzen">${ico('reset')}<span class="lb">Zurücksetzen</span></button>${isStd(k) ? '' : '<button type="button" class="ebtn" data-act="overwrite">Speichern</button>'}<button type="button" class="ebtn pri" data-act="saveas">Als neue Karte</button>`
-          : `<span class="st ok"><i></i>${isStd(k) ? 'Standardkarte' : 'Gespeichert'}</span><button type="button" class="ebtn ghost" data-act="share" title="Teilen" aria-label="Teilen">${ico('share')}<span class="lb">Teilen</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="Duplizieren" aria-label="Duplizieren">${ico('copy')}<span class="lb">Duplizieren</span></button>`
+          : `<span class="st ok" title="${isStd(k) ? 'Standardkarte' : 'Gespeichert'}"><i></i></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Auf den Ausgangszustand zurücksetzen" aria-label="Zurücksetzen" ${st.drafts[cur] ? '' : 'disabled'}>${ico('reset')}<span class="lb">Zurücksetzen</span></button><button type="button" class="ebtn ghost" data-act="share" title="Teilen" aria-label="Teilen">${ico('share')}<span class="lb">Teilen</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="Duplizieren" aria-label="Duplizieren">${ico('copy')}<span class="lb">Duplizieren</span></button>`
       }`;
   }
   function stackPanel(k: Karte): string {
@@ -883,15 +900,46 @@ export function createHud(host: HudHost): Hud {
       afterEdit();
     },
     wxcat: (id) => {
-      // the active category again switches the weather layer off
-      ACT.main(mainFam(view(cur))?.id === id ? '' : id, '', new Event('click'));
+      const it = WX_MENU.find((x) => x.id === id);
+      const f = mainFam(view(cur));
+      const curVar = f ? (view(cur).mainVar ?? f.variants[0][0]) : '';
+      // the active entry again switches the weather layer off
+      if (!it || it.subs.some((x) => f && x.main === f.id && x.mainVar === curVar)) ACT.main('', '', new Event('click'));
+      else ACT.wxsub(id, '0', new Event('click'));
     },
-    tmode: (id) => {
+    wxsub: (id, v) => {
+      const sub = WX_MENU.find((x) => x.id === id)?.subs[Number(v)];
+      if (!sub) return;
       const d = edit();
-      const l = d.layers.find((x) => x.id === id);
-      if (!l) d.layers.push({ id });
-      else if (l.hidden) delete l.hidden;
-      else l.hidden = true;
+      if (d.main !== sub.main) {
+        delete d.wind;
+        delete d.isobars;
+      }
+      d.main = sub.main;
+      d.mainVar = sub.mainVar;
+      afterEdit();
+    },
+    tcat: (id) => {
+      const d = edit();
+      const on = tmodeOf(d) === id;
+      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.tmode = on ? '' : id;
+      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      afterEdit();
+    },
+    ttog: (id) => {
+      const d = edit();
+      if (d.layers.some((l) => l.id === id)) d.layers = d.layers.filter((l) => l.id !== id);
+      else d.layers.unshift({ id });
+      afterEdit();
+    },
+    trad: (id) => {
+      const d = edit();
+      const row = trafficCatOf(id)?.groups.flatMap((g) => g.rows).find((r) => 'choices' in r && r.choices.some((c) => c.layer === id));
+      const mine = d.layers.some((l) => l.id === id);
+      const others = row && 'choices' in row ? row.choices.map((c) => c.layer) : [id];
+      d.layers = d.layers.filter((l) => !others.includes(l.id));
+      if (!mine) d.layers.unshift({ id });
       afterEdit();
     },
     var: (_, v) => {
