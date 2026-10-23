@@ -824,11 +824,13 @@ export class PlanesLayer implements CustomLayerInterface {
       this.scene.add(p.pulse);
     }
     (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
-    // radius in screen pixels; the further out, the smaller (20 % at zoom 6.5, full size from zoom 13),
-    // and smaller again with many aircraft (they all flash at once, so it need not be big)
-    const zoomK = 0.2 + 0.8 * Math.min(1, Math.max(0, (this.map.getZoom() - 6.5) / 6.5)) ** 1.5;
-    const crowdK = Math.min(1, Math.max(0.45, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
-    const px = (8 + 38 * (1 - (1 - t) ** 2)) * zoomK * crowdK;
+    // Radius in screen pixels, tied to the drawn size of the aircraft (about 60 m long, at least ~39 px
+    // when zoomed out): not too big next to a big model when close, still visible when far away.
+    // With many aircraft it is smaller (they all flash at once), but never below 9 px.
+    const planePx = Math.max(60 / mpp, 39);
+    const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
+    const maxPx = Math.max(9, Math.min(40, 0.35 * planePx) * crowdK);
+    const px = maxPx * (0.25 + 0.75 * (1 - (1 - t) ** 2));
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
     const s = mc.meterInMercatorCoordinateUnits() * px * mpp;
     p.pulse.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, s, s));
