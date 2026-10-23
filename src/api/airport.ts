@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { overpass } from './overpass';
-import { parseAirport, type AirportLayout, type Bounds, type OsmElement } from './airport-parse';
+import { LIGHT_COLOURS, LIGHT_TYPES, parseAirport, type AirportLayout, type Bounds, type OsmElement } from './airport-parse';
 
 export type { AirportKind, AirportLayout, Bounds } from './airport-parse';
 
@@ -56,15 +56,18 @@ const FAILED: Promise<StaticAirport[]> = Promise.resolve([]);
 export async function loadStaticAirport(a: StaticAirport): Promise<AirportLayout> {
   const res = await fetch(`${STATIC}${a.icao}.json`);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${a.icao}`);
-  const j = (await res.json()) as AirportLayout & { lights?: number[] };
+  const j = (await res.json()) as AirportLayout & { lights?: number[]; v?: number };
   for (const f of j.polygons) f.properties = { ref: '', ...f.properties };
   for (const f of j.lines) f.properties = { ref: '', w: 20, ...f.properties };
   for (const f of j.points) f.properties = { ref: '', ...f.properties };
-  // lights come as one flat [lon, lat, …] array
+  // lights come as one flat array: [lon, lat, type, colour, …] (v2) or just [lon, lat, …] (older files)
   const lights = j.lights ?? [];
-  for (let i = 0; i + 1 < lights.length; i += 2) {
-    const id = `l${a.icao}${i / 2}`;
-    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '' } });
+  const step = j.v === 2 ? 4 : 2;
+  for (let i = 0; i + step - 1 < lights.length; i += step) {
+    const id = `l${a.icao}${i / step}`;
+    const lt = step === 4 ? (LIGHT_TYPES[lights[i + 2]] ?? 'other') : 'txe';
+    const col = step === 4 ? (LIGHT_COLOURS[lights[i + 3]] ?? 'white') : 'blue';
+    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '', lt, col } });
   }
   return j;
 }

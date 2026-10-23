@@ -9,7 +9,7 @@
 // Already built airports are skipped unless --force is given. Data: © OpenStreetMap contributors (ODbL).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { parseAirport, type AirportLayout, type OsmElement } from '../src/api/airport-parse';
+import { LIGHT_COLOURS, LIGHT_TYPES, parseAirport, type AirportLayout, type OsmElement } from '../src/api/airport-parse';
 
 const OUT = 'public/data/airports';
 const ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
@@ -78,9 +78,16 @@ function compact(layout: AirportLayout) {
   return {
     polygons: layout.polygons.map((f) => strip(f, ['kind'])),
     lines: layout.lines.map((f) => strip(f, ['kind', 'ref', 'w'])),
-    // gates and parking positions as features, the (many) lights as one flat [lon, lat, …] array
+    // gates and parking positions as features, the (many) lights as one flat [lon, lat, type, colour, …] array
+    // (type/colour = index into LIGHT_TYPES / LIGHT_COLOURS)
     points: layout.points.filter((f) => f.properties?.kind !== 'light').map((f) => strip(f, ['kind', 'ref'])),
-    lights: layout.points.filter((f) => f.properties?.kind === 'light').flatMap((f) => (f.geometry.coordinates as number[]).map(r5)),
+    lights: layout.points
+      .filter((f) => f.properties?.kind === 'light')
+      .flatMap((f) => [
+        ...(f.geometry.coordinates as number[]).map(r5),
+        (LIGHT_TYPES as readonly string[]).indexOf(String(f.properties?.lt)),
+        (LIGHT_COLOURS as readonly string[]).indexOf(String(f.properties?.col)),
+      ]),
   };
 }
 
@@ -108,7 +115,7 @@ out geom qt;`);
   layout.lines = dedupe(layout.lines);
   layout.points = dedupe(layout.points);
   const name = el.tags?.['name:de'] ?? el.tags?.name ?? icao;
-  const file = { icao, name, bbox: [bb[1], bb[0], bb[3], bb[2]].map(r5), ...compact(layout) };
+  const file = { icao, name, v: 2, bbox: [bb[1], bb[0], bb[3], bb[2]].map(r5), ...compact(layout) };
   writeFileSync(`${OUT}/${icao}.json`, JSON.stringify(file));
   return { icao, name, bbox: file.bbox, bytes: JSON.stringify(file).length, lines: layout.lines.length, polys: layout.polygons.length, points: layout.points.length };
 }

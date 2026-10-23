@@ -31,6 +31,19 @@ export interface OsmElement {
   tags?: Record<string, string>;
 }
 
+/** OSM `navigationaid` codes of airfield lights; the index is what the pre-built files store. */
+export const LIGHT_TYPES = ['txe', 'txc', 'rwe', 'rwc', 'tdz', 'als', 'rwt', 'sbl', 'cbl', 'rgl', 'txw', 'papi', 'other'] as const;
+export const LIGHT_COLOURS = ['white', 'green', 'blue', 'red', 'yellow'] as const;
+const LIGHT_DEFAULT_COLOUR: Record<string, (typeof LIGHT_COLOURS)[number]> = { txe: 'blue', txc: 'green', papi: 'red' };
+
+/** Light type and colour of a `navigationaid` node (colour from `light:colour`, else the usual one of the type). */
+export function lightKind(tags: Record<string, string>): { lt: string; col: string } {
+  const lt = (LIGHT_TYPES as readonly string[]).includes(tags.navigationaid) ? tags.navigationaid : 'other';
+  const colour = tags['light:colour'];
+  const col = (LIGHT_COLOURS as readonly string[]).includes(colour) ? colour : (LIGHT_DEFAULT_COLOUR[lt] ?? 'white');
+  return { lt, col };
+}
+
 /** Default widths in metres where OSM carries no `width` tag. */
 const DEFAULT_WIDTH: Partial<Record<AirportKind, number>> = { runway: 45, taxiway: 23, taxilane: 15 };
 /** Default heights in metres where OSM carries neither `height` nor `building:levels`. */
@@ -103,7 +116,7 @@ export function parseAirport(elements: OsmElement[]): AirportLayout {
     if (el.type === 'node') {
       if (el.lat == null || el.lon == null) continue;
       if (kind === 'gate' || kind === 'parking' || kind === 'light' || kind === 'helipad')
-        out.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [el.lon, el.lat] }, properties: { id, kind, ref, name, light: tags.navigationaid ?? '' } });
+        out.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [el.lon, el.lat] }, properties: { id, kind, ref, name, ...(kind === 'light' ? lightKind(tags) : {}) } });
       continue;
     }
     const g = el.geometry;
@@ -122,7 +135,7 @@ export function parseAirport(elements: OsmElement[]): AirportLayout {
         properties: { id, kind, ref, name, w: Number.isFinite(w) ? w : (DEFAULT_WIDTH[kind] ?? 20), surface: tags.surface ?? '' },
       });
     } else if (kind === 'gate' || kind === 'parking' || kind === 'helipad') {
-      out.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: centroid(g) }, properties: { id, kind, ref, name, light: '' } });
+      out.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: centroid(g) }, properties: { id, kind, ref, name } });
     }
   }
   return out;

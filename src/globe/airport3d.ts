@@ -4,24 +4,24 @@ import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, stati
 import { isSuperseded } from '../api/overpass';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
-import { FONT_BOLD } from './vector';
+import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
 // models with trails and callsign labels. Everything lives in its own sources/layers (ap3d-*).
 
 /** From this zoom on the layout is loaded and aircraft are drawn as models. */
-export const AIRPORT_ZOOM = 13;
+export const AIRPORT_ZOOM = 11;
 /** Aircraft above this height (m) stay 2D icons; the models are for taxiing, take-off, approach. */
 const MODEL_MAX_ALT = 3000;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
-/** Lights (thousands of nodes at a big airport) are loaded from this zoom on. */
-const LIGHT_ZOOM = 16;
+/** Lights are shown from the same zoom as the taxiways and loaded from the layout zoom on. */
+const LIGHT_ZOOM = AIRPORT_ZOOM;
 /** Grid of the requested boxes (degrees): a pan inside a loaded box costs no request. */
 const GRID = 0.04;
 const MAX_FEATURES = 25000;
 
-export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-centerline', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate', 'ap3d-trail', 'ap3d-label', 'ap3d-hit'];
+export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate', 'ap3d-label', 'ap3d-hit'];
 export const AP3D_HIT_LAYER = 'ap3d-hit';
 
 const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B762', 'B763', 'B764', 'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B788', 'B789', 'B78X', 'A306', 'A30B', 'A310', 'A332', 'A333', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K', 'A388', 'MD11', 'DC10', 'IL96', 'A124', 'AN12', 'C5M', 'C17', 'A225', 'BLCF', 'BSCA', 'B74F']);
@@ -59,12 +59,10 @@ export class Airport3D {
   private retry: number | undefined;
   private staticLoaded = new Set<string>();
   private viewSeq = 0;
-  private selected: string | null = null;
   private covered: Bounds[] = [];
   private lightsCovered: Bounds[] = [];
   private tracker = new PlaneTracker();
   private layer: PlanesLayer;
-  private lastTrails = 0;
   private loading = false;
 
   constructor(
@@ -88,7 +86,7 @@ export class Airport3D {
     const src = (id: string) => {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: emptyFc(), attribution: id === 'ap3d-poly' ? '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)' : undefined });
     };
-    for (const id of ['ap3d-poly', 'ap3d-line', 'ap3d-pt', 'ap3d-trail', 'ap3d-label']) src(id);
+    for (const id of ['ap3d-poly', 'ap3d-line', 'ap3d-pt', 'ap3d-label']) src(id);
     const before = m.getLayer(this.before) ? this.before : undefined;
     const hidden = { visibility: 'none' as const };
     const add = (l: LayerSpecification) => {
@@ -129,23 +127,22 @@ export class Airport3D {
       layout: { ...hidden, 'line-cap': 'butt', 'line-join': 'round' },
       paint: { 'line-color': '#1d1f23', 'line-width': lineWidth() },
     } as LayerSpecification);
-    add({
-      ...roads,
-      id: 'ap3d-centerline',
-      type: 'line',
-      minzoom: AIRPORT_ZOOM + 1,
-      filter: ['==', ['get', 'kind'], 'runway'],
-      layout: { ...hidden, 'line-cap': 'round' },
-      paint: { 'line-color': '#f4f6f8', 'line-width': 1.6, 'line-dasharray': [0.01, 5] },
-    } as LayerSpecification);
+    // airfield lights by type (OSM `navigationaid`): taxiway edge blue and centre green, runway edge/centre/
+    // touchdown/approach white, thresholds green, stop bars red, clearance bars and guard lights yellow
+    const lightSize: ExpressionSpecification = ['match', ['get', 'lt'], 'txe', 1.3, 'txc', 0.8, 'rwe', 2.1, 'rwc', 1.1, 'tdz', 1.7, 'als', 1.9, 'rwt', 2.3, 'sbl', 1.9, 'cbl', 1.9, 'rgl', 1.9, 'txw', 1.4, 'papi', 2.6, 1.2];
     add({
       id: 'ap3d-light',
       type: 'circle',
       source: 'ap3d-pt',
-      minzoom: LIGHT_ZOOM,
+      minzoom: AIRPORT_ZOOM - 1,
       filter: ['==', ['get', 'kind'], 'light'],
       layout: hidden,
-      paint: { 'circle-radius': 2, 'circle-color': '#ffd23f', 'circle-opacity': 0.9 },
+      paint: {
+        // thresholds read green and approach lights white from both directions (OSM also stores their red sides)
+        'circle-color': ['match', ['get', 'lt'], 'rwt', '#2bd47d', 'als', '#f4f6f8', ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8']],
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['*', lightSize, 0.5], 16, lightSize, 19, ['*', lightSize, 2.2]],
+        'circle-opacity': ['match', ['get', 'lt'], 'txc', 0.75, 0.95],
+      },
     });
     add({
       id: 'ap3d-rwy-label',
@@ -153,7 +150,7 @@ export class Airport3D {
       source: 'ap3d-line',
       minzoom: AIRPORT_ZOOM,
       filter: ['all', ['==', ['get', 'kind'], 'runway'], ['!=', ['get', 'ref'], '']],
-      layout: { ...hidden, 'symbol-placement': 'line-center', 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': 12, 'text-keep-upright': true, 'text-letter-spacing': 0.1 },
+      layout: { ...hidden, 'symbol-placement': 'line', 'symbol-spacing': 340, 'text-field': ['get', 'ref'], 'text-font': FONT_REGULAR, 'text-size': 12, 'text-keep-upright': true, 'text-letter-spacing': 0.05 },
       paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.4 },
     });
     add({
@@ -173,14 +170,6 @@ export class Airport3D {
       filter: ['all', ['in', ['get', 'kind'], ['literal', ['gate', 'parking']]], ['!=', ['get', 'ref'], '']],
       layout: { ...hidden, 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false },
       paint: { 'text-color': '#ffd23f', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-    });
-    add({
-      id: 'ap3d-trail',
-      type: 'line',
-      source: 'ap3d-trail',
-      layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
-      // all trails faint, the one of the selected aircraft at full strength
-      paint: { 'line-color': '#ff6a2b', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2.5, 18, 6], 'line-opacity': ['case', ['get', 'sel'], 1, 0.3] },
     });
     add({
       id: 'ap3d-label',
@@ -216,7 +205,6 @@ export class Airport3D {
     if (!on) {
       clearTimeout(this.retry);
       this.tracker.clear();
-      this.setData('ap3d-trail', emptyFc());
       this.setData('ap3d-label', emptyFc());
       this.hooks.info({ loading: false, count: undefined, note: undefined });
       return;
@@ -273,7 +261,7 @@ export class Airport3D {
       this.loadDetails(b);
       return;
     }
-    if (b.east - b.west > 0.6 || b.north - b.south > 0.6) return;
+    if (b.east - b.west > 1 || b.north - b.south > 1) return;
     this.loading = true;
     this.hooks.info({ loading: true });
     loadAirportLayout(b)
@@ -376,7 +364,6 @@ export class Airport3D {
       });
     }
     this.tracker.feed(reports, performance.now());
-    this.updateTrails();
     if (this.enabled && this.is3d()) this.map.triggerRepaint();
   }
 
@@ -398,26 +385,13 @@ export class Airport3D {
       properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? ''), lift: this.lift(p.dAlt, p.dLat) },
     }));
     this.setData('ap3d-label', emptyFc(features));
-    if (performance.now() - this.lastTrails > 1000) this.updateTrails();
   }
 
   /** The aircraft whose trail is drawn at full strength (null: none). */
   select(hex: string | null) {
-    if (hex === this.selected) return;
-    this.selected = hex;
-    this.updateTrails();
-  }
-
-  private updateTrails() {
-    this.lastTrails = performance.now();
-    const features: Feature<LineString>[] = [];
-    for (const p of this.tracker.planes.values()) {
-      if (!p.near || p.trail.length < 2) continue;
-      features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [...p.trail, [p.dLon, p.dLat]] }, properties: { hex: p.hex, sel: p.hex === this.selected } });
-    }
-    // drawn in order: the selected trail on top
-    features.sort((a, b) => Number(a.properties?.sel) - Number(b.properties?.sel));
-    this.setData('ap3d-trail', emptyFc(features));
+    if (hex === this.layer.selected) return;
+    this.layer.selected = hex;
+    this.map.triggerRepaint();
   }
 
   private setData(id: string, data: FeatureCollection) {

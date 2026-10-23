@@ -166,7 +166,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
   { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
-  { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 13 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
+  { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
