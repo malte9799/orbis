@@ -1,6 +1,6 @@
 import { store } from '../store';
 import { BASES, type BaseId } from '../globe/style';
-import { catalogOf } from './catalog';
+import { catalogOf, migrateWx } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
@@ -39,6 +39,11 @@ export interface Karte {
   mainVar?: string;
   wind?: boolean;
   isobars?: boolean;
+  /**
+   * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
+   * switches the traffic modes. What the menu picks is remembered but never counts as a change.
+   */
+  menu?: 'wx' | 'traffic';
   layers: KLayer[];
   view?: KView;
   savedAt?: number;
@@ -48,29 +53,19 @@ export const MAX_PINNED = 5;
 
 export const STANDARD: Karte[] = [
   {
-    id: 'wetter', name: 'Wetter', icon: 'cloud', color: '#4f8dff', std: true,
+    id: 'wetter', name: 'Wetter', icon: 'cloud', color: '#4f8dff', std: true, menu: 'wx',
     base: 'satellite', labels: true, night: true, main: 'radar', mainVar: 'radar',
     layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
   },
   {
-    id: 'wind', name: 'Wind', icon: 'wind', color: '#36c2a8', std: true,
-    base: 'dark', labels: true, night: true, main: 'wind', mainVar: 'wind',
-    layers: [{ id: 'cities' }],
-  },
-  {
-    id: 'gefahren', name: 'Gefahren', icon: 'warn', color: '#e53935', std: true,
+    id: 'verkehr', name: 'Verkehr', icon: 'plane2', color: '#ffb547', std: true, menu: 'traffic',
     base: 'dark', labels: true, night: true, main: null,
-    layers: ['dwdwarn', 'nina', 'quakes', 'fires', 'storms', 'volcanoes', 'floods', 'tsunami'].map((id) => ({ id })),
-  },
-  {
-    id: 'verkehr', name: 'Verkehr', icon: 'plane2', color: '#ffb547', std: true,
-    base: 'dark', labels: true, night: true, main: null,
-    layers: ['aircraft', 'ships', 'trains', 'autobahn'].map((id) => ({ id })),
+    layers: ['autobahn', 'trains', 'aircraft', 'ships'].map((id) => ({ id })),
   },
 ];
 
 /** standard Karten shown in the bar until the user pins something else */
-export const DEFAULT_PINNED = STANDARD.filter((k) => k.id !== 'verkehr').map((k) => k.id);
+export const DEFAULT_PINNED = STANDARD.map((k) => k.id);
 
 export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
@@ -83,13 +78,22 @@ export function blankKarte(): Karte {
 
 export const newId = () => `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
-/** Everything that makes two Karten "different" for the changed-marker (the view only by presence). */
+/** The weather part a menu Karte remembers without calling it a change. */
+const wxState = (k: Karte) => [k.main, k.mainVar ?? '', !!k.wind, !!k.isobars];
+
+/**
+ * Everything that makes two Karten "different" for the changed-marker (the view only by presence).
+ * What a menu steers (weather layer, traffic modes) is left out.
+ */
 export function signature(k: Karte): string {
   return JSON.stringify([
-    k.name, k.icon, k.color, k.base, k.labels, k.night, k.main, k.mainVar ?? '', !!k.wind, !!k.isobars,
-    k.layers.map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
+    k.name, k.icon, k.color, k.base, k.labels, k.night, ...(k.menu === 'wx' ? [] : wxState(k)),
+    k.layers.map((l) => [l.id, k.menu === 'traffic' ? false : !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
   ]);
 }
+
+/** signature plus what the menu picked: two equal ones need no draft */
+export const fullSignature = (k: Karte): string => JSON.stringify([signature(k), wxState(k), k.layers.map((l) => !!l.hidden)]);
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -139,11 +143,14 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
     base: BASES.some((b) => b.id === r.base) ? (r.base as BaseId) : 'satellite',
     labels: r.labels !== false,
     night: r.night !== false,
-    main: typeof r.main === 'string' && r.main ? r.main : null,
+    main: null,
     layers,
   };
+  const wx = migrateWx(typeof r.main === 'string' && r.main ? r.main : null, typeof r.mainVar === 'string' ? r.mainVar : undefined);
+  k.main = wx.main;
+  if (wx.main && wx.mainVar) k.mainVar = wx.mainVar;
+  if (r.menu === 'wx' || r.menu === 'traffic') k.menu = r.menu;
   if (r.std === true) k.std = true;
-  if (k.main && typeof r.mainVar === 'string') k.mainVar = r.mainVar;
   if (r.wind === false) k.wind = false;
   if (r.isobars === true) k.isobars = true;
   const v = r.view as Partial<KView> | undefined;
@@ -167,15 +174,22 @@ export function loadKarten(): KartenState {
     own.push(k);
   }
   const known = new Set([...stdIds, ...own.map((k) => k.id)]);
-  const pinned = [...new Set((Array.isArray(p.pinned) ? p.pinned : []).filter((id): id is string => typeof id === 'string' && known.has(id)))].slice(0, MAX_PINNED);
+  const saved = (Array.isArray(p.pinned) ? p.pinned : []).filter((id): id is string => typeof id === 'string');
+  const pinned = [...new Set(saved.filter((id) => known.has(id)))];
+  // Standard Karten of earlier versions are gone: whoever had one pinned gets the current ones instead
+  if (saved.some((id) => !known.has(id))) for (const id of DEFAULT_PINNED) if (!pinned.includes(id)) pinned.push(id);
+  pinned.splice(MAX_PINNED);
   const drafts: Record<string, Karte> = {};
   if (p.drafts && typeof p.drafts === 'object') {
     for (const [id, raw] of Object.entries(p.drafts as Record<string, unknown>)) {
       if (!known.has(id)) continue;
       const d = sanitizeKarte(raw, id);
       if (!d) continue;
-      if (stdIds.has(id)) d.std = true;
-      else delete d.std;
+      const std = STANDARD.find((k) => k.id === id);
+      if (std) {
+        d.std = true;
+        if (std.menu) d.menu = std.menu;
+      } else delete d.std;
       drafts[id] = d;
     }
   }

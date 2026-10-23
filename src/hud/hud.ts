@@ -13,12 +13,13 @@ import {
   catalogOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
+  TRAFFIC_MODES,
   WIND_OPTION_MAINS,
   type CatalogEntry,
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -138,6 +139,7 @@ export function createHud(host: HudHost): Hud {
   root.innerHTML = `
     <div class="hud-r" data-r="menu"></div>
     <div class="hud-r" data-r="bar"></div>
+    <div class="hud-r" data-r="modes"></div>
     <div class="hud-r" data-r="main"></div>
     <div class="hud-r" data-r="sheet"></div>
     <div class="hud-r" data-r="add"></div>
@@ -165,7 +167,7 @@ export function createHud(host: HudHost): Hud {
 
   function afterEdit(rerender = true) {
     const d = st.drafts[cur];
-    if (d && signature(d) === signature(baseOf(cur))) delete st.drafts[cur];
+    if (d && fullSignature(d) === fullSignature(baseOf(cur))) delete st.drafts[cur];
     persist();
     host.apply(view(cur));
     if (rerender) render();
@@ -211,6 +213,57 @@ export function createHud(host: HudHost): Hud {
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
   }
+  /**
+   * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
+   * and options); the traffic Karte switches car, train, plane and ship.
+   */
+  function modesInner(k: Karte): string {
+    if (k.menu === 'wx') {
+      const fams = host.families();
+      const f = mainFam(k);
+      const variantId = f ? (k.mainVar ?? f.variants[0][0]) : '';
+      const subs: string[] = [];
+      if (f && f.variants.length > 1) subs.push(...f.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}" aria-pressed="${variantId === v}">${esc(t)}</button>`));
+      if (f && WIND_OPTION_MAINS.includes(f.id) && f.variants.some(([v]) => v === variantId)) subs.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
+      if (f && ISOBAR_OPTION_MAINS.includes(f.id)) subs.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene">
+        <div class="mrow cats">${fams.map((x) => `<button type="button" data-act="wxcat" data-id="${esc(x.id)}" class="${f?.id === x.id ? 'on' : ''}" aria-pressed="${f?.id === x.id}" style="--lc:${esc(x.color)}" title="${esc(x.hint)}"><i>${ico(x.icon, 2)}</i><span>${esc(x.label)}</span></button>`).join('')}</div>
+        ${subs.length ? `<div class="mrow subs">${subs.join('')}</div>` : ''}
+      </div>`;
+    }
+    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MODES.map((m) => {
+      const c = catalogOf(m.id);
+      const on = !!k.layers.find((l) => l.id === m.id && !l.hidden);
+      const n = on ? host.info(m.id).count : null;
+      return `<button type="button" data-act="tmode" data-id="${esc(m.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(c?.color ?? '#9aa3b5')}" title="${esc(c?.hint ?? m.label)}"><i>${ico(m.icon, 2)}</i><span>${esc(m.label)}</span><em class="n" data-n="${esc(m.id)}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+    }).join('')}</div></div>`;
+  }
+  function renderModes() {
+    const r = reg('modes');
+    if (!view(cur).menu) {
+      r.innerHTML = '';
+      return;
+    }
+    const left = r.querySelector('.cats')?.scrollLeft ?? 0;
+    r.innerHTML = modesInner(view(cur));
+    const sc = r.querySelector<HTMLElement>('.cats');
+    if (!sc) return;
+    sc.scrollLeft = left;
+    // keep the chosen category visible in the scrolling row
+    const on = sc.querySelector<HTMLElement>('button.on');
+    if (on && on.offsetLeft < sc.scrollLeft) sc.scrollLeft = Math.max(0, on.offsetLeft - 10);
+    else if (on && on.offsetLeft + on.offsetWidth > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = on.offsetLeft + on.offsetWidth - sc.clientWidth + 10;
+    alignSubs();
+  }
+  /** the vertical list hangs under the chosen category */
+  function alignSubs() {
+    const sc = reg('modes').querySelector<HTMLElement>('.cats');
+    const subs = reg('modes').querySelector<HTMLElement>('.subs');
+    const on = sc?.querySelector<HTMLElement>('button.on');
+    if (sc && subs && on) subs.style.marginLeft = `${Math.max(0, Math.min(on.offsetLeft - sc.scrollLeft, sc.clientWidth - subs.offsetWidth))}px`;
+  }
+  reg('modes').addEventListener('scroll', alignSubs, true);
+
   /** keep the active pill visible in the scrolling Karten bar */
   function revealActive() {
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar');
@@ -485,7 +538,7 @@ export function createHud(host: HudHost): Hud {
       out += `<div class="evcard hud-glass"><div class="h"><b>Ereignisse</b>${evSeg()}</div>
         ${evs.length ? evs.map(evRow).join('') : '<div class="muted evempty">Keine Ereignisse im Zeitraum (oder Daten laden noch).</div>'}</div>`;
     }
-    if (!k.main && traffic.length) out += `<div class="trbar hud-glass">${trafficChips(k, traffic)}</div>`;
+    if (!k.main && !k.menu && traffic.length) out += `<div class="trbar hud-glass">${trafficChips(k, traffic)}</div>`;
     // live refreshes come often: only touch the DOM when something changed
     if (out !== lastContent) reg('content').innerHTML = lastContent = out;
   }
@@ -563,7 +616,7 @@ export function createHud(host: HudHost): Hud {
     } else if (k.main) body = '<div class="sh-dock"></div>';
     else if (hazard) {
       body = `<div class="ticker" aria-live="polite">${tickerInner()}</div>${evSeg()}`;
-    } else if (traffic.length) body = `<div class="chipsr">${trafficChips(k, traffic)}</div>`;
+    } else if (traffic.length && !k.menu) body = `<div class="chipsr">${trafficChips(k, traffic)}</div>`;
 
     el.innerHTML = `<div class="sh-drag"><div class="grab"></div>${header}</div><div class="sh-body">${body}</div>${foot}`;
     el.dataset.detent = d;
@@ -693,6 +746,20 @@ export function createHud(host: HudHost): Hud {
       ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a></div>` : ''}`;
   }
 
+  /** --menu-h = room the menu takes under the bar; follows the menu while it lays out or changes rows */
+  let menuObserved: HTMLElement | null = null;
+  const menuObserver = new ResizeObserver(() => syncMenuH());
+  function syncMenuH() {
+    const el = reg('modes').firstElementChild as HTMLElement | null;
+    if (el !== menuObserved) {
+      menuObserver.disconnect();
+      menuObserved = el;
+      if (el) menuObserver.observe(el);
+    }
+    const h = el ? el.offsetHeight + 8 : 0;
+    if (root.style.getPropertyValue('--menu-h') !== `${h}px`) root.style.setProperty('--menu-h', `${h}px`);
+  }
+
   let lastShift = '';
   let lastEdit = false;
   let hadPlace = false;
@@ -711,6 +778,7 @@ export function createHud(host: HudHost): Hud {
     if (hadPlace && !placeNode) host.placeClosed();
     hadPlace = !!placeNode;
     renderBar();
+    renderModes();
     renderMenu();
     renderMain();
     renderSheet();
@@ -718,6 +786,8 @@ export function createHud(host: HudHost): Hud {
     renderGallery();
     renderDialog();
     renderContent();
+    // the Karte card and the stack sit below the menu
+    syncMenuH();
     const sw = layout === 'portrait' ? 0 : ui.edit && (layout === 'landscape' || window.innerWidth > 900) ? (layout === 'landscape' ? 316 : 362) : 0;
     const s = `${sw / 2}px`;
     if (s !== lastShift) {
@@ -836,6 +906,18 @@ export function createHud(host: HudHost): Hud {
       delete d.wind;
       delete d.isobars;
       ui.pick = false;
+      afterEdit();
+    },
+    wxcat: (id) => {
+      // the active category again switches the weather layer off
+      ACT.main(mainFam(view(cur))?.id === id ? '' : id, '', new Event('click'));
+    },
+    tmode: (id) => {
+      const d = edit();
+      const l = d.layers.find((x) => x.id === id);
+      if (!l) d.layers.push({ id });
+      else if (l.hidden) delete l.hidden;
+      else l.hidden = true;
       afterEdit();
     },
     var: (_, v) => {

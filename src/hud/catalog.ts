@@ -37,18 +37,47 @@ export interface WxFamily {
 }
 
 export const WX_FAMILIES: WxFamily[] = [
-  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', icon: 'radar', color: '#4f8dff', variants: [['radar', 'Regen'], ['dwd-radar', 'Deutschland (DWD)']] },
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag']] },
-  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
-  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund', icon: 'thermo', color: '#ff8a4c', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
-  { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', icon: 'drop', color: '#3db8ff', variants: [['precip', '']] },
-  { id: 'cloud', label: 'Wolken', hint: 'Vorhersage: Bewölkung', icon: 'cloud', color: '#b8c2d6', variants: [['cloud', '']] },
+  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS), Wolken und Gewitter live', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken'], ['sat-storm', 'Gewitter']] },
+  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar (RainViewer)', icon: 'radar', color: '#4f8dff', variants: [['radar', 'RainViewer']] },
+  { id: 'precip', label: 'Niederschlag', hint: 'Satellit (NASA IMERG) und Schneefall (Vorhersage)', icon: 'drop', color: '#3db8ff', variants: [['imerg', 'Satellit'], ['snowfall', 'Schnee']] },
+  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', variants: [['wind', 'Stärke'], ['gusts', 'Böen']] },
+  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund; Wasser: Satellit (NASA)', icon: 'thermo', color: '#ff8a4c', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['water', 'Wasser']] },
+  { id: 'humidity', label: 'Feuchtigkeit', hint: 'Vorhersage', icon: 'humid', color: '#4fc3c8', variants: [['humidity', 'Relativ'], ['dewpoint', 'Taupunkt']] },
   { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', icon: 'gauge', color: '#a58bff', variants: [['pressure', '']] },
-  { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', icon: 'humid', color: '#4fc3c8', variants: [['humidity', '']] },
-  { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', icon: 'snow', color: '#d8e8ff', variants: [['snow', '']] },
-  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', icon: 'ocean', color: '#2aa8c8', variants: [['sst', 'Meerestemperatur'], ['seaice', 'Meereis']] },
-  { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', icon: 'bolt', color: '#ffcc33', variants: [['cape', '']] },
 ];
+
+/** [family, variant] for the weather layers of earlier versions (saved Karten, shared links) */
+const LEGACY_WX: Record<string, [string, string]> = {
+  cloud: ['sat', 'sat-ir'],
+  cape: ['sat', 'sat-storm'],
+  snow: ['precip', 'snowfall'],
+  ocean: ['temp', 'water'],
+  dewpoint: ['humidity', 'dewpoint'],
+  imerg: ['precip', 'imerg'],
+  'sat-ir': ['sat', 'sat-ir'],
+  sst: ['temp', 'water'],
+  seaice: ['temp', 'water'],
+  feels: ['temp', 'feels'],
+  gusts: ['wind', 'gusts'],
+  'dwd-radar': ['radar', 'radar'],
+};
+
+/** map a weather main/variant of an older Karte onto today's families (unknown ids pass through) */
+export function migrateWx(main: string | null, variant?: string): { main: string | null; mainVar?: string } {
+  if (!main) return { main: null };
+  let m = main;
+  let v = variant;
+  const whole = LEGACY_WX[main];
+  if (whole) [m, v] = whole;
+  else {
+    // the old families held other variants: 'temp' dewpoint/feels, 'sat' imerg, 'ocean' sst/seaice …
+    const part = variant ? LEGACY_WX[variant] : undefined;
+    if (part && (part[0] === main || main === 'temp' || main === 'sat')) [m, v] = part;
+  }
+  const fam = [...WX_FAMILIES, OWM_FAMILY].find((f) => f.id === m);
+  if (!fam) return { main: null };
+  return { main: m, mainVar: fam.variants.some(([id]) => id === v) ? v : fam.variants[0][0] };
+}
 
 export const OWM_FAMILY: WxFamily = {
   id: 'owm',
@@ -58,6 +87,14 @@ export const OWM_FAMILY: WxFamily = {
   color: '#9aa3b5',
   variants: [['owm-temp_new', 'Temperatur'], ['owm-precipitation_new', 'Niederschlag'], ['owm-clouds_new', 'Wolken'], ['owm-wind_new', 'Wind'], ['owm-pressure_new', 'Luftdruck']],
 };
+
+/** the modes of the Verkehr menu: each switches one live layer */
+export const TRAFFIC_MODES: { id: string; label: string; icon: string }[] = [
+  { id: 'autobahn', label: 'Auto', icon: 'car' },
+  { id: 'trains', label: 'Zug', icon: 'train' },
+  { id: 'aircraft', label: 'Flugzeug', icon: 'plane2' },
+  { id: 'ships', label: 'Schiff', icon: 'ship' },
+];
 
 /** families whose forecast model provides wind particles / isobars as options */
 export const WIND_OPTION_MAINS = ['wind'];
