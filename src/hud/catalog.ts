@@ -92,21 +92,22 @@ export interface TrafficCat {
   label: string;
   icon: string;
   defaults: string[];
-  rows: { label: string; layer: string }[];
+  /** a row switches one or more layers together */
+  rows: { label: string; layers: string[] }[];
 }
 export const TRAFFIC_MENU: TrafficCat[] = [
-  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layer: 'roadnet' }, { label: 'Staus & Baustellen', layer: 'autobahn' }] },
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
   {
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
-    rows: [{ label: 'Busse live', layer: 'transit' }, { label: 'Busnetz', layer: 'busnet' }, { label: 'Züge live', layer: 'trains' }, { label: 'Zugnetz', layer: 'railspeed' }],
+    rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
   },
-  // aircraft always on; the airports bring 3D buildings when zoomed in close
-  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layer: 'airports' }] },
-  { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layer: 'shipping' }] },
+  // aircraft always on; "Flughäfen" = the airport symbols plus the airports in 3D when zoomed in close
+  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
+  { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
 ];
 /** every layer the Verkehr menu manages */
-export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.map((r) => r.layer)]));
-export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layer === layer));
+export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.flatMap((r) => r.layers)]));
+export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
 /** families whose forecast model provides wind particles / isobars as options */
 export const WIND_OPTION_MAINS = ['wind'];
@@ -141,7 +142,7 @@ export interface CatalogEntry {
 const CAT_OF: Record<CatId, string[]> = {
   wetter: ['cities', 'lightning', 'aq', 'aurora', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast'],
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
-  verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports'],
+  verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
   erde: ['terrain', 'buildings3d', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
   netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'plants'],
@@ -153,7 +154,7 @@ const ICON_OF: Record<string, string> = {
   resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
   noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain', buildings3d: 'city',
-  aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
+  aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
   autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', webcams: 'cam', radio: 'radio',
   alpr: 'cam', fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',

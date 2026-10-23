@@ -40,6 +40,8 @@ const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchPa
 const memory = new Map();
 const MEMORY_MAX = 60;
 const UPSTREAM_TIMEOUT_MS = 20000;
+// big Overpass queries (e.g. a whole airport) can take longer
+const OVERPASS_TIMEOUT_MS = 45000;
 const pending = new Map();
 
 function cors(origin) {
@@ -103,7 +105,7 @@ async function load(target, ttl) {
     headers: { Accept: 'application/json', 'User-Agent': 'Orbis-Proxy/2.0 (+https://github.com/malte9799/orbis)' },
     // fail fast with a regular (CORS-carrying) answer instead of hanging until Cloudflare
     // aborts the request with its own error page, which browsers report as a CORS failure
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    signal: AbortSignal.timeout(target.hostname.startsWith('overpass') ? OVERPASS_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS),
     cf: { cacheEverything: true, cacheTtlByStatus: { '200-299': ttl, '300-599': 0 } },
   });
   return {

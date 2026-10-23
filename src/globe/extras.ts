@@ -35,6 +35,7 @@ import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
+import { Airport3D, AP3D_HIT_LAYER, AP3D_LAYERS } from './airport3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
@@ -64,6 +65,7 @@ export type ExtraId =
   | 'radiation'
   | 'launches'
   | 'airports'
+  | 'airport3d'
   | 'ships'
   | 'trains'
   | 'transit'
@@ -166,6 +168,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
   { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
+  { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 13 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
@@ -214,6 +217,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   launches: ['launches'],
   airports: ['airports', 'airports-minor'],
   buildings3d: ['buildings-3d'],
+  airport3d: AP3D_LAYERS,
   ships: ['ships'],
   trains: ['trains', 'trains-label'],
   transit: ['transit-veh', 'transit-label'],
@@ -260,7 +264,7 @@ const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/b
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -359,6 +363,7 @@ export class ExtraLayers {
   private aircraftAt = 0;
   private aircraftDelay: number | undefined;
   private aircraftErr = '';
+  private airport3d: Airport3D | null = null;
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
@@ -1309,6 +1314,8 @@ export class ExtraLayers {
       },
       'marker',
     );
+    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i) });
+    this.airport3d.init();
     this.ready = true;
     this.apply();
   }
@@ -1391,7 +1398,8 @@ export class ExtraLayers {
 
   /** Called after the map stopped moving. */
   onMoveEnd() {
-    if (this.on.has('aircraft')) this.loadAircraftNow();
+    if (this.wantsAircraft()) this.loadAircraftNow();
+    if (this.on.has('airport3d')) this.airport3d?.onMoveEnd();
     if (this.on.has('busnet')) this.loadBusnetNow();
     if (this.on.has('radio')) this.loadRadioNow();
     if (this.on.has('resources')) this.loadResourcesNow();
@@ -1451,6 +1459,11 @@ export class ExtraLayers {
       const on = this.on.has(def.id);
       if (!on) {
         this.clear(def.id);
+        if (def.id === 'airport3d') {
+          this.airport3d?.setEnabled(false);
+          // the 2D icons of aircraft that were drawn as models come back
+          if (this.on.has('aircraft')) this.loadAircraftNow();
+        }
         continue;
       }
       switch (def.id) {
@@ -1478,6 +1491,11 @@ export class ExtraLayers {
         case 'aircraft':
           this.loadAircraftNow();
           this.every('aircraft', 10000, () => this.loadAircraftNow());
+          break;
+        case 'airport3d':
+          this.airport3d?.setEnabled(true);
+          this.loadAircraftNow();
+          this.every('airport3d', 10000, () => this.loadAircraftNow());
           break;
         case 'sondes':
           this.loadOnce('sondes', 60000, async () => {
@@ -1753,8 +1771,13 @@ export class ExtraLayers {
   }
 
   /** Throttled: no overlapping requests and at least 5 s between two (timer + map moves). */
+  /** The aircraft feed also drives the 3D airport layer. */
+  private wantsAircraft() {
+    return this.on.has('aircraft') || this.on.has('airport3d');
+  }
+
   private loadAircraftNow() {
-    if (!this.on.has('aircraft')) return;
+    if (!this.wantsAircraft()) return;
     if (this.aircraftBusy) {
       this.aircraftAgain = true;
       return;
@@ -1779,6 +1802,8 @@ export class ExtraLayers {
   private fetchAircraft(): Promise<void> {
     const m = this.map;
     if (m.getZoom() < 5) {
+      // the 3D airport layer only needs the live feed
+      if (!this.on.has('aircraft')) return Promise.resolve();
       // zoomed out: coarse worldwide overview (positions refresh every 2 minutes)
       const seq = ++this.aircraftSeq;
       return loadGlobalAircraft()
@@ -1802,12 +1827,17 @@ export class ExtraLayers {
     const km = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const nm = km / 1.852;
     const seq = ++this.aircraftSeq;
-    if (!this.info.aircraft?.count) this.set('aircraft', { loading: true, note: undefined });
+    if (this.on.has('aircraft') && !this.info.aircraft?.count) this.set('aircraft', { loading: true, note: undefined });
     return loadAircraft(c.lat, c.lng, nm)
       .then((fc) => {
         this.aircraftErr = '';
-        if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
-        this.setData('aircraft', fc);
+        if (seq !== this.aircraftSeq || !this.wantsAircraft()) return;
+        this.airport3d?.feed(fc);
+        if (!this.on.has('aircraft')) return;
+        // aircraft drawn as 3D models by the airport layer lose their 2D icon
+        const airport = this.airport3d;
+        const icons = airport ? { ...fc, features: fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) } : fc;
+        this.setData('aircraft', icons);
         this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
       })
       .catch((e) => {
@@ -1815,7 +1845,7 @@ export class ExtraLayers {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg !== this.aircraftErr && msg !== AC_ALL_PAUSED) console.warn('aircraft', e);
         this.aircraftErr = msg;
-        if (seq === this.aircraftSeq)
+        if (seq === this.aircraftSeq && this.on.has('aircraft'))
           this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
       });
   }
@@ -2523,7 +2553,8 @@ export class ExtraLayers {
         return { type: 'html', html: html('air', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'sondes':
         return { type: 'html', html: html('sonde', '#ff8fab') + '', lng: pt[0], lat: pt[1] };
-      case 'aircraft': {
+      case 'aircraft':
+      case 'ap3d-hit': {
         const kindLabel: Record<string, string> = { plane: 'Flugzeug', heli: 'Hubschrauber', glider: 'Segelflugzeug', balloon: 'Ballon', drone: 'Drohne' };
         const rows = [
           ['Typ', p.type || kindLabel[String(p.kind)]],
@@ -2536,6 +2567,7 @@ export class ExtraLayers {
         ].filter(([, v]) => v);
         const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
         const hex = String(p.hex);
+        if (f.layer.id === AP3D_HIT_LAYER) this.airport3d?.select(hex);
         return {
           type: 'html',
           html: cardHtml({
@@ -2894,5 +2926,6 @@ export class ExtraLayers {
 
   clearSelection() {
     this.setData('sat-track', empty());
+    this.airport3d?.select(null);
   }
 }

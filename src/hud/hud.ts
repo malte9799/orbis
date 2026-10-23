@@ -239,13 +239,14 @@ export function createHud(host: HudHost): Hud {
     }
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
-    const toggle = (label: string, layer: string) => {
-      const n = have(layer) ? host.info(layer).count : null;
-      return `<button type="button" class="tgl ${have(layer) ? 'on' : ''}" data-act="ttog" data-id="${esc(layer)}" aria-pressed="${have(layer)}"><span>${esc(label)}</span><em class="n" data-n="${esc(layer)}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+    const toggle = (label: string, layers: string[]) => {
+      const on = layers.every(have);
+      const n = on ? host.info(layers[0]).count : null;
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
     };
     return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layer)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
   /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
@@ -924,8 +925,10 @@ export function createHud(host: HudHost): Hud {
     },
     ttog: (id) => {
       const d = edit();
-      if (d.layers.some((l) => l.id === id)) d.layers = d.layers.filter((l) => l.id !== id);
-      else d.layers.unshift({ id });
+      const ids = id.split(',');
+      // all of a row's layers on → switch them off, otherwise switch the missing ones on
+      if (ids.every((x) => d.layers.some((l) => l.id === x))) d.layers = d.layers.filter((l) => !ids.includes(l.id));
+      else for (const x of ids) if (!d.layers.some((l) => l.id === x)) d.layers.unshift({ id: x });
       afterEdit();
     },
     var: (_, v) => {
