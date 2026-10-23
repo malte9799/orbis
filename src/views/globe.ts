@@ -48,6 +48,8 @@ import {
   type FieldId,
 } from '../globe/overlay';
 import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { mountRawDataLink } from '../inspector/inspector';
+import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
 import type { Karte, KView } from '../hud/karten';
@@ -530,6 +532,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <label class="field-label">Radar-Server <small>(optional: eigener RainViewer-kompatibler Server, z. B. selbst gehostetes LibreWXR – ersetzt das eingeschränkte kostenlose RainViewer)</small>
           <input type="url" data-key="radarHost" value="${escapeHtml(keys.radarHost ?? '')}" placeholder="https://radar.example.org" autocomplete="off"/></label>
         <h3>Datenquellen</h3>
+        <div data-rdi></div>
         <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
         PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
         The Space Devs, aisstream.io, NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
@@ -546,6 +549,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <button class="btn small primary" value="save">Speichern</button>
         </div>
       </form>`;
+    mountRawDataLink(settings.querySelector<HTMLElement>('[data-rdi]')!, 'row', { beforeOpen: () => settings.close() });
     settings.showModal();
     settings.querySelector('form')!.addEventListener('submit', (e) => {
       const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -1175,6 +1179,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       maxPitch: 60,
       minZoom: 0.3, // below this the 3D globe hands over to the solar system view
       attributionControl: { compact: true },
+      transformRequest: tileRecorder(() => map),
     });
     // bottom right, stacked from the bottom up: zoom/compass, 2D/3D, locate (later controls sit on top)
     map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
@@ -1437,6 +1442,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     placeClosed: () => setData('marker', []),
   });
   el.appendChild(hud.el);
+  mountRawDataLink(hud.el.querySelector<HTMLElement>('.hud-tr')!, 'button', { cls: 'hud-ibtn' });
   hud.relayout();
   {
     const k = hud.current();

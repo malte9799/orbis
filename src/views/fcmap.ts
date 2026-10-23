@@ -8,6 +8,7 @@ import { LUT, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
 import { loadCityWeather } from '../api/europe';
 import { ensureWeatherIcons } from '../globe/icons';
+import { tileRecorder } from '../inspector/tiles';
 import { weatherIcon } from '../weather';
 import { fmt, rampColor } from '../util';
 
@@ -179,6 +180,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       pitchWithRotate: false,
       cooperativeGestures: true,
       attributionControl: false,
+      transformRequest: tileRecorder(() => map),
       locale: {
         'CooperativeGesturesHandler.WindowsHelpText': 'Strg + Scrollen zum Zoomen',
         'CooperativeGesturesHandler.MacHelpText': '⌘ + Scrollen zum Zoomen',
