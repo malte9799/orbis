@@ -93,6 +93,7 @@ export type ExtraId =
   | 'waves'
   | 'rivers'
   | 'terrain'
+  | 'buildings3d'
   | 'bathymetry'
   | 'chlorophyll'
   | 'ecradar'
@@ -162,6 +163,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'fmirain24', section: 'ocean', label: 'Regensumme 24 h Finnland', hint: 'Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute', glyph: 'flood', color: '#0277bd' },
   { id: 'jmanowcast', section: 'ocean', label: 'Radar-Nowcast Japan', hint: 'Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency', glyph: 'storm', color: '#ad1457' },
   { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
+  { id: 'buildings3d', section: 'ocean', label: '3D-Gebäude', hint: 'Gebäude als Volumen, ab Stadtzoom – Karte mit Strg + Ziehen kippen (OpenStreetMap)', glyph: 'city', color: '#9fb4d0' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
@@ -214,6 +216,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
   airports: ['airports', 'airports-minor'],
+  buildings3d: ['buildings-3d'],
   airport3d: AP3D_LAYERS,
   ships: ['ships'],
   trains: ['trains', 'trains-label'],
@@ -957,6 +960,24 @@ export class ExtraLayers {
       paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
     });
     add(airportLayer('airports', 3, ['international']), 'marker');
+    // 3D buildings everywhere, from city zoom on (the map has to be tilted to see them)
+    add(
+      {
+        id: 'buildings-3d',
+        type: 'fill-extrusion',
+        source: 'ofm',
+        'source-layer': 'building',
+        minzoom: 15,
+        layout: hidden,
+        paint: {
+          'fill-extrusion-color': '#9fb4d0',
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.8,
+        },
+      },
+      'marker',
+    );
     add(airportLayer('airports-minor', 7, ['public', 'regional', 'other', 'military', 'private']), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {

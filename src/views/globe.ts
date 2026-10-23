@@ -47,7 +47,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, EUMETSAT_STORM, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
@@ -62,7 +62,8 @@ import { describe, weatherIcon } from '../weather';
 // ---------------------------------------------------------------------------
 // Configuration
 
-type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'imerg' | 'sst' | 'seaice';
+/** 'water' = sea surface temperature with the sea ice on top */
+type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'sat-storm' | 'imerg' | 'sst' | 'seaice' | 'water';
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 const isField = (o: string): o is FieldId => o in FIELDS;
@@ -779,10 +780,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     vis('field', false);
     vis('hd', o === 'sat-hd');
     vis('sat-ir', o === 'sat-ir');
+    vis('sat-storm', o === 'sat-storm');
     vis('dwd-radar', o === 'dwd-radar');
     vis('imerg', o === 'imerg');
-    vis('sst', o === 'sst');
-    vis('seaice', o === 'seaice');
+    vis('sst', o === 'sst' || o === 'water');
+    vis('seaice', o === 'seaice' || o === 'water');
     setRadarVisible(o === 'radar');
     for (const l of OWM_LAYERS) vis(`owm-${l.id}`, false);
     hideReadout();
@@ -1035,6 +1037,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return t('Satellit HD', 'NASA VIIRS · Tagesbild von gestern', '', []);
       case 'sat-ir':
         return t('Satellit Infrarot', 'live · hohe, kalte Wolken erscheinen hell', 'linear-gradient(90deg,#111,#777,#fff)', [[0, 'warm/tief'], [100, 'kalt/hoch']]);
+      case 'sat-storm':
+        return t('Satellit Gewitter', 'Meteosat Konvektions-RGB · live, Europa & Afrika', 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, 'ruhig'], [100, 'kräftige Gewitter']]);
+      case 'water':
+        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
       case 'sst':
         return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
       case 'seaice':
@@ -1485,7 +1491,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (!map || document.hidden) return;
         if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
-        const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, imerg: IMERG_WMS };
+        const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, 'sat-storm': EUMETSAT_STORM, imerg: IMERG_WMS };
         const url = live[state.overlay];
         if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([url + t]);
       }, 5 * 60000);

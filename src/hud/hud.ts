@@ -13,12 +13,17 @@ import {
   catalogOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
+  TRAFFIC_LAYER_IDS,
+  TRAFFIC_MENU,
+  trafficCatOf,
   WIND_OPTION_MAINS,
+  WX_MENU,
   type CatalogEntry,
+  type WxMenuItem,
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -138,6 +143,7 @@ export function createHud(host: HudHost): Hud {
   root.innerHTML = `
     <div class="hud-r" data-r="menu"></div>
     <div class="hud-r" data-r="bar"></div>
+    <div class="hud-r" data-r="modes"></div>
     <div class="hud-r" data-r="main"></div>
     <div class="hud-r" data-r="sheet"></div>
     <div class="hud-r" data-r="add"></div>
@@ -165,7 +171,7 @@ export function createHud(host: HudHost): Hud {
 
   function afterEdit(rerender = true) {
     const d = st.drafts[cur];
-    if (d && signature(d) === signature(baseOf(cur))) delete st.drafts[cur];
+    if (d && fullSignature(d) === fullSignature(baseOf(cur))) delete st.drafts[cur];
     persist();
     host.apply(view(cur));
     if (rerender) render();
@@ -211,6 +217,55 @@ export function createHud(host: HudHost): Hud {
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
   }
+  /**
+   * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
+   * and options); the traffic Karte switches car, train, plane and ship.
+   */
+  function modesInner(k: Karte): string {
+    if (k.menu === 'wx') {
+      const f = mainFam(k);
+      const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
+      const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
+      const subs = (it: WxMenuItem): string => {
+        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
+        if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
+        if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+        return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
+      };
+      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
+        const on = it.subs.some(isOn);
+        return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
+      }).join('')}</div></div>`;
+    }
+    const cur = tmodeOf(k);
+    const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
+    const toggle = (label: string, layers: string[]) => {
+      const on = layers.every(have);
+      const n = on ? host.info(layers[0]).count : null;
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+    };
+    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+      const on = c.id === cur;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+    }).join('')}</div></div>`;
+  }
+  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  function tmodeOf(k: Karte): string {
+    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
+  }
+  function renderModes() {
+    const r = reg('modes');
+    // beside the editing stack the weather controls of the stack take over
+    if (!view(cur).menu || (ui.edit && layout !== 'portrait')) {
+      r.innerHTML = '';
+      return;
+    }
+    const left = r.querySelector('.wxm')?.scrollTop ?? 0;
+    r.innerHTML = modesInner(view(cur));
+    const m = r.querySelector('.wxm');
+    if (m) m.scrollTop = left;
+  }
+
   /** keep the active pill visible in the scrolling Karten bar */
   function revealActive() {
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar');
@@ -310,7 +365,7 @@ export function createHud(host: HudHost): Hud {
     return `${
         dirty(cur)
           ? `<span class="st" title="Geändert"><i></i><span class="stl">Geändert</span></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Zurücksetzen" aria-label="Zurücksetzen">${ico('reset')}<span class="lb">Zurücksetzen</span></button>${isStd(k) ? '' : '<button type="button" class="ebtn" data-act="overwrite">Speichern</button>'}<button type="button" class="ebtn pri" data-act="saveas">Als neue Karte</button>`
-          : `<span class="st ok"><i></i>${isStd(k) ? 'Standardkarte' : 'Gespeichert'}</span><button type="button" class="ebtn ghost" data-act="share" title="Teilen" aria-label="Teilen">${ico('share')}<span class="lb">Teilen</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="Duplizieren" aria-label="Duplizieren">${ico('copy')}<span class="lb">Duplizieren</span></button>`
+          : `<span class="st ok" title="${isStd(k) ? 'Standardkarte' : 'Gespeichert'}"><i></i></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Auf den Ausgangszustand zurücksetzen" aria-label="Zurücksetzen" ${st.drafts[cur] ? '' : 'disabled'}>${ico('reset')}<span class="lb">Zurücksetzen</span></button><button type="button" class="ebtn ghost" data-act="share" title="Teilen" aria-label="Teilen">${ico('share')}<span class="lb">Teilen</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="Duplizieren" aria-label="Duplizieren">${ico('copy')}<span class="lb">Duplizieren</span></button>`
       }`;
   }
   function stackPanel(k: Karte): string {
@@ -485,7 +540,7 @@ export function createHud(host: HudHost): Hud {
       out += `<div class="evcard hud-glass"><div class="h"><b>Ereignisse</b>${evSeg()}</div>
         ${evs.length ? evs.map(evRow).join('') : '<div class="muted evempty">Keine Ereignisse im Zeitraum (oder Daten laden noch).</div>'}</div>`;
     }
-    if (!k.main && traffic.length) out += `<div class="trbar hud-glass">${trafficChips(k, traffic)}</div>`;
+    if (!k.main && !k.menu && traffic.length) out += `<div class="trbar hud-glass">${trafficChips(k, traffic)}</div>`;
     // live refreshes come often: only touch the DOM when something changed
     if (out !== lastContent) reg('content').innerHTML = lastContent = out;
   }
@@ -563,7 +618,7 @@ export function createHud(host: HudHost): Hud {
     } else if (k.main) body = '<div class="sh-dock"></div>';
     else if (hazard) {
       body = `<div class="ticker" aria-live="polite">${tickerInner()}</div>${evSeg()}`;
-    } else if (traffic.length) body = `<div class="chipsr">${trafficChips(k, traffic)}</div>`;
+    } else if (traffic.length && !k.menu) body = `<div class="chipsr">${trafficChips(k, traffic)}</div>`;
 
     el.innerHTML = `<div class="sh-drag"><div class="grab"></div>${header}</div><div class="sh-body">${body}</div>${foot}`;
     el.dataset.detent = d;
@@ -711,6 +766,8 @@ export function createHud(host: HudHost): Hud {
     if (hadPlace && !placeNode) host.placeClosed();
     hadPlace = !!placeNode;
     renderBar();
+    renderModes();
+    root.classList.toggle('has-menu', !!reg('modes').firstElementChild);
     renderMenu();
     renderMain();
     renderSheet();
@@ -836,6 +893,42 @@ export function createHud(host: HudHost): Hud {
       delete d.wind;
       delete d.isobars;
       ui.pick = false;
+      afterEdit();
+    },
+    wxcat: (id) => {
+      const it = WX_MENU.find((x) => x.id === id);
+      const f = mainFam(view(cur));
+      const curVar = f ? (view(cur).mainVar ?? f.variants[0][0]) : '';
+      // the active entry again switches the weather layer off
+      if (!it || it.subs.some((x) => f && x.main === f.id && x.mainVar === curVar)) ACT.main('', '', new Event('click'));
+      else ACT.wxsub(id, '0', new Event('click'));
+    },
+    wxsub: (id, v) => {
+      const sub = WX_MENU.find((x) => x.id === id)?.subs[Number(v)];
+      if (!sub) return;
+      const d = edit();
+      if (d.main !== sub.main) {
+        delete d.wind;
+        delete d.isobars;
+      }
+      d.main = sub.main;
+      d.mainVar = sub.mainVar;
+      afterEdit();
+    },
+    tcat: (id) => {
+      const d = edit();
+      const on = tmodeOf(d) === id;
+      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.tmode = on ? '' : id;
+      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      afterEdit();
+    },
+    ttog: (id) => {
+      const d = edit();
+      const ids = id.split(',');
+      // all of a row's layers on → switch them off, otherwise switch the missing ones on
+      if (ids.every((x) => d.layers.some((l) => l.id === x))) d.layers = d.layers.filter((l) => !ids.includes(l.id));
+      else for (const x of ids) if (!d.layers.some((l) => l.id === x)) d.layers.unshift({ id: x });
       afterEdit();
     },
     var: (_, v) => {
