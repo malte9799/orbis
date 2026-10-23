@@ -1337,7 +1337,7 @@ export class ExtraLayers {
       },
       'marker',
     );
-    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons() });
+    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons(), iconsTick: () => this.refreshAircraftIcons() });
     this.airport3d.init();
     this.ready = true;
     this.apply();
@@ -1877,8 +1877,15 @@ export class ExtraLayers {
     if (!this.on.has('aircraft') || !this.lastAircraft) return;
     const fc = this.lastAircraft;
     const airport = this.airport3d;
-    const icons = airport ? { ...fc, features: fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) } : fc;
-    this.setData('aircraft', icons);
+    let features = airport ? fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
+    // on a flat map the icons move like the 3D models: smoothed position and heading
+    if (airport?.mode() === 'flat') {
+      features = features.map((f) => {
+        const live = airport.planeInfo(String(f.properties?.hex));
+        return live ? { ...f, geometry: { type: 'Point', coordinates: [live.lon, live.lat] }, properties: { ...f.properties, track: live.track } } : f;
+      });
+    }
+    this.setData('aircraft', { ...fc, features });
   }
 
   /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */

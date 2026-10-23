@@ -38,6 +38,8 @@ export interface Ap3dHooks {
   info(i: { loading?: boolean; count?: number; note?: string }): void;
   /** the map was tilted/flattened or zoomed across a threshold: 2D icons may need updating */
   modeChanged(): void;
+  /** flat map with 2D icons: refresh their positions from the smoothed state */
+  iconsTick(): void;
 }
 
 export type PlaneMode = 'off' | 'flat' | '3d';
@@ -84,6 +86,7 @@ export class Airport3D {
     this.layer = new PlanesLayer(this.tracker, {
       mode: () => this.mode(),
       icons: () => this.iconsOn,
+      tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
     });
   }

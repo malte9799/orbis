@@ -42,9 +42,13 @@ export interface PlaneState extends PlaneReport {
   shadowModel?: PlaneModel;
   drop?: THREE.Line;
   rig?: TrailRig;
+  /** when the last position report arrived (performance.now): a white pulse shows it */
+  pulseAt?: number;
+  pulse?: THREE.Mesh;
 }
 
 const EXPIRE_MS = 60000;
+const PULSE_MS = 1300;
 const TRAIL_MAX = 150;
 /** share of the reported ground speed used to move an aircraft between two reports */
 const EXTRAPOLATE = 0.9;
@@ -68,7 +72,7 @@ export class PlaneTracker {
     for (const r of reports) {
       const prev = this.planes.get(r.hex);
       if (!prev) {
-        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, trail: [[r.lon, r.lat, trailAlt(r)]] });
+        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, trail: [[r.lon, r.lat, trailAlt(r)]] });
         continue;
       }
       // a plane that did not move since the last report keeps its old fix time → no new trail point
@@ -77,7 +81,7 @@ export class PlaneTracker {
         prev.trail.push([r.lon, r.lat, trailAlt(r)]);
         if (prev.trail.length > TRAIL_MAX) prev.trail.shift();
       }
-      Object.assign(prev, r, { at: now, seen: now });
+      Object.assign(prev, r, { at: now, seen: now, pulseAt: now });
     }
     for (const [hex, p] of this.planes) if (now - p.seen > EXPIRE_MS) this.remove(hex, p);
   }
@@ -127,10 +131,11 @@ const trailAlt = (r: { ground: boolean; altM: number }) => (r.ground ? 0.3 : r.a
 
 /** Take everything of an aircraft out of the scene and free what it owns (models share geometry). */
 function disposePlane(p: PlaneState) {
-  for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall]) o?.parent?.remove(o);
+  for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) o?.parent?.remove(o);
   if (p.obj) disposeMaterials(p.obj);
+  (p.pulse?.material as THREE.Material | undefined)?.dispose();
   p.rig?.dispose();
-  p.obj = p.shadow = p.drop = p.rig = undefined;
+  p.obj = p.shadow = p.drop = p.rig = p.pulse = undefined;
 }
 
 function disposeMaterials(o: THREE.Object3D) {
@@ -398,6 +403,8 @@ export interface PlanesLayerHooks {
   mode(): 'off' | 'flat' | '3d';
   /** are the 2D aircraft icons shown (then the models are left out in flat mode)? */
   icons(): boolean;
+  /** about 10× a second while the 2D icons are shown on a flat map: move them with the smoothed positions */
+  tick(): void;
   /** called about 4× a second with the planes that are drawn */
   frame(planes: PlaneState[]): void;
 }
@@ -411,10 +418,15 @@ export class PlanesLayer implements CustomLayerInterface {
   private scene = new THREE.Scene();
   private camera = new THREE.Camera();
   private lastFrameHook = 0;
+  private lastTick = 0;
   private mats!: Mats;
   private proj = new THREE.Matrix4();
+  /** Mercator position of the map centre: everything is placed relative to it (see render) */
+  private cx = 0;
+  private cy = 0;
   private flatNow = false;
   private drop = dropGeometry();
+  private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** hex of the aircraft whose trail is drawn at full strength */
   selected: string | null = null;
 
@@ -439,6 +451,7 @@ export class PlanesLayer implements CustomLayerInterface {
     this.tracker.clear();
     this.renderer?.dispose();
     this.drop.dispose();
+    this.pulseGeo.dispose();
     for (const m of Object.values(this.mats ?? {})) m.dispose();
   }
 
@@ -453,7 +466,13 @@ export class PlanesLayer implements CustomLayerInterface {
     }
     const flat = mode === 'flat';
     this.flatNow = flat;
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]);
+    // Float32 on the GPU cannot place metre-sized detail at world coordinates (~0.5, one metre is
+    // ~1e-8): the models jitter when zoomed in. So every object is positioned relative to the map
+    // centre and the projection gets the centre's offset folded in (computed in double precision).
+    const centre = MercatorCoordinate.fromLngLat(this.map.getCenter(), 0);
+    this.cx = centre.x;
+    this.cy = centre.y;
+    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(this.cx, this.cy, 0));
     const models = !flat || !this.hooks.icons();
     const now = performance.now();
     this.tracker.step(now);
@@ -465,6 +484,10 @@ export class PlanesLayer implements CustomLayerInterface {
     const boost = Math.max(1, 0.65 * mpp);
     const terrain = map.getTerrain();
     // only what is (nearly) in view is built and drawn
+    if (flat && !models && now - this.lastTick > 100) {
+      this.lastTick = now;
+      this.hooks.tick();
+    }
     const b = map.getBounds();
     const padLon = (b.getEast() - b.getWest()) * 0.5;
     const padLat = (b.getNorth() - b.getSouth()) * 0.5;
@@ -494,7 +517,7 @@ export class PlanesLayer implements CustomLayerInterface {
         const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], alt + elev);
         const s = mc.meterInMercatorCoordinateUnits() * boost;
         // y is flipped between mercator space (south = +y) and the model (north = +y)
-        m.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s));
+        m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
         rot.makeRotationZ(-rad(p.dTrack));
         m.multiply(rot);
         p.obj.matrix.copy(m);
@@ -506,9 +529,10 @@ export class PlanesLayer implements CustomLayerInterface {
         for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
       this.syncTrail(p, elev, flat);
+      this.syncPulse(p, now, mpp, elev, flat);
     }
     for (const mat of [this.mats.line, this.mats.lineSel]) mat.uniforms.uRes.value.set(map.getCanvas().width, map.getCanvas().height);
-    this.camera.projectionMatrix.fromArray(args.defaultProjectionData.mainMatrix as number[]);
+    this.camera.projectionMatrix.copy(this.proj);
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
     if (now - this.lastFrameHook > 250) {
@@ -529,7 +553,7 @@ export class PlanesLayer implements CustomLayerInterface {
     const v = new THREE.Vector4();
     const screen = (lon: number, lat: number, alt: number): [number, number] | null => {
       const mc = MercatorCoordinate.fromLngLat([lon, lat], alt);
-      v.set(mc.x, mc.y, mc.z, 1).applyMatrix4(this.proj);
+      v.set(mc.x - this.cx, mc.y - this.cy, mc.z, 1).applyMatrix4(this.proj);
       if (v.w <= 0) return null;
       return [(v.x / v.w * 0.5 + 0.5) * w, (1 - (v.y / v.w * 0.5 + 0.5)) * h];
     };
@@ -595,9 +619,35 @@ export class PlanesLayer implements CustomLayerInterface {
     p.shadow.visible = air;
     if (!air) return;
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], elev + 0.1);
-    m.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(scale, -scale, scale * 0.002));
+    m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(scale, -scale, scale * 0.002));
     m.multiply(rot);
     p.shadow.matrix.copy(m);
+  }
+
+  /** A white, see-through sphere that grows and fades around an aircraft whose position just arrived. */
+  private syncPulse(p: PlaneState, now: number, mpp: number, elev: number, flat: boolean) {
+    const t = p.pulseAt ? (now - p.pulseAt) / PULSE_MS : 1;
+    if (t >= 1) {
+      if (p.pulse) {
+        p.pulse.parent?.remove(p.pulse);
+        (p.pulse.material as THREE.Material).dispose();
+        p.pulse = undefined;
+      }
+      return;
+    }
+    if (!p.pulse) {
+      p.pulse = new THREE.Mesh(this.pulseGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, depthTest: false }));
+      p.pulse.matrixAutoUpdate = false;
+      p.pulse.frustumCulled = false;
+      p.pulse.renderOrder = 3;
+      this.scene.add(p.pulse);
+    }
+    (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
+    const px = 8 + 38 * (1 - (1 - t) ** 2); // radius in screen pixels
+    const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
+    const s = mc.meterInMercatorCoordinateUnits() * px * mpp;
+    p.pulse.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, s, s));
+    p.pulse.visible = true;
   }
 
   /** Thin, faint line from the aircraft straight down to the ground. */
@@ -613,7 +663,7 @@ export class PlanesLayer implements CustomLayerInterface {
     if (!air) return;
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], elev);
     const s = mc.meterInMercatorCoordinateUnits();
-    p.drop.matrix.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s * p.dAlt));
+    p.drop.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s * p.dAlt));
   }
 
   private syncTrail(p: PlaneState, elev: number, flat: boolean) {
@@ -629,7 +679,7 @@ export class PlanesLayer implements CustomLayerInterface {
     rig.line.visible = true;
     const mc = MercatorCoordinate.fromLngLat([rig.lon0, rig.lat0], elev);
     const s = mc.meterInMercatorCoordinateUnits();
-    rig.line.matrix.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s));
+    rig.line.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
     rig.wall.matrix.copy(rig.line.matrix);
   }
 }
