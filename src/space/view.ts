@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mountRawDataLink } from '../inspector/inspector';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -176,6 +177,7 @@ export function createSpaceView(
   const listEl = el.querySelector<HTMLDivElement>('.space-list-items')!;
   const listPanel = el.querySelector<HTMLElement>('.space-list')!;
   const optPanel = el.querySelector<HTMLElement>('.space-opts')!;
+  mountRawDataLink(el, 'fab');
   const filterEl = el.querySelector<HTMLInputElement>('.space-filter')!;
   const timeEl = el.querySelector<HTMLElement>('.space-time')!;
   const dateEl = el.querySelector<HTMLElement>('.sp-date')!;
