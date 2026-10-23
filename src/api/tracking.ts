@@ -155,6 +155,7 @@ interface Ac {
   true_heading?: number;
   category?: string;
   squawk?: string;
+  baro_rate?: number;
   emergency?: string;
 }
 
@@ -339,6 +340,9 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
         reg: a.r ?? '',
         type: a.desc || a.t || '',
         icao: a.t ?? '',
+        squawk: a.squawk ?? '',
+        // ft/min → m/s
+        vsMs: a.baro_rate != null ? Math.round(a.baro_rate * 0.0508) / 10 : null,
         cat: a.category ?? '',
         operator: a.ownOp ?? '',
         altM: onGround ? 0 : Math.round(altFt * 0.3048),

@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
-import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type Sat } from '../api/tracking';
+import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
@@ -314,7 +314,29 @@ const ALPR_FOV_ANGLE = 60; // degrees
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
-  | { type: 'weather'; lng: number; lat: number };
+  | { type: 'weather'; lng: number; lat: number }
+  /** an aircraft was clicked: the flight panel shows it */
+  | { type: 'flight'; hex: string; lng: number; lat: number };
+
+/** What the flight panel shows about one aircraft. */
+export interface FlightInfo {
+  hex: string;
+  callsign: string;
+  reg: string;
+  type: string;
+  icao: string;
+  operator: string;
+  altM: number;
+  speedKmh: number | null;
+  track: number;
+  ground: boolean;
+  emergency: string;
+  squawk: string;
+  vsMs: number | null;
+  lon: number;
+  lat: number;
+  source: string;
+}
 
 interface Info {
   count?: number;
@@ -364,6 +386,7 @@ export class ExtraLayers {
   private aircraftDelay: number | undefined;
   private aircraftErr = '';
   private airport3d: Airport3D | null = null;
+  private lastAircraft: AircraftResult | null = null;
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
@@ -1314,7 +1337,7 @@ export class ExtraLayers {
       },
       'marker',
     );
-    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i) });
+    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons() });
     this.airport3d.init();
     this.ready = true;
     this.apply();
@@ -1455,15 +1478,14 @@ export class ExtraLayers {
     if (this.info.dwdwarn?.note && this.on.has('dwdwarn')) this.vis('dwd', true);
     else if (!this.on.has('dwdwarn')) this.vis('dwd', false);
 
+    // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
+    this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
+    this.refreshAircraftIcons();
+
     for (const def of EXTRAS) {
       const on = this.on.has(def.id);
       if (!on) {
         this.clear(def.id);
-        if (def.id === 'airport3d') {
-          this.airport3d?.setEnabled(false);
-          // the 2D icons of aircraft that were drawn as models come back
-          if (this.on.has('aircraft')) this.loadAircraftNow();
-        }
         continue;
       }
       switch (def.id) {
@@ -1493,7 +1515,6 @@ export class ExtraLayers {
           this.every('aircraft', 10000, () => this.loadAircraftNow());
           break;
         case 'airport3d':
-          this.airport3d?.setEnabled(true);
           this.loadAircraftNow();
           this.every('airport3d', 10000, () => this.loadAircraftNow());
           break;
@@ -1832,12 +1853,10 @@ export class ExtraLayers {
       .then((fc) => {
         this.aircraftErr = '';
         if (seq !== this.aircraftSeq || !this.wantsAircraft()) return;
+        this.lastAircraft = fc;
         this.airport3d?.feed(fc);
         if (!this.on.has('aircraft')) return;
-        // aircraft drawn as 3D models by the airport layer lose their 2D icon
-        const airport = this.airport3d;
-        const icons = airport ? { ...fc, features: fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) } : fc;
-        this.setData('aircraft', icons);
+        this.refreshAircraftIcons();
         this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
       })
       .catch((e) => {
@@ -1848,6 +1867,57 @@ export class ExtraLayers {
         if (seq === this.aircraftSeq && this.on.has('aircraft'))
           this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
       });
+  }
+
+  /** 2D aircraft icons: all aircraft, except those drawn as 3D models while the map is tilted. */
+  private refreshAircraftIcons() {
+    if (!this.on.has('aircraft') || !this.lastAircraft) return;
+    const fc = this.lastAircraft;
+    const airport = this.airport3d;
+    const icons = airport ? { ...fc, features: fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) } : fc;
+    this.setData('aircraft', icons);
+  }
+
+  /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
+  flightInfo(hex: string): FlightInfo | null {
+    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex);
+    if (!f) return null;
+    const p = f.properties as Record<string, unknown>;
+    const live = this.airport3d?.planeInfo(hex);
+    const [lon, lat] = f.geometry.coordinates;
+    return {
+      hex,
+      callsign: String(p.callsign ?? ''),
+      reg: String(p.reg ?? ''),
+      type: String(p.type ?? ''),
+      icao: String(p.icao ?? ''),
+      operator: String(p.operator ?? ''),
+      altM: live ? live.altM : Number(p.altM) || 0,
+      speedKmh: p.speedKmh != null ? Number(p.speedKmh) : null,
+      track: live ? live.track : Number(p.track) || 0,
+      ground: !!p.ground,
+      emergency: String(p.emergency ?? ''),
+      squawk: String(p.squawk ?? ''),
+      vsMs: p.vsMs != null ? Number(p.vsMs) : null,
+      lon: live ? live.lon : lon,
+      lat: live ? live.lat : lat,
+      source: this.lastAircraft?.source ?? '',
+    };
+  }
+
+  /** Aircraft under a screen point: the model, its trail or the wall below the trail. */
+  pickFlight(x: number, y: number): string | null {
+    return this.airport3d?.pick(x, y) ?? null;
+  }
+
+  /** Highlight the trail of an aircraft (null: none). */
+  selectFlight(hex: string | null) {
+    this.airport3d?.select(hex);
+  }
+
+  /** Zoom the map to the whole trail of an aircraft. */
+  fitFlight(hex: string) {
+    this.airport3d?.fitTrail(hex);
   }
 
   private startSatellites() {
@@ -2554,34 +2624,8 @@ export class ExtraLayers {
       case 'sondes':
         return { type: 'html', html: html('sonde', '#ff8fab') + '', lng: pt[0], lat: pt[1] };
       case 'aircraft':
-      case 'ap3d-hit': {
-        const kindLabel: Record<string, string> = { plane: 'Flugzeug', heli: 'Hubschrauber', glider: 'Segelflugzeug', balloon: 'Ballon', drone: 'Drohne' };
-        const rows = [
-          ['Typ', p.type || kindLabel[String(p.kind)]],
-          ['Kennzeichen', p.reg],
-          ['Betreiber', p.operator],
-          ['Höhe', p.ground ? 'am Boden' : `${fmt.num(Number(p.altM))} m`],
-          ['Geschwindigkeit', p.speedKmh != null ? `${p.speedKmh} km/h` : ''],
-          ['Kurs', `${Math.round(Number(p.track))}°`],
-          ['Notfall', p.emergency],
-        ].filter(([, v]) => v);
-        const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-        const hex = String(p.hex);
-        if (f.layer.id === AP3D_HIT_LAYER) this.airport3d?.select(hex);
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: (['plane', 'heli', 'glider', 'balloon', 'drone'].includes(String(p.kind)) ? p.kind : 'plane') as GlyphId,
-            color: '#f2c94c',
-            title: p.callsign,
-            extra,
-            source: 'adsb.lol (ADS-B Community)',
-            url: `https://globe.adsb.lol/?icao=${encodeURIComponent(hex)}`,
-          }),
-          lng: pt[0],
-          lat: pt[1],
-        };
-      }
+      case 'ap3d-hit':
+        return { type: 'flight', hex: String(p.hex), lng: pt[0], lat: pt[1] };
       case 'sats-icon':
       case 'sats-dot': {
         const sat = [...this.sats, ...this.starlink].find((s) => s.id === p.id);
@@ -2926,6 +2970,5 @@ export class ExtraLayers {
 
   clearSelection() {
     this.setData('sat-track', empty());
-    this.airport3d?.select(null);
   }
 }

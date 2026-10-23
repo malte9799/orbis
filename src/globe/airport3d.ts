@@ -9,10 +9,12 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
 // models with trails and callsign labels. Everything lives in its own sources/layers (ap3d-*).
 
-/** From this zoom on the layout is loaded and aircraft are drawn as models. */
+/** From this zoom on the airport layout is loaded and shown. */
 export const AIRPORT_ZOOM = 11;
-/** Aircraft above this height (m) stay 2D icons; the models are for taxiing, take-off, approach. */
-const MODEL_MAX_ALT = 3000;
+/** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
+const PLANE_ZOOM = 6.5;
+/** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
+const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
 /** Lights are shown from the same zoom as the taxiways and loaded from the layout zoom on. */
@@ -21,7 +23,9 @@ const LIGHT_ZOOM = AIRPORT_ZOOM;
 const GRID = 0.04;
 const MAX_FEATURES = 25000;
 
-export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate', 'ap3d-label', 'ap3d-hit'];
+export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate'];
+/** the aircraft labels and click targets follow the aircraft, not the airport layer */
+const PLANE_LAYERS = ['ap3d-label', 'ap3d-hit'];
 export const AP3D_HIT_LAYER = 'ap3d-hit';
 
 const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B762', 'B763', 'B764', 'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B788', 'B789', 'B78X', 'A306', 'A30B', 'A310', 'A332', 'A333', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K', 'A388', 'MD11', 'DC10', 'IL96', 'A124', 'AN12', 'C5M', 'C17', 'A225', 'BLCF', 'BSCA', 'B74F']);
@@ -32,7 +36,11 @@ const contains = (c: Bounds, b: Bounds) => c.west <= b.west && c.south <= b.sout
 
 export interface Ap3dHooks {
   info(i: { loading?: boolean; count?: number; note?: string }): void;
+  /** the map was tilted/flattened or zoomed across a threshold: 2D icons may need updating */
+  modeChanged(): void;
 }
+
+export type PlaneMode = 'off' | 'flat' | '3d';
 
 type Poly = Feature<Polygon>;
 type Line = Feature<LineString>;
@@ -52,7 +60,10 @@ const lineWidth = (scale = 1): ExpressionSpecification => [
 ];
 
 export class Airport3D {
-  private enabled = false;
+  private layoutOn = false;
+  private planesOn = false;
+  private iconsOn = false;
+  private lastMode: PlaneMode = 'off';
   private polys = new Map<string, Poly>();
   private lines = new Map<string, Line>();
   private points = new Map<string, Pt>();
@@ -71,14 +82,31 @@ export class Airport3D {
     private hooks: Ap3dHooks,
   ) {
     this.layer = new PlanesLayer(this.tracker, {
-      active: () => this.enabled && this.is3d(),
+      mode: () => this.mode(),
+      icons: () => this.iconsOn,
       frame: (planes) => this.updateLabels(planes),
     });
   }
 
-  /** Mercator projection and zoomed in far enough. */
-  private is3d() {
-    return this.map.getZoom() >= AIRPORT_ZOOM && this.map.getProjection()?.type !== 'globe';
+  /** 'off' without aircraft layer, zoomed out or on the globe; 'flat' while the map is not tilted. */
+  mode(): PlaneMode {
+    if (!this.planesOn || this.map.getZoom() < PLANE_ZOOM || this.map.getProjection()?.type === 'globe') return 'off';
+    return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
+  }
+
+  /** Keep the aircraft (3D layer, labels, click targets) above everything else. */
+  private raise() {
+    const layers = this.map.getStyle()?.layers;
+    if (!layers?.length || layers[layers.length - 1].id === AP3D_HIT_LAYER) return;
+    for (const id of [this.layer.id, ...PLANE_LAYERS]) if (this.map.getLayer(id)) this.map.moveLayer(id);
+  }
+
+  private checkMode() {
+    const mode = this.mode();
+    if (mode === this.lastMode) return;
+    this.lastMode = mode;
+    this.hooks.modeChanged();
+    this.map.triggerRepaint();
   }
 
   init() {
@@ -175,6 +203,7 @@ export class Airport3D {
       id: 'ap3d-label',
       type: 'symbol',
       source: 'ap3d-label',
+      minzoom: PLANE_ZOOM,
       layout: {
         ...hidden,
         'text-field': ['step', ['zoom'], ['get', 'callsign'], 16, ['concat', ['get', 'callsign'], ['case', ['!=', ['get', 'icao'], ''], ['concat', '\n', ['get', 'icao']], '']]],
@@ -197,25 +226,38 @@ export class Airport3D {
       paint: { 'circle-radius': 26, 'circle-opacity': 0, 'circle-stroke-width': 0 },
     });
     if (!m.getLayer(this.layer.id)) m.addLayer(this.layer, before);
+    // overlays (radar, forecast …) are added later and must not cover the aircraft
+    m.on('styledata', () => this.raise());
+    m.on('pitchend', () => this.checkMode());
+    m.on('zoomend', () => this.checkMode());
   }
 
-  setEnabled(on: boolean) {
-    if (on === this.enabled) return;
-    this.enabled = on;
-    if (!on) {
-      clearTimeout(this.retry);
-      this.tracker.clear();
-      this.setData('ap3d-label', emptyFc());
-      this.hooks.info({ loading: false, count: undefined, note: undefined });
-      return;
+  /** Layout of the airports (`layout`), aircraft with trails (`planes`), 2D aircraft icons shown (`icons`). */
+  configure(o: { layout: boolean; planes: boolean; icons: boolean }) {
+    this.iconsOn = o.icons;
+    if (o.planes !== this.planesOn) {
+      this.planesOn = o.planes;
+      for (const id of PLANE_LAYERS) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', o.planes ? 'visible' : 'none');
+      if (!o.planes) {
+        this.tracker.clear();
+        this.setData('ap3d-label', emptyFc());
+      }
     }
-    this.onMoveEnd();
+    if (o.layout !== this.layoutOn) {
+      this.layoutOn = o.layout;
+      if (o.layout) this.onMoveEnd();
+      else {
+        clearTimeout(this.retry);
+        this.hooks.info({ loading: false, count: undefined, note: undefined });
+      }
+    }
+    this.checkMode();
     this.map.triggerRepaint();
   }
 
   /** Called after the map stopped moving: load the layout for the visible box. */
   onMoveEnd() {
-    if (!this.enabled) return;
+    if (!this.layoutOn) return;
     if (this.map.getProjection()?.type === 'globe') {
       this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht (Projektion „Karte“)' });
       return;
@@ -229,7 +271,7 @@ export class Airport3D {
     const seq = ++this.viewSeq;
     // airports with a pre-built layout come from our own files; Overpass only for the rest
     staticAirports().then(async (list) => {
-      if (seq !== this.viewSeq || !this.enabled) return;
+      if (seq !== this.viewSeq || !this.layoutOn) return;
       const view = this.map.getBounds();
       const hit = list.filter((a) => a.bbox[0] <= view.getEast() && a.bbox[2] >= view.getWest() && a.bbox[1] <= view.getNorth() && a.bbox[3] >= view.getSouth());
       if (!hit.length) return this.loadLive(b);
@@ -325,19 +367,18 @@ export class Airport3D {
     this.hooks.info({
       loading: this.loading,
       count: n || undefined,
-      note: n ? 'Rollwege, Terminals und Flugzeuge in 3D – zum Kippen Strg + Ziehen' : 'hier kein Flughafen in OpenStreetMap erfasst',
+      note: n ? 'Rollwege, Gates und Befeuerung – zum Kippen Strg + Ziehen' : 'hier kein Flughafen in OpenStreetMap erfasst',
     });
   }
 
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
-    if (!this.enabled || !this.is3d()) return false;
-    return !!this.tracker.planes.get(hex)?.near;
+    return this.mode() === '3d' && this.tracker.planes.has(hex);
   }
 
   /** Fresh aircraft positions from the data source. */
   feed(fc: AircraftResult) {
-    if (!this.enabled) return;
+    if (!this.planesOn) return;
     const reports: PlaneReport[] = [];
     for (const f of fc.features) {
       const p = f.properties as Record<string, unknown>;
@@ -359,12 +400,11 @@ export class Airport3D {
         ground,
         model,
         emergency: !!p.emergency,
-        near: ground || (Number(p.altM) || 0) < MODEL_MAX_ALT,
         props: p,
       });
     }
     this.tracker.feed(reports, performance.now());
-    if (this.enabled && this.is3d()) this.map.triggerRepaint();
+    if (this.mode() !== 'off') this.map.triggerRepaint();
   }
 
   /** Label distance above the ground point in em: the model's size plus its altitude on screen. */
@@ -392,6 +432,29 @@ export class Airport3D {
     if (hex === this.layer.selected) return;
     this.layer.selected = hex;
     this.map.triggerRepaint();
+  }
+
+  /** Displayed state of an aircraft (smoothed position, trail), if it is tracked. */
+  planeInfo(hex: string) {
+    const p = this.tracker.planes.get(hex);
+    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail } : null;
+  }
+
+  /** The aircraft under a screen point (model, trail or wall), if any. */
+  pick(x: number, y: number): string | null {
+    return this.layer.pick(x, y);
+  }
+
+  /** Fit the map to the trail of an aircraft. */
+  fitTrail(hex: string) {
+    const p = this.tracker.planes.get(hex);
+    if (!p) return;
+    const pts = [...p.trail, [p.dLon, p.dLat]];
+    const w = Math.min(...pts.map((t) => t[0]));
+    const e = Math.max(...pts.map((t) => t[0]));
+    const s = Math.min(...pts.map((t) => t[1]));
+    const n = Math.max(...pts.map((t) => t[1]));
+    this.map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 60, right: 400 }, maxZoom: 14, duration: 800 });
   }
 
   private setData(id: string, data: FeatureCollection) {

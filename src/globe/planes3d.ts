@@ -5,7 +5,7 @@ import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 
-// 3D aircraft near airports: a three.js layer inside MapLibre's GL context. Positions are
+// 3D aircraft: a three.js layer inside MapLibre's GL context. Positions are
 // reported every ~10 s, so every aircraft keeps a small state that is dead-reckoned from its
 // ground speed and heading and eased towards each new report (no visible jumps). Around each
 // aircraft: its trail at the real altitude, a faint wall from the trail down to the ground,
@@ -23,8 +23,6 @@ export interface PlaneReport {
   ground: boolean;
   model: PlaneModel;
   emergency: boolean;
-  /** close enough to a known airport to be drawn as 3D model */
-  near: boolean;
   /** properties shown in the popup, copied onto the label/hit features */
   props: Record<string, unknown>;
 }
@@ -51,6 +49,8 @@ export interface PlaneState extends PlaneReport {
 
 const EXPIRE_MS = 60000;
 const TRAIL_MAX = 150;
+/** share of the reported ground speed used to move an aircraft between two reports */
+const EXTRAPOLATE = 0.9;
 const M_PER_DEG = 111320;
 const YELLOW = 0xf2c94c;
 const RED = 0xff2d55;
@@ -94,11 +94,21 @@ export class PlaneTracker {
     const kHdg = 1 - Math.exp(-dt / 0.7);
     for (const p of this.planes.values()) {
       const elapsed = Math.min(30, (now - p.at) / 1000);
-      const dist = p.speedMs * elapsed;
+      // a little slower than reported: running ahead of the next report would pull the plane back
+      const dist = p.speedMs * EXTRAPOLATE * elapsed;
+      const cosLat = Math.max(0.2, Math.cos(rad(p.lat)));
       const tLat = p.lat + (dist * Math.cos(rad(p.track))) / M_PER_DEG;
-      const tLon = p.lon + (dist * Math.sin(rad(p.track))) / (M_PER_DEG * Math.max(0.2, Math.cos(rad(p.lat))));
-      p.dLat += (tLat - p.dLat) * kPos;
-      p.dLon += (tLon - p.dLon) * kPos;
+      const tLon = p.lon + (dist * Math.sin(rad(p.track))) / (M_PER_DEG * cosLat);
+      // correction towards the target in metres (east, north); never backwards along the track
+      let dx = (tLon - p.dLon) * cosLat * M_PER_DEG;
+      let dy = (tLat - p.dLat) * M_PER_DEG;
+      const along = dx * Math.sin(rad(p.track)) + dy * Math.cos(rad(p.track));
+      if (along < 0) {
+        dx -= along * Math.sin(rad(p.track));
+        dy -= along * Math.cos(rad(p.track));
+      }
+      p.dLon += (dx * kPos) / (M_PER_DEG * cosLat);
+      p.dLat += (dy * kPos) / M_PER_DEG;
       p.dAlt += (p.altM - p.dAlt) * kAlt;
       p.dTrack = (p.dTrack + shortestDelta(p.dTrack, p.track) * kHdg + 360) % 360;
     }
@@ -265,6 +275,7 @@ class TrailRig {
   lon0 = 0;
   lat0 = 0;
   private count = -1;
+  private flatBuilt = false;
   private points = 0;
   private seg: THREE.InterleavedBuffer | null = null;
   private wallPos: Float32Array = new Float32Array(0);
@@ -282,10 +293,10 @@ class TrailRig {
     return [(lon - this.lon0) * Math.cos(rad(this.lat0)) * M_PER_DEG, (lat - this.lat0) * M_PER_DEG, alt];
   }
 
-  private build(trail: [number, number, number][]) {
+  private build(trail: [number, number, number][], flat: boolean) {
     this.lon0 = trail[0][0];
     this.lat0 = trail[0][1];
-    const pts = trail.map((t) => this.local(t[0], t[1], t[2]));
+    const pts = trail.map((t) => this.local(t[0], t[1], flat ? 0.3 : t[2]));
     pts.push(pts[pts.length - 1]); // the head, moved every frame
     this.points = pts.length;
     this.line.geometry.dispose();
@@ -304,12 +315,13 @@ class TrailRig {
     this.wall.geometry.dispose();
     this.wall.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(w, 3));
     this.count = trail.length;
+    this.flatBuilt = flat;
   }
 
   /** Bring the geometry to the aircraft's trail and current (displayed) position. */
-  sync(p: PlaneState) {
-    if (p.trail.length !== this.count) this.build(p.trail);
-    const [x, y, z] = this.local(p.dLon, p.dLat, p.ground ? 0.3 : p.dAlt);
+  sync(p: PlaneState, flat: boolean) {
+    if (p.trail.length !== this.count || flat !== this.flatBuilt) this.build(p.trail, flat);
+    const [x, y, z] = this.local(p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt);
     const seg = this.seg!;
     const a = seg.array as Float32Array;
     const base = (this.points - 2) * 6;
@@ -323,7 +335,7 @@ class TrailRig {
     for (const v of [1, 3]) w.set([x, y, z], wb + v * 3);
     w.set([x, y, 0], wb + 12);
     (this.wall.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    this.wall.visible = !p.ground && p.dAlt > 3;
+    this.wall.visible = !flat && !p.ground && p.dAlt > 3;
   }
 
   dispose() {
@@ -333,8 +345,10 @@ class TrailRig {
 }
 
 export interface PlanesLayerHooks {
-  /** is the 3D view currently wanted (layer on, zoomed in, mercator)? */
-  active(): boolean;
+  /** 'off': nothing drawn; 'flat': map not tilted (flat trails, models only without 2D icons); '3d': tilted */
+  mode(): 'off' | 'flat' | '3d';
+  /** are the 2D aircraft icons shown (then the models are left out in flat mode)? */
+  icons(): boolean;
   /** called about 4× a second with the planes that are drawn */
   frame(planes: PlaneState[]): void;
 }
@@ -349,6 +363,8 @@ export class PlanesLayer implements CustomLayerInterface {
   private camera = new THREE.Camera();
   private lastFrameHook = 0;
   private mats!: Mats;
+  private proj = new THREE.Matrix4();
+  private flatNow = false;
   private drop = dropGeometry();
   /** hex of the aircraft whose trail is drawn at full strength */
   selected: string | null = null;
@@ -378,55 +394,71 @@ export class PlanesLayer implements CustomLayerInterface {
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
-    if (!this.hooks.active()) {
+    const mode = this.hooks.mode();
+    if (mode === 'off') {
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
         this.hooks.frame([]);
       }
       return;
     }
+    const flat = mode === 'flat';
+    this.flatNow = flat;
+    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]);
+    const models = !flat || !this.hooks.icons();
     const now = performance.now();
     this.tracker.step(now);
     const drawn: PlaneState[] = [];
-    const zoom = this.map.getZoom();
-    // slightly enlarged when zoomed out so the planes stay recognisable
-    const boost = zoom < 15 ? 2 ** ((15 - zoom) * 0.7) : 1;
-    const terrain = this.map.getTerrain();
+    const map = this.map;
+    const center = map.getCenter();
+    // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
+    const mpp = (40075016 * Math.cos(rad(center.lat))) / (512 * 2 ** map.getZoom());
+    const boost = Math.max(1, 0.65 * mpp);
+    const terrain = map.getTerrain();
+    // only what is (nearly) in view is built and drawn
+    const b = map.getBounds();
+    const padLon = (b.getEast() - b.getWest()) * 0.5;
+    const padLat = (b.getNorth() - b.getSouth()) * 0.5;
     const m = new THREE.Matrix4();
     const rot = new THREE.Matrix4();
     for (const p of this.tracker.planes.values()) {
-      if (!p.near) {
+      const inView = p.dLon > b.getWest() - padLon && p.dLon < b.getEast() + padLon && p.dLat > b.getSouth() - padLat && p.dLat < b.getNorth() + padLat;
+      if (!inView) {
         for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall]) if (o) o.visible = false;
         continue;
       }
-      if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
-        if (p.obj) {
-          this.scene.remove(p.obj);
-          disposeMaterials(p.obj);
+      const elev = terrain ? (map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
+      const air = !flat && !p.ground && p.dAlt > 3;
+      if (models) {
+        if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
+          if (p.obj) {
+            this.scene.remove(p.obj);
+            disposeMaterials(p.obj);
+          }
+          p.obj = makeModel(p.model, p.emergency);
+          p.obj.matrixAutoUpdate = false;
+          p.objModel = p.model;
+          p.objEmergency = p.emergency;
+          this.scene.add(p.obj);
         }
-        p.obj = makeModel(p.model, p.emergency);
-        p.obj.matrixAutoUpdate = false;
-        p.objModel = p.model;
-        p.objEmergency = p.emergency;
-        this.scene.add(p.obj);
+        const alt = flat ? (p.ground ? 0.2 : 1) : p.dAlt + (p.ground ? 0.2 : 0);
+        const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], alt + elev);
+        const s = mc.meterInMercatorCoordinateUnits() * boost;
+        // y is flipped between mercator space (south = +y) and the model (north = +y)
+        m.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s));
+        rot.makeRotationZ(-rad(p.dTrack));
+        m.multiply(rot);
+        p.obj.matrix.copy(m);
+        p.obj.visible = true;
+        this.syncShadow(p, air, elev, s, rot, m);
+        this.syncDrop(p, air, elev);
+        drawn.push(p);
+      } else {
+        for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
-      const ground = p.ground ? 0.2 : 0;
-      const elev = terrain ? (this.map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
-      const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], p.dAlt + elev + ground);
-      const s = mc.meterInMercatorCoordinateUnits() * boost;
-      // y is flipped between mercator space (south = +y) and the model (north = +y)
-      m.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s));
-      rot.makeRotationZ(-rad(p.dTrack));
-      m.multiply(rot);
-      p.obj.matrix.copy(m);
-      p.obj.visible = true;
-      const air = !p.ground && p.dAlt > 3;
-      this.syncShadow(p, air, elev, s, rot, m);
-      this.syncDrop(p, air, elev);
-      this.syncTrail(p, elev);
-      drawn.push(p);
+      this.syncTrail(p, elev, flat);
     }
-    for (const mat of [this.mats.line, this.mats.lineSel]) mat.resolution.set(this.map.getCanvas().width, this.map.getCanvas().height);
+    for (const mat of [this.mats.line, this.mats.lineSel]) mat.resolution.set(map.getCanvas().width, map.getCanvas().height);
     this.camera.projectionMatrix.fromArray(args.defaultProjectionData.mainMatrix as number[]);
     this.renderer.resetState();
     this.renderer.render(this.scene, this.camera);
@@ -434,7 +466,69 @@ export class PlanesLayer implements CustomLayerInterface {
       this.lastFrameHook = now;
       this.hooks.frame(drawn);
     }
-    if (drawn.length && !document.hidden) this.map.triggerRepaint();
+    if (this.tracker.planes.size && !document.hidden) map.triggerRepaint();
+  }
+
+  /**
+   * The aircraft at a screen point (CSS px): its model, its trail line or the wall below the line.
+   * The models cannot be picked by MapLibre, so the shapes are projected with the last drawn matrix.
+   */
+  pick(x: number, y: number): string | null {
+    const canvas = this.map.getCanvas();
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const v = new THREE.Vector4();
+    const screen = (lon: number, lat: number, alt: number): [number, number] | null => {
+      const mc = MercatorCoordinate.fromLngLat([lon, lat], alt);
+      v.set(mc.x, mc.y, mc.z, 1).applyMatrix4(this.proj);
+      if (v.w <= 0) return null;
+      return [(v.x / v.w * 0.5 + 0.5) * w, (1 - (v.y / v.w * 0.5 + 0.5)) * h];
+    };
+    const segDist = (a: [number, number], b: [number, number]) => {
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const t = dx || dy ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy))) : 0;
+      return Math.hypot(x - (a[0] + t * dx), y - (a[1] + t * dy));
+    };
+    const inTri = (a: [number, number], b: [number, number], c: [number, number]) => {
+      const d = (p: [number, number], q: [number, number]) => (x - q[0]) * (p[1] - q[1]) - (p[0] - q[0]) * (y - q[1]);
+      const d1 = d(a, b);
+      const d2 = d(b, c);
+      const d3 = d(c, a);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    };
+    let best: string | null = null;
+    let bestD = Infinity;
+    const consider = (hex: string, d: number) => {
+      if (d < bestD) {
+        bestD = d;
+        best = hex;
+      }
+    };
+    for (const p of this.tracker.planes.values()) {
+      if (!p.rig?.line.visible) continue;
+      const flat = this.flatNow;
+      const air = !flat && !p.ground && p.dAlt > 3;
+      if (p.obj?.visible) {
+        const c = screen(p.dLon, p.dLat, flat ? 1 : p.dAlt);
+        if (c) consider(p.hex, Math.max(0, Math.hypot(x - c[0], y - c[1]) - 14));
+      }
+      const pts: [number, number, number][] = [...p.trail.map((t) => [t[0], t[1], flat ? 0.3 : t[2]] as [number, number, number]), [p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt]];
+      let prevTop: [number, number] | null = null;
+      let prevBot: [number, number] | null = null;
+      for (const [lon, lat, alt] of pts) {
+        const top = screen(lon, lat, alt);
+        const bot = air ? screen(lon, lat, 0) : null;
+        if (top && prevTop) {
+          consider(p.hex, Math.max(0, segDist(prevTop, top) - 5));
+          // the wall: two triangles between the trail and the ground
+          if (bot && prevBot && (inTri(prevTop, top, prevBot) || inTri(top, bot, prevBot))) consider(p.hex, 12);
+        }
+        prevTop = top;
+        prevBot = bot;
+      }
+    }
+    return bestD <= 12 ? best : null;
   }
 
   /** Flattened black copy of the model on the ground, straight below the aircraft. */
@@ -473,13 +567,13 @@ export class PlanesLayer implements CustomLayerInterface {
     p.drop.matrix.makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s * p.dAlt));
   }
 
-  private syncTrail(p: PlaneState, elev: number) {
+  private syncTrail(p: PlaneState, elev: number, flat: boolean) {
     if (!p.rig) {
       p.rig = new TrailRig();
       this.scene.add(p.rig.line, p.rig.wall);
     }
     const rig = p.rig;
-    rig.sync(p);
+    rig.sync(p, flat);
     const sel = this.selected === p.hex;
     rig.line.material = sel ? this.mats.lineSel : this.mats.line;
     rig.wall.material = sel ? this.mats.wallSel : this.mats.wall;
