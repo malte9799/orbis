@@ -9,6 +9,7 @@ import { escapeHtml, fmt, toast } from '../util';
 import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt } from './mars';
+import { ATLAS, ATLAS_CELL, LOWRES } from './atlas';
 import { PLANET_MAPS, mapEnabled } from './planets';
 import { loadTrajectories, trajectoryTimes } from './trajectories';
 import {
@@ -409,6 +410,89 @@ export function createSpaceView(
   }
   const v3m = new THREE.Vector3();
 
+  // ----- body textures -------------------------------------------------------
+  // The full maps are up to 15 MB each, so a body only gets its own once it is big on screen or
+  // selected. Until then it shows a 256 × 128 preview cut from one shared atlas (scripts/planet-atlas.py).
+  type BodyMaterial = THREE.MeshStandardMaterial | THREE.MeshBasicMaterial;
+  const bodyMats = new Map<string, BodyMaterial>();
+  const previews = new Map<string, THREE.Texture>();
+  const texState = new Map<string, 'loading' | 'full' | 'failed'>();
+  /** the Moon keeps the small map: its sharper textures and close-up tiles come from moon.ts */
+  const FULL_TEXTURE: Record<string, string> = { moon: './textures/moonmap2k.jpg' };
+  /** relief only needs the small maps (the bump maps of Mercury and the Moon are the 15 MB textures) */
+  const BUMP_TEXTURE: Record<string, string> = { mercury: './textures/mercurymap.jpg', moon: './textures/moonmap2k.jpg' };
+  /** apparent radius (px) from which a body gets its full texture */
+  const FULL_TEX_PX = 40;
+
+  /** a texture may only replace what is still ours: nothing yet, or its preview (moon.ts swaps in sharper maps itself) */
+  const ownsMap = (id: string) => {
+    const m = bodyMats.get(id)!.map;
+    return !m || m === previews.get(id);
+  };
+
+  function loadPreviewTextures() {
+    const img = new Image();
+    img.onload = () => {
+      for (const [id, mat] of bodyMats) {
+        const cell = ATLAS_CELL[id];
+        if (cell === undefined || texState.get(id) === 'full' || !ownsMap(id)) continue;
+        const cv = document.createElement('canvas');
+        cv.width = LOWRES.w;
+        cv.height = LOWRES.h;
+        cv.getContext('2d')!.drawImage(img, (cell % LOWRES.cols) * LOWRES.w, Math.floor(cell / LOWRES.cols) * LOWRES.h, LOWRES.w, LOWRES.h, 0, 0, LOWRES.w, LOWRES.h);
+        const t = new THREE.CanvasTexture(cv);
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 4;
+        previews.set(id, t);
+        mat.map = t;
+        mat.color.set(0xffffff);
+        mat.needsUpdate = true;
+      }
+    };
+    img.src = './textures/planet-lowres.jpg';
+  }
+
+  function loadFullTexture(b: Body) {
+    const mat = bodyMats.get(b.id);
+    if (!mat || texState.has(b.id)) return;
+    texState.set(b.id, 'loading');
+    new THREE.TextureLoader().load(
+      FULL_TEXTURE[b.id] ?? b.texture!,
+      (t) => {
+        if (!ownsMap(b.id)) {
+          texState.set(b.id, 'full');
+          return t.dispose();
+        }
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = 4;
+        previews.get(b.id)?.dispose();
+        previews.delete(b.id);
+        mat.map = t;
+        mat.color.set(0xffffff);
+        if (b.bumpMap && mat instanceof THREE.MeshStandardMaterial) {
+          mat.bumpMap = new THREE.TextureLoader().load(BUMP_TEXTURE[b.id] ?? b.bumpMap);
+          mat.bumpMap.anisotropy = 4;
+        }
+        mat.needsUpdate = true;
+        texState.set(b.id, 'full');
+      },
+      undefined,
+      () => texState.set(b.id, 'failed'),
+    );
+  }
+
+  function updateBodyTextures() {
+    const pxPerRad = el.clientHeight / 2 / Math.tan((camera.fov * Math.PI) / 360);
+    for (const [id, { body: b }] of meshes) {
+      if (!b.texture || texState.has(id)) continue;
+      const p = resolve(id, simTime);
+      if (!p) continue;
+      toThree(sub(p, origin), v3m);
+      const px = (radiusAU(b) / Math.max(1e-15, v3m.distanceTo(camera.position))) * pxPerRad;
+      if (px >= FULL_TEX_PX || id === focusId) loadFullTexture(b);
+    }
+  }
+
   function init() {
     renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -454,23 +538,19 @@ export function createSpaceView(
     scene.add(viewLight);
     scene.add(viewLight.target);
 
+    loadPreviewTextures();
     const sphere = new THREE.SphereGeometry(1, 96, 48);
     for (const b of BODIES) {
       const group = new THREE.Group();
       const spin = new THREE.Group();
       let mat: THREE.Material;
+      // textures come later: the preview from the atlas, then the full map (see updateBodyTextures)
       if (b.kind === 'star') {
-        mat = new THREE.MeshBasicMaterial({ map: b.texture ? load(b.texture) : null, color: b.texture ? 0xffffff : b.color });
+        mat = new THREE.MeshBasicMaterial({ color: b.color });
       } else {
-        const stdOpts: THREE.MeshStandardMaterialParameters = { map: b.texture ? load(b.texture) : null, color: b.texture ? 0xffffff : b.color, roughness: 1, metalness: 0 };
-        if (b.bumpMap) {
-          const bump = loader.load(b.bumpMap);
-          bump.anisotropy = 4;
-          stdOpts.bumpMap = bump;
-          stdOpts.bumpScale = b.bumpScale ?? 0.01;
-        }
-        mat = new THREE.MeshStandardMaterial(stdOpts);
+        mat = new THREE.MeshStandardMaterial({ color: b.color, roughness: 1, metalness: 0, bumpScale: b.bumpScale ?? 0.01 });
       }
+      if (b.texture) bodyMats.set(b.id, mat as BodyMaterial);
       const mesh = new THREE.Mesh(sphere, mat);
       const r = radiusAU(b);
       mesh.scale.setScalar(r);
@@ -836,6 +916,7 @@ export function createSpaceView(
     updateTrails();
     updateSatellites(now);
     updateCraftModels();
+    updateBodyTextures();
 
     adaptControls();
     controls.update();
@@ -1291,18 +1372,6 @@ export function createSpaceView(
     }),
   );
 
-  // small maps for the list thumbnails (the body textures are up to 15 MB)
-  const THUMB: Record<string, string> = {
-    sun: 'sunmap.jpg',
-    mercury: 'mercurymap.jpg',
-    venus: 'venusmap.jpg',
-    earth: 'earthmap2k.jpg',
-    moon: 'moonmap2k.jpg',
-    mars: 'marsmap2k.jpg',
-    jupiter: 'jupitermap.jpg',
-    saturn: 'saturnmap.jpg',
-  };
-  const thumbOf = (b: Body) => (THUMB[b.id] ? `./textures/${THUMB[b.id]}` : b.texture);
   const MAP_ICON =
     '<svg viewBox="0 0 24 24"><path d="M9 4L3 6.5v13L9 17l6 3 6-2.5v-13L15 7zM9 4v13M15 7v13"/></svg>';
   const CRAFT_ICON =
@@ -1323,9 +1392,11 @@ export function createSpaceView(
   };
 
   function rowHtml(b: Body, child = false) {
-    const img = thumbOf(b);
-    const th = img
-      ? `<span class="sp-thumb" style="background-image:url('${img}')"></span>`
+    // one shared atlas image (scripts/planet-atlas.py) instead of a full texture per row
+    const cell = ATLAS_CELL[b.id];
+    const th =
+      cell !== undefined
+        ? `<span class="sp-thumb" style="background-image:url('./textures/planet-atlas.jpg');background-size:${ATLAS.cols * 100}% ${ATLAS.rows * 100}%;background-position:${((cell % ATLAS.cols) / (ATLAS.cols - 1)) * 100}% ${(Math.floor(cell / ATLAS.cols) / (ATLAS.rows - 1)) * 100}%"></span>`
       : `<span class="sp-thumb ${b.kind}" style="--c:${b.color}">${b.kind === 'craft' ? CRAFT_ICON : ''}</span>`;
     // bodies with a detailed map (Earth weather map, planet maps)
     const detail = b.id === 'earth' || mapEnabled(b.id);
