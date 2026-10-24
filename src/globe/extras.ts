@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gas: ['power', 'osm-power'],
   oil: ['power', 'osm-power'],
   biomass: ['power', 'osm-power'],
-  webcams: ['webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
+  webcams: ['webcams-heat', 'webcams-glow', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
   aurora: ['aurora'],
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
@@ -3253,11 +3253,21 @@ export class ExtraLayers {
     );
     m.addLayer(
       {
+        id: 'webcams-glow',
+        type: 'circle',
+        source: 'webcams-world',
+        minzoom: CAM_DOT_ZOOM,
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 4, CAM_DETAIL_ZOOM, 9, 14, 16], 'circle-blur': 1, 'circle-opacity': 0.35 },
+      },
+      before,
+    );
+    m.addLayer(
+      {
         id: 'webcams-dots',
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.9 },
       },
       before,
     );
