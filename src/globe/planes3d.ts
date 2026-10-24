@@ -238,24 +238,46 @@ function airliner(k: number): THREE.BufferGeometry {
   return mergeGeometries(flat)!;
 }
 
-function heliParts(): { body: THREE.BufferGeometry; rotor: THREE.BufferGeometry } {
-  const parts: THREE.BufferGeometry[] = [];
-  parts.push(new THREE.SphereGeometry(1, 14, 10).scale(1.5, 3.6, 1.6).translate(0, 0.6, 2.4));
-  parts.push(new THREE.CylinderGeometry(0.45, 0.22, 6.5, 8).translate(0, -5.6, 2.9));
-  parts.push(new THREE.BoxGeometry(0.25, 1.2, 1.8).translate(0, -8.7, 3.5));
-  parts.push(new THREE.BoxGeometry(0.2, 0.6, 0.6).translate(0, -1.5, 4.1));
-  // skids
-  for (const side of [-1, 1]) parts.push(new THREE.BoxGeometry(0.15, 5, 0.15).translate(side * 1.3, 0.4, 0.4));
-  const flat = parts.map((g) => {
-    const n = g.index ? g.toNonIndexed() : g;
-    n.deleteAttribute('uv');
-    return n;
-  });
-  const rotor = new THREE.CylinderGeometry(6.2, 6.2, 0.06, 28).rotateX(Math.PI / 2).translate(0, 0.4, 4.3);
-  return { body: mergeGeometries(flat)!, rotor };
+/** Parts of the helicopter: body, windscreen, main rotor blades, tail rotor blades (x right, y nose, z up). */
+interface HeliGeos {
+  body: THREE.BufferGeometry;
+  glass: THREE.BufferGeometry;
+  rotor: THREE.BufferGeometry;
+  tail: THREE.BufferGeometry;
 }
 
-let geoCache: { narrow: THREE.BufferGeometry; wide: THREE.BufferGeometry; heli: { body: THREE.BufferGeometry; rotor: THREE.BufferGeometry } } | null = null;
+function heliParts(): HeliGeos {
+  // only position + normal are needed; keep attributes identical so they can be merged
+  const merge = (list: THREE.BufferGeometry[]) =>
+    mergeGeometries(
+      list.map((g) => {
+        const n = g.index ? g.toNonIndexed() : g;
+        n.deleteAttribute('uv');
+        return n;
+      }),
+    )!;
+  const parts: THREE.BufferGeometry[] = [
+    new THREE.SphereGeometry(1, 16, 12).scale(1.5, 3.2, 1.55).translate(0, 0.8, 2.0), // cabin
+    new THREE.SphereGeometry(1, 12, 8).scale(0.95, 1.8, 0.8).translate(0, -0.6, 3.5), // engine housing
+    new THREE.CylinderGeometry(0.5, 0.2, 7, 10).translate(0, -5.3, 2.6), // tail boom
+    new THREE.BoxGeometry(0.16, 1.3, 1.9).translate(0, -8.6, 3.4), // fin
+    new THREE.BoxGeometry(2.4, 0.8, 0.12).translate(0, -7.6, 2.7), // stabiliser
+    new THREE.CylinderGeometry(0.17, 0.2, 1.2, 8).rotateX(Math.PI / 2).translate(0, 0.2, 4.2), // rotor mast
+  ];
+  for (const side of [-1, 1]) {
+    parts.push(new THREE.CylinderGeometry(0.12, 0.12, 5.4, 6).translate(side * 1.35, 0.6, 0.3)); // skid
+    for (const y of [-0.9, 1.9]) parts.push(new THREE.BoxGeometry(0.12, 0.12, 1.5).translate(side * 1.25, y, 1.0)); // strut
+  }
+  const blades = (n: number) => merge(Array.from({ length: n }, (_, i) => new THREE.BoxGeometry(0.45, 6.3, 0.05).translate(0, 3.35, 0).rotateZ((i * 2 * Math.PI) / n)));
+  return {
+    body: merge(parts),
+    glass: merge([new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, 1.0).scale(1.53, 3.26, 1.58).translate(0, 0.8, 2.0)]), // front cap of the cabin: the canopy
+    rotor: blades(4),
+    tail: merge([new THREE.BoxGeometry(0.05, 1.5, 0.16), new THREE.BoxGeometry(0.05, 1.5, 0.16).rotateX(Math.PI / 2)]),
+  };
+}
+
+let geoCache: { narrow: THREE.BufferGeometry; wide: THREE.BufferGeometry; heli: HeliGeos } | null = null;
 const geos = () => (geoCache ??= { narrow: airliner(1), wide: airliner(1.68), heli: heliParts() });
 
 function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
@@ -265,7 +287,16 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
   if (model === 'heli') {
     const group = new THREE.Group();
     group.add(new THREE.Mesh(g.heli.body, mat));
-    group.add(new THREE.Mesh(g.heli.rotor, new THREE.MeshBasicMaterial({ color: 0x20242b, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false })));
+    group.add(new THREE.Mesh(g.heli.glass, mat));
+    // the rotors turn: main rotor around z at the mast, tail rotor around x at the end of the boom
+    const main = new THREE.Group();
+    main.position.set(0, 0.2, 4.85);
+    main.add(new THREE.Mesh(g.heli.rotor, mat));
+    const tail = new THREE.Group();
+    tail.position.set(0.3, -8.9, 3.5);
+    tail.add(new THREE.Mesh(g.heli.tail, mat));
+    group.add(main, tail);
+    group.userData = { main, tail };
     return group;
   }
   return new THREE.Mesh(g[model], mat);
@@ -748,6 +779,13 @@ export class PlanesLayer implements CustomLayerInterface {
         m.multiply(rot);
         p.obj.matrix.copy(m);
         p.obj.visible = true;
+        if (p.model === 'heli') {
+          // the blades turn (a little different per helicopter so a fleet does not run in step)
+          const { main, tail } = p.obj.userData as { main: THREE.Object3D; tail: THREE.Object3D };
+          const phase = (p.hex.charCodeAt(0) + p.hex.charCodeAt(p.hex.length - 1)) % 7;
+          main.rotation.z = now * 0.011 + phase;
+          tail.rotation.x = now * 0.025 + phase;
+        }
         this.syncShadow(p, air, elev, s, rot, m);
         this.syncDrop(p, air, elev);
         drawn.push(p);
