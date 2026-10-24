@@ -3245,8 +3245,8 @@ export class ExtraLayers {
         paint: {
           'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 3, 8, 10],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.2, 8, 0.6],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.6, CAM_DETAIL_ZOOM + 0.5, 0],
-          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.4)', 0.5, '#26c6da', 0.8, '#80deea', 1, '#ffffff'],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.5, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.25)', 0.45, '#26c6da', 0.7, '#ffffff', 1, '#ffffff'],
         },
       },
       before,
@@ -3257,7 +3257,7 @@ export class ExtraLayers {
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 4, CAM_DETAIL_ZOOM, 9, 14, 16], 'circle-blur': 1, 'circle-opacity': 0.35 },
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 5, CAM_DETAIL_ZOOM, 11, 14, 19], 'circle-blur': 1, 'circle-opacity': 0.25 },
       },
       before,
     );
