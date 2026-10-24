@@ -12,7 +12,7 @@ import { loadBuoys, loadRivers, loadTideDetails, loadTideStations, loadWaves } f
 import {
   AisStream,
   countdown,
-  hasAisKey,
+  hasAisLive,
   loadAirportFlights,
   loadDigitrafficShips,
   loadLaunches,
@@ -173,7 +173,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
-  { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit mit kostenlosem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
+  { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit über den Daten-Proxy oder mit eigenem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
   { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
   { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden', glyph: 'train', color: '#ab47bc' },
   { id: 'roadnet', section: 'networks', label: 'Straßennetz', hint: 'Autobahnen bis Kreisstraßen mit Nummern – OpenStreetMap', glyph: 'city', color: '#f57c00' },
@@ -1741,7 +1741,7 @@ export class ExtraLayers {
           break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
-          if (hasAisKey()) {
+          if (hasAisLive()) {
             this.ais ??= new AisStream(() => this.mergeShips());
             this.ais.start(this.viewBounds(4));
             this.every('ais-push', 3000, () => this.mergeShips());
@@ -1814,10 +1814,10 @@ export class ExtraLayers {
       this.lightning?.stop();
       this.setData('lightning', empty());
     }
-    if (!this.on.has('ships') || !hasAisKey()) {
+    if (!this.on.has('ships') || !hasAisLive()) {
       this.clear('ais-push');
       this.ais?.stop();
-      if (!hasAisKey()) this.ais = null;
+      if (!hasAisLive()) this.ais = null;
     }
   }
 
@@ -2413,7 +2413,7 @@ export class ExtraLayers {
       this.baltic = await loadDigitrafficShips();
     } catch (e) {
       console.warn('Digitraffic AIS', e);
-      if (!hasAisKey()) throw e;
+      if (!hasAisLive()) throw e;
       note = 'Fintraffic nicht erreichbar';
     }
     this.mergeShips();
@@ -2491,7 +2491,7 @@ export class ExtraLayers {
     for (const s of this.baltic) all.set(s.mmsi, s);
     if (this.ais) for (const s of this.ais.ships.values()) all.set(s.mmsi, s);
     this.setData('ships', shipFeatures(all.values()));
-    const notes = [this.ais?.error, !hasAisKey() ? 'außerhalb der Ostsee mit kostenlosem aisstream.io-Schlüssel (Einstellungen)' : 'weltweit live im Kartenausschnitt (aisstream.io)'].filter(Boolean);
+    const notes = [this.ais?.error, !hasAisLive() ? 'außerhalb der Ostsee mit Daten-Proxy oder kostenlosem aisstream.io-Schlüssel (Einstellungen)' : 'weltweit live im Kartenausschnitt (aisstream.io)'].filter(Boolean);
     const prev = this.info.ships;
     const note = notes.join(' · ');
     if (prev?.count !== all.size || prev?.note !== note) this.set('ships', { count: all.size, note });

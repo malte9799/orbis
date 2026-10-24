@@ -248,7 +248,10 @@ Proxy; nach einem Update des Proxy-Codes muss der Worker neu deployt werden. Der
    sollte JSON mit Flugzeugen zeigen.
 5. Absichern (empfohlen): Worker → *Settings → Variables and Secrets → Add* → Typ *Text*, Name `ALLOWED_ORIGINS`,
    Wert `https://malte9799.github.io,http://localhost:5173` → *Deploy*.
-6. Fest einbauen: im GitHub-Repo *Settings → Secrets and variables → Actions → Variables → New repository variable*,
+6. Schiffe weltweit (optional): kostenlosen Schlüssel auf [aisstream.io](https://aisstream.io) holen, im Worker unter
+   *Settings → Variables and Secrets* als *Secret* `AISSTREAM_KEY` anlegen → *Deploy*. Der Pfad `/ais` leitet dann den
+   AIS-Livestream weiter, Besucher brauchen keinen eigenen Schlüssel.
+7. Fest einbauen: im GitHub-Repo *Settings → Secrets and variables → Actions → Variables → New repository variable*,
    Name `PROXY_URL`, Wert = Worker-Adresse aus Schritt 3. Danach *Actions → Deploy to GitHub Pages → Run workflow*.
 
 Alternativ kann jeder Nutzer eine eigene Worker-Adresse unter *Einstellungen → Daten-Proxy* eintragen; sie hat Vorrang vor der

@@ -6,6 +6,9 @@
 // - Overpass (OpenStreetMap): answers are cached, so many visitors looking at the same area
 //   cost the public servers only one request.
 //
+// - Live ships: /ais is a WebSocket relay to aisstream.io. The API key lives in the worker
+//   secret AISSTREAM_KEY (Settings → Variables and Secrets → Secret), so visitors need no key.
+//
 // Setup: see "Daten-Proxy" in README.md. Optional variable ALLOWED_ORIGINS
 // (Settings → Variables), comma separated, e.g.
 //   https://malte9799.github.io,http://localhost:5173
@@ -63,6 +66,7 @@ export default {
     const headers = cors(allowed.length ? origin : '*');
 
     if (request.method === 'OPTIONS') return new Response(null, { headers });
+    if (new URL(request.url).pathname.endsWith('/ais')) return aisRelay(request, env, headers);
     if (request.method !== 'GET') return new Response('Method not allowed', { status: 405, headers });
 
     let target;
@@ -101,6 +105,37 @@ export default {
     return respond(entry, headers, ttl, 'MISS');
   },
 };
+
+// WebSocket relay to aisstream.io: the browser sends only {BoundingBoxes}, the worker adds the key.
+async function aisRelay(request, env, headers) {
+  if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected WebSocket', { status: 426, headers });
+  if (!env.AISSTREAM_KEY) return new Response('AISSTREAM_KEY not configured', { status: 503, headers });
+  const upstream = (await fetch('https://stream.aisstream.io/v0/stream', { headers: { Upgrade: 'websocket' } })).webSocket;
+  if (!upstream) return new Response('aisstream.io not reachable', { status: 502, headers });
+  const [client, server] = Object.values(new WebSocketPair());
+  upstream.accept();
+  server.accept();
+  server.addEventListener('message', (ev) => {
+    try {
+      const boxes = JSON.parse(String(ev.data)).BoundingBoxes;
+      if (!Array.isArray(boxes) || boxes.length > 4) return;
+      upstream.send(
+        JSON.stringify({ APIKey: env.AISSTREAM_KEY, BoundingBoxes: boxes, FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ShipStaticData'] }),
+      );
+    } catch {
+      /* ignore malformed subscriptions */
+    }
+  });
+  upstream.addEventListener('message', (ev) => server.send(ev.data));
+  const close = () => {
+    try { server.close(); } catch { /* already closed */ }
+    try { upstream.close(); } catch { /* already closed */ }
+  };
+  server.addEventListener('close', close);
+  upstream.addEventListener('close', close);
+  upstream.addEventListener('error', close);
+  return new Response(null, { status: 101, webSocket: client });
+}
 
 async function load(target, ttl) {
   const res = await fetch(target.toString(), {
