@@ -34,8 +34,12 @@ import {
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
+import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
+import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
+import { LaunchPanel } from '../launch/panel';
+import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
@@ -213,7 +217,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
+  let launchPanel: LaunchPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
 
@@ -335,8 +341,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let hud = null as Hud | null;
   const families = () => (store.getKeys().owm ? [...WX_FAMILIES, OWM_FAMILY] : WX_FAMILIES);
   const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
+  /** the Karte the HUD last applied: decides whether a map click shows the weather tooltip */
+  let curKarte: Karte | null = null;
+  /**
+   * A map click shows the place weather only on a weather Karte: the standard "Wetter" Karte
+   * or an own Karte with a weather layer (menu 'wx' with a layer, or main set). Traffic and
+   * other Karten get their own tooltips later.
+   */
+  const isWeatherKarte = (k: Karte | null): boolean => !!k && (k.menu === 'wx' || k.main != null);
 
   function applyKarte(k: Karte) {
+    curKarte = k;
     const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
@@ -390,7 +405,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     refreshHud();
   }
 
-  /** per-layer options: quake magnitude, aircraft kinds, opacity */
+  /** per-layer options: quake magnitude, aircraft kinds, lightning extras, opacity */
   function applyLayerOptions(k: Karte) {
     if (!map || !ready) return;
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
@@ -398,6 +413,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
+    const volTok = opts.find((t) => t.startsWith('vol-'));
+    const vol = volTok ? Number(volTok.slice(4)) : NaN;
+    if (extras)
+      extras.setLightningOptions({
+        sound: opts.includes('sound'),
+        wave: opts.includes('wave'),
+        detectors: opts.includes('detectors'),
+        lines: opts.includes('lines'),
+        thunder: opts.includes('thunder'),
+        volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
+      });
+    // Rohstoffe: per Komodität gefiltert (Kategorie-Filter), oder alles wenn kein Filter gesetzt
+    const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
+    if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
+    if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
@@ -531,6 +562,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <input type="password" data-key="aisstream" value="${escapeHtml(keys.aisstream ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <label class="field-label">US National Park Service <small>(kostenloser Schlüssel von nps.gov/subjects/developer – Nationalpark-Webcams)</small>
           <input type="password" data-key="nps" value="${escapeHtml(keys.nps ?? '')}" placeholder="API-Key (optional – sonst gemeinsamer Snapshot)" autocomplete="off"/></label>
+        <label class="field-label">511 Ontario <small>(kostenlos: auf 511on.ca anmelden, Key auf der Developers-Seite anfordern – Verkehrskameras Ontario)</small>
+          <input type="password" data-key="ontario511" value="${escapeHtml(keys.ontario511 ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
+        <label class="field-label">511 Alberta <small>(kostenlos: auf 511.alberta.ca anmelden, Key auf der Developers-Seite anfordern – Verkehrskameras Alberta)</small>
+          <input type="password" data-key="alberta511" value="${escapeHtml(keys.alberta511 ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
         <h3>Nahverkehr live (optional)</h3>
         <label class="field-label">Transport Victoria <small>(KeyId von opendata.transport.vic.gov.au – Melbourne: Züge, Trams, Busse)</small>
           <input type="password" data-key="victoria" value="${escapeHtml(keys.victoria ?? '')}" placeholder="KeyId" autocomplete="off"/></label>
@@ -549,7 +584,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         The Space Devs, aisstream.io, NGA World Port Index, Upply (UN/LOCODE), NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
         Overpass API, Blitzortung.org, EURDEP (JRC), Japan Meteorological Agency, Finnish Meteorological Institute, NOAA MRMS, NOAA SPC, Esri World Imagery, NASA Blue/Black Marble,
         Bright Sky, BigDataCloud (Ortsname zum eigenen Standort), Nominatim/OpenStreetMap (Ortsname zum Kartenklick), Open-Meteo Geocoding/Flood (GloFAS), Global Shipping Lanes (P. Benden), PB2002 (Bird 2003), ALERTCalifornia, NYC DOT, DDOT,
-        511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service.
+        511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service, Vegagerðin (Island), NZTA (Neuseeland), Transport for NSW, City of Calgary, DriveBC (British Columbia).
         Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.
         <a href="https://github.com/malte9799/orbis/blob/main/docs/DATENQUELLEN.md" target="_blank" rel="noopener">Alle Quellen mit Lizenzen</a> ·
         Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
@@ -567,7 +602,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (submitter?.value !== 'save') return;
       const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
       const proxy = get('adsbProxy');
-      store.setKeys({ owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), radarHost: /^https:\/\//.test(get('radarHost') ?? '') ? get('radarHost') : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
+      store.setKeys({ ...store.getKeys(), owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), ontario511: get('ontario511'), alberta511: get('alberta511'), radarHost: /^https:\/\//.test(get('radarHost') ?? '') ? get('radarHost') : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
       feedData.firms.at = 0;
       firmsOk = false;
       if (hud) applyKarte(hud.current());
@@ -1132,6 +1167,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     </div>`;
   }
 
+  /** Opens the launch tracker panel for the next launch of a pad (popup button). */
+  async function openLaunchTracker(l: Launch, lng: number, lat: number) {
+    popup?.remove();
+    flightPanel?.close();
+    shipPanel?.close();
+    let d: LaunchDetail;
+    try {
+      const list = await getLaunchDetails();
+      d = list.find((x) => x.id && x.id === l.id) ?? detailFromLaunch(l, lng, lat);
+    } catch {
+      d = detailFromLaunch(l, lng, lat);
+      toast('Startdetails gerade nicht erreichbar – Tracking mit Basisdaten.', 'error');
+    }
+    launchPanel?.open(d);
+  }
+
   function openPopup(lngLat: { lng: number; lat: number }, html: string) {
     popup?.remove();
     const node = document.createElement('div');
@@ -1307,7 +1358,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
+      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
@@ -1316,7 +1367,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         map: () => map,
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
-      shipPanel.onOpen = () => flightPanel?.close();
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
+      shipPanel.onOpen = () => {
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+      };
+      sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1420,8 +1478,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       // the 3D ship models are picked by hand (their 2D icons are stale between two updates)
       const shipHit = extras?.pickShip(e.point.x, e.point.y, e.lngLat);
+      // the same holds for the 3D train, tram, subway and bus models
+      const vehHit = extras?.pickVehicle(e.point.x, e.point.y, e.lngLat);
       const ships3d = extras?.ships3dActive();
-      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships'));
+      const veh3d = extras?.vehicles3dActive();
+      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships') && !(veh3d && (l === 'trains' || l === 'transit-veh')));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
         [e.point.x - 4, e.point.y - 4],
@@ -1433,15 +1494,31 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
-        flightPanel?.open(picked);
+        launchPanel?.close();
+        if (picked.startsWith('sonde:')) {
+          flightPanel?.close();
+          sondePanel?.open(picked.slice('sonde:'.length));
+        } else {
+          sondePanel?.close();
+          flightPanel?.open(picked);
+        }
         return;
       }
       extras?.clearSelection();
-      const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
+        launchPanel?.close();
+        sondePanel?.close();
         flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'sonde') {
+        shipPanel?.close();
+        flightPanel?.close();
+        launchPanel?.close();
+        sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
+        flightPanel?.close();
+        launchPanel?.close();
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {
         weatherPopup(extraResult.lng, extraResult.lat);
@@ -1460,7 +1537,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else {
+      } else if (isWeatherKarte(curKarte)) {
         const { lng, lat } = e.lngLat;
         const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
         weatherPopup(lng, lat, byte == null ? null : rainRate(byte));

@@ -151,6 +151,11 @@ function route() {
 window.addEventListener('hashchange', route);
 route();
 
+// launch reminders (browser notifications for tracked rockets) run independently of the active view
+import('./launch/tracker')
+  .then((m) => m.initLaunchReminders())
+  .catch(() => {});
+
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});

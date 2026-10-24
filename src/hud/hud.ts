@@ -11,6 +11,9 @@ import {
   CATALOG,
   CATS,
   catalogOf,
+  INFRA_LAYER_IDS,
+  INFRA_MENU,
+  infraCatOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
   TRAFFIC_LAYER_IDS,
@@ -98,11 +101,33 @@ const FILTERS: Record<string, { multi?: boolean; options: [string, string][]; no
     options: [['plane', 'Flugzeuge'], ['heli', 'Hubschrauber'], ['glider', 'Segelflug'], ['drone', 'Drohnen'], ['balloon', 'Ballone']],
     none: '',
   },
+  // Unteroptionen von "Blitze Live": Ton bei jedem Einschlag, schrumpfender Kreis, Detektoren, Linien und Donner
+  lightning: {
+    multi: true,
+    options: [['sound', 'Ton'], ['wave', 'Einschlagskreis'], ['detectors', 'Detektoren'], ['lines', 'Detektor-Linien'], ['thunder', 'Donner']],
+    none: '',
+  },
 };
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
   return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
+};
+
+/** volume of the strike tick sounds ("Blitze Live"): stored as a vol-n token in the layer filter */
+const BOLT_DEFAULT_VOL = 70;
+const lightningVol = (l?: KLayer): number => {
+  const t = (l?.filter ?? '').split(',').find((t) => t.startsWith('vol-'));
+  const v = t ? Number(t.slice(4)) : NaN;
+  return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : BOLT_DEFAULT_VOL;
+};
+const setLightningVol = (l: KLayer | undefined, v: number) => {
+  if (!l) return;
+  const toks = (l.filter ?? '').split(',').filter((t) => t && !t.startsWith('vol-'));
+  const n = Math.max(0, Math.min(100, Math.round(v)));
+  if (n !== BOLT_DEFAULT_VOL) toks.push(`vol-${n}`);
+  l.filter = toks.join(',') || undefined;
+  if (!l.filter) delete l.filter;
 };
 
 const ICONS = ['cloud', 'bolt', 'wave', 'train', 'plane2', 'warn', 'fire', 'mountain', 'sun', 'snow', 'pin', 'orbit'];
@@ -116,7 +141,7 @@ function suggestionsFor(k: Karte): [string, string][] {
   if (k.main && !traffic) return [['lightning', 'Gewitter und Einschläge live'], ['aq', 'Luftqualität und Pollenflug'], ['gauges', 'Pegelstände in Deutschland']];
   if (hazard) return [['radiation', 'Messnetz in ganz Europa'], ['lightning', 'Gewitter live'], ['rivers', 'Hochwasser an Flüssen']];
   if (traffic) return [['transit', 'Busse und Bahnen im Stadtverkehr'], ['railmap', 'Strecken unter den Zügen'], ['airports', 'Flughäfen mit Abflügen']];
-  return [['webcams', 'Live-Webcams weltweit'], ['lightning', 'Blitze live'], ['aircraft', 'Flugzeuge live']];
+  return [['webcams', 'Live-Webcams weltweit'], ['lightning', 'Blitze Live'], ['aircraft', 'Flugzeuge live']];
 }
 
 const isStd = (k: Karte) => !!k.std;
@@ -218,38 +243,70 @@ export function createHud(host: HudHost): Hud {
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
-   * and options); the traffic Karte switches car, train, plane and ship.
+   * and options); the traffic and infra Karten switch their categories (Auto, Energie …) whose
+   * rows toggle layers.
    */
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
       const f = mainFam(k);
       const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
-      const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
+      const isOn = (x: WxMenuItem['subs'][number]) =>
+        // "Blitze Live" is on when the live layer is active and no storm main layer is chosen
+        x.main === 'lightning'
+          ? boltOn && !f
+          : !!f && x.main === f.id && x.mainVar === curVar;
+      // option chips of "Blitze Live" as a further indented list inside the Gewitter rows;
+      // when Ton is on, a volume slider sits beside its chip
+      const bolt = k.layers.find((x) => x.id === 'lightning');
+      const boltOn = !!bolt && !bolt.hidden;
+      const chip = (o: boolean, v: string, label: string) =>
+        `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
+      const has = (v: string) => (bolt?.filter ?? '').split(',').includes(v);
+      const vol = lightningVol(bolt);
+      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', 'Ton')}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="Lautstärke der Tick-Töne"/></div>`;
+      const boltChips =
+        (has('sound') ? volRow : chip(has('sound'), 'sound', 'Ton')) +
+        chip(has('wave'), 'wave', 'Kreis') +
+        chip(has('detectors'), 'detectors', 'Detektoren') +
+        chip(has('lines'), 'lines', 'Linien') +
+        chip(has('thunder'), 'thunder', 'Donner');
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+        // when "Blitze Live" is chosen, its options follow as a nested list right underneath it
+        if (it.id === 'storm' && boltOn) {
+          const i = it.subs.findIndex((x) => x.main === 'lightning');
+          if (i > -1 && rows[i]) rows.splice(i + 1, 0, `<div class="subs">${boltChips}</div>`);
+        }
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
       return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
-        const on = it.subs.some(isOn);
-        return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
+      // the Gewitter entry stays active while the live strikes are switched on
+      const on = it.id === 'storm' ? boltOn || it.subs.some(isOn) : it.subs.some(isOn);
+      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
     const toggle = (label: string, layers: string[]) => {
       const on = layers.every(have);
       const n = on ? host.info(layers[0]).count : null;
-      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+      const c = catalogOf(layers[0]);
+      // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
-    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
-  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
   function tmodeOf(k: Karte): string {
-    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
+    const ids = k.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
+    const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
+    return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   function renderModes() {
     const r = reg('modes');
@@ -859,10 +916,13 @@ export function createHud(host: HudHost): Hud {
       const f = FILTERS[id];
       if (!l || !f) return;
       if (f.multi) {
-        const set = new Set((l.filter ?? '').split(',').filter(Boolean));
+        // extra tokens (vol-n from the volume slider) survive every chip toggle
+        const toks = (l.filter ?? '').split(',').filter(Boolean);
+        const names = new Set(f.options.map(([o]) => o));
+        const set = new Set(toks.filter((t) => names.has(t)));
         if (set.has(v)) set.delete(v);
         else set.add(v);
-        l.filter = f.options.map(([o]) => o).filter((o) => set.has(o)).join(',') || undefined;
+        l.filter = [...toks.filter((t) => !names.has(t)), ...f.options.map(([o]) => o).filter((o) => set.has(o))].join(',') || undefined;
       } else l.filter = v || undefined;
       if (!l.filter) delete l.filter;
       afterEdit();
@@ -896,30 +956,54 @@ export function createHud(host: HudHost): Hud {
     },
     wxcat: (id) => {
       const it = WX_MENU.find((x) => x.id === id);
-      const f = mainFam(view(cur));
-      const curVar = f ? (view(cur).mainVar ?? f.variants[0][0]) : '';
-      // the active entry again switches the weather layer off
-      if (!it || it.subs.some((x) => f && x.main === f.id && x.mainVar === curVar)) ACT.main('', '', new Event('click'));
-      else ACT.wxsub(id, '0', new Event('click'));
+      const k0 = view(cur);
+      const f = mainFam(k0);
+      const curVar = f ? (k0.mainVar ?? f.variants[0][0]) : '';
+      const stormFam = !!it?.subs.some((x) => f && x.main === f.id && x.mainVar === curVar);
+      const boltOn = k0.layers.some((x) => x.id === 'lightning' && !x.hidden);
+      // the active entry again switches it off (also "Blitze Live" inside Gewitter)
+      if (!it || stormFam || (id === 'storm' && boltOn)) {
+        ACT.main('', '', new Event('click'));
+        if (id === 'storm' && boltOn) edit().layers = edit().layers.filter((x) => x.id !== 'lightning');
+        afterEdit();
+      } else ACT.wxsub(id, '0', new Event('click'));
     },
     wxsub: (id, v) => {
-      const sub = WX_MENU.find((x) => x.id === id)?.subs[Number(v)];
-      if (!sub) return;
+      const it = WX_MENU.find((x) => x.id === id);
+      const sub = it?.subs[Number(v)];
+      if (!sub || !it) return;
       const d = edit();
-      if (d.main !== sub.main) {
+      if (sub.main === 'lightning') {
+        // "Blitze Live": the extra layer takes over, no weather main layer on the Karte
+        d.main = null;
+        delete d.mainVar;
         delete d.wind;
         delete d.isobars;
+        const l = d.layers.find((x) => x.id === 'lightning');
+        if (!l) {
+          d.layers.unshift({ id: 'lightning' });
+          fresh.add('lightning');
+        } else delete l.hidden;
+      } else {
+        if (d.main !== sub.main) {
+          delete d.wind;
+          delete d.isobars;
+        }
+        d.main = sub.main;
+        d.mainVar = sub.mainVar;
+        // radio: another Gewitter row replaces "Blitze Live"
+        d.layers = d.layers.filter((x) => x.id !== 'lightning');
       }
-      d.main = sub.main;
-      d.mainVar = sub.mainVar;
       afterEdit();
     },
     tcat: (id) => {
       const d = edit();
+      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
       const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.layers = d.layers.filter((l) => !ids.has(l.id));
       d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
       afterEdit();
     },
     ttog: (id) => {
@@ -1154,6 +1238,12 @@ export function createHud(host: HudHost): Hud {
       const out = t.closest('.op')?.querySelector('[data-opv]');
       if (out) out.textContent = `${v} %`;
       applyLive();
+    } else if (t.dataset.vol) {
+      const l = layerOf(t.dataset.vol);
+      if (!l) return;
+      const v = Math.max(0, Math.min(100, Number(t.value) || 0));
+      setLightningVol(l, v);
+      applyLive();
     }
   });
   /** end the inline rename of an own Karte (Enter / leaving the field saves, Esc cancels) */
@@ -1176,10 +1266,11 @@ export function createHud(host: HudHost): Hud {
     if ((e.target as HTMLElement).id === 'hud-rn') finishRename(true);
   });
 
-  // apply opacity while dragging, finish (dirty marker, persistence) when released
+  // apply opacity / volume while dragging, finish (dirty marker, persistence) when released
   const applyLive = debounce(() => host.apply(view(cur)), 30);
   root.addEventListener('change', (e) => {
-    if ((e.target as HTMLElement).dataset.op) afterEdit();
+    const d = (e.target as HTMLElement).dataset;
+    if (d.op || d.vol) afterEdit();
   });
 
   // --- reorder by dragging the grip (pointer events: mouse, pen and touch alike)
