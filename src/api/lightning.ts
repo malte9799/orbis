@@ -14,8 +14,8 @@ const MAX_STRIKES = 25000;
 const SIG_KEEP_MS = 90 * 1000;
 /** A strike "wave" (highlight circle that shrinks onto the strike) lives this long. */
 export const LIGHTNING_WAVE_MS = 5000;
-/** Thunder circles grow with the speed of sound and fade, they live this long (~31 km). */
-export const LIGHTNING_THUNDER_MS = 90 * 1000;
+/** Thunder circles grow with the speed of sound and fade; 73 s × 0.343 km/s ≈ 25 km radius. */
+export const LIGHTNING_THUNDER_MS = 73 * 1000;
 /** Speed of sound in km per second (as displayed rings, all directions). */
 export const SOUND_KM_S = 0.343;
 /** Detector lines are drawn for strikes younger than this. */
