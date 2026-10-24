@@ -3243,9 +3243,9 @@ export class ExtraLayers {
         source: 'webcams-world',
         maxzoom: CAM_DETAIL_ZOOM + 0.5,
         paint: {
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 3, 8, 10],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.2, 8, 0.6],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.6, CAM_DETAIL_ZOOM + 0.5, 0],
           'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.4)', 0.5, '#26c6da', 0.8, '#80deea', 1, '#ffffff'],
         },
       },
