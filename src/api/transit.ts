@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
-import { fetchJson } from '../util';
+import { fetchJson, fetchJsonEtag, pruneEtagCache } from '../util';
 import { viaProxy } from './proxy';
 
 // Public transport and rail – live positions.
@@ -229,10 +229,23 @@ export async function loadAmtrak(): Promise<Feature<Point>[]> {
 
 // ---------------------------------------------------------------------------
 // Autobahn GmbH: traffic reports, closures and roadworks on German motorways (keyless).
+//
+// The API has no spatial query (no bbox/area filter): report locations are only known
+// after each road's full answer arrives, so every road × kind must be fetched at least
+// once. To keep that bearable the answers are cached in the browser (Cache Storage,
+// across page loads) and revalidated via the API's ETag support: unchanged roads reply
+// with an empty 304, so only roads with actual changes transfer data again. Reports
+// also surface progressively via the `onProgress` callback as roads finish loading.
 
 export type AutobahnKind = 'warning' | 'closure' | 'roadworks';
 
 const AB = 'https://verkehr.autobahn.de/o/autobahn';
+const AB_CACHE = 'autobahn-reports-v1';
+
+export interface AutobahnProgress {
+  points: Feature<Point>[];
+  lines: Feature<LineString>[];
+}
 
 interface AbItem {
   identifier: string;
@@ -266,19 +279,27 @@ async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Prom
   return out;
 }
 
-export async function loadAutobahn(): Promise<{ points: FeatureCollection<Point>; lines: FeatureCollection<LineString> }> {
-  const { roads } = await fetchJson<{ roads: string[] }>(`${AB}/`, undefined, 20000);
-  const jobs: [string, AutobahnKind][] = [];
-  for (const r of roads) for (const k of ['warning', 'closure', 'roadworks'] as AutobahnKind[]) jobs.push([r.trim(), k]);
-  const results = await pool(jobs, 8, ([road, kind]) => fetchJson<Record<string, AbItem[]>>(`${AB}/${encodeURIComponent(road)}/services/${kind}`, undefined, 20000));
-  if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
+export async function loadAutobahn(onProgress?: (p: AutobahnProgress) => void): Promise<{ points: FeatureCollection<Point>; lines: FeatureCollection<LineString> }> {
+  const { roads } = await fetchJsonEtag<{ roads: string[] }>(`${AB}/`, AB_CACHE);
+  const names = [...new Set(roads.map((r) => r.trim()))];
+  const kinds: AutobahnKind[] = ['warning', 'closure', 'roadworks'];
+  const jobs: [string, AutobahnKind][] = names.flatMap((road) => kinds.map((kind) => [road, kind] as [string, AutobahnKind]));
   const points: Feature<Point>[] = [];
   const lines: Feature<LineString>[] = [];
   const seen = new Set<string>();
-  results.forEach((r, i) => {
-    if (r.status !== 'fulfilled') return;
-    const [road, kind] = jobs[i];
-    for (const it of r.value[kind] ?? []) {
+  let dirty = false;
+  let flushAt = 0;
+  /** Throttled: surface finished roads to the map while the sweep is still running. */
+  const flush = (force = false) => {
+    if (!onProgress || !dirty) return;
+    const t = Date.now();
+    if (!force && t < flushAt) return;
+    flushAt = t + 500;
+    dirty = false;
+    onProgress({ points: [...points], lines: [...lines] });
+  };
+  const addItems = (road: string, kind: string, items: AbItem[]) => {
+    for (const it of items) {
       if (seen.has(it.identifier)) continue;
       seen.add(it.identifier);
       const lat = Number(it.coordinate?.lat);
@@ -301,8 +322,14 @@ export async function loadAutobahn(): Promise<{ points: FeatureCollection<Point>
       if (it.geometry?.type === 'LineString' && it.geometry.coordinates.length > 1 && kind !== 'roadworks') {
         lines.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: it.geometry.coordinates }, properties: props });
       }
+      dirty = true;
     }
-  });
+    flush();
+  };
+  const results = await pool(jobs, 12, ([road, kind]) => fetchJsonEtag<Record<string, AbItem[]>>(`${AB}/${encodeURIComponent(road)}/services/${kind}`, AB_CACHE).then((value) => addItems(road, kind, value[kind] ?? [])));
+  if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
+  flush(true);
+  if (names.length) pruneEtagCache(AB_CACHE, [`${AB}/`, ...jobs.map(([road, kind]) => `${AB}/${encodeURIComponent(road)}/services/${kind}`)]);
   return { points: { type: 'FeatureCollection', features: points }, lines: { type: 'FeatureCollection', features: lines } };
 }
 
