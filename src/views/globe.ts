@@ -36,6 +36,7 @@ import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
+import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
 import { LaunchPanel } from '../launch/panel';
 import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
@@ -216,6 +217,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let firmsCount = 0;
@@ -339,8 +341,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let hud = null as Hud | null;
   const families = () => (store.getKeys().owm ? [...WX_FAMILIES, OWM_FAMILY] : WX_FAMILIES);
   const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
+  /** the Karte the HUD last applied: decides whether a map click shows the weather tooltip */
+  let curKarte: Karte | null = null;
+  /**
+   * A map click shows the place weather only on a weather Karte: the standard "Wetter" Karte
+   * or an own Karte with a weather layer (menu 'wx' with a layer, or main set). Traffic and
+   * other Karten get their own tooltips later.
+   */
+  const isWeatherKarte = (k: Karte | null): boolean => !!k && (k.menu === 'wx' || k.main != null);
 
   function applyKarte(k: Karte) {
+    curKarte = k;
     const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
@@ -394,7 +405,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     refreshHud();
   }
 
-  /** per-layer options: quake magnitude, aircraft kinds, opacity */
+  /** per-layer options: quake magnitude, aircraft kinds, lightning extras, opacity */
   function applyLayerOptions(k: Karte) {
     if (!map || !ready) return;
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
@@ -402,6 +413,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
+    const volTok = opts.find((t) => t.startsWith('vol-'));
+    const vol = volTok ? Number(volTok.slice(4)) : NaN;
+    if (extras)
+      extras.setLightningOptions({
+        sound: opts.includes('sound'),
+        wave: opts.includes('wave'),
+        detectors: opts.includes('detectors'),
+        lines: opts.includes('lines'),
+        thunder: opts.includes('thunder'),
+        volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
+      });
+    // Rohstoffe: per Komodität gefiltert (Kategorie-Filter), oder alles wenn kein Filter gesetzt
+    const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
+    if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
+    if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
@@ -1336,11 +1363,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         map: () => map,
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
       shipPanel.onOpen = () => {
         flightPanel?.close();
+        sondePanel?.close();
         launchPanel?.close();
       };
+      sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1444,8 +1474,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       // the 3D ship models are picked by hand (their 2D icons are stale between two updates)
       const shipHit = extras?.pickShip(e.point.x, e.point.y, e.lngLat);
+      // the same holds for the 3D train, tram, subway and bus models
+      const vehHit = extras?.pickVehicle(e.point.x, e.point.y, e.lngLat);
       const ships3d = extras?.ships3dActive();
-      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships'));
+      const veh3d = extras?.vehicles3dActive();
+      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships') && !(veh3d && (l === 'trains' || l === 'transit-veh')));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
         [e.point.x - 4, e.point.y - 4],
@@ -1458,15 +1491,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (picked) {
         shipPanel?.close();
         launchPanel?.close();
-        flightPanel?.open(picked);
+        if (picked.startsWith('sonde:')) {
+          flightPanel?.close();
+          sondePanel?.open(picked.slice('sonde:'.length));
+        } else {
+          sondePanel?.close();
+          flightPanel?.open(picked);
+        }
         return;
       }
       extras?.clearSelection();
-      const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
         launchPanel?.close();
+        sondePanel?.close();
         flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'sonde') {
+        shipPanel?.close();
+        flightPanel?.close();
+        launchPanel?.close();
+        sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
         flightPanel?.close();
         launchPanel?.close();
@@ -1488,7 +1533,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else {
+      } else if (isWeatherKarte(curKarte)) {
         const { lng, lat } = e.lngLat;
         const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
         weatherPopup(lng, lat, byte == null ? null : rainRate(byte));

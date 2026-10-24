@@ -30,6 +30,59 @@ export async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 
   }
 }
 
+/**
+ * Fetch JSON revalidated via ETag, cached in the browser's Cache Storage across page loads.
+ * Responses without an ETag (or without Cache Storage, e.g. private mode) fall back to plain fetch.
+ * Unchanged responses answer with an empty 304 and the stored copy is returned; if the network
+ * fails or errors, fall back to the stored copy rather than failing.
+ */
+export async function fetchJsonEtag<T>(url: string, cacheName: string, timeoutMs = 20000): Promise<T> {
+  let cache: Cache | null = null;
+  if (typeof window !== 'undefined' && 'caches' in window) {
+    try {
+      cache = await caches.open(cacheName);
+    } catch {
+      cache = null;
+    }
+  }
+  let stored: Response | null = null;
+  let init: RequestInit = {};
+  if (cache) {
+    try {
+      stored = (await cache.match(url)) ?? null;
+      if (stored?.headers.get('etag')) init = { headers: { 'If-None-Match': stored.headers.get('etag')! } };
+      else stored = null;
+    } catch {
+      stored = null;
+    }
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    if (res.status === 304 && stored) return (await stored.json()) as T;
+    if (!res.ok) throw new Error(`HTTP ${res.status} – ${url}`);
+    if (cache && res.headers.get('etag')) await cache.put(url, res.clone()).catch(() => {});
+    return (await res.json()) as T;
+  } catch (e) {
+    if (stored) return (await stored.json()) as T;
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Delete cached URLs that are no longer in `keep` (e.g. renamed sources). */
+export async function pruneEtagCache(cacheName: string, keep: Iterable<string>): Promise<void> {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  const cache = await caches.open(cacheName).catch(() => null);
+  if (!cache) return;
+  const used = new Set(keep);
+  (await cache.keys().catch(() => []))
+    .filter((req) => !used.has(req.url))
+    .forEach((req) => void cache.delete(req));
+}
+
 const de = 'de-DE';
 
 export const fmt = {
