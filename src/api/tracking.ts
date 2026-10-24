@@ -162,13 +162,22 @@ interface Ac {
 export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
 
 function aircraftKind(a: Ac): AircraftKind {
-  // ground transponders typed "TWR" (vehicles, equipment on the airfield)
-  if (a.t === 'TWR') return 'vehicle';
-  switch (a.category) {
-    // surface emergency / service vehicles on the airfield
-    case 'C1':
-    case 'C2':
-      return 'vehicle';
+  const hex = (a.hex ?? '').toUpperCase();
+  const flight = (a.flight ?? '').trim().toUpperCase();
+  const type = (a.t ?? '').trim().toUpperCase();
+  const desc = (a.desc ?? '').trim().toUpperCase();
+  const cat = a.category ?? '';
+  // Ground transponders and airfield vehicles (e.g. Follow-Me, Pushback Tugs, Service Vehicles)
+  if (
+    type === 'TWR' || type === 'GND' || type === 'VEH' || type === 'CAR' ||
+    /^C[0-2]$/.test(cat) ||
+    /^(FM\d*|FOLLOW\w*|TUG\d*|PUSH\d*|MARSH\w*|SWEEP\w*|APRON\w*|GATE\w*|FEUER\w*|FIRE\w*|RAMP\w*)/i.test(flight) ||
+    /FOLLOW|PUSHBACK|TUG|SWEEPER|SURFACE VEHICLE|BODENFAHRZEUG/i.test(desc) ||
+    hex === '3C41FA' || hex === '3C41D0'
+  ) {
+    return 'vehicle';
+  }
+  switch (cat) {
     case 'A7':
       return 'heli';
     case 'B1':

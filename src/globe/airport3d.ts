@@ -456,10 +456,19 @@ export class Airport3D {
       const p = f.properties as Record<string, unknown>;
       const [lon, lat] = f.geometry.coordinates;
       const kind = String(p.kind);
-      if (kind !== 'plane' && kind !== 'heli') continue;
-      const ground = !!p.ground;
+      if (kind !== 'plane' && kind !== 'heli' && kind !== 'vehicle') continue;
+      const ground = kind === 'vehicle' ? true : !!p.ground;
       const icao = String(p.icao ?? '');
-      const model: PlaneModel = kind === 'heli' ? 'heli' : p.cat === 'A5' || WIDE.has(icao) ? 'wide' : 'narrow';
+      const cs = String(p.callsign ?? '').toUpperCase();
+      let model: PlaneModel;
+      if (kind === 'vehicle') {
+        const isTug = /TUG|PUSH|SCHLEPP|TRACTOR/i.test(cs);
+        model = isTug ? 'tug' : 'car';
+      } else if (kind === 'heli') {
+        model = 'heli';
+      } else {
+        model = p.cat === 'A5' || WIDE.has(icao) ? 'wide' : 'narrow';
+      }
       const speedMs = p.speedKmh != null ? Number(p.speedKmh) / 3.6 : 0;
       reports.push({
         hex: String(p.hex),

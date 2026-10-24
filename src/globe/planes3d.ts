@@ -8,7 +8,7 @@ import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from
 // aircraft: its trail at the real altitude, a faint wall from the trail down to the ground,
 // a thin line from the aircraft to the ground and its shadow.
 
-export type PlaneModel = 'narrow' | 'wide' | 'heli';
+export type PlaneModel = 'narrow' | 'wide' | 'heli' | 'car' | 'tug';
 
 export interface PlaneReport {
   hex: string;
@@ -286,8 +286,126 @@ function heliParts(): HeliGeos {
   };
 }
 
-let geoCache: { narrow: THREE.BufferGeometry; wide: THREE.BufferGeometry; heli: HeliGeos } | null = null;
-const geos = () => (geoCache ??= { narrow: airliner(1), wide: airliner(1.68), heli: heliParts() });
+/** Parts of airport ground vehicles: body, windshield/windows, wheels, lightbar/beacon. */
+interface VehicleGeos {
+  body: THREE.BufferGeometry;
+  glass: THREE.BufferGeometry;
+  wheels: THREE.BufferGeometry;
+  beacon: THREE.BufferGeometry;
+}
+
+const CAR_K = 1.35;
+function followMeCarParts(): VehicleGeos {
+  const merge = (list: THREE.BufferGeometry[]) =>
+    mergeGeometries(
+      list.map((g) => {
+        const n = g.index ? g.toNonIndexed() : g;
+        n.deleteAttribute('uv');
+        return n;
+      }),
+    )!.scale(CAR_K, CAR_K, CAR_K);
+
+  // Body: chassis, hood, rear box, bumpers, Follow-Me sign frame
+  const bodyParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(2.1, 4.8, 0.75).translate(0, 0, 0.78),
+    new THREE.BoxGeometry(2.0, 1.5, 0.35).translate(0, 1.55, 1.2),
+    new THREE.BoxGeometry(2.05, 1.9, 0.85).translate(0, -1.35, 1.4),
+    new THREE.BoxGeometry(2.2, 0.25, 0.35).translate(0, 2.45, 0.65),
+    new THREE.BoxGeometry(2.2, 0.25, 0.35).translate(0, -2.45, 0.65),
+    new THREE.BoxGeometry(1.4, 0.16, 0.52).translate(0, -0.6, 2.4),
+  ];
+
+  // Windshield & windows
+  const glassParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(1.92, 1.85, 0.82).translate(0, 0.3, 1.55),
+  ];
+
+  // 4 Wheels
+  const wheelParts: THREE.BufferGeometry[] = [];
+  for (const side of [-1, 1]) {
+    wheelParts.push(
+      new THREE.CylinderGeometry(0.44, 0.44, 0.32, 10).rotateZ(Math.PI / 2).translate(side * 1.08, 1.45, 0.44),
+      new THREE.CylinderGeometry(0.44, 0.44, 0.32, 10).rotateZ(Math.PI / 2).translate(side * 1.08, -1.45, 0.44),
+    );
+  }
+
+  // Roof amber lightbar & Follow-Me display screen
+  const beaconParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(1.5, 0.35, 0.18).translate(0, 0.5, 2.1),
+    new THREE.BoxGeometry(1.28, 0.12, 0.42).translate(0, -0.6, 2.4),
+  ];
+
+  return {
+    body: merge(bodyParts),
+    glass: merge(glassParts),
+    wheels: merge(wheelParts),
+    beacon: merge(beaconParts),
+  };
+}
+
+const TUG_K = 1.35;
+function pushbackTugParts(): VehicleGeos {
+  const merge = (list: THREE.BufferGeometry[]) =>
+    mergeGeometries(
+      list.map((g) => {
+        const n = g.index ? g.toNonIndexed() : g;
+        n.deleteAttribute('uv');
+        return n;
+      }),
+    )!.scale(TUG_K, TUG_K, TUG_K);
+
+  // Heavy low pushback tractor chassis, ballast sides, hitches
+  const bodyParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(2.7, 6.2, 0.85).translate(0, 0, 0.9),
+    new THREE.BoxGeometry(2.9, 4.2, 0.6).translate(0, 0, 0.8),
+    new THREE.BoxGeometry(0.7, 0.6, 0.4).translate(0, 3.2, 0.65),
+    new THREE.BoxGeometry(0.7, 0.6, 0.4).translate(0, -3.2, 0.65),
+    new THREE.BoxGeometry(2.9, 1.0, 0.3).translate(0, 2.1, 0.55),
+    new THREE.BoxGeometry(2.9, 1.0, 0.3).translate(0, -2.1, 0.55),
+  ];
+
+  // Low driver cab
+  const glassParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(2.0, 2.0, 0.85).translate(0, 0.6, 1.6),
+  ];
+
+  // 4 massive heavy wheels
+  const wheelParts: THREE.BufferGeometry[] = [];
+  for (const side of [-1, 1]) {
+    wheelParts.push(
+      new THREE.CylinderGeometry(0.62, 0.62, 0.52, 12).rotateZ(Math.PI / 2).translate(side * 1.38, 1.7, 0.62),
+      new THREE.CylinderGeometry(0.62, 0.62, 0.52, 12).rotateZ(Math.PI / 2).translate(side * 1.38, -1.7, 0.62),
+    );
+  }
+
+  // Safety amber lightbar on cab roof
+  const beaconParts: THREE.BufferGeometry[] = [
+    new THREE.BoxGeometry(1.6, 0.35, 0.18).translate(0, 0.6, 2.1),
+  ];
+
+  return {
+    body: merge(bodyParts),
+    glass: merge(glassParts),
+    wheels: merge(wheelParts),
+    beacon: merge(beaconParts),
+  };
+}
+
+let geoCache: {
+  narrow: THREE.BufferGeometry;
+  wide: THREE.BufferGeometry;
+  heli: HeliGeos;
+  car: VehicleGeos;
+  tug: VehicleGeos;
+} | null = null;
+const geos = () =>
+  (geoCache ??= {
+    narrow: airliner(1),
+    wide: airliner(1.68),
+    heli: heliParts(),
+    car: followMeCarParts(),
+    tug: pushbackTugParts(),
+  });
 
 function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
   const color = emergency ? RED : YELLOW;
@@ -306,6 +424,21 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
     tail.add(new THREE.Mesh(g.heli.tail, mat));
     group.add(main, tail);
     group.userData = { main, tail };
+    return group;
+  }
+  if (model === 'car' || model === 'tug') {
+    const v = model === 'car' ? g.car : g.tug;
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide });
+    const glassMat = new THREE.MeshLambertMaterial({ color: 0x37474f, side: THREE.DoubleSide });
+    const wheelMat = new THREE.MeshLambertMaterial({ color: 0x1f232b, side: THREE.DoubleSide });
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff9900, transparent: true, opacity: 0.9 });
+    group.add(new THREE.Mesh(v.body, bodyMat));
+    group.add(new THREE.Mesh(v.glass, glassMat));
+    group.add(new THREE.Mesh(v.wheels, wheelMat));
+    const beaconMesh = new THREE.Mesh(v.beacon, beaconMat);
+    group.add(beaconMesh);
+    group.userData = { beacon: beaconMesh };
     return group;
   }
   return new THREE.Mesh(g[model], mat);
@@ -794,6 +927,13 @@ export class PlanesLayer implements CustomLayerInterface {
           const phase = (p.hex.charCodeAt(0) + p.hex.charCodeAt(p.hex.length - 1)) % 7;
           main.rotation.z = now * 0.011 + phase;
           tail.rotation.x = now * 0.025 + phase;
+        } else if (p.model === 'car' || p.model === 'tug') {
+          const { beacon } = p.obj.userData as { beacon?: THREE.Mesh };
+          if (beacon) {
+            const phase = (p.hex.charCodeAt(0) + p.hex.charCodeAt(p.hex.length - 1)) % 5;
+            const flash = Math.sin(now * 0.012 + phase) > 0.2 ? 1.0 : 0.25;
+            (beacon.material as THREE.MeshBasicMaterial).opacity = flash;
+          }
         }
         this.syncShadow(p, air, elev, s, rot, m);
         this.syncDrop(p, air, elev);
@@ -850,7 +990,9 @@ export class PlanesLayer implements CustomLayerInterface {
       }
       const callsign = String(p.props.callsign ?? '');
       const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
-      const text = icao ? `${callsign}\n${icao}` : callsign;
+      // vehicles: always show callsign as label (their ID is all they have)
+      const isVehicle = p.model === 'car' || p.model === 'tug';
+      const text = isVehicle ? callsign : (icao ? `${callsign}\n${icao}` : callsign);
       if (el.textContent !== text) el.textContent = text;
       el.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
       seen.add(p.hex);
@@ -931,7 +1073,8 @@ export class PlanesLayer implements CustomLayerInterface {
     if (!p.shadow || p.shadowModel !== p.model) {
       p.shadow?.parent?.remove(p.shadow);
       const g = geos();
-      p.shadow = new THREE.Mesh(p.model === 'heli' ? g.heli.body : g[p.model], this.mats.shadow);
+      const shadowGeo = p.model === 'heli' ? g.heli.body : p.model === 'car' ? g.car.body : p.model === 'tug' ? g.tug.body : g[p.model];
+      p.shadow = new THREE.Mesh(shadowGeo, this.mats.shadow);
       p.shadow.matrixAutoUpdate = false;
       p.shadow.renderOrder = 1;
       p.shadow.frustumCulled = false;

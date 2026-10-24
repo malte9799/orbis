@@ -31,12 +31,15 @@ export type ExtraGlyph =
   | 'bolt'
   | 'airport'
   | 'vessel'
-  | 'radio';
+  | 'radio'
+  | 'vehicle';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
 export const SILHOUETTES: Partial<Record<ExtraGlyph | 'rotor', string>> = {
   plane: 'M12 2c.8 0 1.3.8 1.3 1.8v5.4l7.7 4.6v2l-7.7-2.4v4.8l2.2 1.6v1.7L12 20.6l-3.5 1v-1.7l2.2-1.6v-4.8L3 15.8v-2l7.7-4.6V3.8C10.7 2.8 11.2 2 12 2z',
+  // vehicle seen from above (hood forward/north)
+  vehicle: 'M7 3h10c1.2 0 2 .8 2.2 2l1 5.5c.1.4.1.8.1 1.2v8.5c0 .9-.7 1.8-1.8 1.8h-1c-.9 0-1.5-.7-1.5-1.5V19H8v1.5C8 21.3 7.4 22 6.5 22h-1C4.7 22 4 21.1 4 20.2V11.7c0-.4 0-.8.1-1.2l1-5.5C5.3 3.8 6.1 3 7 3zm1 3.5l-.6 3.5h9.2l-.6-3.5H8zm-1.5 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm13 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',
   // seen from above, the rotor hub in the icon centre: cabin, tail boom and stabiliser (the blades are `rotor`, turned separately)
   heli: 'M12 8.6a2.8 4 0 1 0 0 8a2.8 4 0 1 0 0-8zM11.25 16h1.5v7h-1.5zM9.8 21.6h4.4V23H9.8z',
   rotor: 'M17.87 18.86 L18.86 17.87 L6.13 5.14 L5.14 6.13zM5.14 17.87 L6.13 18.86 L18.86 6.13 L17.87 5.14z',
@@ -117,6 +120,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
     { mode: 'fill', d: 'M4 9h16a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 20 21H4a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 4 9z' },
     { mode: 'stroke', width: 2, d: 'M6 8.5L17 3.5' },
   ],
+  vehicle: [{ mode: 'fill', d: SILHOUETTES.vehicle! }],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px
