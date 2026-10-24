@@ -429,14 +429,16 @@
   background: rgba(255, 255, 255, 0.03);
   text-decoration: none;
 }
-.fp-photo-link img {
+.fp-photo-link img,
+.fp-photo-link svg {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   transition: transform 0.25s ease;
 }
-.fp-photo-link:hover img {
+.fp-photo-link:hover img,
+.fp-photo-link:hover svg {
   transform: scale(1.03);
 }
 .fp-photo-credit {
@@ -448,6 +450,12 @@
   color: var(--muted);
   background: rgba(13, 18, 38, 0.9);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.fp-photo-credit span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .fp-photo-credit a {
   color: var(--muted);

@@ -410,6 +410,14 @@ interface SondeTelemetry {
   vel_v?: number;
   vel_h?: number;
   frequency?: number;
+  heading?: number;
+  manufacturer?: string;
+  frame?: number;
+  time_received?: string;
+  uploader_callsign?: string;
+  uploader_antenna?: string;
+  software_name?: string;
+  software_version?: string;
 }
 
 export async function loadSondes(): Promise<FeatureCollection<Point>> {
@@ -418,16 +426,31 @@ export async function loadSondes(): Promise<FeatureCollection<Point>> {
   for (const s of Object.values(data)) {
     if (s.lat == null || s.lon == null) continue;
     const rising = (s.vel_v ?? 0) > 0.5;
+    const falling = (s.vel_v ?? 0) < -0.5;
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
       properties: {
         serial: s.serial,
+        // the label above the 3D model is the serial itself (like a callsign)
+        callsign: s.serial,
         title: `Wetterballon ${s.serial}`,
-        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${fmt.num(s.alt, 0)} m · ${rising ? 'steigt' : (s.vel_v ?? 0) < -0.5 ? 'fällt (Fallschirm)' : 'gelandet'}`,
+        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${fmt.num(s.alt, 0)} m · ${rising ? 'steigt' : falling ? 'fällt (Fallschirm)' : 'gelandet'}`,
         date: s.datetime,
         url: `https://sondehub.org/#!mt=Mapnik&f=${encodeURIComponent(s.serial)}&q=${encodeURIComponent(s.serial)}`,
         altM: Math.round(s.alt),
+        type: s.type ?? '',
+        subtype: s.subtype ?? '',
+        manufacturer: s.manufacturer ?? '',
+        frequency: s.frequency ?? null,
+        heading: s.heading ?? null,
+        velV: s.vel_v ?? null,
+        velH: s.vel_h ?? null,
+        timeReceived: s.time_received ?? '',
+        frame: s.frame ?? null,
+        uploader: s.uploader_callsign ?? '',
+        antenna: s.uploader_antenna ?? '',
+        software: [s.software_name, s.software_version].filter(Boolean).join(' '),
       },
     });
   }

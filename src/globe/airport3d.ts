@@ -489,6 +489,52 @@ export class Airport3D {
     if (this.mode() !== 'off') this.map.triggerRepaint();
   }
 
+  /**
+   * Live radiosonde positions (SondeHub): they fly along with the aircraft as pink balloon
+   * models, keyed `sonde:<serial>` so they can never collide with an ADS-B hex.
+   */
+  feedSondes(fc: FeatureCollection<Point>) {
+    if (!this.planesOn) return;
+    const reports: PlaneReport[] = [];
+    for (const f of fc.features) {
+      const p = f.properties as Record<string, unknown>;
+      const serial = String(p.serial ?? '');
+      if (!serial) continue;
+      const [lon, lat] = f.geometry.coordinates;
+      const altM = Number(p.altM) || 0;
+      const vs = p.velV != null ? Number(p.velV) : 0;
+      // a sonde that has landed sits at the ground until it vanishes from the feed
+      const landed = altM < 30 && Math.abs(vs) < 1;
+      reports.push({
+        hex: `sonde:${serial}`,
+        lon,
+        lat,
+        altM,
+        vsMs: landed ? 0 : vs,
+        track: Number(p.heading) || 0,
+        speedMs: landed ? 0 : Number(p.velH) || 0,
+        ground: landed,
+        model: 'sonde',
+        emergency: false,
+        props: { ...p },
+      });
+    }
+    this.tracker.feed(reports, performance.now());
+    if (this.mode() !== 'off') this.map.triggerRepaint();
+  }
+
+  /** Take the radiosondes out of the 3D tracker (the Wetterballons layer is off). */
+  clearSondes() {
+    this.tracker.drop('sonde:');
+  }
+
+  /** Is this radiosonde drawn as a 3D model (so its 2D symbol should disappear)? Like `owns()`. */
+  ownsSonde(serial: string) {
+    if (!this.tracker.planes.has(`sonde:${serial}`)) return false;
+    const mode = this.mode();
+    return mode === '3d' || (mode === 'flat' && !this.iconsOn);
+  }
+
   private updateLabels(planes: PlaneState[]) {
     const features: Feature<Point>[] = planes.map((p) => ({
       type: 'Feature',
@@ -517,6 +563,8 @@ export class Airport3D {
 
   /** Route of the selected aircraft by its callsign (adsbdb) → grey dashed line to the airports. */
   private async fetchRoute(hex: string) {
+    // radiosondes get no airport route (their callsign is the SondeHub serial)
+    if (hex.startsWith('sonde:')) return;
     // a found route is kept; "unknown" (or a failed request) is asked again after two minutes
     let known = this.routes.get(hex);
     if (!known || (!known.raw && Date.now() - known.at > 120_000)) {

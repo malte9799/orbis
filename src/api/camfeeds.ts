@@ -2,10 +2,17 @@ import type { Feature, Point } from 'geojson';
 import { viaProxy } from './proxy';
 import { store } from '../store';
 import { fetchJson } from '../util';
+import { fetchText } from './data';
 
 // Public traffic, weather and wildfire cameras from open government / operator feeds.
 // Each feed is loaded once its region comes into view (and refreshed every 10 minutes);
 // still images get a cache-buster when the popup opens.
+
+/** First child text of `tag` in a simple, flat XML fragment (also usable under Node). */
+const xmlTag = (s: string, tag: string) => s.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`))?.[1]?.trim() ?? '';
+
+/** All blocks `<tag …>…</tag>` – flat, so only for elements that never nest themselves. */
+const xmlBlocks = (s: string, tag: string) => s.match(new RegExp(`<${tag}(?:\\s[^>]*)??>[\\s\\S]*?</${tag}>`, 'g')) ?? [];
 
 export interface CamFeed {
   id: string;
@@ -147,8 +154,11 @@ export const CAM_FEEDS: CamFeed[] = [
       label: host === '511on.ca' ? '511 Ontario' : '511 Alberta',
       bbox: host === '511on.ca' ? [-95.2, 41.6, -74.3, 56.9] : [-120.0, 49.0, -110.0, 60.0],
       async load() {
+        // beide Feeds verlangen inzwischen einen kostenlosen Developer-Key (10 Aufrufe/min)
+        const key = store.getKeys()[host === '511on.ca' ? 'ontario511' : 'alberta511'];
+        const keyParam = key ? `&key=${encodeURIComponent(key)}` : '';
         const list = await fetchJson<{ Id: string | number; Roadway?: string; Location?: string; Latitude: number; Longitude: number; Views?: { Url: string; Status?: string; Description?: string }[] }[]>(
-          viaProxy(`https://${host}/api/v2/get/cameras?format=json`),
+          viaProxy(`https://${host}/api/v2/get/cameras?format=json${keyParam}`),
           undefined,
           30000,
         );
@@ -161,6 +171,135 @@ export const CAM_FEEDS: CamFeed[] = [
       },
     }),
   ),
+  {
+    id: 'is',
+    label: 'Vegagerðin (Island)',
+    bbox: [-25.6, 63.2, -13.0, 66.8],
+    async load() {
+      const list = await fetchJson<{ Maelist_nr: number; Myndavel: string; Vegheiti?: string; NrVegur?: string; Skyring?: string; Slod: string; Breidd: number; Lengd: number }[]>(
+        'https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1',
+        undefined,
+        30000,
+      );
+      return list.flatMap((c) => {
+        const id = c.Slod?.split('/').pop();
+        if (!id || !ok(c.Lengd, c.Breidd)) return [];
+        return [
+          cam(c.Lengd, c.Breidd, {
+            id: `is-${id}`,
+            title: c.Myndavel,
+            subtitle: ['Straßenwetterkamera Island', c.Vegheiti || `Route ${c.NrVegur}`].filter(Boolean).join(' · '),
+            image: c.Slod,
+            url: c.Slod,
+            source: 'Vegagerðin (Icelandic Road and Coastal Administration)',
+          }),
+        ];
+      });
+    },
+  },
+  {
+    id: 'nz',
+    label: 'NZTA (Neuseeland)',
+    bbox: [165.9, -47.7, 179.2, -34.0],
+    async load() {
+      const xml = await fetchText('https://trafficnz.info/service/traffic/rest/4/cameras/all', 30000);
+      return xmlBlocks(xml, 'camera').flatMap((b) => {
+        const lat = Number(xmlTag(b, 'latitude'));
+        const lon = Number(xmlTag(b, 'longitude'));
+        const id = xmlTag(b, 'id');
+        const img = xmlTag(b, 'imageUrl');
+        if (!ok(lon, lat) || !img || xmlTag(b, 'offline') === 'true') return [];
+        return [
+          cam(lon, lat, {
+            id: `nz-${id}`,
+            title: xmlTag(b, 'name') || xmlTag(b, 'description') || 'Verkehrskamera Neuseeland',
+            subtitle: [xmlTag(b, 'highway'), xmlTag(b, 'direction')].filter(Boolean).join(' · ') || 'Verkehrskamera Neuseeland',
+            image: `https://trafficnz.info${img}`,
+            url: `https://trafficnz.info${xmlTag(b, 'viewUrl') || img}`,
+            source: 'NZ Transport Agency / Waka Kotahi',
+          }),
+        ];
+      });
+    },
+  },
+  {
+    id: 'drivebc',
+    label: 'DriveBC (British Columbia)',
+    bbox: [-139.2, 48.1, -113.9, 60.1],
+    async load() {
+      const list = await fetchJson<{ id: number; name?: string; caption?: string; credit?: string; highway_display?: string; is_on?: boolean; location?: { coordinates: number[] } }[]>(
+        'https://www.drivebc.ca/api/webcams/',
+        undefined,
+        40000,
+      );
+      return list
+        .filter((c) => Number.isFinite(c.id) && ok(c.location?.coordinates?.[0], c.location?.coordinates?.[1]) && c.is_on !== false)
+        .map((c) =>
+          cam(c.location!.coordinates[0], c.location!.coordinates[1], {
+            id: `bc-${c.id}`,
+            title: c.name ?? 'Kamera',
+            subtitle: [c.caption, c.highway_display ? `Highway ${c.highway_display}` : '', c.credit].filter(Boolean).join(' · '),
+            image: `https://www.drivebc.ca/images/${c.id}.jpg`,
+            url: `https://www.drivebc.ca/images/${c.id}.jpg`,
+            source: 'DriveBC (Open Government Licence – British Columbia)',
+          }),
+        );
+    },
+  },
+  {
+    id: 'nsw',
+    label: 'TfNSW Live Traffic (NSW, Australien)',
+    bbox: [140.9, -38.1, 153.8, -28.2],
+    async load() {
+      const fc = await fetchJson<{ features: { id: string; geometry: { coordinates: number[] }; properties?: { title?: string; view?: string; href?: string } }[] }>(
+        'https://data.livetraffic.com/cameras/traffic-cam.json',
+        undefined,
+        30000,
+      );
+      return (fc.features ?? []).flatMap((f) => {
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        const href = f.properties?.href;
+        if (!ok(lon, lat) || !href?.startsWith('http')) return [];
+        return [
+          cam(lon!, lat!, {
+            id: `nsw-${f.id}`,
+            title: f.properties?.title ?? 'Verkehrskamera NSW',
+            subtitle: f.properties?.view,
+            image: href,
+            url: href,
+            source: 'Transport for NSW (CC BY 4.0)',
+          }),
+        ];
+      });
+    },
+  },
+  {
+    id: 'calgary',
+    label: 'Calgary (Alberta)',
+    bbox: [-114.65, 50.65, -113.55, 51.35],
+    async load() {
+      const list = await fetchJson<{ camera_location?: string; quadrant?: string; camera_url?: { url?: string }; point?: { coordinates?: number[] } }[]>(
+        'https://data.calgary.ca/resource/k7p9-kppz.json',
+        undefined,
+        20000,
+      );
+      return list.flatMap((c) => {
+        const [lon, lat] = c.point?.coordinates ?? [];
+        const img = (c.camera_url?.url ?? '').replace(/^http:\/\//, 'https://');
+        if (!ok(lon, lat) || !img.startsWith('https://')) return [];
+        return [
+          cam(lon!, lat!, {
+            id: `cal-${img.split('/').pop()}`,
+            title: `${c.camera_location ?? 'Kamera'}${c.quadrant ? `  (${c.quadrant})` : ''}`,
+            subtitle: 'Verkehrskamera Calgary',
+            image: img,
+            url: img,
+            source: 'City of Calgary – Open Data',
+          }),
+        ];
+      });
+    },
+  },
   {
     id: 'alertca',
     label: 'ALERTCalifornia (Waldbrandkameras)',
@@ -224,8 +363,8 @@ export const CAM_FEEDS: CamFeed[] = [
   },
 ];
 
-/** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML). */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps']);
+/** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML); images always live. */
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();

@@ -1,10 +1,10 @@
 import { store } from '../store';
 import { BASES, type BaseId } from '../globe/style';
-import { catalogOf, TRAFFIC_LAYER_IDS } from './catalog';
+import { catalogOf, MENU_LAYERS } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
-// ordered list of overlay layers. Orbis ships four standard Karten; users can change any of them
+// ordered list of overlay layers. Orbis ships three standard Karten; users can change any of them
 // (the change lives in a per-Karte draft) and save the result as their own Karte.
 
 export interface KLayer {
@@ -46,9 +46,10 @@ export interface Karte {
   buildings3d?: boolean;
   /**
    * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
-   * switches the traffic modes. What the menu picks is remembered but never counts as a change.
+   * and 'infra' switch the categories of their menu. What the menu picks is remembered but never
+   * counts as a change.
    */
-  menu?: 'wx' | 'traffic';
+  menu?: 'wx' | 'traffic' | 'infra';
   /** traffic menu: id of the chosen category ('' = none) */
   tmode?: string;
   layers: KLayer[];
@@ -68,6 +69,11 @@ export const STANDARD: Karte[] = [
     id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',
     base: 'dark', labels: true, night: true, main: null,
     tmode: 'auto', layers: [{ id: 'roadnet' }],
+  },
+  {
+    id: 'infra', name: 'Infrastruktur', icon: 'power', color: '#00bfa5', std: true, menu: 'infra',
+    base: 'dark', labels: true, night: true, main: null,
+    tmode: 'energie', layers: [],
   },
 ];
 
@@ -99,7 +105,7 @@ const wxState = (k: Karte) => [k.main, k.mainVar ?? '', !!k.wind, !!k.isobars];
 export function signature(k: Karte): string {
   return JSON.stringify([
     k.name, k.icon, k.color, k.base, ...(k.menu === 'wx' ? [] : wxState(k)),
-    k.layers.filter((l) => k.menu !== 'traffic' || !TRAFFIC_LAYER_IDS.has(l.id)).map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
+    k.layers.filter((l) => !k.menu || !MENU_LAYERS[k.menu].has(l.id)).map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
   ]);
 }
 
