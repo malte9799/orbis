@@ -245,7 +245,9 @@ export function createHud(host: HudHost): Hud {
     const toggle = (label: string, layers: string[]) => {
       const on = layers.every(have);
       const n = on ? host.info(layers[0]).count : null;
-      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+      const c = catalogOf(layers[0]);
+      // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
     const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
     return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
