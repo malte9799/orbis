@@ -327,8 +327,6 @@ export type ClickResult =
 /** What the ship panel shows about one vessel. */
 export interface ShipInfo {
   ship: Ship;
-  /** speeds (kn) of the reports seen so far */
-  speeds: number[];
   /** displayed position */
   lon: number;
   lat: number;
@@ -354,8 +352,6 @@ export interface FlightInfo {
   source: string;
   /** departure / destination (adsbdb); null: unknown, undefined: still loading */
   route?: FlightRoute | null;
-  /** altitudes (m) along the trail seen so far */
-  profile?: number[];
 }
 
 interface Info {
@@ -2044,7 +2040,6 @@ export class ExtraLayers {
       lat: live ? live.lat : lat,
       source: this.lastAircraft?.source ?? '',
       route: this.airport3d?.route(hex),
-      profile: live?.trail.map((t) => t[2]),
     };
   }
 
@@ -2531,7 +2526,7 @@ export class ExtraLayers {
     const ship = this.shipsAll.get(mmsi);
     if (!ship) return null;
     const pos = this.ships3d?.position(mmsi);
-    return { ship, speeds: this.ships3d?.history(mmsi) ?? [], lon: pos?.[0] ?? ship.lon, lat: pos?.[1] ?? ship.lat };
+    return { ship, lon: pos?.[0] ?? ship.lon, lat: pos?.[1] ?? ship.lat };
   }
 
   private mergeShips() {

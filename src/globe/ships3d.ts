@@ -36,8 +36,6 @@ interface ShipState {
   /** when the last position report arrived (performance.now) */
   pulseAt?: number;
   pulse?: THREE.Mesh;
-  /** speed over ground (kn) of the last reports */
-  hist: number[];
   /** screen position (CSS px) and radius of the model in the last drawn frame, for picking */
   sx: number;
   sy: number;
@@ -244,15 +242,11 @@ export class ShipsLayer implements CustomLayerInterface {
       const prev = this.ships.get(ship.mmsi);
       const rot = ship.heading >= 0 && ship.heading < 360 ? ship.heading : ship.cog;
       if (prev) {
-        if (prev.ship.at !== ship.at) {
-          prev.pulseAt = now;
-          prev.hist.push(ship.sog);
-          if (prev.hist.length > 60) prev.hist.shift();
-        }
+        if (prev.ship.at !== ship.at) prev.pulseAt = now;
         prev.ship = ship;
         prev.seen = now;
       } else {
-        this.ships.set(ship.mmsi, { ship, dLon: ship.lon, dLat: ship.lat, dRot: rot, seen: now, pulseAt: now, hist: [ship.sog], sx: -1e4, sy: -1e4, rpx: 0 });
+        this.ships.set(ship.mmsi, { ship, dLon: ship.lon, dLat: ship.lat, dRot: rot, seen: now, pulseAt: now, sx: -1e4, sy: -1e4, rpx: 0 });
       }
     }
     for (const [k, s] of this.ships) {
@@ -293,11 +287,6 @@ export class ShipsLayer implements CustomLayerInterface {
     this.labelBox?.remove();
     this.labels.clear();
     this.ships.clear();
-  }
-
-  /** Speeds (kn) of the reports seen so far. */
-  history(mmsi: number): number[] {
-    return this.ships.get(mmsi)?.hist ?? [];
   }
 
   /** Displayed (smoothed) position of a ship, if tracked. */

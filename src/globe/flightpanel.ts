@@ -2,7 +2,7 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
-import { category, distKm, duration, profile, routeHero, tile } from './sidepanel';
+import { category, distKm, duration, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected aircraft (everything ADS-B delivers) and
@@ -162,6 +162,6 @@ export class FlightPanel {
       category('position', 'Position und Signal', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Squawk', escapeHtml(i.squawk || '–')], ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner']], this.open_);
     const source = i.source ? `${escapeHtml(i.source)} · ` : '';
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> (Schätzung nach Callsign, gestrichelt auf der Karte) · ' : ''}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
-    this.body.innerHTML = hero + profile('Höhenprofil', i.profile ?? [], COLOR, 'Das Profil entsteht, sobald das Flugzeug eine Weile beobachtet wurde.') + tiles + cats + src;
+    this.body.innerHTML = hero + tiles + cats + src;
   }
 }

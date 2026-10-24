@@ -3,7 +3,7 @@ import type { ShipInfo } from './extras';
 import { SHIP_COLORS, SHIP_LABELS, shipCat } from '../api/transport';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
-import { category, profile, routeHero, tile } from './sidepanel';
+import { category, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected ship (AIS), same layout as the flight panel.
@@ -129,6 +129,6 @@ export class ShipPanel {
       category('ship', 'Schiff', [['Typ', escapeHtml(SHIP_LABELS[cat])], ['Rufzeichen', escapeHtml(s.callSign || '–')], ['MMSI', String(s.mmsi)], ['Ziel', escapeHtml(dest || '–')]], this.open_) +
       category('position', 'Position', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Geschwindigkeit', `${fmt.num(s.sog * 1.852, 0)} km/h`]], this.open_);
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(s.source)} · <a href="https://www.marinetraffic.com/de/ais/details/ships/mmsi:${s.mmsi}" target="_blank" rel="noopener noreferrer">Auf MarineTraffic ansehen ↗</a></div></details>`;
-    this.body.innerHTML = hero + profile('Tempo über die letzten Meldungen (kn)', i.speeds, COLOR, 'Der Verlauf entsteht, sobald weitere Meldungen eintreffen.') + tiles + cats + src;
+    this.body.innerHTML = hero + tiles + cats + src;
   }
 }
