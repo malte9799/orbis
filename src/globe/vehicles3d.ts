@@ -120,11 +120,13 @@ const merge = (parts: THREE.BufferGeometry[]) =>
     }),
   )!;
 
-/** Box: (x, y) centre, z = bottom; an optional tilt around x slants the top towards the nose. */
+/** Box: (x, y) centre, z = bottom; an optional tilt around x slants the roof. After tilting,
+ * the lowest point of the part sits back on z (otherwise the outer edge would dig into the ground). */
 function box(x: number, y: number, z: number, w: number, l: number, h: number, color: number, tilt = 0): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, l, h);
   if (tilt) g.rotateX(tilt);
-  g.translate(x, y, z + h / 2);
+  g.computeBoundingBox();
+  g.translate(x, y, z - g.boundingBox!.min.z);
   return paint(g, color);
 }
 
