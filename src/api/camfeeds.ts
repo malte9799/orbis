@@ -11,9 +11,6 @@ import { fetchText } from './data';
 /** First child text of `tag` in a simple, flat XML fragment (also usable under Node). */
 const xmlTag = (s: string, tag: string) => s.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`))?.[1]?.trim() ?? '';
 
-/** Value of an attribute, e.g. the tag string `<predefinedLocation id="…">`. */
-const xmlAttr = (s: string, name: string) => s.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? '';
-
 /** All blocks `<tag …>…</tag>` – flat, so only for elements that never nest themselves. */
 const xmlBlocks = (s: string, tag: string) => s.match(new RegExp(`<${tag}(?:\\s[^>]*)??>[\\s\\S]*?</${tag}>`, 'g')) ?? [];
 
@@ -298,46 +295,6 @@ export const CAM_FEEDS: CamFeed[] = [
           }),
         ];
       });
-    },
-  },
-  {
-    // Estland: Bild-URLs tragen den Zeitpunkt der letzten Aufnahme im Dateinamen und rotieren –
-    // deshalb kein Snapshot, sondern beide DATEX-II-Listen live (im 10-min-Rhythmus der Ansicht).
-    // kind 'signed': ohne Cache-Buster, da exakte Dateinamen.
-    id: 'ee',
-    label: 'Tarktee (Estland)',
-    bbox: [21.5, 57.3, 28.4, 59.8],
-    async load() {
-      const [locXml, imgXml] = await Promise.all([
-        fetchText(viaProxy('https://tarktee.transpordiamet.ee/api/v1/datex/roadCameraLocations'), 30000),
-        fetchText(viaProxy('https://tarktee.transpordiamet.ee/api/v1/datex/roadCameraImages'), 30000),
-      ]);
-      const locs = new Map<string, { name: string; lat: number; lon: number }>();
-      for (const b of xmlBlocks(locXml, 'predefinedLocation')) {
-        const lat = Number(xmlTag(b, 'latitude'));
-        const lon = Number(xmlTag(b, 'longitude'));
-        const id = xmlAttr((b.match(/^<predefinedLocation[^>]*>/i) ?? [''])[0], 'id');
-        if (!id || !ok(lon, lat)) continue;
-        locs.set(id, { name: xmlTag(b, 'value'), lat, lon });
-      }
-      const out: Feature<Point>[] = [];
-      for (const b of xmlBlocks(imgXml, 'trafficView')) {
-        const ref = (b.match(/linearPredefinedLocationReference[^>]*\bid="([^"]*)"/) ?? [])[1];
-        const img = xmlTag(b, 'urlLinkAddress');
-        const loc = ref ? locs.get(ref) : undefined;
-        if (!loc || !/^https?:\/\//.test(img)) continue;
-        out.push(
-          cam(loc.lon, loc.lat, {
-            id: `ee-${ref}`,
-            title: loc.name,
-            subtitle: 'Verkehrskamera Estland',
-            image: img,
-            url: img, source: 'Transpordiamet – Tarktee (Estland)',
-            live: false, // Dateinamen mit Zeitstempel – kein Cache-Buster
-          }),
-        );
-      }
-      return out;
     },
   },
   {
