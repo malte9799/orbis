@@ -160,18 +160,57 @@ interface TrainOpts {
   /** window bands: [z base, height] */
   bands: [number, number][];
   nose: 'wedge' | 'stream';
-  noseTilt?: number;
   wheelR?: number;
 }
 
-/** Slanted nose at the end face `endY` of a car body: a tilted box sunk into the body.
- * The tilt sign: a roof line must FALL towards the nose tip (rotateX(+θ) would raise it). */
-function endNose(o: TrainOpts, endY: number, c: number, dir: 1 | -1): THREE.BufferGeometry[] {
-  const tilt = -(o.noseTilt ?? 0.5) * dir;
-  return [
-    box(0, endY + dir * 0.9, o.z0 - 0.1, o.w - 0.15, 1.9, o.h + 0.25, c, tilt),
-    box(0, endY + dir * 0.45, o.z0 + o.h * 0.5, o.w - 0.85, 0.95, o.h * 0.44, DARK, tilt),
+/** Extruded silhouette in the y–z plane: `pts` are (y, z) pairs, the extrusion of
+ * `depth` runs centred along x. Exact nose profiles — no tilted boxes. */
+function profile(pts: [number, number][], depth: number, color: number): THREE.BufferGeometry {
+  const s = new THREE.Shape();
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (const [a, b] of pts.slice(1)) s.lineTo(a, b);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: false });
+  // (x, y, z) → (z, x, y): shape (a, b) becomes model (y, z), the extrusion runs along +x
+  g.applyMatrix4(new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1));
+  g.translate(-depth / 2, 0, 0);
+  return paint(g, color);
+}
+
+/**
+ * Wedge nose at the end face `endY`: an extruded side silhouette sinking into the body.
+ * The roof falls towards the tip, the tip keeps a small upright mouth. `mouth` builds the
+ * long streamlined end (highspeed) in white livery, a short blunt one otherwise.
+ */
+function endNose(o: TrainOpts, endY: number, c: number, dir: 1 | -1, mouth = o.nose === 'stream', N = mouth ? 10.5 : 2.7): THREE.BufferGeometry[] {
+  const wc = mouth ? WHITE : c;
+  const tip = o.h > 3 ? 0.8 : 0.55; // height of the upright tip, relative to the body base
+  const pts: [number, number][] = [
+    [endY, o.z0 + o.h], // roof at the end face
+    [endY + dir * N * 0.42, o.z0 + o.h - (mouth ? 1.7 : o.h > 3 ? 0.5 : 0.9)],
+    [endY + dir * N, o.z0 + tip],
+    [endY + dir * N, o.z0],
+    [endY, o.z0],
   ];
+  // windscreen: a thin slab lying on the upper slope, narrower than the body
+  const wy1 = endY + dir * N * 0.3;
+  const wz1 = o.z0 + o.h - 0.55;
+  const wy2 = endY + dir * N * 0.78;
+  const wz2 = o.z0 + tip + 0.28;
+  const glass: [number, number][] = [
+    [wy1, wz1],
+    [wy2, wz2],
+    [wy1, wz1 - 0.42],
+    [wy2, wz2 - 0.42],
+  ];
+  // livery band follows the slope between z0+0.5 and z0+1.0 (matches the body stripe)
+  const band: [number, number][] = [
+    [endY, o.z0 + 1.0],
+    [endY + dir * N, o.z0 + 1.0],
+    [endY + dir * N, o.z0 + 0.5],
+    [endY, o.z0 + 0.5],
+  ];
+  return [profile(pts, o.w - 0.1, wc), profile(glass, o.w - 0.95, DARK), profile(band, o.w + 0.1, c)];
 }
 
 function trainModel(o: TrainOpts, c: number): THREE.BufferGeometry {
@@ -201,20 +240,14 @@ function trainModel(o: TrainOpts, c: number): THREE.BufferGeometry {
       if (i === o.cars - 1 || o.cars === 1) parts.push(...endNose(o, -half - o.carLen / 2, c, -1));
     }
   }
-  // highspeed: one long streamlined body with a two-part nose and a coloured stripe
+  // highspeed: one long streamlined body with profile noses and a coloured stripe
   if (o.nose === 'stream') {
     const L = o.carLen; // body length, spans -L/2 .. L/2
     parts.push(box(0, 0, 1.0, o.w + 0.12, L, 0.5, c)); // livery stripe
     parts.push(box(0, 0, 2.2, o.w + 0.12, L - 5, 0.62, DARK)); // window band
     parts.push(box(0, 0, o.z0 + o.h - 0.12, o.w - 0.5, L - 0.6, 0.22, ROOF));
-    // nose
-    parts.push(box(0, L / 2 + 3.75, o.z0, o.w - 0.05, 7.5, o.h - 0.2, WHITE, -0.42));
-    parts.push(box(0, L / 2 + 7.9, o.z0 + 0.15, o.w - 0.7, 4.5, 1.8, WHITE, -0.8));
-    parts.push(box(0, 0, 1.0, o.w + 0.12, 7.4, 0.5, c, -0.42).translate(0, L / 2 + 3.75, 0)); // stripe on the nose
-    parts.push(box(0, L / 2 + 5.1, o.z0 + o.h - 1.62, o.w - 1.0, 1.2, 0.85, DARK, -0.42)); // windshield
-    // tail
-    parts.push(box(0, -L / 2 - 3.25, o.z0, o.w - 0.05, 6.5, o.h - 0.2, WHITE, 0.5));
-    parts.push(box(0, 0, 1.0, o.w, 6.0, 0.5, c, 0.5).translate(0, -L / 2 - 3.25, 0));
+    parts.push(...endNose(o, L / 2, c, 1, true, 10.5)); // nose
+    parts.push(...endNose(o, -L / 2, c, -1, true, 7)); // shorter tail
     // wheels
     for (const dy of [L / 2 - 4, L / 2 - 9, -L / 2 + 4, -L / 2 + 9]) {
       for (const dx of [-o.w / 2 + 0.68, o.w / 2 - 0.68]) parts.push(wheel(dx, dy, 0.45, 0.45, WHEEL));
@@ -241,9 +274,8 @@ const trainSpec = (
   z0: number,
   bands: [number, number][],
   nose: TrainOpts['nose'],
-  noseTilt = 0.45,
   wheelR = 0.45,
-): Spec => ({ len: cars * carLen + (cars - 1) * gap + 2.6, build: (c) => trainModel({ cars, carLen, gap, w, h, z0, bands, nose, noseTilt, wheelR }, c) });
+): Spec => ({ len: cars * carLen + (cars - 1) * gap + 2.6, build: (c) => trainModel({ cars, carLen, gap, w, h, z0, bands, nose, wheelR }, c) });
 
 const SPECS: Record<VehCat, Spec> = {
   highspeed: {
@@ -255,10 +287,10 @@ const SPECS: Record<VehCat, Spec> = {
       );
     },
   },
-  rail: trainSpec(3, 12.8, 0.85, 2.88, 2.55, 0.62, [[1.95, 0.68]], 'wedge', 0.5),
-  sbahn: trainSpec(3, 12.3, 0.7, 2.95, 2.95, 0.72, [[1.45, 1.4]], 'wedge', 0.5),
-  subway: trainSpec(3, 13, 0.4, 3.05, 3.55, 0.66, [[2.5, 0.85]], 'wedge', 0.22),
-  tram: trainSpec(5, 5.35, 0.5, 2.3, 2.75, 0.55, [[2.0, 0.78]], 'wedge', 0.3, 0.35),
+  rail: trainSpec(3, 12.8, 0.85, 2.88, 2.55, 0.62, [[1.95, 0.68]], 'wedge'),
+  sbahn: trainSpec(3, 12.3, 0.7, 2.95, 2.95, 0.72, [[1.45, 1.4]], 'wedge'),
+  subway: trainSpec(3, 13, 0.4, 3.05, 3.55, 0.66, [[2.5, 0.85]], 'wedge'),
+  tram: trainSpec(5, 5.35, 0.5, 2.3, 2.75, 0.55, [[2.0, 0.78]], 'wedge', 0.35),
   bus: {
     len: 12,
     build(c) {
