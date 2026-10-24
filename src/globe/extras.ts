@@ -373,13 +373,14 @@ const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [
 
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
- *  zoom range, so a km-based circle stays the same size on the map while zooming. */
+ *  zoom range, so a km-based circle stays the same size on the map while zooming. A small
+ *  minimum radius keeps fresh and far-zoomed circles visible at all. */
 const thunderRadius: ExpressionSpecification = (() => {
   const A = 1000 / 156543.03392;
   const cos = ['cos', ['/', ['*', ['get', 'lat'], 3.141592653589793], 180]] as unknown as ExpressionSpecification;
   const stops: unknown[] = [];
   for (let z = 0; z <= 12; z += 2) stops.push(z, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]);
-  return ['interpolate', ['exponential', 2], ['zoom'], ...stops] as unknown as ExpressionSpecification;
+  return ['max', 10, ['interpolate', ['exponential', 2], ['zoom'], ...stops]] as unknown as ExpressionSpecification;
 })();
 
 const ALT_COLOR: ExpressionSpecification = [
@@ -991,7 +992,7 @@ export class ExtraLayers {
         source: 'lightning-thunder',
         layout: hidden,
         paint: {
-          'circle-color': 'rgba(255,255,255,0.16)',
+          'circle-color': 'rgba(255,255,255,0.24)',
           'circle-opacity': ['get', 'o'],
           // real geographic radius: screen px = km * A * 2^zoom / cos(lat) – stops every second
           // zoom make the exponential(2) interpolation exact, so the circle scales with the zoom
