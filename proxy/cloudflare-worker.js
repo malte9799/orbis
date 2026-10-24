@@ -21,6 +21,8 @@ const HOSTS = {
   'api.adsb.lol': 8,
   // route of a callsign (adsbdb.com), changes rarely
   'api.adsbdb.com': 3600,
+  // aircraft photos (planespotters.net), cached for 24h
+  'api.planespotters.net': 86400,
   'opendata.adsb.fi': 8,
   'api.airplanes.live': 8,
   'opensky-network.org': 30,
