@@ -37,13 +37,26 @@ export const BLACK_MARBLE = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/
 export const gibsFires = (date: string) =>
   `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=VIIRS_NOAA20_Thermal_Anomalies_375m_All&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&TIME=${date}`;
 
-/** Live global infrared cloud composite (multi-satellite) from EUMETSAT's view service. */
-export const EUMETSAT_IR =
-  'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=mumi:worldcloudmap_ir108&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+/**
+ * EUMETSAT's geoserver renders each tile from whatever scan *it* resolves when no explicit
+ * TIME is given — its per-level tile caches end up on different scans, so neighbouring
+ * zoom levels show completely different cloud images. Pinning TIME to the newest published
+ * scan keeps every zoom level on the same frame (nearestValue=1 rounds a scan that is not
+ * published yet to the closest available one).
+ */
+export const eumetsatTime = (cadenceMs: number, latencyMs: number) => {
+  const t = Math.floor((Date.now() - latencyMs) / cadenceMs) * cadenceMs;
+  return new Date(t).toISOString().slice(0, 19) + 'Z';
+};
 
-/** Convection RGB of the Meteosat disk (Europe, Africa): developing thunderstorms show bright yellow. */
-export const EUMETSAT_STORM =
-  'https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=msg_fes:rgb_convection&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
+const eumetsatWms = (layers: string, time: string) =>
+  `https://view.eumetsat.int/geoserver/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=${layers}&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&TIME=${time}`;
+
+/** Live global infrared cloud composite (multi-satellite): new scan every 3 h, published ~2 h later. */
+export const eumetsatIr = () => eumetsatWms('mumi:worldcloudmap_ir108', eumetsatTime(3 * 3600_000, 2 * 3600_000));
+
+/** Convection RGB of the Meteosat disk (Europe, Africa): scan every 15 min, published ~20 min later. */
+export const eumetsatStorm = () => eumetsatWms('msg_fes:rgb_convection', eumetsatTime(15 * 60_000, 30 * 60_000));
 
 /** NASA GPM IMERG satellite precipitation rate (30 min, latest available). */
 export const IMERG_WMS =
@@ -143,14 +156,14 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       },
       'sat-ir': {
         type: 'raster',
-        tiles: [EUMETSAT_IR],
+        tiles: [eumetsatIr()],
         tileSize: 256,
         maxzoom: 7,
         attribution: `Satellit © <a href="https://view.eumetsat.int/">EUMETSAT</a> ${new Date().getUTCFullYear()}`,
       },
       'sat-storm': {
         type: 'raster',
-        tiles: [EUMETSAT_STORM],
+        tiles: [eumetsatStorm()],
         tileSize: 256,
         maxzoom: 7,
         bounds: [-77, -77, 77, 77],
