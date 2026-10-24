@@ -1493,7 +1493,8 @@ export class ExtraLayers {
       },
     });
     m.addLayer(this.ships3d, 'marker');
-    // low-poly 3D trains, subways, trams, buses … from zoom 10 on the flat map; the 2D dots step aside
+    // low-poly 3D trains, subways, trams, buses … from zoom 12 on the flat map and only while
+    // few enough of them are in view (otherwise they lag); the 2D dots step aside
     this.vehicles3d = new VehiclesLayer({
       enabled: () => this.on.has('trains') || this.on.has('transit'),
       modeChanged: (on) => {

@@ -9,16 +9,18 @@ import type { Feature, Point } from 'geojson';
 // map; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
 // towards every new report; speeds with bearing are dead-reckoned in between.
 
-/** from this zoom on the 3D models replace the 2D dots (zoom 10 ≈ city view) */
-const VEH_ZOOM = 10;
+/** from this zoom on the 3D models may replace the 2D dots (zoom 12 ≈ city blocks) */
+const VEH_ZOOM = 12;
+/** the 3D models only take over while this many vehicles are in view (active: more of them stay on) */
+const VEH_MAX_ON = 120;
+/** the 2D dots take back over above this many vehicles in view (hysteresis against flickering) */
+const VEH_MAX_OFF = 200;
 /** names are shown from this zoom on */
 const LABEL_ZOOM = 8;
 /** the smallest length of a model on screen (px) so vehicles stay visible when zoomed out */
 const MIN_PX = 22;
 /** a report older than this is no longer extrapolated (s) */
 const MAX_EXTRAPOLATE_S = 90;
-/** vehicles not reported for this long are dropped (ms) */
-const EXPIRE_MS = 60000;
 const KMH = 1 / 3.6;
 const M_PER_DEG = 111320;
 
@@ -160,9 +162,10 @@ interface TrainOpts {
   wheelR?: number;
 }
 
-/** Slanted nose at the end face `endY` of a car body: a tilted box sunk into the body. */
+/** Slanted nose at the end face `endY` of a car body: a tilted box sunk into the body.
+ * The tilt sign: a roof line must FALL towards the nose tip (rotateX(+θ) would raise it). */
 function endNose(o: TrainOpts, endY: number, c: number, dir: 1 | -1): THREE.BufferGeometry[] {
-  const tilt = (o.noseTilt ?? 0.5) * dir;
+  const tilt = -(o.noseTilt ?? 0.5) * dir;
   return [
     box(0, endY + dir * 0.9, o.z0 - 0.1, o.w - 0.15, 1.9, o.h + 0.25, c, tilt),
     box(0, endY + dir * 0.45, o.z0 + o.h * 0.5, o.w - 0.85, 0.95, o.h * 0.44, DARK, tilt),
@@ -203,13 +206,13 @@ function trainModel(o: TrainOpts, c: number): THREE.BufferGeometry {
     parts.push(box(0, 0, 2.2, o.w + 0.12, L - 5, 0.62, DARK)); // window band
     parts.push(box(0, 0, o.z0 + o.h - 0.12, o.w - 0.5, L - 0.6, 0.22, ROOF));
     // nose
-    parts.push(box(0, L / 2 + 3.75, o.z0, o.w - 0.05, 7.5, o.h - 0.2, WHITE, 0.42));
-    parts.push(box(0, L / 2 + 7.9, o.z0 + 0.15, o.w - 0.7, 4.5, 1.8, WHITE, 0.8));
-    parts.push(box(0, 0, 1.0, o.w + 0.12, 7.4, 0.5, c, 0.42).translate(0, L / 2 + 3.75, 0)); // stripe on the nose
-    parts.push(box(0, L / 2 + 5.1, o.z0 + o.h - 1.62, o.w - 1.0, 1.2, 0.85, DARK, 0.42)); // windshield
+    parts.push(box(0, L / 2 + 3.75, o.z0, o.w - 0.05, 7.5, o.h - 0.2, WHITE, -0.42));
+    parts.push(box(0, L / 2 + 7.9, o.z0 + 0.15, o.w - 0.7, 4.5, 1.8, WHITE, -0.8));
+    parts.push(box(0, 0, 1.0, o.w + 0.12, 7.4, 0.5, c, -0.42).translate(0, L / 2 + 3.75, 0)); // stripe on the nose
+    parts.push(box(0, L / 2 + 5.1, o.z0 + o.h - 1.62, o.w - 1.0, 1.2, 0.85, DARK, -0.42)); // windshield
     // tail
-    parts.push(box(0, -L / 2 - 3.25, o.z0, o.w - 0.05, 6.5, o.h - 0.2, WHITE, -0.5));
-    parts.push(box(0, 0, 1.0, o.w, 6.0, 0.5, c, -0.5).translate(0, -L / 2 - 3.25, 0));
+    parts.push(box(0, -L / 2 - 3.25, o.z0, o.w - 0.05, 6.5, o.h - 0.2, WHITE, 0.5));
+    parts.push(box(0, 0, 1.0, o.w, 6.0, 0.5, c, 0.5).translate(0, -L / 2 - 3.25, 0));
     // wheels
     for (const dy of [L / 2 - 4, L / 2 - 9, -L / 2 + 4, -L / 2 + 9]) {
       for (const dx of [-o.w / 2 + 0.68, o.w / 2 - 0.68]) parts.push(wheel(dx, dy, 0.45, 0.45, WHEEL));
@@ -364,7 +367,6 @@ export class VehiclesLayer implements CustomLayerInterface {
     // a group (same feed, line and mode), trip ids and train numbers are unique
     const byGroup = new Map<string, VehState[]>();
     for (const s of this.states.values()) {
-      if (now - s.seen > EXPIRE_MS * 3) continue;
       let list = byGroup.get(s.group);
       if (!list) byGroup.set(s.group, (list = []));
       list.push(s);
@@ -435,9 +437,12 @@ export class VehiclesLayer implements CustomLayerInterface {
         this.states.set(key, s);
       }
     }
-    // everything no longer in the set is dropped after a while
+    // everything no longer in the set is dropped: immediately when another update delivered
+    // vehicles (a mode was switched off or a vehicle left the view), with a short grace after
+    // an empty update (feed hiccup) so nothing flashes off and back on
+    const staleMs = features.length ? 0 : 15000;
     for (const [k, s] of this.states) {
-      if (!s.matched && now - s.seen > EXPIRE_MS) {
+      if (!s.matched && now - s.seen > staleMs) {
         if (s.obj) {
           s.obj.parent?.remove(s.obj);
           s.obj = undefined;
@@ -503,7 +508,18 @@ export class VehiclesLayer implements CustomLayerInterface {
   }
 
   private active() {
-    return this.hooks.enabled() && this.map.getZoom() >= VEH_ZOOM && this.map.getProjection()?.type !== 'globe';
+    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe') return false;
+    // the models lag when there are too many at once (a whole city at once): only take over
+    // while the view is small enough, with hysteresis so switching does not flicker
+    const b = this.map.getBounds();
+    const padLon = (b.getEast() - b.getWest()) * 0.1;
+    const padLat = (b.getNorth() - b.getSouth()) * 0.1;
+    let n = 0;
+    for (const s of this.states.values()) {
+      const [lon, lat] = s.feature.geometry.coordinates;
+      if (lon > b.getWest() - padLon && lon < b.getEast() + padLon && lat > b.getSouth() - padLat && lat < b.getNorth() + padLat) n++;
+    }
+    return n <= (this.lastOn ? VEH_MAX_OFF : VEH_MAX_ON);
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
