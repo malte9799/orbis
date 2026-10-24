@@ -1,9 +1,10 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { ShipInfo } from './extras';
-import { SHIP_COLORS, SHIP_LABELS, shipCat } from '../api/transport';
+import { SHIP_COLORS, SHIP_LABELS, shipCat, type ShipCat } from '../api/transport';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
 import { category, graph, routeHero, tile } from './sidepanel';
+import { fetchShipPhoto, type ShipPhoto } from '../api/ships';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected ship (AIS), same layout as the flight panel.
@@ -16,11 +17,16 @@ export interface ShipPanelHooks {
 export class ShipPanel {
   private root = document.createElement('aside');
   private body: HTMLElement;
+  private photoEl: HTMLElement;
+  private contentEl: HTMLElement;
   private mmsi: number | null = null;
   private following = false;
   private refresh: number | undefined;
   private followTimer: number | undefined;
   private open_ = new Set<string>();
+  private photo: ShipPhoto | null = null;
+  /** category of the currently shown photo, so one fetch serves every ship of that type */
+  private photoCat: ShipCat | null = null;
   /** tile whose graph is shown (speed, track) */
   private metric: string | null = null;
   private dragHooked = false;
@@ -36,13 +42,18 @@ export class ShipPanel {
     this.root.innerHTML = `
       <div class="fp-head"><i class="fp-ic">${glyphSvg('vessel', '#4dd0e1', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
       <div class="fp-sub"></div>
-      <div class="fp-body"></div>
+      <div class="fp-body">
+        <div class="fp-photo-container"></div>
+        <div class="fp-content"></div>
+      </div>
       <div class="fp-actions">
         <button type="button" data-act="follow">Folgen</button>
         <button type="button" data-act="zoom">Heranzoomen</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
+    this.photoEl = this.root.querySelector('.fp-photo-container')!;
+    this.contentEl = this.root.querySelector('.fp-content')!;
     this.root.querySelector('.fp-close')!.addEventListener('click', () => this.close());
     this.root.querySelector('.fp-actions')!.addEventListener('click', (e) => {
       const act = (e.target as HTMLElement).closest('button')?.dataset.act;
@@ -81,6 +92,10 @@ export class ShipPanel {
     this.setFollow(false);
     clearInterval(this.refresh);
     this.mmsi = null;
+    this.photoCat = null;
+    this.photo = null;
+    this.photoEl.innerHTML = '';
+    this.contentEl.innerHTML = '';
     this.root.hidden = true;
   }
 
@@ -117,7 +132,8 @@ export class ShipPanel {
     if (!i) {
       title.textContent = `MMSI ${this.mmsi}`;
       sub.textContent = '';
-      this.body.innerHTML = '<div class="fp-note">Gerade keine Daten zu diesem Schiff – es ist außerhalb des Ausschnitts oder nicht mehr in Reichweite.</div>';
+      this.photoEl.innerHTML = '';
+      this.contentEl.innerHTML = '<div class="fp-note">Gerade keine Daten zu diesem Schiff – es ist außerhalb des Ausschnitts oder nicht mehr in Reichweite.</div>';
       return;
     }
     const s = i.ship;
@@ -127,6 +143,9 @@ export class ShipPanel {
     const rot = s.heading >= 0 && s.heading < 360 ? s.heading : s.cog;
     title.textContent = s.name || `MMSI ${s.mmsi}`;
     sub.innerHTML = `${escapeHtml(SHIP_LABELS[cat])} · <b>${s.mmsi}</b>`;
+    // head icon tinted with the category colour
+    this.root.querySelector('.fp-ic')!.innerHTML = glyphSvg('vessel', COLOR, 30);
+    this.loadPhoto(cat, s.mmsi);
     const age = Math.max(0, Math.round((Date.now() - s.at) / 1000));
     const ago = age < 90 ? `vor ${age} s` : age < 5400 ? `vor ${Math.round(age / 60)} min` : `vor ${Math.round(age / 3600)} h`;
     const dest = (s.destination ?? '').trim();
@@ -140,7 +159,42 @@ export class ShipPanel {
     const cats =
       category('ship', 'Schiff', [['Typ', escapeHtml(SHIP_LABELS[cat])], ['Rufzeichen', escapeHtml(s.callSign || '–')], ['MMSI', String(s.mmsi)], ['Ziel', escapeHtml(dest || '–')]], this.open_) +
       category('position', 'Position', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Geschwindigkeit', `${fmt.num(s.sog * 1.852, 0)} km/h`]], this.open_);
-    const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(s.source)} · <a href="https://www.marinetraffic.com/de/ais/details/ships/mmsi:${s.mmsi}" target="_blank" rel="noopener noreferrer">Auf MarineTraffic ansehen ↗</a></div></details>`;
-    this.body.innerHTML = hero + tiles + chart + cats + src;
+    const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(s.source)} · Fotos: <a href="https://commons.wikimedia.org" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a> · <a href="https://www.marinetraffic.com/de/ais/details/ships/mmsi:${s.mmsi}" target="_blank" rel="noopener noreferrer">Auf MarineTraffic ansehen ↗</a></div></details>`;
+    this.contentEl.innerHTML = hero + tiles + chart + cats + src;
+  }
+
+  /**
+   * Photo of the ship type (Wikimedia Commons, cached per category) above the content –
+   * there is no keyless photo API for individual ships such as Planespotters for aircraft.
+   */
+  private loadPhoto(cat: ShipCat, mmsi: number) {
+    if (this.photoCat === cat) return this.renderPhoto(mmsi);
+    this.photoCat = cat;
+    this.photo = null;
+    this.photoEl.innerHTML = '';
+    fetchShipPhoto(cat).then((p) => {
+      if (this.photoCat !== cat) return;
+      this.photo = p;
+      this.renderPhoto(mmsi);
+    });
+  }
+
+  private renderPhoto(mmsi: number) {
+    if (!this.photo) {
+      this.photoEl.innerHTML = '';
+      return;
+    }
+    const mtUrl = `https://www.marinetraffic.com/de/ais/details/ships/mmsi:${mmsi}`;
+    const creditBits = [this.photo.license, 'Wikimedia Commons'].filter(Boolean).join(' · ');
+    this.photoEl.innerHTML = `
+      <div class="fp-photo-wrap">
+        <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer" class="fp-photo-link" title="Foto in voller Auflösung auf Wikimedia Commons ansehen">
+          <img src="${escapeHtml(this.photo.src)}" alt="${escapeHtml(SHIP_LABELS[this.photoCat as ShipCat])} · Symbolbild" loading="lazy" />
+        </a>
+        <div class="fp-photo-credit">
+          <a href="${escapeHtml(mtUrl)}" target="_blank" rel="noopener noreferrer">Symbolbild · Schiffsdaten ↗</a>
+          <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer">Foto: © ${escapeHtml(this.photo.photographer)} (${escapeHtml(creditBits)}) ↗</a>
+        </div>
+      </div>`;
   }
 }
