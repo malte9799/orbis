@@ -47,9 +47,11 @@
 .hud .subs button.tgl { margin-top: 0; }
 .hud .subs button.tgl.on { background: rgba(91,157,255,.16); border-color: rgba(91,157,255,.55); color: #d8e6ff; font-weight: 500; }
 
-/* Blitze Live: Regler direkt neben dem Ton-Chip */
-.hud .volrow { display: flex; align-items: center; gap: 8px; height: 30px; padding-right: 4px; cursor: default; }
-.hud .volrow .rng { width: min(110px, 30vw); flex: 1 1 auto; }
+/* Blitze Live: die Zeile selbst ist die Toggle-Box (wie .tgl.on), der Regler sitzt in derselben Box */
+.hud .volrow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 0; border: 1px solid rgba(91,157,255,.55); border-radius: 8px; background: rgba(91,157,255,.16); cursor: default; }
+.hud .volrow button.tgl { height: 28px; margin-left: 10px; padding: 0; background: transparent; border: 0; font-size: 13px; color: #d8e6ff; font-weight: 500; cursor: pointer; justify-content: flex-start; flex: none; }
+.hud .volrow button.tgl:hover, .hud .volrow button.tgl.on { background: transparent; border: 0; color: #d8e6ff; }
+.hud .volrow .rng { width: min(96px, 26vw); flex: 1 1 auto; }
 .hud.has-menu .sum { left: calc(var(--hud-l) + 242px); max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r) - 242px)); }
 
 /* ---------- top right: search + settings ---------- */
