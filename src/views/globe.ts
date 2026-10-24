@@ -35,6 +35,7 @@ import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { FlightPanel } from '../globe/flightpanel';
+import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
@@ -213,6 +214,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
@@ -1316,7 +1318,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         map: () => map,
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
-      shipPanel.onOpen = () => flightPanel?.close();
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      shipPanel.onOpen = () => {
+        flightPanel?.close();
+        sondePanel?.close();
+      };
+      sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1433,14 +1440,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
-        flightPanel?.open(picked);
+        if (picked.startsWith('sonde:')) {
+          flightPanel?.close();
+          sondePanel?.open(picked.slice('sonde:'.length));
+        } else {
+          sondePanel?.close();
+          flightPanel?.open(picked);
+        }
         return;
       }
       extras?.clearSelection();
       const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
+        sondePanel?.close();
         flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'sonde') {
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {

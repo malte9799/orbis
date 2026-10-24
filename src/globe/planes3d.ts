@@ -8,7 +8,7 @@ import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from
 // aircraft: its trail at the real altitude, a faint wall from the trail down to the ground,
 // a thin line from the aircraft to the ground and its shadow.
 
-export type PlaneModel = 'narrow' | 'wide' | 'heli' | 'car' | 'tug';
+export type PlaneModel = 'narrow' | 'wide' | 'heli' | 'car' | 'tug' | 'sonde';
 
 export interface PlaneReport {
   hex: string;
@@ -165,6 +165,16 @@ export class PlaneTracker {
   clear() {
     for (const [hex, p] of this.planes) this.remove(hex, p);
     this.lastStep = 0;
+  }
+
+  /** Remove a whole group of tracked objects (e.g. `sonde:` the radiosondes), selected ones included. */
+  drop(id: string) {
+    for (const [hex, p] of this.planes) {
+      if (!hex.startsWith(id)) continue;
+      this.planes.delete(hex);
+      if (hex === this.keep) this.keep = null;
+      disposePlane(p);
+    }
   }
 }
 
@@ -391,12 +401,61 @@ function pushbackTugParts(): VehicleGeos {
   };
 }
 
+/** Parts of the radiosonde: the pink balloon and the white instrument box hanging on the string. */
+interface SondeGeos {
+  balloon: THREE.BufferGeometry;
+  payload: THREE.BufferGeometry;
+}
+
+/** the sonde model is drawn much larger than its real 3 m (next to 40–60 m aircraft it would be invisible) */
+const SONDE_K = 3.2;
+
+function sondeParts(): SondeGeos {
+  const merge = (list: THREE.BufferGeometry[]) =>
+    mergeGeometries(
+      list.map((g) => {
+        const n = g.index ? g.toNonIndexed() : g;
+        n.deleteAttribute('uv');
+        return n;
+      }),
+    )!;
+  // teardrop profile of a roughly 1.7 m sounding balloon, filled (in metres, lathe around y)
+  const profile: [number, number][] = [
+    [0, 1.3],
+    [0.1, 1.35],
+    [0.15, 1.5],
+    [0.4, 1.95],
+    [0.66, 2.55],
+    [0.8, 3.1],
+    [0.77, 3.5],
+    [0.6, 3.8],
+    [0.34, 4],
+    [0.1, 4.08],
+    [0, 4.1],
+  ];
+  const balloon = merge([
+    new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 14),
+    // the cord down to the payload
+    new THREE.CylinderGeometry(0.012, 0.02, 1.1, 5).translate(0, 0.75, 0),
+  ]);
+  const payload = merge([
+    // the white sensor box and its antenna pointing down
+    new THREE.BoxGeometry(0.4, 0.34, 0.16),
+    new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5).translate(0, -0.22, 0),
+  ]);
+  // the lathe axis (y = forward in model space) becomes up: balloon and payload hang above the anchor
+  balloon.rotateX(Math.PI / 2).scale(SONDE_K, SONDE_K, SONDE_K);
+  payload.rotateX(Math.PI / 2).scale(SONDE_K, SONDE_K, SONDE_K);
+  return { balloon, payload };
+}
+
 let geoCache: {
   narrow: THREE.BufferGeometry;
   wide: THREE.BufferGeometry;
   heli: HeliGeos;
   car: VehicleGeos;
   tug: VehicleGeos;
+  sonde: SondeGeos;
 } | null = null;
 const geos = () =>
   (geoCache ??= {
@@ -405,6 +464,7 @@ const geos = () =>
     heli: heliParts(),
     car: followMeCarParts(),
     tug: pushbackTugParts(),
+    sonde: sondeParts(),
   });
 
 function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
@@ -424,6 +484,16 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
     tail.add(new THREE.Mesh(g.heli.tail, mat));
     group.add(main, tail);
     group.userData = { main, tail };
+    return group;
+  }
+  if (model === 'sonde') {
+    // the whole balloon rig hangs at the payload and rocks gently in the wind
+    const group = new THREE.Group();
+    const sway = new THREE.Group();
+    sway.add(new THREE.Mesh(g.sonde.balloon, new THREE.MeshLambertMaterial({ color: 0xff8fab, side: THREE.DoubleSide })));
+    sway.add(new THREE.Mesh(g.sonde.payload, new THREE.MeshLambertMaterial({ color: 0xeceff4, side: THREE.DoubleSide })));
+    group.add(sway);
+    group.userData = { sway };
     return group;
   }
   if (model === 'car' || model === 'tug') {
@@ -922,7 +992,8 @@ export class PlanesLayer implements CustomLayerInterface {
         const s = mc.meterInMercatorCoordinateUnits() * boost;
         // y is flipped between mercator space (south = +y) and the model (north = +y)
         m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
-        rot.makeRotationZ(-rad(p.dTrack));
+        if (p.model === 'sonde') rot.identity(); // the balloon hangs upright, no nose direction
+        else rot.makeRotationZ(-rad(p.dTrack));
         m.multiply(rot);
         p.obj.matrix.copy(m);
         p.obj.visible = true;
@@ -932,6 +1003,13 @@ export class PlanesLayer implements CustomLayerInterface {
           const phase = (p.hex.charCodeAt(0) + p.hex.charCodeAt(p.hex.length - 1)) % 7;
           main.rotation.z = now * 0.011 + phase;
           tail.rotation.x = now * 0.025 + phase;
+        } else if (p.model === 'sonde') {
+          // the payload pendulums under the balloon (a little different per sonde)
+          const { sway } = p.obj.userData as { sway?: THREE.Object3D };
+          if (sway) {
+            const phase = (p.hex.charCodeAt(6) + p.hex.charCodeAt(p.hex.length - 1)) % 7;
+            sway.rotation.x = Math.sin(now * 0.0012 + phase * 1.9) * 0.05;
+          }
         } else if (p.model === 'car' || p.model === 'tug') {
           const { beacon } = p.obj.userData as { beacon?: THREE.Mesh };
           if (beacon) {
@@ -1078,7 +1156,7 @@ export class PlanesLayer implements CustomLayerInterface {
     if (!p.shadow || p.shadowModel !== p.model) {
       p.shadow?.parent?.remove(p.shadow);
       const g = geos();
-      const shadowGeo = p.model === 'heli' ? g.heli.body : p.model === 'car' ? g.car.body : p.model === 'tug' ? g.tug.body : g[p.model];
+      const shadowGeo = p.model === 'heli' ? g.heli.body : p.model === 'car' ? g.car.body : p.model === 'tug' ? g.tug.body : p.model === 'sonde' ? g.sonde.balloon : g[p.model];
       p.shadow = new THREE.Mesh(shadowGeo, this.mats.shadow);
       p.shadow.matrixAutoUpdate = false;
       p.shadow.renderOrder = 1;
