@@ -127,7 +127,7 @@ export const INFRA_MENU: TrafficCat[] = [
     ],
   },
   { id: 'rohstoffe', label: 'Rohstoffe', icon: 'pick', defaults: ['resources'], rows: [{ label: 'Vorkommen', layers: ['resources'] }] },
-  { id: 'netze', label: 'Netze', icon: 'cable', rows: [{ label: 'Seekabel & Internetknoten', layers: ['cables'] }, { label: 'Öl- & Gaspipelines', layers: ['pipelines'] }] },
+  { id: 'netze', label: 'Netze', icon: 'cable', rows: [{ label: 'Seekabel', layers: ['cables'] }, { label: 'Internetknoten', layers: ['ixp'] }, { label: 'Öl- & Gaspipelines', layers: ['pipelines'] }] },
   { id: 'radio', label: 'Radio', icon: 'radio', defaults: ['radio'], rows: [{ label: 'Radiosender', layers: ['radio'] }] },
   { id: 'ueberwachung', label: 'Überwachung', icon: 'cam', rows: [{ label: 'Live-Kameras', layers: ['webcams'] }, { label: 'Kennzeichen-Kameras', layers: ['alpr'] }] },
 ];
@@ -171,7 +171,7 @@ const CAT_OF: Record<CatId, string[]> = {
   verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
   erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
-  netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'water', 'nuclear', 'coal', 'gas', 'oil', 'biomass', 'plants'],
+  netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'ixp', 'pipelines', 'wind', 'solar', 'water', 'nuclear', 'coal', 'gas', 'oil', 'biomass', 'plants'],
   medien: ['webcams', 'radio', 'alpr'],
 };
 
@@ -182,7 +182,7 @@ const ICON_OF: Record<string, string> = {
   noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
-  autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', water: 'drop', nuclear: 'radiation',
+  autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', ixp: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', water: 'drop', nuclear: 'radiation',
   coal: 'mountain', gas: 'flame', oil: 'barrel', biomass: 'leaf', webcams: 'cam', radio: 'radio',
   alpr: 'cam', fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
 };

@@ -54,6 +54,7 @@ export type ExtraId =
   | 'starlink'
   | 'shipping'
   | 'cables'
+  | 'ixp'
   | 'wind'
   | 'solar'
   | 'plants'
@@ -192,7 +193,8 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'pipelines', section: 'infra', label: 'Öl- & Gaspipelines', hint: 'Pipelines für Gas, Öl, Wasserstoff (ab Zoom 8) – OpenStreetMap', glyph: 'cable', color: '#29b6f6' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
-  { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'Unterseekabel aus OpenStreetMap (unvollständig), Internetknoten von PeeringDB', glyph: 'cable', color: '#9c6bff' },
+  { id: 'cables', section: 'infra', label: 'Seekabel', hint: 'Unterseekabel (unvollständig) – OpenStreetMap', glyph: 'cable', color: '#9c6bff' },
+  { id: 'ixp', section: 'infra', label: 'Internetknoten', hint: 'Internet Exchange Points – PeeringDB', glyph: 'cable', color: '#e040fb' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
   { id: 'water', section: 'infra', label: 'Wasserkraft', hint: 'Wasser- und Gezeitenkraftwerke', glyph: 'hydro', color: FUELS.Hydro.color },
@@ -220,7 +222,8 @@ const LAYERS: Record<ExtraId, string[]> = {
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
   shipping: ['ship-lanes', 'ferries'],
-  cables: ['cables', 'ixp'],
+  cables: ['cables'],
+  ixp: ['ixp'],
   wind: ['power', 'osm-power'],
   solar: ['power', 'osm-power'],
   plants: ['power', 'osm-power'],
@@ -1720,7 +1723,19 @@ export class ExtraLayers {
           });
           break;
         case 'cables':
-          this.loadOnce('cables', Infinity, () => this.loadCablesAndIxps());
+          this.loadOnce('cables', Infinity, async () => {
+            const fc = await loadCables();
+            this.setData('cables', fc);
+            return { count: fc.features.length };
+          });
+          break;
+        case 'ixp':
+          this.loadOnce('ixp', Infinity, async () => {
+            const fc = await loadIxps();
+            this.setData('ixp', fc);
+            return { count: fc.features.length };
+          });
+          break;
           break;
         case 'wind':
         case 'solar':
@@ -2183,22 +2198,6 @@ export class ExtraLayers {
   private updateSatPositions() {
     const list = [...(this.on.has('sats') ? this.sats : []), ...(this.on.has('starlink') ? this.starlink : [])];
     this.setData('sats', satelliteFeatures(list));
-  }
-
-  private async loadCablesAndIxps() {
-    const [cables, ixps] = await Promise.allSettled([loadCables(), loadIxps()]);
-    let count = 0;
-    const missing: string[] = [];
-    if (cables.status === 'fulfilled') {
-      this.setData('cables', cables.value);
-      count += cables.value.features.length;
-    } else missing.push('Seekabel');
-    if (ixps.status === 'fulfilled') {
-      this.setData('ixp', ixps.value);
-      count += ixps.value.features.length;
-    } else missing.push('Internetknoten');
-    if (missing.length === 2) throw new Error('keine Quelle erreichbar');
-    return { count, note: missing.length ? `${missing.join(', ')} nicht erreichbar` : undefined };
   }
 
   private ensurePower() {
