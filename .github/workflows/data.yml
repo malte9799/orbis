@@ -50,6 +50,8 @@ jobs:
           VICTORIA_KEY: ${{ secrets.VICTORIA_KEY }}
           CTA_KEY: ${{ secrets.CTA_KEY }}
           TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
+          ONTARIO_511_API_KEY: ${{ secrets.ONTARIO_511_API_KEY }}
+          ALBERTA_511_API_KEY: ${{ secrets.ALBERTA_511_API_KEY }}
           MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN || vars.MAPILLARY_TOKEN }}
         run: |
           npx esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
