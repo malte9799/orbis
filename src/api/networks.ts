@@ -35,7 +35,9 @@ const validColor = (c?: string) => (c && /^#?[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c
 export async function loadTransitNetwork(b: Bounds): Promise<{ lines: FeatureCollection<MultiLineString>; stops: FeatureCollection<Point> }> {
   const bb = `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`;
   const { elements: els } = await overpass<{ elements: El[] }>(
-    `[out:json][timeout:35];(relation["type"="route"]["route"~"^(bus|trolleybus|tram|subway|light_rail|ferry)$"](${bb});)->.r;.r out geom tags;node(r.r:"stop")(${bb});out tags 4000;`,
+    // `out tags` prints no coordinates and `out geom tags` drops the relation members, so both
+    // parts would come back without geometry – `out body` (+ `geom` for the ways) is required.
+    `[out:json][timeout:35];(relation["type"="route"]["route"~"^(bus|trolleybus|tram|subway|light_rail|ferry)$"](${bb});)->.r;.r out body geom;node(r.r:"stop")(${bb});out body 4000;`,
     'busnet',
   );
   const lines: Feature<MultiLineString>[] = [];
