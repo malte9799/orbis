@@ -35,6 +35,7 @@ import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { FlightPanel } from '../globe/flightpanel';
+import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
@@ -49,12 +50,12 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, EUMETSAT_STORM, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
-import type { Karte, KView } from '../hud/karten';
+import { defaultBuildings3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
@@ -102,6 +103,8 @@ interface GlobeState {
   /** wind particle animation */
   wind: boolean;
   isobars: boolean;
+  /** 3D-Gebäude as a Grundkarten-Option (defaults on Dunkel and Hell) */
+  buildings3d: boolean;
   extras: Partial<Record<ExtraId, boolean>>;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
@@ -117,6 +120,7 @@ const DEFAULT_STATE: GlobeState = {
   overlay: 'none',
   wind: false,
   isobars: false,
+  buildings3d: false,
   extras: {},
   groups: {},
   projection: 'mercator',
@@ -210,6 +214,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
@@ -343,7 +348,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyKarte(k: Karte) {
     curKarte = k;
-    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars };
+    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
     if (fam) overlay = (fam.variants.find(([v]) => v === k.mainVar) ?? fam.variants[0])[0] as OverlayId;
@@ -355,6 +360,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
     state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
+    // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
+    state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
 
     const nextExtras: Partial<Record<ExtraId, boolean>> = {};
     const nextGroups: Partial<Record<GroupId, boolean>> = {};
@@ -380,6 +387,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map || !ready) return;
 
     if (prev.base !== state.base || prev.labels !== state.labels) applyBase();
+    else if (prev.buildings3d !== state.buildings3d) applyBuildings();
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
@@ -413,6 +421,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         thunder: opts.includes('thunder'),
         volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
       });
+    // Rohstoffe: per Komodität gefiltert (Kategorie-Filter), oder alles wenn kein Filter gesetzt
+    const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
+    if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
+    if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
@@ -628,6 +640,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       else if (l.id.startsWith('vbase-light-')) vis(l.id, state.base === 'light');
       else if (l.id.startsWith('lbl-')) vis(l.id, state.labels);
     }
+    applyBuildings();
     // dark text on the light map, white text everywhere else
     const c = labelPaint(state.base === 'light' ? 'onLight' : 'onDark');
     for (const l of layers) {
@@ -646,6 +659,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!state.night) return;
     updateNight();
     nightTimer = window.setInterval(updateNight, 60000);
+  }
+
+  /** The 3D-Gebäude layer of the base map: light extrusions on the light map, dark ones elsewhere. */
+  function applyBuildings() {
+    if (!map?.getLayer('buildings-3d')) return;
+    vis('buildings-3d', state.buildings3d);
+    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
   }
 
   /** The terminator follows the forecast timeline when one is shown. */
@@ -1323,7 +1343,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         map: () => map,
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
-      shipPanel.onOpen = () => flightPanel?.close();
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      shipPanel.onOpen = () => {
+        flightPanel?.close();
+        sondePanel?.close();
+      };
+      sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1427,8 +1452,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       // the 3D ship models are picked by hand (their 2D icons are stale between two updates)
       const shipHit = extras?.pickShip(e.point.x, e.point.y, e.lngLat);
+      // the same holds for the 3D train, tram, subway and bus models
+      const vehHit = extras?.pickVehicle(e.point.x, e.point.y, e.lngLat);
       const ships3d = extras?.ships3dActive();
-      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships'));
+      const veh3d = extras?.vehicles3dActive();
+      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships') && !(veh3d && (l === 'trains' || l === 'transit-veh')));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
         [e.point.x - 4, e.point.y - 4],
@@ -1440,14 +1468,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
-        flightPanel?.open(picked);
+        if (picked.startsWith('sonde:')) {
+          flightPanel?.close();
+          sondePanel?.open(picked.slice('sonde:'.length));
+        } else {
+          sondePanel?.close();
+          flightPanel?.open(picked);
+        }
         return;
       }
       extras?.clearSelection();
-      const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
+        sondePanel?.close();
         flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'sonde') {
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {
@@ -1556,9 +1595,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (!map || document.hidden) return;
         if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
-        const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, 'sat-storm': EUMETSAT_STORM, imerg: IMERG_WMS };
+        // EUMETSAT layers get their own TIME parameter in the URL (newest published scan);
+        // only static-URL sources need the generic cache buster.
+        const live: Record<string, (() => string) | string> = {
+          'dwd-radar': DWD_RADAR_WMS,
+          'sat-ir': eumetsatIr,
+          'sat-storm': eumetsatStorm,
+          imerg: IMERG_WMS,
+        };
         const url = live[state.overlay];
-        if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([url + t]);
+        if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
     },
     deactivate() {

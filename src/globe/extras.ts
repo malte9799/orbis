@@ -4,6 +4,7 @@ import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from 
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
+import { VehiclesLayer } from './vehicles3d';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
@@ -54,9 +55,16 @@ export type ExtraId =
   | 'starlink'
   | 'shipping'
   | 'cables'
+  | 'ixp'
   | 'wind'
   | 'solar'
   | 'plants'
+  | 'water'
+  | 'nuclear'
+  | 'coal'
+  | 'gas'
+  | 'oil'
+  | 'biomass'
   | 'webcams'
   | 'alpr'
   | 'aurora'
@@ -96,7 +104,6 @@ export type ExtraId =
   | 'waves'
   | 'rivers'
   | 'terrain'
-  | 'buildings3d'
   | 'bathymetry'
   | 'chlorophyll'
   | 'ecradar'
@@ -166,9 +173,8 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'fmirain24', section: 'ocean', label: 'Regensumme 24 h Finnland', hint: 'Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute', glyph: 'flood', color: '#0277bd' },
   { id: 'jmanowcast', section: 'ocean', label: 'Radar-Nowcast Japan', hint: 'Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency', glyph: 'storm', color: '#ad1457' },
   { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
-  { id: 'buildings3d', section: 'ocean', label: '3D-Gebäude', hint: 'Gebäude als Volumen, ab Stadtzoom – Karte mit Strg + Ziehen kippen (OpenStreetMap)', glyph: 'city', color: '#9fb4d0' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
-  { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
+  { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live (SondeHub) – mit dem Flugverkehr als 3D-Modell und Detaildaten zum Klick', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
   { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
   { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
@@ -188,10 +194,17 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
   { id: 'pipelines', section: 'infra', label: 'Öl- & Gaspipelines', hint: 'Pipelines für Gas, Öl, Wasserstoff (ab Zoom 8) – OpenStreetMap', glyph: 'cable', color: '#29b6f6' },
   { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
-  { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'Unterseekabel aus OpenStreetMap (unvollständig), Internetknoten von PeeringDB', glyph: 'cable', color: '#9c6bff' },
+  { id: 'cables', section: 'infra', label: 'Seekabel', hint: 'Unterseekabel (unvollständig) – OpenStreetMap', glyph: 'cable', color: '#9c6bff' },
+  { id: 'ixp', section: 'infra', label: 'Internetknoten', hint: 'Internet Exchange Points – PeeringDB', glyph: 'cable', color: '#e040fb' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
-  { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Kern, Kohle, Gas, Wasser, Biomasse …', glyph: 'plant', color: FUELS.Nuclear.color },
+  { id: 'water', section: 'infra', label: 'Wasserkraft', hint: 'Wasser- und Gezeitenkraftwerke', glyph: 'hydro', color: FUELS.Hydro.color },
+  { id: 'nuclear', section: 'infra', label: 'Kernkraftwerke', hint: 'Kernkraftwerke weltweit (WRI Global Power Plant Database)', glyph: 'radiation', color: FUELS.Nuclear.color },
+  { id: 'coal', section: 'infra', label: 'Kohlekraftwerke', hint: 'Kohle- und Petrolkoks-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Coal.color },
+  { id: 'gas', section: 'infra', label: 'Gaskraftwerke', hint: 'Gaskraftwerke weltweit', glyph: 'plant', color: FUELS.Gas.color },
+  { id: 'oil', section: 'infra', label: 'Ölkraftwerke', hint: 'Öl-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Oil.color },
+  { id: 'biomass', section: 'infra', label: 'Biomasse & Abfall', hint: 'Biomasse- und Müllheizkraftwerke weltweit', glyph: 'plant', color: FUELS.Biomass.color },
+  { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Geothermie, Speicher, Kraft-Wärme-Kopplung …', glyph: 'plant', color: FUELS.Geothermal.color },
   { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
   { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
@@ -210,10 +223,17 @@ const LAYERS: Record<ExtraId, string[]> = {
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
   shipping: ['ship-lanes', 'ferries'],
-  cables: ['cables', 'ixp'],
+  cables: ['cables'],
+  ixp: ['ixp'],
   wind: ['power', 'osm-power'],
   solar: ['power', 'osm-power'],
   plants: ['power', 'osm-power'],
+  water: ['power', 'osm-power'],
+  nuclear: ['power', 'osm-power'],
+  coal: ['power', 'osm-power'],
+  gas: ['power', 'osm-power'],
+  oil: ['power', 'osm-power'],
+  biomass: ['power', 'osm-power'],
   webcams: ['webcams', 'webcams-osm'],
   aurora: ['aurora'],
   gvp: ['gvp'],
@@ -223,7 +243,6 @@ const LAYERS: Record<ExtraId, string[]> = {
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
   airports: ['airports', 'airports-minor', ...AIRPORT_FAR],
-  buildings3d: ['buildings-3d'],
   airport3d: AP3D_LAYERS,
   ships: ['ships'],
   ports: ['ports', 'ports-label'],
@@ -269,7 +288,19 @@ const LAYERS: Record<ExtraId, string[]> = {
 
 const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
 
-const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
+/** which power-plant categories each extra shows – all extras share the same point layers */
+const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
+  wind: ['wind'],
+  solar: ['solar'],
+  water: ['hydro'],
+  nuclear: ['nuclear'],
+  coal: ['coal'],
+  gas: ['gas'],
+  oil: ['oil'],
+  biomass: ['biomass'],
+  plants: ['other'],
+};
+const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
 /** Interactive layers this module answers clicks for. */
 export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
@@ -326,7 +357,9 @@ export type ClickResult =
   /** an aircraft was clicked: the flight panel shows it */
   | { type: 'flight'; hex: string; lng: number; lat: number }
   /** a ship was clicked: the ship panel shows it */
-  | { type: 'ship'; mmsi: number; lng: number; lat: number };
+  | { type: 'ship'; mmsi: number; lng: number; lat: number }
+  /** a radiosonde was clicked: the sonde panel shows it */
+  | { type: 'sonde'; serial: string; lng: number; lat: number };
 
 /** What the ship panel shows about one vessel. */
 export interface ShipInfo {
@@ -358,6 +391,30 @@ export interface FlightInfo {
   source: string;
   /** departure / destination (adsbdb); null: unknown, undefined: still loading */
   route?: FlightRoute | null;
+  /** values of the reports seen so far, for the graph of a clicked tile */
+  history?: { alt: number[]; speed: number[]; vs: number[]; track: number[] };
+}
+
+/** What the sonde panel shows about one radiosonde (SondeHub telemetry). */
+export interface SondeInfo {
+  serial: string;
+  type: string;
+  subtype: string;
+  manufacturer: string;
+  altM: number;
+  vsMs: number | null;
+  speedKmh: number | null;
+  track: number | null;
+  frequency: number | null;
+  frame: number | null;
+  datetime: string;
+  timeReceived: string;
+  uploader: string;
+  antenna: string;
+  software: string;
+  url: string;
+  lon: number;
+  lat: number;
   /** values of the reports seen so far, for the graph of a clicked tile */
   history?: { alt: number[]; speed: number[]; vs: number[]; track: number[] };
 }
@@ -412,7 +469,7 @@ export class ExtraLayers {
   private starlinkLoading: Promise<void> | null = null;
   private powerLoaded = false;
   private powerLoading: Promise<void> | null = null;
-  private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, other: 0 };
+  private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
   private osmPowerKey = '';
   private aircraftSeq = 0;
   private aircraftBusy = false;
@@ -422,6 +479,11 @@ export class ExtraLayers {
   private aircraftErr = '';
   private airport3d: Airport3D | null = null;
   private lastAircraft: AircraftResult | null = null;
+  /** latest radiosonde data (SondeHub) – also drives the 3D balloon models */
+  private lastSondes: FeatureCollection<Point> | null = null;
+  /** when the sondes were last fed into the 3D tracker / whether they are in there now */
+  private lastSondesFed = 0;
+  private sondes3D = false;
   /** helicopters of the 2D icons (their rotor blades are drawn as an own, turning layer) */
   private heliFeatures: Feature<Point>[] = [];
   private rotorShown = false;
@@ -461,6 +523,7 @@ export class ExtraLayers {
   private feedErrors = new Set<string>();
   private ais: AisStream | null = null;
   private ships3d?: ShipsLayer;
+  private vehicles3d?: VehiclesLayer;
   private shipsAll = new Map<number, Ship>();
   private lightning: LightningStream | null = null;
   /** Unteroptionen von "Blitze": Ton, Einschlagskreis, Detektoren + Linien */
@@ -1117,24 +1180,6 @@ export class ExtraLayers {
       const spec = airportLayer(id, 5 + i, [], true);
       add({ ...spec, source: 'airports-far', 'source-layer': undefined, maxzoom: 8, filter: ['==', ['get', 'tier'], i + 1], layout: { ...spec.layout, 'text-field': ['get', 'iata'] } } as LayerSpecification, 'marker');
     });
-    // 3D buildings everywhere, from zoom 14 on (the map has to be tilted to see them)
-    add(
-      {
-        id: 'buildings-3d',
-        type: 'fill-extrusion',
-        source: 'ofm',
-        'source-layer': 'building',
-        minzoom: 14,
-        layout: hidden,
-        paint: {
-          'fill-extrusion-color': '#1c2538', // the dark building colour of the map
-          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
-          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-          'fill-extrusion-opacity': 0.8,
-        },
-      },
-      'marker',
-    );
     add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private'], false), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
@@ -1585,7 +1630,21 @@ export class ExtraLayers {
       },
     });
     m.addLayer(this.ships3d, 'marker');
-    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons(), iconsTick: () => this.refreshAircraftIcons() });
+    // low-poly 3D trains, subways, trams, buses … from zoom 12 on the flat map and only while
+    // few enough of them are in view (otherwise they lag); the 2D dots step aside
+    this.vehicles3d = new VehiclesLayer({
+      enabled: () => this.on.has('trains') || this.on.has('transit'),
+      modeChanged: (on) => {
+        for (const id of ['trains', 'transit-veh']) {
+          if (!m.getLayer(id)) continue;
+          m.setPaintProperty(id, 'circle-opacity', on ? 0 : 1);
+          m.setPaintProperty(id, 'circle-stroke-opacity', on ? 0 : 1);
+        }
+        for (const id of ['trains-label', 'transit-label']) if (m.getLayer(id)) m.setPaintProperty(id, 'text-opacity', on ? 0 : 1);
+      },
+    });
+    m.addLayer(this.vehicles3d, 'marker');
+    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshLiveIcons(), iconsTick: () => this.refreshLiveIcons() });
     this.airport3d.init();
     this.ready = true;
     this.apply();
@@ -1809,7 +1868,7 @@ export class ExtraLayers {
     if (this.on.has('alpr')) this.loadAlprNow();
     if (this.on.has('waves')) this.loadWavesNow();
     if (this.on.has('rivers')) this.loadRiversNow();
-    if (this.on.has('wind') || this.on.has('solar') || this.on.has('plants')) this.loadOsmPowerNow();
+    if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
   }
 
   // -------------------------------------------------------------------------
@@ -1863,8 +1922,8 @@ export class ExtraLayers {
     for (const l of new Set(Object.values(LAYERS).flat())) this.vis(l, visible.has(l));
     // layers that were added lazily pick up the chosen opacity now
     for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
-    // power plants share layers – filter by enabled categories
-    const cats = (Object.keys(POWER_CAT) as ExtraId[]).filter((id) => this.on.has(id)).map((id) => POWER_CAT[id]!);
+    // power plants share layers – filter by the categories of the enabled extras
+    const cats = [...new Set(POWER_EXTRAS.filter((id) => this.on.has(id)).flatMap((id) => POWER_CATS[id]!))];
     this.map.setFilter('power', ['in', ['get', 'cat'], ['literal', cats]]);
     this.map.setFilter('osm-power', ['in', ['get', 'cat'], ['literal', cats]]);
     if (this.info.dwdwarn?.note && this.on.has('dwdwarn')) this.vis('dwd', true);
@@ -1875,6 +1934,21 @@ export class ExtraLayers {
     // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
     this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
     this.refreshAircraftIcons();
+    // the radiosondes fly along with the aircraft: feed their positions into the 3D tracker (again
+    // after each toggle and whenever the last feed lies back; the feed itself is fresh every 60 s)
+    const sondesOn = this.on.has('sondes');
+    if (sondesOn !== this.sondes3D) {
+      this.sondes3D = sondesOn;
+      if (sondesOn && this.lastSondes) {
+        this.lastSondesFed = Date.now();
+        this.airport3d?.feedSondes(this.lastSondes);
+      } else if (!sondesOn) this.airport3d?.clearSondes();
+    }
+    if (sondesOn && this.lastSondes && Date.now() - this.lastSondesFed > 20000) {
+      this.lastSondesFed = Date.now();
+      this.airport3d?.feedSondes(this.lastSondes);
+    }
+    this.refreshSondesIcons();
     // the airport symbols make room for the 3D airport once it is drawn
     const maxZoom = this.on.has('airport3d') ? AIRPORT_ZOOM : 24;
     for (const [id, min] of [['airports', 1], ['airports-minor', 5.5]] as const) if (this.map.getLayer(id)) this.map.setLayerZoomRange(id, min, maxZoom);
@@ -1918,7 +1992,11 @@ export class ExtraLayers {
         case 'sondes':
           this.loadOnce('sondes', 60000, async () => {
             const fc = await loadSondes();
+            this.lastSondes = fc;
+            this.lastSondesFed = Date.now();
+            this.airport3d?.feedSondes(fc);
             this.setData('sondes', fc);
+            this.refreshSondesIcons();
             return { count: fc.features.length };
           });
           break;
@@ -1934,10 +2012,28 @@ export class ExtraLayers {
           });
           break;
         case 'cables':
-          this.loadOnce('cables', Infinity, () => this.loadCablesAndIxps());
+          this.loadOnce('cables', Infinity, async () => {
+            const fc = await loadCables();
+            this.setData('cables', fc);
+            return { count: fc.features.length };
+          });
+          break;
+        case 'ixp':
+          this.loadOnce('ixp', Infinity, async () => {
+            const fc = await loadIxps();
+            this.setData('ixp', fc);
+            return { count: fc.features.length };
+          });
+          break;
           break;
         case 'wind':
         case 'solar':
+        case 'water':
+        case 'nuclear':
+        case 'coal':
+        case 'gas':
+        case 'oil':
+        case 'biomass':
         case 'plants':
           this.ensurePower();
           break;
@@ -2067,7 +2163,13 @@ export class ExtraLayers {
           break;
         case 'autobahn':
           this.loadOnce('autobahn', 10 * 60000, async () => {
-            const r = await loadAutobahn();
+            // Reports surface as their roads finish loading – the first sweep takes a while
+            // (the feed has no spatial query, so every road has to be visited), later
+            // sweeps are revalidated cheaply from the browser cache.
+            const r = await loadAutobahn((p) => {
+              this.setData('autobahn', { type: 'FeatureCollection', features: p.points });
+              this.setData('autobahn-line', { type: 'FeatureCollection', features: p.lines });
+            });
             this.setData('autobahn', r.points);
             this.setData('autobahn-line', r.lines);
             const n = (k: string) => r.points.features.filter((f) => f.properties?.kind === k).length;
@@ -2315,6 +2417,21 @@ export class ExtraLayers {
     this.setData('aircraft', { ...fc, features });
   }
 
+  /** 2D radiosonde symbols: hide the ones that are drawn as 3D balloon models (like the aircraft). */
+  private refreshSondesIcons() {
+    const fc = this.lastSondes;
+    if (!fc || !this.on.has('sondes')) return;
+    const air = this.airport3d;
+    const features = air ? fc.features.filter((f) => !air.ownsSonde(String(f.properties?.serial))) : fc.features;
+    if (features.length !== fc.features.length) this.setData('sondes', { ...fc, features });
+  }
+
+  /** 2D icon refresh for all live 3D traffic (aircraft and radiosondes). */
+  private refreshLiveIcons() {
+    this.refreshAircraftIcons();
+    this.refreshSondesIcons();
+  }
+
   /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
   flightInfo(hex: string): FlightInfo | null {
     const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex) ?? this.airport3d?.cachedFeatures(new Set())?.find((x) => x.properties?.hex === hex);
@@ -2359,6 +2476,45 @@ export class ExtraLayers {
     this.airport3d?.fitTrail(hex);
   }
 
+  /** Current data of a radiosonde for the sonde panel (smoothed position if it is tracked in 3D). */
+  sondeInfo(serial: string): SondeInfo | null {
+    const f = this.lastSondes?.features.find((x) => x.properties?.serial === serial);
+    if (!f) return null;
+    const p = f.properties as Record<string, unknown>;
+    const live = this.airport3d?.planeInfo(`sonde:${serial}`);
+    return {
+      serial,
+      type: String(p.type ?? ''),
+      subtype: String(p.subtype ?? ''),
+      manufacturer: String(p.manufacturer ?? ''),
+      altM: live ? live.altM : Number(p.altM) || 0,
+      vsMs: p.velV != null ? Number(p.velV) : null,
+      speedKmh: p.velH != null ? Math.round(Number(p.velH) * 36) / 10 : null,
+      track: p.heading != null ? Number(p.heading) : null,
+      frequency: p.frequency != null ? Number(p.frequency) : null,
+      frame: p.frame != null ? Number(p.frame) : null,
+      datetime: String(p.date ?? ''),
+      timeReceived: String(p.timeReceived ?? ''),
+      uploader: String(p.uploader ?? ''),
+      antenna: String(p.antenna ?? ''),
+      software: String(p.software ?? ''),
+      url: String(p.url ?? ''),
+      lon: live ? live.lon : f.geometry.coordinates[0],
+      lat: live ? live.lat : f.geometry.coordinates[1],
+      history: live ? { alt: live.hist.map((h) => h[0]), speed: live.hist.map((h) => h[1]), vs: live.hist.map((h) => h[2]), track: live.hist.map((h) => h[3]) } : undefined,
+    };
+  }
+
+  /** Highlight the ascent trail of a radiosonde (null: none). */
+  selectSonde(serial: string | null) {
+    this.airport3d?.select(serial == null ? null : `sonde:${serial}`);
+  }
+
+  /** Zoom the map to the whole ascent of a radiosonde. */
+  fitSonde(serial: string) {
+    this.airport3d?.fitTrail(`sonde:${serial}`);
+  }
+
   private startSatellites() {
     const wantBase = this.on.has('sats');
     const wantStarlink = this.on.has('starlink');
@@ -2401,37 +2557,21 @@ export class ExtraLayers {
     this.setData('sats', satelliteFeatures(list));
   }
 
-  private async loadCablesAndIxps() {
-    const [cables, ixps] = await Promise.allSettled([loadCables(), loadIxps()]);
-    let count = 0;
-    const missing: string[] = [];
-    if (cables.status === 'fulfilled') {
-      this.setData('cables', cables.value);
-      count += cables.value.features.length;
-    } else missing.push('Seekabel');
-    if (ixps.status === 'fulfilled') {
-      this.setData('ixp', ixps.value);
-      count += ixps.value.features.length;
-    } else missing.push('Internetknoten');
-    if (missing.length === 2) throw new Error('keine Quelle erreichbar');
-    return { count, note: missing.length ? `${missing.join(', ')} nicht erreichbar` : undefined };
-  }
-
   private ensurePower() {
     if (!this.powerLoaded && !this.powerLoading) {
-      for (const id of ['wind', 'solar', 'plants'] as ExtraId[]) if (this.on.has(id)) this.set(id, { loading: true });
+      for (const id of POWER_EXTRAS) if (this.on.has(id)) this.set(id, { loading: true });
       this.powerLoading = loadPowerPlants()
         .then((fc) => {
           this.powerLoaded = true;
           this.setData('power', fc);
-          this.powerCounts = { wind: 0, solar: 0, other: 0 };
+          this.powerCounts = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
           for (const f of fc.features) this.powerCounts[f.properties!.cat as PowerCat]++;
         })
         .catch(() => this.hooks.toast('Kraftwerksdatenbank konnte nicht geladen werden.'))
         .finally(() => {
           this.powerLoading = null;
-          for (const id of ['wind', 'solar', 'plants'] as ExtraId[]) {
-            this.set(id, { loading: false, count: this.powerLoaded ? this.powerCounts[POWER_CAT[id]!] : undefined });
+          for (const id of POWER_EXTRAS) {
+            this.set(id, { loading: false, count: this.powerLoaded ? this.powerCounts[POWER_CATS[id]![0]] : undefined });
           }
         });
     }
@@ -2716,6 +2856,7 @@ export class ExtraLayers {
     const gps = [...this.feedVeh.values()].flatMap((f) => f.features).filter((f) => (f.properties?.rail ? rail : local));
     const features = [...live.features, ...gps, ...(rail ? this.gpsTrains.features : [])];
     this.setData('trains', { type: 'FeatureCollection', features });
+    this.vehicles3d?.setFeatures(features as Feature<Point>[]);
     const nRail = features.filter((f) => f.properties?.rail).length;
     if (rail && this.info.trains?.count !== nRail) this.set('trains', { count: nRail, loading: false });
     if (local && this.info.transit?.count !== features.length - nRail) this.set('transit', { count: features.length - nRail });
@@ -2827,6 +2968,19 @@ export class ExtraLayers {
     const ship = this.ships3d?.isActive() ? this.ships3d.pick(x, y) : null;
     if (!ship) return null;
     const feature = { ...shipFeatures([ship]).features[0], layer: { id: 'ships' } } as unknown as MapGeoJSONFeature;
+    return this.click(feature, at);
+  }
+
+  /** True while the 3D vehicle models are drawn: the 2D dots are not clickable then (see pickVehicle). */
+  vehicles3dActive() {
+    return !!this.vehicles3d?.isActive();
+  }
+
+  /** The 3D vehicle model under a screen point as a click result (popup), if any. */
+  pickVehicle(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const f = this.vehicles3d?.isActive() ? this.vehicles3d.pick(x, y) : null;
+    if (!f) return null;
+    const feature = { ...f, layer: { id: f.properties?.rail ? 'trains' : 'transit-veh' } } as unknown as MapGeoJSONFeature;
     return this.click(feature, at);
   }
 
@@ -3092,7 +3246,7 @@ export class ExtraLayers {
       case 'aq-circle':
         return { type: 'html', html: html('air', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'sondes':
-        return { type: 'html', html: html('sonde', '#ff8fab') + '', lng: pt[0], lat: pt[1] };
+        return { type: 'sonde', serial: String(p.serial ?? ''), lng: pt[0], lat: pt[1] };
       case 'aircraft':
       case 'aircraft-vehicle':
       case 'ap3d-hit':
@@ -3410,7 +3564,7 @@ export class ExtraLayers {
       }
       case 'power':
       case 'osm-power': {
-        const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : 'plant';
+        const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : p.cat === 'hydro' ? 'hydro' : p.cat === 'nuclear' ? 'radiation' : 'plant';
         return { type: 'html', html: html(glyph, String(p.color)), lng: pt[0], lat: pt[1] };
       }
     }

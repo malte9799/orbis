@@ -45,6 +45,9 @@
 .hud .subs .n { margin-left: auto; font: 600 11px ui-monospace, Menlo, monospace; font-style: normal; color: var(--muted); }
 .hud .subs .n:empty { display: none; }
 .hud .subs button.tgl { margin-top: 0; }
+
+.hud .subs button.tgl .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; margin-left: 12px; box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 0 6px rgba(255,255,255,.12); }
+
 .hud .subs button.tgl.on { background: rgba(91,157,255,.16); border-color: rgba(91,157,255,.55); color: #d8e6ff; font-weight: 500; }
 
 /* Blitze Live: die Zeile selbst ist die Toggle-Box (wie .tgl.on), der Regler sitzt in derselben Box */

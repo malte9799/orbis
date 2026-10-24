@@ -84,33 +84,60 @@ export const OWM_FAMILY: WxFamily = {
 };
 
 /**
- * The Verkehr menu: one category at a time (radio). `defaults` are switched on with the category
- * and always stay on; every row inside switches one more layer (toggle).
+ * The Karten menus under the bar: one category at a time (radio). `defaults` are switched on with
+ * the category and always stay on; every row inside switches one more layer (toggle).
  */
 export interface TrafficCat {
   id: string;
   label: string;
   icon: string;
-  defaults: string[];
+  /** switched on when the category is selected ('' for menu purely of toggle rows) */
+  defaults?: string[];
   /** a row switches one or more layers together */
   rows: { label: string; layers: string[] }[];
 }
 export const TRAFFIC_MENU: TrafficCat[] = [
-  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['roadnet'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
   {
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
     rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
   },
-  // aircraft always on; "Flughäfen" = the airport symbols plus the airports in 3D when zoomed in close
-  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
+  // aircraft always on, the weather balloons fly along ("Flughäfen" = the airport symbols plus the
+  // airports in 3D when zoomed in close); the eye switch of each layer turns them off separately
+  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft', 'sondes'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
   { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
 ];
 /** every layer the Verkehr menu manages */
-export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.flatMap((r) => r.layers)]));
-export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
+export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
-/** families whose forecast model provides wind particles / isobars as options */
-export const WIND_OPTION_MAINS = ['wind'];
+/** the Infrastruktur menu – same pattern: category on, rows inside toggle layers */
+export const INFRA_MENU: TrafficCat[] = [
+  {
+    id: 'energie', label: 'Energie', icon: 'power',
+    rows: [
+      { label: 'Windkraft', layers: ['wind'] },
+      { label: 'Solarparks', layers: ['solar'] },
+      { label: 'Wasserkraft', layers: ['water'] },
+      { label: 'Kernkraftwerke', layers: ['nuclear'] },
+      { label: 'Kohlekraftwerke', layers: ['coal'] },
+      { label: 'Gaskraftwerke', layers: ['gas'] },
+      { label: 'Ölkraftwerke', layers: ['oil'] },
+      { label: 'Biomasse & Abfall', layers: ['biomass'] },
+      { label: 'Weitere Kraftwerke', layers: ['plants'] },
+    ],
+  },
+  { id: 'rohstoffe', label: 'Rohstoffe', icon: 'pick', defaults: ['resources'], rows: [{ label: 'Vorkommen', layers: ['resources'] }] },
+  { id: 'netze', label: 'Netze', icon: 'cable', rows: [{ label: 'Seekabel', layers: ['cables'] }, { label: 'Internetknoten', layers: ['ixp'] }, { label: 'Öl- & Gaspipelines', layers: ['pipelines'] }] },
+  { id: 'radio', label: 'Radio', icon: 'radio', defaults: ['radio'], rows: [{ label: 'Radiosender', layers: ['radio'] }] },
+  { id: 'ueberwachung', label: 'Überwachung', icon: 'cam', rows: [{ label: 'Live-Kameras', layers: ['webcams'] }, { label: 'Kennzeichen-Kameras', layers: ['alpr'] }] },
+];
+export const INFRA_LAYER_IDS = new Set(INFRA_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
+export const infraCatOf = (layer: string) => INFRA_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+/** the menu type of a Karten menu id ('' = none) */
+export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra', Set<string>> = { wx: new Set(), traffic: TRAFFIC_LAYER_IDS, infra: INFRA_LAYER_IDS };
+
+/** families whose forecast model provides isobars as an option */
 export const ISOBAR_OPTION_MAINS = ['wind', 'pressure'];
 
 // ---------------------------------------------------------------------------
@@ -144,8 +171,8 @@ const CAT_OF: Record<CatId, string[]> = {
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
   verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
-  erde: ['terrain', 'buildings3d', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
-  netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'plants'],
+  erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
+  netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'ixp', 'pipelines', 'wind', 'solar', 'water', 'nuclear', 'coal', 'gas', 'oil', 'biomass', 'plants'],
   medien: ['webcams', 'radio', 'alpr'],
 };
 
@@ -153,10 +180,11 @@ const ICON_OF: Record<string, string> = {
   cities: 'city', dwdwarn: 'warn', gauges: 'gauge', nina: 'warn', aq: 'air', aurora: 'aurora', tsunami: 'tsunami', lightning: 'bolt', radiation: 'radiation',
   resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
-  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain', buildings3d: 'city',
+  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
-  autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', webcams: 'cam', radio: 'radio',
+  autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', ixp: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', water: 'drop', nuclear: 'radiation',
+  coal: 'mountain', gas: 'flame', oil: 'barrel', biomass: 'leaf', webcams: 'cam', radio: 'radio',
   alpr: 'cam', fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
 };
 const GROUP_COLOR: Record<string, string> = { fires: '#ff5722', storms: '#7c8cff', tornado: '#b07cff', quakes: '#ffb547', volcanoes: '#ff7043', floods: '#3d9ad1', ice: '#9ec5e8' };
