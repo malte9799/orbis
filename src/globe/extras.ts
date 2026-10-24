@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gas: ['power', 'osm-power'],
   oil: ['power', 'osm-power'],
   biomass: ['power', 'osm-power'],
-  webcams: ['webcams', 'webcams-osm'],
+  webcams: ['webcams-heat', 'webcams', 'webcams-osm'],
   aurora: ['aurora'],
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
@@ -1450,6 +1450,24 @@ export class ExtraLayers {
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
+    // density map of all loaded live cameras (feeds + Windy + Finland): WebGL heatmap,
+    // fades out where the real camera pins take over
+    add(
+      {
+        id: 'webcams-heat',
+        type: 'heatmap',
+        source: 'webcams',
+        layout: hidden,
+        paint: {
+          'heatmap-weight': 0.6,
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 6, 6, 30, 9, 60],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 1],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 2, 0.7, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.25, 'rgba(0,191,165,0.35)', 0.6, '#4dd0e1', 0.85, '#fde047', 1, '#ff5ac8'],
+        },
+      },
+      'webcams',
+    );
     add(
       {
         id: 'blitzer',
