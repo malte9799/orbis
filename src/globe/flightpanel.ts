@@ -17,6 +17,14 @@ export interface FlightPanelHooks {
 
 type Follow = 'off' | 'follow' | 'cockpit';
 
+const M_PER_DEG = 111320;
+const rad = (d: number) => (d * Math.PI) / 180;
+
+/** A point `metres` away from lon/lat in the direction of a compass bearing. */
+function shift(lon: number, lat: number, bearing: number, metres: number): [number, number] {
+  return [lon + (metres * Math.sin(rad(bearing))) / (M_PER_DEG * Math.max(0.05, Math.cos(rad(lat)))), lat + (metres * Math.cos(rad(bearing))) / M_PER_DEG];
+}
+
 const SECTIONS: { key: string; title: string }[] = [
   { key: 'flight', title: 'Flugdaten' },
   { key: 'position', title: 'Position' },
@@ -99,8 +107,20 @@ export class FlightPanel {
       const tick = () => {
         const i = this.hex ? this.h.info(this.hex) : null;
         if (!i) return;
-        if (this.follow === 'cockpit') map.jumpTo({ center: [i.lon, i.lat], bearing: i.track, pitch: 75, zoom: Math.max(map.getZoom(), 15) });
-        else map.jumpTo({ center: [i.lon, i.lat] });
+        const alt = i.ground ? 0 : i.altM;
+        if (this.follow === 'cockpit') {
+          // the camera sits at the aircraft (on its altitude) and looks along its course: with the pitch
+          // the camera is `dist` away from the map centre, `dist · cos(pitch)` high and `dist · sin(pitch)`
+          // behind it – so the height fixes the zoom and the centre lies ahead of the aircraft
+          const pitch = Math.min(map.getMaxPitch(), 75);
+          const dist = (Math.max(alt, 20) + 8) / Math.cos(rad(pitch));
+          const h = map.getCanvas().clientHeight;
+          const zoom = Math.log2((40075016 * Math.cos(rad(i.lat))) / (512 * (dist / (1.5 * h))));
+          map.jumpTo({ center: shift(i.lon, i.lat, i.track, dist * Math.sin(rad(pitch))), bearing: i.track, pitch, zoom: Math.min(map.getMaxZoom(), Math.max(0, zoom)) });
+        } else {
+          // the aircraft is in the air: the map centre is where the view ray through it meets the ground
+          map.jumpTo({ center: shift(i.lon, i.lat, map.getBearing(), alt * Math.tan(rad(map.getPitch()))) });
+        }
       };
       tick();
       this.followTimer = window.setInterval(tick, 200);

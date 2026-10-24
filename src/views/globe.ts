@@ -1193,6 +1193,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
     el.querySelector('.maplibregl-ctrl-zoom-in')?.parentElement?.classList.add('nav-ctl');
     map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
+    // zoom level next to the scale bar
+    const zoomEl = document.createElement('div');
+    zoomEl.className = 'maplibregl-ctrl zoom-ctrl';
+    const showZoom = () => (zoomEl.textContent = `Zoom ${map!.getZoom().toFixed(1)}`);
+    map.addControl({ onAdd: () => { showZoom(); map!.on('zoom', showZoom); return zoomEl; }, onRemove: () => { map?.off('zoom', showZoom); zoomEl.remove(); } }, 'bottom-left');
 
     // phones: the attribution stays collapsed until the "i" button is tapped (MapLibre opens it
     // by itself whenever new sources bring attributions)

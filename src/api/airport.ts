@@ -34,6 +34,8 @@ export interface StaticAirport {
   name: string;
   /** [west, south, east, north] */
   bbox: [number, number, number, number];
+  /** IATA code, '' or missing if none */
+  iata?: string;
 }
 
 const STATIC = `${import.meta.env.BASE_URL}data/airports/`;
@@ -42,7 +44,7 @@ let staticIndex: { at: number; list: Promise<StaticAirport[]> } | null = null;
 /** The airports that ship with a layout; an unreachable index is retried after a minute. */
 export function staticAirports(): Promise<StaticAirport[]> {
   if (!staticIndex || (Date.now() - staticIndex.at > 60000 && staticIndex.list === FAILED)) {
-    const list = fetch(`${STATIC}index.json`)
+    const list = fetch(`${STATIC}index.json`, { cache: 'no-cache' })
       .then((r) => (r.ok ? (r.json() as Promise<{ airports: StaticAirport[] }>) : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((j) => j.airports)
       .catch(() => FAILED);
@@ -67,7 +69,7 @@ export async function loadStaticAirport(a: StaticAirport): Promise<AirportLayout
     const id = `l${a.icao}${i / step}`;
     const lt = step === 4 ? (LIGHT_TYPES[lights[i + 2]] ?? 'other') : 'txe';
     const col = step === 4 ? (LIGHT_COLOURS[lights[i + 3]] ?? 'white') : 'blue';
-    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '', lt, col } });
+    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '', lt, col, ...(step === 2 && { legacy: 1 }) } });
   }
   return j;
 }

@@ -69,11 +69,10 @@ const AIRPORTS: string[] = [
     // Germany
     'EDDF', 'EDDM', 'EDDB', 'EDDH', 'EDDL', 'EDDK', 'EDDS', 'EDDP',
     'EDDN', 'EDDV', 'EDDW', 'EDDG',
-    'EDDE', 'EDFH', 'EDFM', 'EDGS', 'EDHI', 'EDHK', 'EDHL', 'EDJA',
-    'EDLE', 'EDLP', 'EDLV', 'EDLW', 'EDMA', 'EDMO', 'EDNY', 'EDOP',
-    'EDQD', 'EDQM', 'EDRK', 'EDRY', 'EDSB', 'EDTD', 'EDTF', 'EDVE',
+    'EDDE', 'EDFH', 'EDFM', 'EDHI', 'EDHK', 'EDHL', 'EDJA',
+    'EDLE', 'EDLP', 'EDLV', 'EDLW', 'EDMA', 'EDMO', 'EDNY',     'EDQD', 'EDQM', 'EDRK', 'EDRY', 'EDSB', 'EDTD', 'EDTF', 'EDVE',
     'EDVK', 'EDVM', 'EDWI', 'EDWR', 'EDWY', 'EDAZ', 'EDBH', 'EDBN',
-    'EDCD', 'EDCG', 'EDCP', 'EDLA', 'EDLI', 'EDOV', 'EDPA',
+    'EDCG', 'EDCP', 'EDLA', 'EDLI', 'EDOV', 'EDPA',
     'EDQC', 'EDQH', 'EDRT', 'EDTM', 'EDTY',
 
     // Austria and Switzerland
@@ -119,7 +118,7 @@ const AIRPORTS: string[] = [
     'LTFM', 'LTBA',
     'OMDB', 'OMAA', 'OMDW', 'OMSJ',
     'OTHH', 'OTBD', 'OERK', 'OEJN', 'OEDF',
-    'OOMS', 'OKBK', 'OLBA', 'LLBG',
+    'OOMS', 'OLBA', 'LLBG', // Kuwait is OKKK since 2023 (see below)
 
     // Africa
     'FAOR', 'FACT', 'FALE',
@@ -137,7 +136,7 @@ const AIRPORTS: string[] = [
     'KSTL', 'KMCI', 'KIND', 'KCVG', 'KCLE',
     'KPIT', 'KBNA', 'KAUS', 'KSAT', 'KHOU',
     'KIAH', 'KDAL', 'KDFW', 'KMSY', 'KJAX',
-    'KANC', 'PHNL', 'KBUF', 'KRIC', 'KOMA',
+    'PANC', 'PHNL', 'KBUF', 'KRIC', 'KOMA',
     'KABQ',
 
     // Canada
@@ -161,7 +160,7 @@ const AIRPORTS: string[] = [
     // Southeast Asia
     'WSSS', 'WMKK', 'WMKP', 'WIII', 'WADD',
     'VTBS', 'VTBD', 'VTSP', 'VVNB', 'VVTS',
-    'RPLL', 'RPVM', 'VDPP', 'VLVT',
+    'RPLL', 'RPVM', 'VLVT',
 
     // South Asia
     'VIDP', 'VABB', 'VOBL', 'VOMM', 'VOHS',
@@ -184,6 +183,20 @@ const AIRPORTS: string[] = [
     'MPTO', 'MROC', 'MGGT', 'MHLM', 'MKJP',
     'TNCM', 'TJSJ', 'MYNN', 'MDSD', 'MDPC',
     'MUHA', 'MWCR',
+
+    // Further airports among the busiest ~200 worldwide (about 8 million passengers a year and more)
+    'KLAS', 'KEWR', 'KLGA', 'KMDW', 'KSMF', 'KSNA', 'KOAK', 'KRDU', 'KRSW', 'KCMH', 'PHOG',
+    'UUEE', 'UUDD', 'UUWW', 'ULLI', 'URSS', 'URKK', 'USSS', 'UNNT', 'LTFJ',
+    'EGGD', 'EGGP', 'LIPE', 'LIML', 'LEMG', 'LEIB', 'GCTS', 'GCLP', 'GCRR', 'EVRA',
+    'OKKK', 'OBBI', 'OEMA', 'OJAI', 'OIIE', 'OIII', 'OIMM',
+    'ZBAD', 'ZUTF', 'ZSSS', 'ZBTJ', 'ZHHH', 'ZHCC', 'ZGNN', 'ZYHB', 'ZYTL', 'ZYTX', 'ZSQD', 'ZGHA',
+    'ZUGY', 'ZPPP', 'ZSAM', 'ZSFZ', 'ZJHK', 'ZJSY', 'ZSWZ', 'ZSNB', 'ZSOF', 'ZSJN', 'ZBYN', 'ZWWW',
+    'ZLLL', 'ZLIC', 'ZYCC', 'ZSCN', 'ZGSD', 'ZLXN', 'ZPLJ',
+    'RKPC', 'RCKH',
+    'WAAA', 'WARR', 'WIMM', 'VTCC', 'VVDN', 'VVCR', 'VVPQ', 'WBKK', 'VCBI', 'VNKT', 'VGHS',
+    'VAAH', 'VAPO', 'VOGA', 'VEGT', 'VIJP', 'VILK', 'VOCI', 'OPKC',
+    'UAAA',
+    'SBCT', 'MMSD',
   ]),
 ];
 
@@ -207,6 +220,8 @@ interface IndexEntry {
   icao: string;
   name: string;
   bbox: number[];
+  /** IATA code ('' if the airport has none); shown on the map from far away */
+  iata?: string;
 }
 
 interface Geo {
@@ -242,6 +257,8 @@ interface CompactAirport {
 
 interface Options {
   force: boolean;
+  /** only fill the IATA codes of the index, build nothing */
+  meta: boolean;
   workers: number;
 }
 
@@ -472,6 +489,7 @@ async function overpass<T>(query: string, label: string, worker: number): Promis
 
 interface Outline {
   name: string;
+  iata: string;
   bounds: { minlat: number; minlon: number; maxlat: number; maxlon: number };
 }
 
@@ -495,7 +513,8 @@ async function loadOutlines(icaos: string[], workers: number): Promise<Map<strin
   const missing: string[] = [];
 
   for (const icao of icaos) {
-    if (cache[icao]) out.set(icao, cache[icao]);
+    // outlines cached by an older version lack the IATA code
+    if (cache[icao] && 'iata' in cache[icao]) out.set(icao, cache[icao]);
     else missing.push(icao);
   }
 
@@ -522,7 +541,7 @@ async function loadOutlines(icaos: string[], workers: number): Promise<Map<strin
 
         if (known && boundsArea(known.bounds) >= boundsArea(e.bounds)) continue;
 
-        out.set(icao, { name: e.tags?.['name:de'] ?? e.tags?.name ?? icao, bounds: e.bounds });
+        out.set(icao, { name: e.tags?.['name:de'] ?? e.tags?.name ?? icao, iata: e.tags?.iata ?? '', bounds: e.bounds });
       }
 
       console.log(`Outlines: batch ${n + 1}/${chunks.length} done (${chunk.length} codes)`);
@@ -692,9 +711,10 @@ function flushIndex(map: Map<string, IndexEntry>) {
 
 function printHelp() {
   console.log(
-    `Usage: node airports.mjs [--force] [--workers N] [ICAO ...]
+    `Usage: node airports.mjs [--force] [--meta] [--workers N] [ICAO ...]
 
   --force        regenerate existing files
+  --meta         only add the IATA codes to index.json (cheap, no airport is built)
   --workers N    parallel requests (default ${DEFAULT_WORKERS}, max 4)
   ICAO           one or more 4-letter ICAO codes (default: built-in list)`,
   );
@@ -713,7 +733,7 @@ async function main() {
 
   if (wIdx >= 0) args.splice(wIdx, 2);
 
-  const unknown = args.filter((a) => a.startsWith('-') && a !== '--force');
+  const unknown = args.filter((a) => a.startsWith('-') && a !== '--force' && a !== '--meta');
 
   if (unknown.length || !Number.isInteger(workerArg) || workerArg < 1) {
     console.error(`Unknown option(s): ${unknown.join(', ') || '--workers needs a number'}`);
@@ -724,6 +744,7 @@ async function main() {
 
   const opts: Options = {
     force: args.includes('--force'),
+    meta: args.includes('--meta'),
     workers: Math.min(workerArg, 4),
   };
 
@@ -750,7 +771,7 @@ async function main() {
     process.exit(130);
   });
 
-  const todo = list.filter((icao) => opts.force || !existsSync(`${OUT}/${icao}.json`));
+  const todo = opts.meta ? [] : list.filter((icao) => opts.force || !existsSync(`${OUT}/${icao}.json`));
   const skipped = list.length - todo.length;
 
   console.log(`${list.length} airports requested, ${skipped} already built, ${todo.length} to do, ${opts.workers} workers`);
@@ -775,7 +796,7 @@ async function main() {
       const jsonPath = `${OUT}/${icao}.json`;
 
       writeAtomic(jsonPath, JSON.stringify(data));
-      index.set(icao, toEntry(data));
+      index.set(icao, { ...toEntry(data), iata: outline.iata });
       built++;
 
       if (built % INDEX_FLUSH_EVERY === 0) flushIndex(index);
@@ -798,6 +819,21 @@ async function main() {
 
     console.log(`[${done}/${todo.length}] ${line}  (w${worker}, ETA ${Math.ceil(eta / 60)} min)`);
   });
+
+  // IATA codes of airports built earlier (they are shown on the map from far away)
+  const noIata = [...index.values()].filter((e) => e.iata === undefined).map((e) => e.icao);
+
+  if (noIata.length) {
+    console.log(`IATA codes for ${noIata.length} airports in the index …`);
+
+    const found = await loadOutlines(noIata, opts.workers);
+
+    for (const icao of noIata) {
+      const e = index.get(icao);
+
+      if (e && found.has(icao)) e.iata = found.get(icao)!.iata;
+    }
+  }
 
   flushIndex(index);
 

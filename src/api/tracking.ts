@@ -159,10 +159,16 @@ interface Ac {
   emergency?: string;
 }
 
-export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone';
+export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
 
 function aircraftKind(a: Ac): AircraftKind {
+  // ground transponders typed "TWR" (vehicles, equipment on the airfield)
+  if (a.t === 'TWR') return 'vehicle';
   switch (a.category) {
+    // surface emergency / service vehicles on the airfield
+    case 'C1':
+    case 'C2':
+      return 'vehicle';
     case 'A7':
       return 'heli';
     case 'B1':
@@ -287,6 +293,24 @@ export async function loadGlobalAircraft(): Promise<AircraftResult> {
   return fc;
 }
 
+/** One aircraft by its Mode-S code, wherever it is (for the selected aircraft when the map is far away from it). */
+export async function loadAircraftByHex(hex: string): Promise<AircraftResult> {
+  resetOnProxyChange();
+  const sources: [string, string][] = [
+    ['adsb.lol (ODbL)', 'https://api.adsb.lol/v2/hex/'],
+    ['airplanes.live', 'https://api.airplanes.live/v2/hex/'],
+  ];
+  let last: unknown;
+  for (const [label, base] of sources) {
+    try {
+      return toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('Flugzeug nicht erreichbar');
+}
+
 /** Aircraft within `radiusNm` (max 250) around a point. */
 export async function loadAircraft(lat: number, lon: number, radiusNm: number): Promise<AircraftResult> {
   resetOnProxyChange();
@@ -324,10 +348,15 @@ export async function loadAircraft(lat: number, lon: number, radiusNm: number): 
   throw new Error(`Keine Flugdatenquelle erreichbar (${errors.join('; ')})`);
 }
 
+/** Some feeds send "@@@@@@@@" instead of a callsign / registration / type when nothing was decoded. */
+const clean = (v?: string) => (v ?? '').replace(/@/g, '').trim();
+
 function toFeatures(list: Ac[], source: string): AircraftResult {
   const features: Feature<Point>[] = [];
   for (const a of list) {
     if (a.lat == null || a.lon == null) continue;
+    // ADS-B also carries fixed obstacles (category C3–C5, hex 000000): no aircraft and no vehicle
+    if (/^C[3-5]$/.test(a.category ?? '') || /^0+$/.test(a.hex)) continue;
     const onGround = a.alt_baro === 'ground';
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({
@@ -336,15 +365,15 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
       properties: {
         hex: a.hex,
         kind: aircraftKind(a),
-        callsign: (a.flight ?? '').trim() || a.r || a.hex.toUpperCase(),
-        reg: a.r ?? '',
-        type: a.desc || a.t || '',
-        icao: a.t ?? '',
+        callsign: clean(a.flight) || clean(a.r) || a.hex.toUpperCase(),
+        reg: clean(a.r),
+        type: clean(a.desc) || clean(a.t),
+        icao: clean(a.t),
         squawk: a.squawk ?? '',
         // ft/min → m/s
         vsMs: a.baro_rate != null ? Math.round(a.baro_rate * 0.0508) / 10 : null,
         cat: a.category ?? '',
-        operator: a.ownOp ?? '',
+        operator: clean(a.ownOp),
         altM: onGround ? 0 : Math.round(altFt * 0.3048),
         speedKmh: a.gs != null ? Math.round(a.gs * 1.852) : null,
         track: a.track ?? a.true_heading ?? 0,

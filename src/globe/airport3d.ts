@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, staticAirports, type Bounds, type StaticAirport } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
-import { loadRoute, plausible, type FlightRoute } from '../api/route';
+import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
@@ -18,6 +18,13 @@ const PLANE_ZOOM = 6.5;
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
+/**
+ * Lights in the colours OSM maps (thresholds green or red, approach lights white or red, red/yellow
+ * bars …). `true` simplifies them: thresholds green, approach white, everything on a runway white.
+ * Meant to become an option later.
+ */
+const SIMPLE_LIGHTS = false;
+
 /** Lights are shown from the same zoom as the taxiways and loaded from the layout zoom on. */
 const LIGHT_ZOOM = AIRPORT_ZOOM;
 /** Grid of the requested boxes (degrees): a pan inside a loaded box costs no request. */
@@ -26,7 +33,7 @@ const MAX_FEATURES = 25000;
 
 export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate'];
 /** the aircraft labels and click targets follow the aircraft, not the airport layer */
-const PLANE_LAYERS = ['ap3d-label', 'ap3d-hit'];
+const PLANE_LAYERS = ['ap3d-hit'];
 export const AP3D_HIT_LAYER = 'ap3d-hit';
 
 const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B762', 'B763', 'B764', 'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B788', 'B789', 'B78X', 'A306', 'A30B', 'A310', 'A332', 'A333', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K', 'A388', 'MD11', 'DC10', 'IL96', 'A124', 'AN12', 'C5M', 'C17', 'A225', 'BLCF', 'BSCA', 'B74F']);
@@ -66,7 +73,7 @@ export class Airport3D {
   private layoutOn = false;
   private planesOn = false;
   private iconsOn = false;
-  private lastMode: PlaneMode = 'off';
+  private lastMode = 'off';
   private polys = new Map<string, Poly>();
   private lines = new Map<string, Line>();
   private points = new Map<string, Pt>();
@@ -86,6 +93,7 @@ export class Airport3D {
   ) {
     this.layer = new PlanesLayer(this.tracker, {
       mode: () => this.mode(),
+      only: () => this.onlySelected(),
       icons: () => this.iconsOn,
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
@@ -93,8 +101,20 @@ export class Airport3D {
   }
 
   /** 'off' without aircraft layer, zoomed out or on the globe; 'flat' while the map is not tilted. */
+  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route (not on the globe). */
+  private onlySelected(): string | null {
+    const hex = this.layer.selected;
+    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && this.map.getProjection()?.type !== 'globe' && this.tracker.planes.has(hex) ? hex : null;
+  }
+
+  /** The selected aircraft, if any. */
+  selectedHex(): string | null {
+    return this.layer.selected;
+  }
+
   mode(): PlaneMode {
-    if (!this.planesOn || this.map.getZoom() < PLANE_ZOOM || this.map.getProjection()?.type === 'globe') return 'off';
+    if (!this.planesOn || this.map.getProjection()?.type === 'globe') return 'off';
+    if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
 
@@ -106,7 +126,8 @@ export class Airport3D {
   }
 
   private checkMode() {
-    const mode = this.mode();
+    // the 2D icons also change when only the selected aircraft is left far out
+    const mode = this.mode() + (this.onlySelected() ?? '');
     if (mode === this.lastMode) return;
     this.lastMode = mode;
     this.hooks.modeChanged();
@@ -170,8 +191,10 @@ export class Airport3D {
       filter: ['==', ['get', 'kind'], 'light'],
       layout: hidden,
       paint: {
-        // thresholds read green and approach lights white from both directions (OSM also stores their red sides)
-        'circle-color': ['match', ['get', 'lt'], 'rwt', '#2bd47d', 'als', '#f4f6f8', ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8']],
+        'circle-color': SIMPLE_LIGHTS
+          ? // thresholds read green and approach lights white from both directions (OSM also stores their red sides)
+            ['match', ['get', 'lt'], 'rwt', '#2bd47d', 'als', '#f4f6f8', ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8']]
+          : ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8'],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['*', lightSize, 0.5], 16, lightSize, 19, ['*', lightSize, 2.2]],
         'circle-opacity': ['match', ['get', 'lt'], 'txc', 0.75, 0.95],
       },
@@ -198,28 +221,10 @@ export class Airport3D {
       id: 'ap3d-gate',
       type: 'symbol',
       source: 'ap3d-pt',
-      minzoom: AIRPORT_ZOOM + 2,
+      minzoom: AIRPORT_ZOOM + 4,
       filter: ['all', ['in', ['get', 'kind'], ['literal', ['gate', 'parking']]], ['!=', ['get', 'ref'], '']],
       layout: { ...hidden, 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false },
       paint: { 'text-color': '#ffd23f', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-    });
-    add({
-      id: 'ap3d-label',
-      type: 'symbol',
-      source: 'ap3d-label',
-      minzoom: PLANE_ZOOM,
-      layout: {
-        ...hidden,
-        'text-field': ['step', ['zoom'], ['get', 'callsign'], 16, ['concat', ['get', 'callsign'], ['case', ['!=', ['get', 'icao'], ''], ['concat', '\n', ['get', 'icao']], '']]],
-        'text-font': FONT_BOLD,
-        'text-size': 12,
-        // the label sits above the model: `lift` (em) grows with the zoom and the altitude
-        'text-variable-anchor': ['bottom'],
-        'text-radial-offset': ['get', 'lift'],
-        'text-allow-overlap': true,
-        'text-padding': 4,
-      },
-      paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(10,12,16,0.85)', 'text-halo-width': 1.6 },
     });
     // invisible but clickable: the 3D models themselves cannot be picked
     add({
@@ -335,9 +340,60 @@ export class Airport3D {
       });
   }
 
+  /**
+   * Lights on a runway read white: OSM often tags runway edge lights blue (or leaves the airport's
+   * lights untagged, which the files store as blue). Whatever blue light lies within a runway's width
+   * is switched to white, as is every blue light on the extended centre line up to 1.2 km before and behind the
+   * runway ends (approach lighting); automatically for every airport. Thresholds, stop bars etc. keep their colour.
+   */
+  private whitenRunwayLights(points: Pt[]) {
+    const runways: { w: number; coords: number[][] }[] = [];
+    for (const l of this.lines.values()) {
+      if (l.properties?.kind === 'runway' && l.geometry.type === 'LineString') runways.push({ w: Math.max(Number(l.properties.w) || 0, 45), coords: l.geometry.coordinates });
+    }
+    if (!runways.length) return;
+    for (const f of points) {
+      const pr = f.properties;
+      // files in the old format only know positions (all "blue"); the full colours are kept for the others
+      if (!pr || pr.kind !== 'light' || pr.col === 'white' || !(SIMPLE_LIGHTS || pr.legacy)) continue;
+      const recolour = pr.col === 'blue' || (['rwe', 'rwc', 'tdz'].includes(String(pr.lt)) && pr.col === 'green');
+      if (!recolour) continue;
+      const [lon, lat] = f.geometry.coordinates;
+      const kx = Math.cos((lat * Math.PI) / 180) * 111320;
+      const near = runways.some(({ w, coords }) => {
+        // approach lights: on the extended centre line, up to 1.2 km before and behind the runway ends
+        const first = coords[0];
+        const last = coords[coords.length - 1];
+        const ex = (last[0] - first[0]) * kx;
+        const ey = (last[1] - first[1]) * 111320;
+        const len = Math.hypot(ex, ey);
+        if (len > 300) {
+          const rx = (lon - first[0]) * kx;
+          const ry = (lat - first[1]) * 111320;
+          const along = (rx * ex + ry * ey) / len;
+          const across = Math.abs(rx * ey - ry * ex) / len;
+          if (across <= Math.max(25, w / 2 + 6) && along >= -1200 && along <= len + 1200) return true;
+        }
+        const limit = w / 2 + 6;
+        for (let i = 0; i + 1 < coords.length; i++) {
+          const ax = (coords[i][0] - lon) * kx;
+          const ay = (coords[i][1] - lat) * 111320;
+          const dx = (coords[i + 1][0] - coords[i][0]) * kx;
+          const dy = (coords[i + 1][1] - coords[i][1]) * 111320;
+          const len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+          if (Math.hypot(ax + t * dx, ay + t * dy) <= limit) return true;
+        }
+        return false;
+      });
+      if (near) pr.col = 'white';
+    }
+  }
+
   private merge(polys: Poly[], lines: Line[], points: Pt[]) {
     for (const f of polys) this.polys.set(String(f.id), f);
     for (const f of lines) this.lines.set(String(f.id), f);
+    this.whitenRunwayLights(points);
     for (const f of points) this.points.set(String(f.id), f);
     this.setData('ap3d-poly', emptyFc([...this.polys.values()]));
     this.setData('ap3d-line', emptyFc([...this.lines.values()]));
@@ -375,13 +431,25 @@ export class Airport3D {
     });
   }
 
+  /** Cached aircraft that the latest request did not return (e.g. outside the view then), at their smoothed positions. */
+  cachedFeatures(skip: Set<string>): Feature<Point>[] {
+    const out: Feature<Point>[] = [];
+    for (const p of this.tracker.planes.values()) {
+      if (skip.has(p.hex)) continue;
+      out.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.dLon, p.dLat] }, properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack) } });
+    }
+    return out;
+  }
+
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
+    const only = this.onlySelected();
+    if (only) return hex === only && this.mode() === '3d';
     return this.mode() === '3d' && this.tracker.planes.has(hex);
   }
 
   /** Fresh aircraft positions from the data source. */
-  feed(fc: AircraftResult) {
+  feed(fc: AircraftResult, area?: { lat: number; lon: number; nm: number }) {
     if (!this.planesOn) return;
     const reports: PlaneReport[] = [];
     for (const f of fc.features) {
@@ -398,6 +466,7 @@ export class Airport3D {
         lon,
         lat,
         altM: Number(p.altM) || 0,
+        vsMs: p.vsMs != null ? Number(p.vsMs) || 0 : 0,
         track: Number(p.track) || 0,
         // a taxiing or parked plane (a few knots of noise) must not drift
         speedMs: ground && speedMs < 1.5 ? 0 : speedMs,
@@ -407,26 +476,15 @@ export class Airport3D {
         props: p,
       });
     }
-    this.tracker.feed(reports, performance.now());
+    this.tracker.feed(reports, performance.now(), area);
     if (this.mode() !== 'off') this.map.triggerRepaint();
-  }
-
-  /** Label distance above the ground point in em: the model's size plus its altitude on screen. */
-  private lift(altM: number, lat: number) {
-    const m = this.map;
-    const zoom = m.getZoom();
-    const base = 1.4 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 2;
-    if (altM < 1) return base;
-    const metresPerPx = (40075016 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-    const heightPx = (altM * Math.sin((m.getPitch() * Math.PI) / 180)) / metresPerPx;
-    return base + Math.min(heightPx, 4000) / 12;
   }
 
   private updateLabels(planes: PlaneState[]) {
     const features: Feature<Point>[] = planes.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.dLon, p.dLat] },
-      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? ''), lift: this.lift(p.dAlt, p.dLat) },
+      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? '') },
     }));
     this.setData('ap3d-label', emptyFc(features));
   }
@@ -435,31 +493,33 @@ export class Airport3D {
   select(hex: string | null) {
     if (hex === this.layer.selected) return;
     this.layer.selected = hex;
+    this.tracker.keep = hex;
+    this.checkMode();
     if (hex) void this.fetchRoute(hex);
     this.map.triggerRepaint();
   }
 
-  /** hex → route of the aircraft (null: unknown / not plausible, missing: still loading) */
-  private routes = new Map<string, FlightRoute | null>();
+  /** hex → route as stored by adsbdb (raw: null = unknown / failed), and the one shown (aligned with the flight direction) */
+  private routes = new Map<string, { raw: FlightRoute | null; shown: FlightRoute | null; at: number }>();
 
   route(hex: string): FlightRoute | null | undefined {
-    return this.routes.get(hex);
+    return this.routes.get(hex)?.shown;
   }
 
   /** Route of the selected aircraft by its callsign (adsbdb) → grey dashed line to the airports. */
   private async fetchRoute(hex: string) {
-    const p = this.tracker.planes.get(hex);
-    const known = this.routes.get(hex);
-    if (known !== undefined) {
-      this.applyRoute(hex, known);
-      return;
+    // a found route is kept; "unknown" (or a failed request) is asked again after two minutes
+    let known = this.routes.get(hex);
+    if (!known || (!known.raw && Date.now() - known.at > 120_000)) {
+      const found = await loadRoute(String(this.tracker.planes.get(hex)?.props.callsign ?? ''));
+      known = { raw: found, shown: null, at: Date.now() };
+      this.routes.set(hex, known);
     }
-    const found = await loadRoute(String(p?.props.callsign ?? ''));
+    // direction is decided on every selection from the aircraft's current state, not once for good
     const now = this.tracker.planes.get(hex);
     // the callsign of the route must still fit the aircraft's position
-    const route = found && now && plausible(found, now.dLon, now.dLat) ? found : null;
-    this.routes.set(hex, route);
-    this.applyRoute(hex, route);
+    known.shown = known.raw && now && plausible(known.raw, now.dLon, now.dLat) ? orient(known.raw, now.dLon, now.dLat, now.dTrack, now.vsMs, now.ground) : null;
+    this.applyRoute(hex, known.shown);
   }
 
   private applyRoute(hex: string, route: FlightRoute | null) {
@@ -482,12 +542,19 @@ export class Airport3D {
   fitTrail(hex: string) {
     const p = this.tracker.planes.get(hex);
     if (!p) return;
-    const pts = [...p.trail, [p.dLon, p.dLat]];
+    // the trail is in the air: seen from the tilted camera every point lies `altitude · tan(pitch)` further ahead
+    const bearing = this.map.getBearing();
+    const pitch = this.map.getPitch();
+    const k = Math.tan((pitch * Math.PI) / 180);
+    const pts = [...p.trail.map((t) => [t[0], t[1], t[2]]), [p.dLon, p.dLat, p.ground ? 0 : p.dAlt]].map(([lon, lat, alt]) => {
+      const d = p.ground ? 0 : alt * k;
+      return [lon + (d * Math.sin((bearing * Math.PI) / 180)) / (111320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180))), lat + (d * Math.cos((bearing * Math.PI) / 180)) / 111320];
+    });
     const w = Math.min(...pts.map((t) => t[0]));
     const e = Math.max(...pts.map((t) => t[0]));
     const s = Math.min(...pts.map((t) => t[1]));
     const n = Math.max(...pts.map((t) => t[1]));
-    this.map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 60, right: 400 }, maxZoom: 14, duration: 800 });
+    this.map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 60, right: 400 }, maxZoom: 14, duration: 800, bearing, pitch });
   }
 
   private setData(id: string, data: FeatureCollection) {

@@ -2,8 +2,9 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
+import { staticAirports } from '../api/airport';
 import type { FlightRoute } from '../api/route';
-import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
+import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
@@ -194,12 +195,15 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
 ];
 
+/** the big airports of our own list for zoom 5–8 (the tiles have airports from zoom 8): by size, largest first */
+const AIRPORT_FAR = ['airports-far-1', 'airports-far-2', 'airports-far-3'];
+
 const LAYERS: Record<ExtraId, string[]> = {
   cities: ['cities'],
   dwdwarn: ['dwd-warn-fill', 'dwd-warn-line'],
   gauges: ['gauges'],
   aq: ['aq-circle', 'aq-text'],
-  aircraft: ['aircraft'],
+  aircraft: ['aircraft', 'aircraft-rotor', 'aircraft-vehicle'],
   sondes: ['sondes'],
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
@@ -216,7 +220,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   lightning: ['lightning-glow', 'lightning'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
-  airports: ['airports', 'airports-minor'],
+  airports: ['airports', 'airports-minor', ...AIRPORT_FAR],
   buildings3d: ['buildings-3d'],
   airport3d: AP3D_LAYERS,
   ships: ['ships'],
@@ -265,7 +269,7 @@ const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/b
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = ['cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -390,6 +394,9 @@ export class ExtraLayers {
   private aircraftErr = '';
   private airport3d: Airport3D | null = null;
   private lastAircraft: AircraftResult | null = null;
+  /** helicopters of the 2D icons (their rotor blades are drawn as an own, turning layer) */
+  private heliFeatures: Feature<Point>[] = [];
+  private rotorShown = false;
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
@@ -469,7 +476,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -965,7 +972,7 @@ export class ExtraLayers {
       'marker',
     );
     // transport
-    const airportLayer = (id: string, minzoom: number, classes: string[]): LayerSpecification => ({
+    const airportLayer = (id: string, minzoom: number, classes: string[], textOverlap: boolean): LayerSpecification => ({
       id,
       type: 'symbol',
       source: 'ofm',
@@ -982,21 +989,31 @@ export class ExtraLayers {
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
         'text-optional': true,
+        // icons and names stay visible at medium zoom (~50 km) and are not hidden by place labels of the base map
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-allow-overlap': textOverlap,
       },
       paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
     });
-    add(airportLayer('airports', 1, ['international']), 'marker');
-    // 3D buildings everywhere, from city zoom on (the map has to be tilted to see them)
+    add(airportLayer('airports', 1, ['international'], true), 'marker');
+    // The map tiles only carry airports from zoom 8. The big ones (from our own airport list, by size) show up earlier:
+    // the largest from zoom 5, then 6 and 7.
+    AIRPORT_FAR.forEach((id, i) => {
+      const spec = airportLayer(id, 5 + i, [], true);
+      add({ ...spec, source: 'airports-far', 'source-layer': undefined, maxzoom: 8, filter: ['==', ['get', 'tier'], i + 1], layout: { ...spec.layout, 'text-field': ['get', 'iata'] } } as LayerSpecification, 'marker');
+    });
+    // 3D buildings everywhere, from zoom 14 on (the map has to be tilted to see them)
     add(
       {
         id: 'buildings-3d',
         type: 'fill-extrusion',
         source: 'ofm',
         'source-layer': 'building',
-        minzoom: 15,
+        minzoom: 14,
         layout: hidden,
         paint: {
-          'fill-extrusion-color': '#9fb4d0',
+          'fill-extrusion-color': '#1c2538', // the dark building colour of the map
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-opacity': 0.8,
@@ -1004,7 +1021,7 @@ export class ExtraLayers {
       },
       'marker',
     );
-    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private']), 'marker');
+    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private'], false), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
         type: 'raster',
@@ -1315,6 +1332,7 @@ export class ExtraLayers {
         id: 'aircraft',
         type: 'symbol',
         source: 'aircraft',
+        filter: ['!=', ['get', 'kind'], 'vehicle'],
         layout: {
           ...hidden,
           'icon-image': ['concat', 'sil-', ['get', 'kind']],
@@ -1336,6 +1354,55 @@ export class ExtraLayers {
           'text-color': '#ffffff',
           'text-halo-color': 'rgba(0,0,0,0.8)',
           'text-halo-width': 1.2,
+        },
+      },
+      'marker',
+    );
+    // the rotor blades of helicopters: an own icon around the same centre, turned by a timer (see below)
+    add(
+      {
+        id: 'aircraft-rotor',
+        type: 'symbol',
+        source: 'aircraft-rotor',
+        layout: {
+          ...hidden,
+          'icon-image': 'sil-rotor',
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.3],
+          'icon-rotate': ['get', 'rot'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: {
+          'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
+          'icon-halo-color': 'rgba(0,0,0,0.75)',
+          'icon-halo-width': 1,
+        },
+      },
+      'marker',
+    );
+    // the blades turn: the (few) helicopter positions go into their own source with a changing angle
+    window.setInterval(() => {
+      if (document.hidden || !this.on.has('aircraft')) return;
+      if (!this.heliFeatures.length && !this.rotorShown) return;
+      const rot = (performance.now() * 0.3) % 360;
+      this.rotorShown = this.heliFeatures.length > 0;
+      this.setData('aircraft-rotor', { type: 'FeatureCollection', features: this.heliFeatures.map((f) => ({ ...f, properties: { ...f.properties, rot } })) });
+    }, 90);
+    // vehicles on the airfield (ADS-B category C1/C2): yellow dots for now
+    add(
+      {
+        id: 'aircraft-vehicle',
+        type: 'circle',
+        source: 'aircraft',
+        minzoom: 12,
+        filter: ['==', ['get', 'kind'], 'vehicle'],
+        layout: hidden,
+        paint: {
+          'circle-color': '#ffd23f',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 4.5, 19, 8],
+          'circle-stroke-color': 'rgba(0,0,0,0.6)',
+          'circle-stroke-width': 1,
         },
       },
       'marker',
@@ -1445,6 +1512,23 @@ export class ExtraLayers {
   private set(id: ExtraId, i: Info) {
     this.info[id] = { ...this.info[id], ...i };
     this.hooks.changed();
+  }
+
+  /** Big airports from our own list for the zoom levels 5–8, where the map tiles have none yet. */
+  private async loadFarAirports() {
+    const list = await staticAirports();
+    const area = (b: number[]) => (b[2] - b[0]) * Math.cos((((b[1] + b[3]) / 2) * Math.PI) / 180) * (b[3] - b[1]) * 111.32 ** 2; // km²
+    const features: Feature<Point>[] = list
+      .filter((a) => a.iata)
+      .map((a) => {
+        const km2 = area(a.bbox);
+        return {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [(a.bbox[0] + a.bbox[2]) / 2, (a.bbox[1] + a.bbox[3]) / 2] },
+          properties: { icao: a.icao, iata: a.iata, name: a.name, tier: km2 >= 45 ? 1 : km2 >= 30 ? 2 : 3 },
+        };
+      });
+    this.setData('airports-far', { type: 'FeatureCollection', features });
   }
 
   private setData(source: string, data: FeatureCollection) {
@@ -1653,6 +1737,7 @@ export class ExtraLayers {
           break;
         case 'airports':
           this.set('airports', { note: 'Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag' });
+          void this.loadFarAirports();
           break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
@@ -1826,8 +1911,22 @@ export class ExtraLayers {
     });
   }
 
+  private selectedBusy = false;
+
+  /** The selected aircraft is followed on its own, so it stays up to date outside the area of the map request. */
+  private fetchSelected() {
+    const hex = this.airport3d?.selectedHex();
+    if (!hex || this.selectedBusy) return;
+    this.selectedBusy = true;
+    loadAircraftByHex(hex)
+      .then((fc) => this.airport3d?.feed(fc))
+      .catch(() => undefined)
+      .finally(() => (this.selectedBusy = false));
+  }
+
   private fetchAircraft(): Promise<void> {
     const m = this.map;
+    this.fetchSelected();
     if (m.getZoom() < 5) {
       // the 3D airport layer only needs the live feed
       if (!this.on.has('aircraft')) return Promise.resolve();
@@ -1860,7 +1959,7 @@ export class ExtraLayers {
         this.aircraftErr = '';
         if (seq !== this.aircraftSeq || !this.wantsAircraft()) return;
         this.lastAircraft = fc;
-        this.airport3d?.feed(fc);
+        this.airport3d?.feed(fc, { lat: c.lat, lon: c.lng, nm });
         if (!this.on.has('aircraft')) return;
         this.refreshAircraftIcons();
         this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
@@ -1880,7 +1979,9 @@ export class ExtraLayers {
     if (!this.on.has('aircraft') || !this.lastAircraft) return;
     const fc = this.lastAircraft;
     const airport = this.airport3d;
-    let features = airport ? fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
+    // aircraft of the cache that the latest request did not return stay visible (they keep flying on their course)
+    const cached = airport ? airport.cachedFeatures(new Set(fc.features.map((f) => String(f.properties?.hex)))) : [];
+    let features = airport ? [...fc.features, ...cached].filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
     // on a flat map the icons move like the 3D models: smoothed position and heading
     if (airport?.mode() === 'flat') {
       features = features.map((f) => {
@@ -1888,12 +1989,13 @@ export class ExtraLayers {
         return live ? { ...f, geometry: { type: 'Point', coordinates: [live.lon, live.lat] }, properties: { ...f.properties, track: live.track } } : f;
       });
     }
+    this.heliFeatures = features.filter((f) => f.properties?.kind === 'heli') as Feature<Point>[];
     this.setData('aircraft', { ...fc, features });
   }
 
   /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
   flightInfo(hex: string): FlightInfo | null {
-    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex);
+    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex) ?? this.airport3d?.cachedFeatures(new Set())?.find((x) => x.properties?.hex === hex);
     if (!f) return null;
     const p = f.properties as Record<string, unknown>;
     const live = this.airport3d?.planeInfo(hex);
@@ -2820,6 +2922,9 @@ export class ExtraLayers {
         };
       }
       case 'airports-minor':
+      case 'airports-far-1':
+      case 'airports-far-2':
+      case 'airports-far-3':
       case 'airports': {
         const icao = String(p.icao ?? '');
         const name = String(p['name:de'] ?? p.name ?? 'Flughafen');

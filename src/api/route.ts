@@ -84,5 +84,39 @@ export function plausible(route: FlightRoute, lon: number, lat: number): boolean
   return haversine(o.lon, o.lat, lon, lat) + haversine(lon, lat, d.lon, d.lat) <= haversine(o.lon, o.lat, d.lon, d.lat) * 1.25 + 100_000;
 }
 
+const bearing = (aLon: number, aLat: number, bLon: number, bLat: number) => {
+  const r = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(r(bLon - aLon)) * Math.cos(r(bLat));
+  const x = Math.cos(r(aLat)) * Math.sin(r(bLat)) - Math.sin(r(aLat)) * Math.cos(r(bLat)) * Math.cos(r(bLon - aLon));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+const angle = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
+
+/**
+ * adsbdb knows a callsign by its usual route, but the same callsign flies it in both directions
+ * (UAL1871 out of JFK is stored as "… → JFK"). The aircraft's state tells which way it goes:
+ * - close to an endpoint (< 60 km) the course is useless (final approach, departure turns), so the
+ *   vertical speed decides: climbing away from it = that airport is the origin, descending = the destination;
+ * - far from both it must head towards the destination.
+ * Level flight near an airport, or on the ground, says nothing: the stored direction stays.
+ */
+export function orient(route: FlightRoute, lon: number, lat: number, track: number, vsMs: number, ground: boolean): FlightRoute {
+  const { origin: o, destination: d } = route;
+  const swap = { origin: d, destination: o };
+  const dO = haversine(lon, lat, o.lon, o.lat);
+  const dD = haversine(lon, lat, d.lon, d.lat);
+  const NEAR = 60_000;
+  if (Math.min(dO, dD) < NEAR) {
+    if (ground || Math.abs(vsMs) < 2) return route;
+    const nearIsOrigin = dO < dD;
+    // climbing: the near airport is where it came from; descending: where it is going
+    const shouldBeOrigin = vsMs > 0;
+    return nearIsOrigin === shouldBeOrigin ? route : swap;
+  }
+  const toDest = angle(track, bearing(lon, lat, d.lon, d.lat));
+  const toOrigin = angle(track, bearing(lon, lat, o.lon, o.lat));
+  return toDest > 110 || (toOrigin < 50 && toDest > 50) ? swap : route;
+}
+
 /** Already loaded route (undefined: not asked yet / still loading). */
 export const cachedRoute = (callsign: string): FlightRoute | null | undefined => cache.get(callsign.trim().toUpperCase())?.route;
