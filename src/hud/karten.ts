@@ -40,6 +40,11 @@ export interface Karte {
   wind?: boolean;
   isobars?: boolean;
   /**
+   * 3D-Gebäude: explicitly true/false; unset = the default of the base map (on for Dunkel and
+   * Hell, off everywhere else – see defaultBuildings3d).
+   */
+  buildings3d?: boolean;
+  /**
    * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
    * switches the traffic modes. What the menu picks is remembered but never counts as a change.
    */
@@ -71,6 +76,9 @@ export const DEFAULT_PINNED = STANDARD.map((k) => k.id);
 
 export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
+/** whether 3D-Gebäude is on without an explicit choice: standard on Dunkel and Hell */
+export const defaultBuildings3d = (base: BaseId): boolean => base === 'dark' || base === 'light';
+
 export function blankKarte(): Karte {
   return {
     id: newId(), name: 'Neue Karte', icon: 'pin', color: '#a58bff',
@@ -97,7 +105,7 @@ export function signature(k: Karte): string {
 
 /** signature plus everything remembered silently: two equal ones need no draft */
 export const fullSignature = (k: Karte): string =>
-  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.layers.map((l) => [l.id, !!l.hidden])]);
+  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.buildings3d === undefined, k.layers.map((l) => [l.id, !!l.hidden])]);
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -156,6 +164,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
   if (r.std === true) k.std = true;
   if (r.wind === false) k.wind = false;
   if (r.isobars === true) k.isobars = true;
+  if (typeof r.buildings3d === 'boolean') k.buildings3d = r.buildings3d;
   const v = r.view as Partial<KView> | undefined;
   if (v && Array.isArray(v.center) && Number.isFinite(v.center[0]) && Number.isFinite(v.center[1]) && Number.isFinite(v.zoom)) {
     k.view = { center: [Number(v.center[0]), Number(v.center[1])], zoom: Number(v.zoom) };
