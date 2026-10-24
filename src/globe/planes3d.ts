@@ -599,6 +599,9 @@ export class PlanesLayer implements CustomLayerInterface {
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
   private forecast?: ForecastRig;
+  /** callsign labels: plain elements moved every frame with the same matrix as the models (no lag when zooming) */
+  private labelBox?: HTMLDivElement;
+  private labels = new Map<string, HTMLDivElement>();
 
   /** Route of an aircraft (null: none): a grey dashed line is drawn while it is the selected one. */
   setRoute(hex: string, route: { origin: [number, number]; destination: [number, number] } | null) {
@@ -621,6 +624,9 @@ export class PlanesLayer implements CustomLayerInterface {
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     this.mats = makeMats();
+    this.labelBox = document.createElement('div');
+    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    map.getCanvasContainer().appendChild(this.labelBox);
   }
 
   onRemove() {
@@ -630,11 +636,14 @@ export class PlanesLayer implements CustomLayerInterface {
     this.pulseGeo.dispose();
     for (const m of Object.values(this.mats ?? {})) if ('dispose' in m) m.dispose();
     this.forecast?.dispose();
+    this.labelBox?.remove();
+    this.labels.clear();
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
     const mode = this.hooks.mode();
     if (mode === 'off') {
+      this.syncLabels([]);
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
         this.hooks.frame([]);
@@ -709,6 +718,7 @@ export class PlanesLayer implements CustomLayerInterface {
       this.syncPulse(p, now, mpp, elev, flat);
     }
     this.mats.now.value = now;
+    this.syncLabels(drawn);
     this.syncForecast(mpp, flat);
     for (const mat of [this.mats.line, this.mats.lineSel]) mat.uniforms.uRes.value.set(map.getCanvas().width, map.getCanvas().height);
     this.camera.projectionMatrix.copy(this.proj);
@@ -719,6 +729,50 @@ export class PlanesLayer implements CustomLayerInterface {
       this.hooks.frame(drawn);
     }
     if (this.tracker.planes.size && !document.hidden) map.triggerRepaint();
+  }
+
+  /** Screen position (CSS px) of a point with the last drawn matrix, null behind the camera. */
+  private screenOf(lon: number, lat: number, alt: number, v = new THREE.Vector4()): [number, number] | null {
+    const canvas = this.map.getCanvas();
+    const mc = MercatorCoordinate.fromLngLat([lon, lat], alt);
+    v.set(mc.x - this.cx, mc.y - this.cy, mc.z, 1).applyMatrix4(this.proj);
+    if (v.w <= 0) return null;
+    return [(v.x / v.w * 0.5 + 0.5) * canvas.clientWidth, (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight];
+  }
+
+  /** Callsign above every drawn model; moved here every frame so it never trails behind while zooming. */
+  private syncLabels(drawn: PlaneState[]) {
+    const box = this.labelBox;
+    if (!box) return;
+    const zoom = this.map.getZoom();
+    // distance above the model: grows with the zoom (the models get bigger)
+    const lift = 17 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 24;
+    const seen = new Set<string>();
+    const v = new THREE.Vector4();
+    for (const p of drawn) {
+      const pos = this.screenOf(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt, v);
+      if (!pos) continue;
+      let el = this.labels.get(p.hex);
+      if (!el) {
+        el = document.createElement('div');
+        el.style.cssText =
+          'position:absolute;left:0;top:0;white-space:pre;text-align:center;font:700 12px/1.2 system-ui,sans-serif;color:#fff;' +
+          'text-shadow:0 0 3px rgba(10,12,16,.95),0 0 3px rgba(10,12,16,.95),0 0 2px rgba(10,12,16,.95);will-change:transform';
+        box.append(el);
+        this.labels.set(p.hex, el);
+      }
+      const callsign = String(p.props.callsign ?? '');
+      const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
+      const text = icao ? `${callsign}\n${icao}` : callsign;
+      if (el.textContent !== text) el.textContent = text;
+      el.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
+      seen.add(p.hex);
+    }
+    for (const [hex, el] of this.labels) {
+      if (seen.has(hex)) continue;
+      el.remove();
+      this.labels.delete(hex);
+    }
   }
 
   /**

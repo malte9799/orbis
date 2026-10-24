@@ -67,7 +67,7 @@ export async function loadStaticAirport(a: StaticAirport): Promise<AirportLayout
     const id = `l${a.icao}${i / step}`;
     const lt = step === 4 ? (LIGHT_TYPES[lights[i + 2]] ?? 'other') : 'txe';
     const col = step === 4 ? (LIGHT_COLOURS[lights[i + 3]] ?? 'white') : 'blue';
-    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '', lt, col } });
+    j.points.push({ type: 'Feature', id, geometry: { type: 'Point', coordinates: [lights[i], lights[i + 1]] }, properties: { id, kind: 'light', ref: '', lt, col, ...(step === 2 && { legacy: 1 }) } });
   }
   return j;
 }

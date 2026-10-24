@@ -965,7 +965,7 @@ export class ExtraLayers {
       'marker',
     );
     // transport
-    const airportLayer = (id: string, minzoom: number, classes: string[]): LayerSpecification => ({
+    const airportLayer = (id: string, minzoom: number, classes: string[], textOverlap: boolean): LayerSpecification => ({
       id,
       type: 'symbol',
       source: 'ofm',
@@ -982,10 +982,14 @@ export class ExtraLayers {
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
         'text-optional': true,
+        // icons and names stay visible at medium zoom (~50 km) and are not hidden by place labels of the base map
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        'text-allow-overlap': textOverlap,
       },
       paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
     });
-    add(airportLayer('airports', 1, ['international']), 'marker');
+    add(airportLayer('airports', 1, ['international'], true), 'marker');
     // 3D buildings everywhere, from city zoom on (the map has to be tilted to see them)
     add(
       {
@@ -1004,7 +1008,7 @@ export class ExtraLayers {
       },
       'marker',
     );
-    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private']), 'marker');
+    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private'], false), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
         type: 'raster',

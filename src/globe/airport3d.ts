@@ -18,6 +18,13 @@ const PLANE_ZOOM = 6.5;
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
+/**
+ * Lights in the colours OSM maps (thresholds green or red, approach lights white or red, red/yellow
+ * bars …). `true` simplifies them: thresholds green, approach white, everything on a runway white.
+ * Meant to become an option later.
+ */
+const SIMPLE_LIGHTS = false;
+
 /** Lights are shown from the same zoom as the taxiways and loaded from the layout zoom on. */
 const LIGHT_ZOOM = AIRPORT_ZOOM;
 /** Grid of the requested boxes (degrees): a pan inside a loaded box costs no request. */
@@ -26,7 +33,7 @@ const MAX_FEATURES = 25000;
 
 export const AP3D_LAYERS = ['ap3d-apron', 'ap3d-area', 'ap3d-runway', 'ap3d-taxiway', 'ap3d-light', 'ap3d-rwy-label', 'ap3d-taxi-label', 'ap3d-gate'];
 /** the aircraft labels and click targets follow the aircraft, not the airport layer */
-const PLANE_LAYERS = ['ap3d-label', 'ap3d-hit'];
+const PLANE_LAYERS = ['ap3d-hit'];
 export const AP3D_HIT_LAYER = 'ap3d-hit';
 
 const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B762', 'B763', 'B764', 'B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B788', 'B789', 'B78X', 'A306', 'A30B', 'A310', 'A332', 'A333', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K', 'A388', 'MD11', 'DC10', 'IL96', 'A124', 'AN12', 'C5M', 'C17', 'A225', 'BLCF', 'BSCA', 'B74F']);
@@ -170,8 +177,10 @@ export class Airport3D {
       filter: ['==', ['get', 'kind'], 'light'],
       layout: hidden,
       paint: {
-        // thresholds read green and approach lights white from both directions (OSM also stores their red sides)
-        'circle-color': ['match', ['get', 'lt'], 'rwt', '#2bd47d', 'als', '#f4f6f8', ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8']],
+        'circle-color': SIMPLE_LIGHTS
+          ? // thresholds read green and approach lights white from both directions (OSM also stores their red sides)
+            ['match', ['get', 'lt'], 'rwt', '#2bd47d', 'als', '#f4f6f8', ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8']]
+          : ['match', ['get', 'col'], 'blue', '#4a78ff', 'green', '#2bd47d', 'red', '#ff4b4b', 'yellow', '#ffd23f', '#f4f6f8'],
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, ['*', lightSize, 0.5], 16, lightSize, 19, ['*', lightSize, 2.2]],
         'circle-opacity': ['match', ['get', 'lt'], 'txc', 0.75, 0.95],
       },
@@ -198,28 +207,10 @@ export class Airport3D {
       id: 'ap3d-gate',
       type: 'symbol',
       source: 'ap3d-pt',
-      minzoom: AIRPORT_ZOOM + 2,
+      minzoom: AIRPORT_ZOOM + 4,
       filter: ['all', ['in', ['get', 'kind'], ['literal', ['gate', 'parking']]], ['!=', ['get', 'ref'], '']],
       layout: { ...hidden, 'text-field': ['get', 'ref'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false },
       paint: { 'text-color': '#ffd23f', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-    });
-    add({
-      id: 'ap3d-label',
-      type: 'symbol',
-      source: 'ap3d-label',
-      minzoom: PLANE_ZOOM,
-      layout: {
-        ...hidden,
-        'text-field': ['step', ['zoom'], ['get', 'callsign'], 16, ['concat', ['get', 'callsign'], ['case', ['!=', ['get', 'icao'], ''], ['concat', '\n', ['get', 'icao']], '']]],
-        'text-font': FONT_BOLD,
-        'text-size': 12,
-        // the label sits above the model: `lift` (em) grows with the zoom and the altitude
-        'text-variable-anchor': ['bottom'],
-        'text-radial-offset': ['get', 'lift'],
-        'text-allow-overlap': true,
-        'text-padding': 4,
-      },
-      paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(10,12,16,0.85)', 'text-halo-width': 1.6 },
     });
     // invisible but clickable: the 3D models themselves cannot be picked
     add({
@@ -335,9 +326,60 @@ export class Airport3D {
       });
   }
 
+  /**
+   * Lights on a runway read white: OSM often tags runway edge lights blue (or leaves the airport's
+   * lights untagged, which the files store as blue). Whatever blue light lies within a runway's width
+   * is switched to white, as is every blue light on the extended centre line up to 1.2 km before and behind the
+   * runway ends (approach lighting); automatically for every airport. Thresholds, stop bars etc. keep their colour.
+   */
+  private whitenRunwayLights(points: Pt[]) {
+    const runways: { w: number; coords: number[][] }[] = [];
+    for (const l of this.lines.values()) {
+      if (l.properties?.kind === 'runway' && l.geometry.type === 'LineString') runways.push({ w: Math.max(Number(l.properties.w) || 0, 45), coords: l.geometry.coordinates });
+    }
+    if (!runways.length) return;
+    for (const f of points) {
+      const pr = f.properties;
+      // files in the old format only know positions (all "blue"); the full colours are kept for the others
+      if (!pr || pr.kind !== 'light' || pr.col === 'white' || !(SIMPLE_LIGHTS || pr.legacy)) continue;
+      const recolour = pr.col === 'blue' || (['rwe', 'rwc', 'tdz'].includes(String(pr.lt)) && pr.col === 'green');
+      if (!recolour) continue;
+      const [lon, lat] = f.geometry.coordinates;
+      const kx = Math.cos((lat * Math.PI) / 180) * 111320;
+      const near = runways.some(({ w, coords }) => {
+        // approach lights: on the extended centre line, up to 1.2 km before and behind the runway ends
+        const first = coords[0];
+        const last = coords[coords.length - 1];
+        const ex = (last[0] - first[0]) * kx;
+        const ey = (last[1] - first[1]) * 111320;
+        const len = Math.hypot(ex, ey);
+        if (len > 300) {
+          const rx = (lon - first[0]) * kx;
+          const ry = (lat - first[1]) * 111320;
+          const along = (rx * ex + ry * ey) / len;
+          const across = Math.abs(rx * ey - ry * ex) / len;
+          if (across <= Math.max(25, w / 2 + 6) && along >= -1200 && along <= len + 1200) return true;
+        }
+        const limit = w / 2 + 6;
+        for (let i = 0; i + 1 < coords.length; i++) {
+          const ax = (coords[i][0] - lon) * kx;
+          const ay = (coords[i][1] - lat) * 111320;
+          const dx = (coords[i + 1][0] - coords[i][0]) * kx;
+          const dy = (coords[i + 1][1] - coords[i][1]) * 111320;
+          const len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+          if (Math.hypot(ax + t * dx, ay + t * dy) <= limit) return true;
+        }
+        return false;
+      });
+      if (near) pr.col = 'white';
+    }
+  }
+
   private merge(polys: Poly[], lines: Line[], points: Pt[]) {
     for (const f of polys) this.polys.set(String(f.id), f);
     for (const f of lines) this.lines.set(String(f.id), f);
+    this.whitenRunwayLights(points);
     for (const f of points) this.points.set(String(f.id), f);
     this.setData('ap3d-poly', emptyFc([...this.polys.values()]));
     this.setData('ap3d-line', emptyFc([...this.lines.values()]));
@@ -411,22 +453,11 @@ export class Airport3D {
     if (this.mode() !== 'off') this.map.triggerRepaint();
   }
 
-  /** Label distance above the ground point in em: the model's size plus its altitude on screen. */
-  private lift(altM: number, lat: number) {
-    const m = this.map;
-    const zoom = m.getZoom();
-    const base = 1.4 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 2;
-    if (altM < 1) return base;
-    const metresPerPx = (40075016 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
-    const heightPx = (altM * Math.sin((m.getPitch() * Math.PI) / 180)) / metresPerPx;
-    return base + Math.min(heightPx, 4000) / 12;
-  }
-
   private updateLabels(planes: PlaneState[]) {
     const features: Feature<Point>[] = planes.map((p) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [p.dLon, p.dLat] },
-      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? ''), lift: this.lift(p.dAlt, p.dLat) },
+      properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack), callsign: String(p.props.callsign ?? ''), icao: String(p.props.icao ?? '') },
     }));
     this.setData('ap3d-label', emptyFc(features));
   }
