@@ -207,6 +207,8 @@ interface IndexEntry {
   icao: string;
   name: string;
   bbox: number[];
+  /** IATA code ('' if the airport has none); shown on the map from far away */
+  iata?: string;
 }
 
 interface Geo {
@@ -242,6 +244,8 @@ interface CompactAirport {
 
 interface Options {
   force: boolean;
+  /** only fill the IATA codes of the index, build nothing */
+  meta: boolean;
   workers: number;
 }
 
@@ -472,6 +476,7 @@ async function overpass<T>(query: string, label: string, worker: number): Promis
 
 interface Outline {
   name: string;
+  iata: string;
   bounds: { minlat: number; minlon: number; maxlat: number; maxlon: number };
 }
 
@@ -495,7 +500,8 @@ async function loadOutlines(icaos: string[], workers: number): Promise<Map<strin
   const missing: string[] = [];
 
   for (const icao of icaos) {
-    if (cache[icao]) out.set(icao, cache[icao]);
+    // outlines cached by an older version lack the IATA code
+    if (cache[icao] && 'iata' in cache[icao]) out.set(icao, cache[icao]);
     else missing.push(icao);
   }
 
@@ -522,7 +528,7 @@ async function loadOutlines(icaos: string[], workers: number): Promise<Map<strin
 
         if (known && boundsArea(known.bounds) >= boundsArea(e.bounds)) continue;
 
-        out.set(icao, { name: e.tags?.['name:de'] ?? e.tags?.name ?? icao, bounds: e.bounds });
+        out.set(icao, { name: e.tags?.['name:de'] ?? e.tags?.name ?? icao, iata: e.tags?.iata ?? '', bounds: e.bounds });
       }
 
       console.log(`Outlines: batch ${n + 1}/${chunks.length} done (${chunk.length} codes)`);
@@ -692,9 +698,10 @@ function flushIndex(map: Map<string, IndexEntry>) {
 
 function printHelp() {
   console.log(
-    `Usage: node airports.mjs [--force] [--workers N] [ICAO ...]
+    `Usage: node airports.mjs [--force] [--meta] [--workers N] [ICAO ...]
 
   --force        regenerate existing files
+  --meta         only add the IATA codes to index.json (cheap, no airport is built)
   --workers N    parallel requests (default ${DEFAULT_WORKERS}, max 4)
   ICAO           one or more 4-letter ICAO codes (default: built-in list)`,
   );
@@ -713,7 +720,7 @@ async function main() {
 
   if (wIdx >= 0) args.splice(wIdx, 2);
 
-  const unknown = args.filter((a) => a.startsWith('-') && a !== '--force');
+  const unknown = args.filter((a) => a.startsWith('-') && a !== '--force' && a !== '--meta');
 
   if (unknown.length || !Number.isInteger(workerArg) || workerArg < 1) {
     console.error(`Unknown option(s): ${unknown.join(', ') || '--workers needs a number'}`);
@@ -724,6 +731,7 @@ async function main() {
 
   const opts: Options = {
     force: args.includes('--force'),
+    meta: args.includes('--meta'),
     workers: Math.min(workerArg, 4),
   };
 
@@ -750,7 +758,7 @@ async function main() {
     process.exit(130);
   });
 
-  const todo = list.filter((icao) => opts.force || !existsSync(`${OUT}/${icao}.json`));
+  const todo = opts.meta ? [] : list.filter((icao) => opts.force || !existsSync(`${OUT}/${icao}.json`));
   const skipped = list.length - todo.length;
 
   console.log(`${list.length} airports requested, ${skipped} already built, ${todo.length} to do, ${opts.workers} workers`);
@@ -775,7 +783,7 @@ async function main() {
       const jsonPath = `${OUT}/${icao}.json`;
 
       writeAtomic(jsonPath, JSON.stringify(data));
-      index.set(icao, toEntry(data));
+      index.set(icao, { ...toEntry(data), iata: outline.iata });
       built++;
 
       if (built % INDEX_FLUSH_EVERY === 0) flushIndex(index);
@@ -798,6 +806,21 @@ async function main() {
 
     console.log(`[${done}/${todo.length}] ${line}  (w${worker}, ETA ${Math.ceil(eta / 60)} min)`);
   });
+
+  // IATA codes of airports built earlier (they are shown on the map from far away)
+  const noIata = [...index.values()].filter((e) => e.iata === undefined).map((e) => e.icao);
+
+  if (noIata.length) {
+    console.log(`IATA codes for ${noIata.length} airports in the index …`);
+
+    const found = await loadOutlines(noIata, opts.workers);
+
+    for (const icao of noIata) {
+      const e = index.get(icao);
+
+      if (e && found.has(icao)) e.iata = found.get(icao)!.iata;
+    }
+  }
 
   flushIndex(index);
 

@@ -34,6 +34,8 @@ export interface StaticAirport {
   name: string;
   /** [west, south, east, north] */
   bbox: [number, number, number, number];
+  /** IATA code, '' or missing if none */
+  iata?: string;
 }
 
 const STATIC = `${import.meta.env.BASE_URL}data/airports/`;
