@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
-const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY };
+const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY, ontario511: process.env.ONTARIO_511_API_KEY, alberta511: process.env.ALBERTA_511_API_KEY };
 (globalThis as { localStorage?: unknown }).localStorage = {
   getItem: (k: string) => (k === 'wg.keys' ? JSON.stringify(envKeys) : null),
   setItem() {},

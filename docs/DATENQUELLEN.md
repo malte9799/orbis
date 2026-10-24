@@ -149,13 +149,18 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [Fintraffic Wettercams](https://weathercam.digitraffic.fi) | Webcams Finnland | 🟢 CC BY 4.0 |
+| [Vegagerðin](https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar) | Straßen-/Wetterkameras Island (~500 Aufnahmen) | 🟢 NLOD |
+| [NZTA / trafficnz.info](https://www.nzta.govt.nz/traffic-and-travel-information/use-our-data) | Verkehrskameras Neuseeland (REST v4) | 🟢 |
+| [TfNSW Live Traffic](https://opendata.transport.nsw.gov.au) | Verkehrskameras New South Wales | 🟢 CC BY 4.0 |
+| [DriveBC](https://www.drivebc.ca) | Winter- und Verkehrskameras British Columbia | 🟢 Open Government Licence – BC |
+| [City of Calgary](https://data.calgary.ca/stories/s/traffic-cameras/6hwp-pnmi) | Verkehrskameras Calgary | 🟢 |
 | [Windy Webcams](https://api.windy.com/webcams) | Weltweite Webcams | 🔑 |
 | [TfL](https://api.tfl.gov.uk) | London (inkl. Videoclips) | 🟢 |
 | [NYC DOT](https://webcams.nyctmc.org) | New York | 🟢 |
 | [DDOT / DC GIS](https://maps2.dcgis.dc.gov) | Washington D.C. | 🟢 |
 | [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien | 🟢 |
 | [ALERTCalifornia](https://cameras.alertcalifornia.org) (UC San Diego) | Waldbrandkameras Kalifornien | 🟢 |
-| 511 (Ontario, Alberta) | Kameras Kanada | 🟢 |
+| 511 ([Ontario](https://511on.ca/developers/doc), [Alberta](https://511.alberta.ca/developers/doc)) | Kameras Kanada | 🟢 🔑 kostenlos – My511-Konto anlegen, Key auf der Developers-Seite anfordern (10 Aufrufe/min) |
 | [Hong Kong Transport Department](https://data.gov.hk) | Kameras Hongkong | 🟢 |
 | [LTA / data.gov.sg](https://api.data.gov.sg) | Kameras Singapur | 🟢 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
