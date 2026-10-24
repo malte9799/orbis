@@ -77,6 +77,8 @@ function metres(aLon: number, aLat: number, bLon: number, bLat: number) {
 export class PlaneTracker {
   readonly planes = new Map<string, PlaneState>();
   private lastStep = 0;
+  /** the selected aircraft is never dropped as long as it flies on (cached) */
+  keep: string | null = null;
   /** area of the latest request: [lat, lon, radius nm] */
   private area: { lat: number; lon: number; nm: number } | null = null;
 
@@ -98,6 +100,7 @@ export class PlaneTracker {
     }
     for (const [hex, p] of this.planes) {
       const age = now - p.seen;
+      if (hex === this.keep && age < 3600_000) continue;
       if (age > CACHE_MS || (age > EXPIRE_MS && this.inArea(p.lat, p.lon))) this.remove(hex, p);
     }
   }
@@ -598,6 +601,8 @@ class ForecastRig {
 export interface PlanesLayerHooks {
   /** 'off': nothing drawn; 'flat': map not tilted (flat trails, models only without 2D icons); '3d': tilted */
   mode(): 'off' | 'flat' | '3d';
+  /** far out only this aircraft (the selected one) is drawn, with its trail and route; null: all */
+  only(): string | null;
   /** are the 2D aircraft icons shown (then the models are left out in flat mode)? */
   icons(): boolean;
   /** about 10× a second while the 2D icons are shown on a flat map: move them with the smoothed positions */
@@ -690,6 +695,7 @@ export class PlanesLayer implements CustomLayerInterface {
     this.cy = centre.y;
     this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(this.cx, this.cy, 0));
     const models = !flat || !this.hooks.icons();
+    const only = this.hooks.only();
     const now = performance.now();
     this.tracker.step(now);
     const drawn: PlaneState[] = [];
@@ -710,9 +716,13 @@ export class PlanesLayer implements CustomLayerInterface {
     const m = new THREE.Matrix4();
     const rot = new THREE.Matrix4();
     for (const p of this.tracker.planes.values()) {
+      if (only && p.hex !== only) {
+        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
+        continue;
+      }
       const inView = p.dLon > b.getWest() - padLon && p.dLon < b.getEast() + padLon && p.dLat > b.getSouth() - padLat && p.dLat < b.getNorth() + padLat;
       if (!inView) {
-        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall]) if (o) o.visible = false;
+        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
         continue;
       }
       const elev = terrain ? (map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
@@ -910,10 +920,10 @@ export class PlanesLayer implements CustomLayerInterface {
     (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
     // Radius in screen pixels, tied to the drawn size of the aircraft (about 60 m long, at least ~39 px
     // when zoomed out): not too big next to a big model when close, still visible when far away.
-    // With many aircraft it is smaller (they all flash at once), but never below 9 px.
+    // With many aircraft it is smaller (they all flash at once), but never below 12 px.
     const planePx = Math.max(60 / mpp, 39);
     const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
-    const maxPx = Math.max(9, Math.min(40, 0.35 * planePx) * crowdK);
+    const maxPx = Math.max(12, Math.min(56, 0.5 * planePx) * crowdK);
     const px = maxPx * (0.25 + 0.75 * (1 - (1 - t) ** 2));
     const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
     const s = mc.meterInMercatorCoordinateUnits() * px * mpp;

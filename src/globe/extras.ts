@@ -4,7 +4,7 @@ import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from 
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
 import type { FlightRoute } from '../api/route';
-import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
+import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
@@ -1858,8 +1858,22 @@ export class ExtraLayers {
     });
   }
 
+  private selectedBusy = false;
+
+  /** The selected aircraft is followed on its own, so it stays up to date outside the area of the map request. */
+  private fetchSelected() {
+    const hex = this.airport3d?.selectedHex();
+    if (!hex || this.selectedBusy) return;
+    this.selectedBusy = true;
+    loadAircraftByHex(hex)
+      .then((fc) => this.airport3d?.feed(fc))
+      .catch(() => undefined)
+      .finally(() => (this.selectedBusy = false));
+  }
+
   private fetchAircraft(): Promise<void> {
     const m = this.map;
+    this.fetchSelected();
     if (m.getZoom() < 5) {
       // the 3D airport layer only needs the live feed
       if (!this.on.has('aircraft')) return Promise.resolve();

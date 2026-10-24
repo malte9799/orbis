@@ -73,7 +73,7 @@ export class Airport3D {
   private layoutOn = false;
   private planesOn = false;
   private iconsOn = false;
-  private lastMode: PlaneMode = 'off';
+  private lastMode = 'off';
   private polys = new Map<string, Poly>();
   private lines = new Map<string, Line>();
   private points = new Map<string, Pt>();
@@ -93,6 +93,7 @@ export class Airport3D {
   ) {
     this.layer = new PlanesLayer(this.tracker, {
       mode: () => this.mode(),
+      only: () => this.onlySelected(),
       icons: () => this.iconsOn,
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
@@ -100,8 +101,20 @@ export class Airport3D {
   }
 
   /** 'off' without aircraft layer, zoomed out or on the globe; 'flat' while the map is not tilted. */
+  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route (not on the globe). */
+  private onlySelected(): string | null {
+    const hex = this.layer.selected;
+    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && this.map.getProjection()?.type !== 'globe' && this.tracker.planes.has(hex) ? hex : null;
+  }
+
+  /** The selected aircraft, if any. */
+  selectedHex(): string | null {
+    return this.layer.selected;
+  }
+
   mode(): PlaneMode {
-    if (!this.planesOn || this.map.getZoom() < PLANE_ZOOM || this.map.getProjection()?.type === 'globe') return 'off';
+    if (!this.planesOn || this.map.getProjection()?.type === 'globe') return 'off';
+    if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
 
@@ -113,7 +126,8 @@ export class Airport3D {
   }
 
   private checkMode() {
-    const mode = this.mode();
+    // the 2D icons also change when only the selected aircraft is left far out
+    const mode = this.mode() + (this.onlySelected() ?? '');
     if (mode === this.lastMode) return;
     this.lastMode = mode;
     this.hooks.modeChanged();
@@ -429,6 +443,8 @@ export class Airport3D {
 
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
+    const only = this.onlySelected();
+    if (only) return hex === only && this.mode() === '3d';
     return this.mode() === '3d' && this.tracker.planes.has(hex);
   }
 
@@ -477,6 +493,8 @@ export class Airport3D {
   select(hex: string | null) {
     if (hex === this.layer.selected) return;
     this.layer.selected = hex;
+    this.tracker.keep = hex;
+    this.checkMode();
     if (hex) void this.fetchRoute(hex);
     this.map.triggerRepaint();
   }

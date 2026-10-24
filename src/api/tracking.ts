@@ -287,6 +287,24 @@ export async function loadGlobalAircraft(): Promise<AircraftResult> {
   return fc;
 }
 
+/** One aircraft by its Mode-S code, wherever it is (for the selected aircraft when the map is far away from it). */
+export async function loadAircraftByHex(hex: string): Promise<AircraftResult> {
+  resetOnProxyChange();
+  const sources: [string, string][] = [
+    ['adsb.lol (ODbL)', 'https://api.adsb.lol/v2/hex/'],
+    ['airplanes.live', 'https://api.airplanes.live/v2/hex/'],
+  ];
+  let last: unknown;
+  for (const [label, base] of sources) {
+    try {
+      return toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+    } catch (e) {
+      last = e;
+    }
+  }
+  throw last instanceof Error ? last : new Error('Flugzeug nicht erreichbar');
+}
+
 /** Aircraft within `radiusNm` (max 250) around a point. */
 export async function loadAircraft(lat: number, lon: number, radiusNm: number): Promise<AircraftResult> {
   resetOnProxyChange();
