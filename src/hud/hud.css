@@ -47,13 +47,9 @@
 .hud .subs button.tgl { margin-top: 0; }
 .hud .subs button.tgl.on { background: rgba(91,157,255,.16); border-color: rgba(91,157,255,.55); color: #d8e6ff; font-weight: 500; }
 
-/* Blitze Live: die Zeile selbst ist die Box, rechts daneben der Lautstärke-Regler */
-.hud .volrow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 12px; border: 1px solid transparent; border-radius: 8px; background: var(--card); cursor: default; }
-.hud .volrow .tgl { height: auto; padding: 0; background: transparent; border: 0; font-size: 13px; color: var(--text-2); cursor: pointer; justify-content: flex-start; }
-.hud .volrow .tgl:hover { background: transparent; color: var(--text); }
-.hud .volrow .tgl.on { color: var(--text); font-weight: 600; }
-.hud .volrow .rng { width: min(96px, 26vw); flex: 1 1 auto; }
-.hud .volrow .volv { font: 600 10.5px ui-monospace, Menlo, monospace; color: var(--muted); width: 34px; flex: none; text-align: right; }
+/* Blitze Live: Regler direkt neben dem Ton-Chip */
+.hud .volrow { display: flex; align-items: center; gap: 8px; height: 30px; padding-right: 4px; cursor: default; }
+.hud .volrow .rng { width: min(110px, 30vw); flex: 1 1 auto; }
 .hud.has-menu .sum { left: calc(var(--hud-l) + 242px); max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r) - 242px)); }
 
 /* ---------- top right: search + settings ---------- */

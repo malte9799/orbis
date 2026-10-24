@@ -260,7 +260,7 @@ export function createHud(host: HudHost): Hud {
         `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
       const has = (v: string) => (bolt?.filter ?? '').split(',').includes(v);
       const vol = lightningVol(bolt);
-      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', 'Ton')}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="Lautstärke der Tick-Töne"/><span class="volv" data-volv>${vol} %</span></div>`;
+      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', 'Ton')}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="Lautstärke der Tick-Töne"/></div>`;
       const boltChips =
         (has('sound') ? volRow : chip(has('sound'), 'sound', 'Ton')) +
         chip(has('wave'), 'wave', 'Kreis') +
@@ -1226,8 +1226,6 @@ export function createHud(host: HudHost): Hud {
       if (!l) return;
       const v = Math.max(0, Math.min(100, Number(t.value) || 0));
       setLightningVol(l, v);
-      const out = t.closest('.volrow')?.querySelector('[data-volv]');
-      if (out) out.textContent = `${v} %`;
       applyLive();
     }
   });
