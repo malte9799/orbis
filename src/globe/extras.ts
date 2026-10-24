@@ -3305,11 +3305,10 @@ export class ExtraLayers {
           type: 'heatmap',
           source: src,
           'source-layer': ALPR_SOURCE_LAYER,
-          maxzoom: CAM_DETAIL_ZOOM + 0.5,
           paint: {
             'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
             'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-            'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+            'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 14, 0.6],
             'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(239,68,68,0)', 0.2, 'rgba(239,68,68,0.45)', 0.5, '#f97316', 0.8, '#fde047', 1, '#ffffff'],
           },
         },
