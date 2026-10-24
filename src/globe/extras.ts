@@ -312,7 +312,7 @@ export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'g
 const CAM_DETAIL_ZOOM = 9;
 /** camera dots appear from this zoom on; below it the heatmap shows the distribution */
 const CAM_DOT_ZOOM = 6;
-const CAM_BLUE = '#3b82f6';
+const CAM_COLOR = '#00bfa5';
 const CAM_ZOOM_RED = '#e53935';
 const ALPR_RED = '#ef4444';
 const CARDINAL = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -1465,7 +1465,7 @@ export class ExtraLayers {
       source,
       minzoom: CAM_DOT_ZOOM,
       layout: hidden,
-      paint: { 'circle-color': CAM_BLUE, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
+      paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
@@ -1476,7 +1476,7 @@ export class ExtraLayers {
         type: 'fill',
         source: 'webcams-fov',
         layout: hidden,
-        paint: { 'fill-color': CAM_BLUE, 'fill-opacity': 0.28 },
+        paint: { 'fill-color': CAM_COLOR, 'fill-opacity': 0.28 },
       },
       'marker',
     );
@@ -1486,7 +1486,7 @@ export class ExtraLayers {
         type: 'line',
         source: 'webcams-fov',
         layout: hidden,
-        paint: { 'line-color': CAM_BLUE, 'line-width': 1.2, 'line-opacity': 0.85 },
+        paint: { 'line-color': CAM_COLOR, 'line-width': 1.2, 'line-opacity': 0.85 },
       },
       'marker',
     );
@@ -3241,12 +3241,12 @@ export class ExtraLayers {
         id: 'webcams-heat',
         type: 'heatmap',
         source: 'webcams-world',
-        maxzoom: CAM_DOT_ZOOM + 0.5,
+        maxzoom: CAM_DETAIL_ZOOM + 0.5,
         paint: {
           'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM - 1, 0.85, CAM_DOT_ZOOM + 0.5, 0],
-          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(59,130,246,0)', 0.2, 'rgba(59,130,246,0.45)', 0.5, '#3b82f6', 0.8, '#93c5fd', 1, '#ffffff'],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.4)', 0.5, '#26c6da', 0.8, '#80deea', 1, '#ffffff'],
         },
       },
       before,
@@ -3257,7 +3257,7 @@ export class ExtraLayers {
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_BLUE, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
       },
       before,
     );
