@@ -450,6 +450,7 @@ export class Airport3D {
         lon,
         lat,
         altM: Number(p.altM) || 0,
+        vsMs: p.vsMs != null ? Number(p.vsMs) || 0 : 0,
         track: Number(p.track) || 0,
         // a taxiing or parked plane (a few knots of noise) must not drift
         speedMs: ground && speedMs < 1.5 ? 0 : speedMs,
@@ -481,25 +482,26 @@ export class Airport3D {
   }
 
   /** hex → route of the aircraft (null: unknown / not plausible, missing: still loading) */
-  private routes = new Map<string, FlightRoute | null>();
+  private routes = new Map<string, { route: FlightRoute | null; at: number }>();
 
   route(hex: string): FlightRoute | null | undefined {
-    return this.routes.get(hex);
+    return this.routes.get(hex)?.route;
   }
 
   /** Route of the selected aircraft by its callsign (adsbdb) → grey dashed line to the airports. */
   private async fetchRoute(hex: string) {
     const p = this.tracker.planes.get(hex);
+    // a found route is kept; "unknown" (or a failed request) is asked again after two minutes
     const known = this.routes.get(hex);
-    if (known !== undefined) {
-      this.applyRoute(hex, known);
+    if (known && (known.route || Date.now() - known.at < 120_000)) {
+      this.applyRoute(hex, known.route);
       return;
     }
     const found = await loadRoute(String(p?.props.callsign ?? ''));
     const now = this.tracker.planes.get(hex);
     // the callsign of the route must still fit the aircraft's position
     const route = found && now && plausible(found, now.dLon, now.dLat) ? found : null;
-    this.routes.set(hex, route);
+    this.routes.set(hex, { route, at: Date.now() });
     this.applyRoute(hex, route);
   }
 

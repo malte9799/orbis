@@ -15,6 +15,8 @@ export interface PlaneReport {
   lon: number;
   lat: number;
   altM: number;
+  /** climb rate (m/s, negative: descending) */
+  vsMs: number;
   track: number;
   speedMs: number;
   ground: boolean;
@@ -58,8 +60,8 @@ const TRAIL_FADE_MS = 60000;
 /** the wall below a trail only exists at low altitude (take-off, landing, helicopters): full below, gone above */
 const WALL_FULL_M = 800;
 const WALL_MAX_M = 1500;
-/** share of the reported ground speed used to move an aircraft between two reports */
-const EXTRAPOLATE = 0.9;
+/** share of the reported speed used to move an aircraft between two reports (1: not slowed down) */
+const EXTRAPOLATE = 1;
 const M_PER_DEG = 111320;
 const YELLOW = 0xf2c94c;
 const RED = 0xff2d55;
@@ -119,7 +121,7 @@ export class PlaneTracker {
     const kHdg = 1 - Math.exp(-dt / 0.7);
     for (const p of this.planes.values()) {
       const elapsed = Math.min(CACHE_MS / 1000, (now - p.at) / 1000);
-      // a little slower than reported: running ahead of the next report would pull the plane back
+      // an aircraft running ahead of the next report is never pulled back along its track (see below)
       const dist = p.speedMs * EXTRAPOLATE * elapsed;
       const cosLat = Math.max(0.2, Math.cos(rad(p.lat)));
       const tLat = p.lat + (dist * Math.cos(rad(p.track))) / M_PER_DEG;
@@ -139,7 +141,9 @@ export class PlaneTracker {
         p.dLon += (dx * kPos) / (M_PER_DEG * cosLat);
         p.dLat += (dy * kPos) / M_PER_DEG;
       }
-      p.dAlt += (p.altM - p.dAlt) * kAlt;
+      // the altitude runs on with the climb / sink rate (for a minute at most: the aircraft levels off sometime)
+      const tAlt = p.ground ? 0 : Math.max(0, p.altM + p.vsMs * EXTRAPOLATE * Math.min(60, elapsed));
+      p.dAlt += (tAlt - p.dAlt) * kAlt;
       p.dTrack = (p.dTrack + shortestDelta(p.dTrack, p.track) * kHdg + 360) % 360;
     }
   }
@@ -344,6 +348,8 @@ function makeMats(): Mats {
       fragmentShader: LINE_FRAGMENT,
       uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: width * dpr }, uOpacity: { value: opacity }, uNow: now, uFade: { value: fade }, uColor: { value: colour }, uDash: { value: 0 } },
       transparent: true,
+      // the trail rigs are mirrored (y flipped), which flips the triangle winding; the forecast line is not
+      side: THREE.DoubleSide,
       depthWrite: false,
     });
   const wall = (opacity: number, fade: number) =>
