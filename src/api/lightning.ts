@@ -306,17 +306,19 @@ export class LightningStream {
     return { type: 'FeatureCollection', features };
   }
 
-  /** The shrinking highlight circles ("wave") of very fresh strikes. */
+  /** The expanding highlight rings ("wave") of very fresh strikes, fading out as they grow. */
   waveFeatures(now = Date.now(), maxAge = LIGHTNING_WAVE_MS): FeatureCollection<Point> {
     const features: Feature<Point>[] = [];
     for (let i = this.strikes.length - 1; i >= 0; i--) {
       const s = this.strikes[i];
       if (s.at < now - maxAge) break;
-      const k = Math.round(Math.max(0.04, 1 - (now - s.at) / maxAge) * 100) / 100;
+      const p = Math.max(0, Math.min(1, (now - s.at) / maxAge));
+      // k = growth of the ring (0 → 1), o = fade (1 → 0)
+      const k = Math.round(p * 100) / 100;
       features.push({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-        properties: { k, o: k },
+        properties: { k, o: Math.round((1 - p) * 100) / 100 },
       });
     }
     return { type: 'FeatureCollection', features };

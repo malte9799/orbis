@@ -393,12 +393,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
     const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
+    const volTok = opts.find((t) => t.startsWith('vol-'));
+    const vol = volTok ? Number(volTok.slice(4)) : NaN;
     if (extras)
       extras.setLightningOptions({
         sound: opts.includes('sound'),
         wave: opts.includes('wave'),
         detectors: opts.includes('detectors'),
         lines: opts.includes('lines'),
+        volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
       });
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);

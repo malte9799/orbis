@@ -112,6 +112,22 @@ const filterText = (l: KLayer): string => {
   return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
 };
 
+/** volume of the strike tick sounds ("Blitze Live"): stored as a vol-n token in the layer filter */
+const BOLT_DEFAULT_VOL = 70;
+const lightningVol = (l?: KLayer): number => {
+  const t = (l?.filter ?? '').split(',').find((t) => t.startsWith('vol-'));
+  const v = t ? Number(t.slice(4)) : NaN;
+  return Number.isFinite(v) ? Math.max(0, Math.min(100, v)) : BOLT_DEFAULT_VOL;
+};
+const setLightningVol = (l: KLayer | undefined, v: number) => {
+  if (!l) return;
+  const toks = (l.filter ?? '').split(',').filter((t) => t && !t.startsWith('vol-'));
+  const n = Math.max(0, Math.min(100, Math.round(v)));
+  if (n !== BOLT_DEFAULT_VOL) toks.push(`vol-${n}`);
+  l.filter = toks.join(',') || undefined;
+  if (!l.filter) delete l.filter;
+};
+
 const ICONS = ['cloud', 'bolt', 'wave', 'train', 'plane2', 'warn', 'fire', 'mountain', 'sun', 'snow', 'pin', 'orbit'];
 const COLORS = ['#4f8dff', '#d4a800', '#1fb5d6', '#36c2a8', '#ff6b8b', '#e53935', '#ff8a4c', '#a58bff'];
 
@@ -236,22 +252,20 @@ export function createHud(host: HudHost): Hud {
         x.main === 'lightning'
           ? boltOn && !f
           : !!f && x.main === f.id && x.mainVar === curVar;
-      // option chips of "Blitze Live" as a further indented list inside the Gewitter rows
+      // option chips of "Blitze Live" as a further indented list inside the Gewitter rows;
+      // when Ton is on, a volume slider sits beside its chip
       const bolt = k.layers.find((x) => x.id === 'lightning');
       const boltOn = !!bolt && !bolt.hidden;
-      const boltChips = (
-        [
-          ['sound', 'Ton'],
-          ['wave', 'Kreis'],
-          ['detectors', 'Detektoren'],
-          ['lines', 'Linien'],
-        ] as [string, string][]
-      )
-        .map(([v, label]) => {
-          const o = (bolt?.filter ?? '').split(',').includes(v);
-          return `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
-        })
-        .join('');
+      const chip = (o: boolean, v: string, label: string) =>
+        `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
+      const has = (v: string) => (bolt?.filter ?? '').split(',').includes(v);
+      const vol = lightningVol(bolt);
+      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', 'Ton')}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="Lautstärke der Tick-Töne"/><span class="volv" data-volv>${vol} %</span></div>`;
+      const boltChips =
+        (has('sound') ? volRow : chip(has('sound'), 'sound', 'Ton')) +
+        chip(has('wave'), 'wave', 'Kreis') +
+        chip(has('detectors'), 'detectors', 'Detektoren') +
+        chip(has('lines'), 'lines', 'Linien');
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
@@ -892,10 +906,13 @@ export function createHud(host: HudHost): Hud {
       const f = FILTERS[id];
       if (!l || !f) return;
       if (f.multi) {
-        const set = new Set((l.filter ?? '').split(',').filter(Boolean));
+        // extra tokens (vol-n from the volume slider) survive every chip toggle
+        const toks = (l.filter ?? '').split(',').filter(Boolean);
+        const names = new Set(f.options.map(([o]) => o));
+        const set = new Set(toks.filter((t) => names.has(t)));
         if (set.has(v)) set.delete(v);
         else set.add(v);
-        l.filter = f.options.map(([o]) => o).filter((o) => set.has(o)).join(',') || undefined;
+        l.filter = [...toks.filter((t) => !names.has(t)), ...f.options.map(([o]) => o).filter((o) => set.has(o))].join(',') || undefined;
       } else l.filter = v || undefined;
       if (!l.filter) delete l.filter;
       afterEdit();
@@ -1203,6 +1220,14 @@ export function createHud(host: HudHost): Hud {
       const out = t.closest('.op')?.querySelector('[data-opv]');
       if (out) out.textContent = `${v} %`;
       applyLive();
+    } else if (t.dataset.vol) {
+      const l = layerOf(t.dataset.vol);
+      if (!l) return;
+      const v = Math.max(0, Math.min(100, Number(t.value) || 0));
+      setLightningVol(l, v);
+      const out = t.closest('.volrow')?.querySelector('[data-volv]');
+      if (out) out.textContent = `${v} %`;
+      applyLive();
     }
   });
   /** end the inline rename of an own Karte (Enter / leaving the field saves, Esc cancels) */
@@ -1225,10 +1250,11 @@ export function createHud(host: HudHost): Hud {
     if ((e.target as HTMLElement).id === 'hud-rn') finishRename(true);
   });
 
-  // apply opacity while dragging, finish (dirty marker, persistence) when released
+  // apply opacity / volume while dragging, finish (dirty marker, persistence) when released
   const applyLive = debounce(() => host.apply(view(cur)), 30);
   root.addEventListener('change', (e) => {
-    if ((e.target as HTMLElement).dataset.op) afterEdit();
+    const d = (e.target as HTMLElement).dataset;
+    if (d.op || d.vol) afterEdit();
   });
 
   // --- reorder by dragging the grip (pointer events: mouse, pen and touch alike)

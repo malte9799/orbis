@@ -453,7 +453,7 @@ export class ExtraLayers {
   private shipsAll = new Map<number, Ship>();
   private lightning: LightningStream | null = null;
   /** Unteroptionen von "Blitze": Ton, Einschlagskreis, Detektoren + Linien */
-  private lightningOpts = { sound: false, wave: false, detectors: false, lines: false };
+  private lightningOpts = { sound: false, wave: false, detectors: false, lines: false, volume: 70 };
   /** detector stations already pushed to the map source */
   private lightningStationsPushed = -1;
   /** strike wave / detector lines idle? (empty data pushed once, then the fast timer stops) */
@@ -969,9 +969,14 @@ export class ExtraLayers {
     );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
-    // shrinking wave of a fresh strike, detector line colours: green = close, blue = medium, red = far
+    // expanding ring of a fresh strike (grows with "k", fades via "o"), detector line colours: green = close, blue = medium, red = far
     const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
-    const waveRadius: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 1, ['*', 24, ['get', 'k']], 8, ['*', 46, ['get', 'k']], 12, ['*', 64, ['get', 'k']]];
+    const waveRadius: ExpressionSpecification = [
+      'interpolate', ['linear'], ['zoom'],
+      1, ['+', 18, ['*', 52, ['get', 'k']]],
+      6, ['+', 30, ['*', 110, ['get', 'k']]],
+      12, ['+', 44, ['*', 190, ['get', 'k']]],
+    ];
     const waveOpacity: ExpressionSpecification = ['*', 0.6, ['get', 'o']];
     const waveStroke: ExpressionSpecification = ['*', 0.8, ['get', 'o']];
     // detector lines (Unteroption "Linien"): line from every capturing detector to the strike (like lightningmaps.org)
@@ -998,10 +1003,10 @@ export class ExtraLayers {
         source: 'lightning-sta',
         layout: hidden,
         paint: {
-          'circle-color': 'rgba(140,190,255,0.75)',
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 6, 1.6, 10, 2.6],
-          'circle-stroke-color': 'rgba(20,30,50,0.6)',
-          'circle-stroke-width': 0.4,
+          'circle-color': 'rgba(140,190,255,0.85)',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 1.6, 6, 3.2, 10, 5],
+          'circle-stroke-color': 'rgba(15,25,45,0.75)',
+          'circle-stroke-width': 1,
         },
       },
       'marker',
@@ -1629,11 +1634,12 @@ export class ExtraLayers {
     return LAYERS[id] ?? [];
   }
 
-  /** Unteroptionen von "Blitze": Ton, Einschlagskreis, Detektoren, Detektor-Linien. */
-  setLightningOptions(o: { sound?: boolean; wave?: boolean; detectors?: boolean; lines?: boolean }) {
-    const next = { sound: !!o.sound, wave: !!o.wave, detectors: !!o.detectors, lines: !!o.lines };
+  /** Unteroptionen von "Blitze Live": Ton (mit Lautstärke), Einschlagskreis, Detektoren. */
+  setLightningOptions(o: { sound?: boolean; wave?: boolean; detectors?: boolean; lines?: boolean; volume?: number }) {
+    const vol = o.volume != null && Number.isFinite(o.volume) ? Math.max(0, Math.min(100, o.volume)) : 70;
+    const next = { sound: !!o.sound, wave: !!o.wave, detectors: !!o.detectors, lines: !!o.lines, volume: vol };
     const prev = this.lightningOpts;
-    if (prev.sound === next.sound && prev.wave === next.wave && prev.detectors === next.detectors && prev.lines === next.lines) return;
+    if (prev.sound === next.sound && prev.wave === next.wave && prev.detectors === next.detectors && prev.lines === next.lines && prev.volume === next.volume) return;
     this.lightningOpts = next;
     if (!this.ready) return;
     this.updateLightningVis();
@@ -1709,13 +1715,15 @@ export class ExtraLayers {
       const t = ctx.currentTime;
       if (t - this.lightningLastTick < 0.09) return;
       this.lightningLastTick = t;
+      const peak = 0.2 * (this.lightningOpts.volume / 100);
+      if (peak <= 0) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(660, t);
       osc.frequency.exponentialRampToValueAtTime(190, t + 0.05);
       gain.gain.setValueAtTime(0.001, t);
-      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.004);
+      gain.gain.exponentialRampToValueAtTime(peak, t + 0.004);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
       osc.connect(gain).connect(ctx.destination);
       osc.start(t);
