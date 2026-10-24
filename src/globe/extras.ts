@@ -1939,7 +1939,13 @@ export class ExtraLayers {
           break;
         case 'autobahn':
           this.loadOnce('autobahn', 10 * 60000, async () => {
-            const r = await loadAutobahn();
+            // Reports surface as their roads finish loading – the first sweep takes a while
+            // (the feed has no spatial query, so every road has to be visited), later
+            // sweeps are revalidated cheaply from the browser cache.
+            const r = await loadAutobahn((p) => {
+              this.setData('autobahn', { type: 'FeatureCollection', features: p.points });
+              this.setData('autobahn-line', { type: 'FeatureCollection', features: p.lines });
+            });
             this.setData('autobahn', r.points);
             this.setData('autobahn-line', r.lines);
             const n = (k: string) => r.points.features.filter((f) => f.properties?.kind === k).length;
