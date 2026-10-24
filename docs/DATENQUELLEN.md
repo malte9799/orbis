@@ -149,6 +149,12 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [Fintraffic Wettercams](https://weathercam.digitraffic.fi) | Webcams Finnland | 🟢 CC BY 4.0 |
+| [Vegagerðin](https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar) | Straßen-/Wetterkameras Island (~500 Aufnahmen) | 🟢 NLOD |
+| [Transpordiamet – Tarktee](https://tarktee.transpordiamet.ee) | Verkehrskameras Estland (DATEX II, rotierende Bild-URLs → live) | 🟢 |
+| [NZTA / trafficnz.info](https://www.nzta.govt.nz/traffic-and-travel-information/use-our-data) | Verkehrskameras Neuseeland (REST v4) | 🟢 |
+| [TfNSW Live Traffic](https://opendata.transport.nsw.gov.au) | Verkehrskameras New South Wales | 🟢 CC BY 4.0 |
+| [DriveBC](https://www.drivebc.ca) | Winter- und Verkehrskameras British Columbia | 🟢 Open Government Licence – BC |
+| [City of Calgary](https://data.calgary.ca/stories/s/traffic-cameras/6hwp-pnmi) | Verkehrskameras Calgary | 🟢 |
 | [Windy Webcams](https://api.windy.com/webcams) | Weltweite Webcams | 🔑 |
 | [TfL](https://api.tfl.gov.uk) | London (inkl. Videoclips) | 🟢 |
 | [NYC DOT](https://webcams.nyctmc.org) | New York | 🟢 |

@@ -205,7 +205,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'oil', section: 'infra', label: 'Ölkraftwerke', hint: 'Öl-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Oil.color },
   { id: 'biomass', section: 'infra', label: 'Biomasse & Abfall', hint: 'Biomasse- und Müllheizkraftwerke weltweit', glyph: 'plant', color: FUELS.Biomass.color },
   { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Geothermie, Speicher, Kraft-Wärme-Kopplung …', glyph: 'plant', color: FUELS.Geothermal.color },
-  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
+  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Island, Estland, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
   { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
 ];
@@ -553,7 +553,7 @@ export class ExtraLayers {
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://airplanes.live/">airplanes.live</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
-      webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>',
+      webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>, <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://tarktee.transpordiamet.ee">Transpordiamet</a>, <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://data.calgary.ca">City of Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (Open Government Licence – BC)',
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
       aurora: 'Polarlicht: <a href="https://www.swpc.noaa.gov/products/aurora-30-minute-forecast">NOAA SWPC</a>',
