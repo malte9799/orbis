@@ -9,6 +9,7 @@ import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobal
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
+import { loadPorts } from '../api/ports';
 import { loadBuoys, loadRivers, loadTideDetails, loadTideStations, loadWaves } from '../api/ocean';
 import {
   AisStream,
@@ -68,6 +69,7 @@ export type ExtraId =
   | 'airports'
   | 'airport3d'
   | 'ships'
+  | 'ports'
   | 'trains'
   | 'transit'
   | 'railmap'
@@ -173,6 +175,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
   { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
   { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit über den Daten-Proxy oder mit eigenem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
+  { id: 'ports', section: 'infra', label: 'Häfen', hint: '~16.000 Seehäfen mit Größe, Tiefen und Umschlag – NGA World Port Index, UN/LOCODE', glyph: 'vessel', color: '#ffb74d' },
   { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
   { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden', glyph: 'train', color: '#ab47bc' },
   { id: 'roadnet', section: 'networks', label: 'Straßennetz', hint: 'Autobahnen bis Kreisstraßen mit Nummern – OpenStreetMap', glyph: 'city', color: '#f57c00' },
@@ -223,6 +226,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   buildings3d: ['buildings-3d'],
   airport3d: AP3D_LAYERS,
   ships: ['ships'],
+  ports: ['ports', 'ports-label'],
   trains: ['trains', 'trains-label'],
   transit: ['transit-veh', 'transit-label'],
   railmap: ['railmap'],
@@ -268,7 +272,7 @@ const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/b
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -487,11 +491,12 @@ export class ExtraLayers {
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
       waves: 'Seegang: <a href="https://open-meteo.com/en/docs/marine-weather-api">Open-Meteo Marine</a> (CC BY 4.0)',
       rivers: 'Flüsse: <a href="https://open-meteo.com/en/docs/flood-api">Open-Meteo Flood</a> / GloFAS (CC BY 4.0)',
+      ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
       buoys: 'Bojen: <a href="https://www.ndbc.noaa.gov/">NOAA NDBC</a>',
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -1133,6 +1138,42 @@ export class ExtraLayers {
     };
     vehicleLayers('trains', 'trains-label', ['==', ['get', 'rail'], true]);
     vehicleLayers('transit-veh', 'transit-label', ['!=', ['get', 'rail'], true]);
+    // ports: the bigger, the earlier (zoom 2 / 5 / 7 / 9 / 11); a port that is not yet "due" has radius 0
+    const byTier = (...v: number[]): ExpressionSpecification => ['case', ['<=', ['get', 'tier'], 1], v[0], ['<=', ['get', 'tier'], 2], v[1], ['<=', ['get', 'tier'], 3], v[2], ['<=', ['get', 'tier'], 4], v[3], v[4]];
+    const dueAt = (tier: number, r: number): ExpressionSpecification => ['case', ['<=', ['get', 'tier'], tier], r, 0];
+    add(
+      {
+        id: 'ports',
+        type: 'circle',
+        source: 'ports',
+        layout: { ...hidden, 'circle-sort-key': ['-', 0, ['get', 'tier']] },
+        paint: {
+          'circle-color': '#ffb74d',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, dueAt(1, 3.5), 4.5, dueAt(1, 5), 5, dueAt(2, 4.5), 7, dueAt(3, 4.5), 9, dueAt(4, 5), 11, byTier(7, 6.5, 6, 5.5, 5)],
+          'circle-stroke-color': '#1b1200',
+          'circle-stroke-width': 1,
+        },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'ports-label',
+        type: 'symbol',
+        source: 'ports',
+        layout: {
+          ...hidden,
+          'text-field': ['step', ['zoom'], '', 5, ['case', ['<=', ['get', 'tier'], 1], ['get', 'name'], ''], 7, ['case', ['<=', ['get', 'tier'], 2], ['get', 'name'], ''], 9, ['case', ['<=', ['get', 'tier'], 3], ['get', 'name'], ''], 11, ['get', 'name']],
+          'text-font': FONT_REGULAR,
+          'text-size': 11,
+          'text-offset': [0, 0.9],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#ffe0b2', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
+      },
+      'marker',
+    );
     add(
       {
         id: 'ships',
@@ -1764,6 +1805,13 @@ export class ExtraLayers {
         case 'airports':
           this.set('airports', { note: 'Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag' });
           void this.loadFarAirports();
+          break;
+        case 'ports':
+          this.loadOnce('ports', Infinity, async () => {
+            const fc = await loadPorts();
+            this.setData('ports', fc);
+            return { count: fc.features.length, note: 'Größere Häfen ab kleinem Zoom, kleinere beim Heranzoomen · Klick zeigt Hafendaten' };
+          });
           break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
@@ -3014,6 +3062,34 @@ export class ExtraLayers {
                 if (el) el.textContent = 'OpenSky gerade nicht erreichbar (Tageskontingent ohne Konto begrenzt).';
               });
           },
+        };
+      }
+      case 'ports': {
+        const row = (k: string, v: unknown, unit = '') => (v === '' || v == null ? null : [k, `${v}${unit}`]);
+        const rows = [
+          row('Größe', p.size),
+          row('Hafentyp', p.type),
+          row('Fahrwassertiefe', p.channel, ' m'),
+          row('Pier-Tiefe', p.pier, ' m'),
+          row('Größtes Schiff', p.length, ' m lang'),
+          row('Max. Tiefgang', p.draft, ' m'),
+          row('Lotsen', p.pilot),
+          row('Schutz', p.shelter),
+          row('Umschlag', p.fac),
+        ].filter(Boolean) as string[][];
+        const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : '';
+        return {
+          type: 'html',
+          html: cardHtml({
+            glyph: 'vessel',
+            color: '#ffb74d',
+            title: p.name,
+            subtitle: [p.code, p.country].filter(Boolean).join(' · '),
+            source: p.wpi ? 'NGA World Port Index' : 'UN/LOCODE (Upply, CC BY 4.0)',
+            extra,
+          }),
+          lng: pt[0],
+          lat: pt[1],
         };
       }
       case 'ships':
