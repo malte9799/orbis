@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:georss="http://www.georss.org/georss">
+    <id>urn:uuid:d97258de-4314-4d25-82df-531ef9416684</id><title>Tsunami Information Statement Number 1</title>
+    <updated>2026-10-24T02:39:49Z</updated>
+    <author>
+      <name>NWS National Tsunami Warning Center Palmer AK</name>
+<uri>https://www.tsunami.gov/</uri>
+     <email>ntwc@noaa.gov</email>
+    </author>
+<icon>https://www.tsunami.gov/images/favicon.ico</icon>
+<link type="application/atom+xml" rel="self" title="self" href="https://www.tsunami.gov/events/xml/PAAQAtom.xml"/>
+<link rel="related" title="Travel Time Map" href="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/ttvutne4d5-01.jpg" type="image/jpeg" /> 
+<link rel="related" title="Energy Map" href="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/energytne4d5.jpg" type="image/jpeg" /> 
+
+   <entry>
+
+    <title>near the Vanuatu Islands</title><updated>2026-10-24T02:39:49Z</updated>
+<geo:lat>-13.800</geo:lat>
+<geo:long>165.700</geo:long>
+<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">
+     <strong>Category:</strong> Information<br/><strong>Bulletin Issue Time: </strong> 2026.10.24 02:39:49 UTC <br/><strong>Preliminary Magnitude: </strong>7.2(Mwp)<br/><strong>Lat/Lon: </strong>-13.800 / 165.700<br/><strong>Affected Region: </strong>near the Vanuatu Islands<br/><b>Note:</b>  * There is no tsunami danger for the U.S. West Coast, British    Columbia, or Alaska.  * Based on earthquake information and historic tsunami records,    the earthquake is not expected to generate a tsunami. <br/><strong>Definition: </strong>An information statement indicates that an earthquake has occurred, but does not pose a tsunami threat, or that a tsunami warning, advisory, or watch has been issued for another section of the ocean. <a href="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/WEAK53.txt">View bulletin</a><img src="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/energytne4d5.jpg" alt="Energy Map" /> 
+<img src="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/ttvutne4d5-01.jpg" alt="Travel Time Map" /> 
+</div></summary>
+    <id>urn:uuid:09b31fa7-5ecf-416d-92bb-e2f20772b657</id><link rel="related" title="CapXML document" href="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/PAAQCAP.xml" type="application/cap+xml" />
+<link rel="alternate" title="Bulletin" href="https://www.tsunami.gov/events/PAAQ/2026/10/24/tne4d5/1/WEAK53/WEAK53.txt" type="application/xml" />
+</entry>
+</feed>
