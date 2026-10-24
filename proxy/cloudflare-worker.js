@@ -126,7 +126,17 @@ async function aisRelay(request, env, headers) {
       /* ignore malformed subscriptions */
     }
   });
-  upstream.addEventListener('message', (ev) => server.send(ev.data));
+  // aisstream sends JSON as binary frames; forward them as text
+  const decoder = new TextDecoder();
+  upstream.addEventListener('message', async (ev) => {
+    const d = ev.data;
+    const text = typeof d === 'string' ? d : typeof d.text === 'function' ? await d.text() : decoder.decode(d);
+    try {
+      server.send(text);
+    } catch {
+      /* client already gone */
+    }
+  });
   const close = () => {
     try { server.close(); } catch { /* already closed */ }
     try { upstream.close(); } catch { /* already closed */ }
