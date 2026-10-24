@@ -184,6 +184,20 @@ const AIRPORTS: string[] = [
     'MPTO', 'MROC', 'MGGT', 'MHLM', 'MKJP',
     'TNCM', 'TJSJ', 'MYNN', 'MDSD', 'MDPC',
     'MUHA', 'MWCR',
+
+    // Further airports among the busiest ~200 worldwide (about 8 million passengers a year and more)
+    'KLAS', 'KEWR', 'KLGA', 'KMDW', 'KSMF', 'KSNA', 'KOAK', 'KRDU', 'KRSW', 'KCMH', 'PHOG',
+    'UUEE', 'UUDD', 'UUWW', 'ULLI', 'URSS', 'URKK', 'USSS', 'UNNT', 'LTFJ',
+    'EGGD', 'EGGP', 'LIPE', 'LIML', 'LEMG', 'LEIB', 'GCTS', 'GCLP', 'GCRR', 'EVRA',
+    'OKKK', 'OBBI', 'OEMA', 'OJAI', 'OIIE', 'OIII', 'OIMM',
+    'ZBAD', 'ZUTF', 'ZSSS', 'ZBTJ', 'ZHHH', 'ZHCC', 'ZGNN', 'ZYHB', 'ZYTL', 'ZYTX', 'ZSQD', 'ZGHA',
+    'ZUGY', 'ZPPP', 'ZSAM', 'ZSFZ', 'ZJHK', 'ZJSY', 'ZSWZ', 'ZSNB', 'ZSOF', 'ZSJN', 'ZBYN', 'ZWWW',
+    'ZLLL', 'ZLIC', 'ZYCC', 'ZSCN', 'ZGSD', 'ZLXN', 'ZPLJ',
+    'RKPC', 'RCKH',
+    'WAAA', 'WARR', 'WIMM', 'VTCC', 'VVDN', 'VVCR', 'VVPQ', 'WBKK', 'VCBI', 'VNKT', 'VGHS',
+    'VAAH', 'VAPO', 'VOGA', 'VEGT', 'VIJP', 'VILK', 'VOCI', 'OPKC',
+    'UTTT', 'UAAA',
+    'SBCT', 'MMSD',
   ]),
 ];
 

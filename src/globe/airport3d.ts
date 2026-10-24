@@ -499,28 +499,27 @@ export class Airport3D {
     this.map.triggerRepaint();
   }
 
-  /** hex → route of the aircraft (null: unknown / not plausible, missing: still loading) */
-  private routes = new Map<string, { route: FlightRoute | null; at: number }>();
+  /** hex → route as stored by adsbdb (raw: null = unknown / failed), and the one shown (aligned with the flight direction) */
+  private routes = new Map<string, { raw: FlightRoute | null; shown: FlightRoute | null; at: number }>();
 
   route(hex: string): FlightRoute | null | undefined {
-    return this.routes.get(hex)?.route;
+    return this.routes.get(hex)?.shown;
   }
 
   /** Route of the selected aircraft by its callsign (adsbdb) → grey dashed line to the airports. */
   private async fetchRoute(hex: string) {
-    const p = this.tracker.planes.get(hex);
     // a found route is kept; "unknown" (or a failed request) is asked again after two minutes
-    const known = this.routes.get(hex);
-    if (known && (known.route || Date.now() - known.at < 120_000)) {
-      this.applyRoute(hex, known.route);
-      return;
+    let known = this.routes.get(hex);
+    if (!known || (!known.raw && Date.now() - known.at > 120_000)) {
+      const found = await loadRoute(String(this.tracker.planes.get(hex)?.props.callsign ?? ''));
+      known = { raw: found, shown: null, at: Date.now() };
+      this.routes.set(hex, known);
     }
-    const found = await loadRoute(String(p?.props.callsign ?? ''));
+    // direction is decided on every selection from the aircraft's current state, not once for good
     const now = this.tracker.planes.get(hex);
     // the callsign of the route must still fit the aircraft's position
-    const route = found && now && plausible(found, now.dLon, now.dLat) ? orient(found, now.dLon, now.dLat, now.dTrack) : null;
-    this.routes.set(hex, { route, at: Date.now() });
-    this.applyRoute(hex, route);
+    known.shown = known.raw && now && plausible(known.raw, now.dLon, now.dLat) ? orient(known.raw, now.dLon, now.dLat, now.dTrack, now.vsMs, now.ground) : null;
+    this.applyRoute(hex, known.shown);
   }
 
   private applyRoute(hex: string, route: FlightRoute | null) {

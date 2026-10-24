@@ -94,17 +94,28 @@ const angle = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
 
 /**
  * adsbdb knows a callsign by its usual route, but the same callsign flies it in both directions
- * (UAL1871 out of JFK is stored as "… → JFK"). The aircraft's course tells: it must head towards the
- * destination. A far endpoint it flies away from is the origin; an endpoint within 5 km (just taken
- * off / about to land) says nothing and is ignored.
+ * (UAL1871 out of JFK is stored as "… → JFK"). The aircraft's state tells which way it goes:
+ * - close to an endpoint (< 60 km) the course is useless (final approach, departure turns), so the
+ *   vertical speed decides: climbing away from it = that airport is the origin, descending = the destination;
+ * - far from both it must head towards the destination.
+ * Level flight near an airport, or on the ground, says nothing: the stored direction stays.
  */
-export function orient(route: FlightRoute, lon: number, lat: number, track: number): FlightRoute {
+export function orient(route: FlightRoute, lon: number, lat: number, track: number, vsMs: number, ground: boolean): FlightRoute {
   const { origin: o, destination: d } = route;
-  const far = (a: RouteAirport) => haversine(lon, lat, a.lon, a.lat) > 5000;
-  const towardDest = far(d) ? angle(track, bearing(lon, lat, d.lon, d.lat)) : null;
-  const towardOrigin = far(o) ? angle(track, bearing(lon, lat, o.lon, o.lat)) : null;
-  const reversed = (towardDest != null && towardDest > 110) || (towardOrigin != null && towardOrigin < 50 && (towardDest == null || towardDest > 50));
-  return reversed ? { origin: d, destination: o } : route;
+  const swap = { origin: d, destination: o };
+  const dO = haversine(lon, lat, o.lon, o.lat);
+  const dD = haversine(lon, lat, d.lon, d.lat);
+  const NEAR = 60_000;
+  if (Math.min(dO, dD) < NEAR) {
+    if (ground || Math.abs(vsMs) < 2) return route;
+    const nearIsOrigin = dO < dD;
+    // climbing: the near airport is where it came from; descending: where it is going
+    const shouldBeOrigin = vsMs > 0;
+    return nearIsOrigin === shouldBeOrigin ? route : swap;
+  }
+  const toDest = angle(track, bearing(lon, lat, d.lon, d.lat));
+  const toOrigin = angle(track, bearing(lon, lat, o.lon, o.lat));
+  return toDest > 110 || (toOrigin < 50 && toDest > 50) ? swap : route;
 }
 
 /** Already loaded route (undefined: not asked yet / still loading). */

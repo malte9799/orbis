@@ -44,7 +44,7 @@ let staticIndex: { at: number; list: Promise<StaticAirport[]> } | null = null;
 /** The airports that ship with a layout; an unreachable index is retried after a minute. */
 export function staticAirports(): Promise<StaticAirport[]> {
   if (!staticIndex || (Date.now() - staticIndex.at > 60000 && staticIndex.list === FAILED)) {
-    const list = fetch(`${STATIC}index.json`)
+    const list = fetch(`${STATIC}index.json`, { cache: 'no-cache' })
       .then((r) => (r.ok ? (r.json() as Promise<{ airports: StaticAirport[] }>) : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((j) => j.airports)
       .catch(() => FAILED);
