@@ -58,7 +58,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Japan Meteorological Agency](https://www.jma.go.jp/bosai/nowc/) | Niederschlagsradar Japan (5 min) und Nowcast (+60 min) | 🟢 |
 | [DWD WMS](https://maps.dwd.de) | Radar-Nowcast Deutschland (WN-Produkt, 2 h) | 🟢 CC BY 4.0 |
 | [DWD Open Data – RV-Komposit](https://opendata.dwd.de/weather/radar/composite/rv/) | Rohraster 1 km, 5 min, Analyse + 120 min Nowcast (HDF5); geprüfte Quellen siehe [RADAR-QUELLEN.md](RADAR-QUELLEN.md) | 🟢 CC BY 4.0 |
-| [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot und Konvektions-RGB (Gewitter) | 🟢 |
+| [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot (Wolken) und Konvektions-RGB (Gewitter) – WMS; **expliziter `TIME`-Parameter nötig**, sonst rendert der Server je Tile einen anderen Scan und die Zoomstufen passen nicht zusammen (IR-Komposit: 3-stündlich, ~2 h Verarbeitungslatenz; Konvektions-RGB: 15 min, ~20 min) | 🟢 |
 | [NASA GPM IMERG](https://gpm.nasa.gov/data/imerg) (über GIBS) | Niederschlag aus Satellitendaten | 🟢 |
 | [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs) | Tagesbild (VIIRS), Nachtlichter (Black Marble), Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole, Chlorophyll, Meerestemperatur (GHRSST MUR), Meereis (AMSR2) | 🟢 |
 

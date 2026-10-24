@@ -49,7 +49,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, EUMETSAT_IR, EUMETSAT_STORM, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
@@ -1535,9 +1535,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (!map || document.hidden) return;
         if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
-        const live: Record<string, string> = { 'dwd-radar': DWD_RADAR_WMS, 'sat-ir': EUMETSAT_IR, 'sat-storm': EUMETSAT_STORM, imerg: IMERG_WMS };
+        // EUMETSAT layers get their own TIME parameter in the URL (newest published scan);
+        // only static-URL sources need the generic cache buster.
+        const live: Record<string, (() => string) | string> = {
+          'dwd-radar': DWD_RADAR_WMS,
+          'sat-ir': eumetsatIr,
+          'sat-storm': eumetsatStorm,
+          imerg: IMERG_WMS,
+        };
         const url = live[state.overlay];
-        if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([url + t]);
+        if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
     },
     deactivate() {
