@@ -272,7 +272,7 @@ const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/b
 const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
@@ -1445,20 +1445,37 @@ export class ExtraLayers {
       this.rotorShown = this.heliFeatures.length > 0;
       this.setData('aircraft-rotor', { type: 'FeatureCollection', features: this.heliFeatures.map((f) => ({ ...f, properties: { ...f.properties, rot } })) });
     }, 90);
-    // vehicles on the airfield (ADS-B category C1/C2): yellow dots for now
+    // vehicles on the airfield (ADS-B category C1/C2): small car icon + callsign, clickable
     add(
       {
         id: 'aircraft-vehicle',
-        type: 'circle',
+        type: 'symbol',
         source: 'aircraft',
         minzoom: 12,
         filter: ['==', ['get', 'kind'], 'vehicle'],
-        layout: hidden,
+        layout: {
+          ...hidden,
+          'icon-image': 'sil-vehicle',
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.55, 16, 0.85, 19, 1.1],
+          'icon-rotate': ['get', 'track'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'text-field': ['step', ['zoom'], '', 13, ['get', 'callsign']],
+          'text-font': FONT_BOLD,
+          'text-size': 9,
+          'text-offset': [0, 1.2],
+          'text-anchor': 'top',
+          'text-optional': true,
+          'text-allow-overlap': false,
+        },
         paint: {
-          'circle-color': '#ffd23f',
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 4.5, 19, 8],
-          'circle-stroke-color': 'rgba(0,0,0,0.6)',
-          'circle-stroke-width': 1,
+          'icon-color': '#ffd23f',
+          'icon-halo-color': 'rgba(0,0,0,0.7)',
+          'icon-halo-width': 1,
+          'text-color': '#ffd23f',
+          'text-halo-color': 'rgba(0,0,0,0.8)',
+          'text-halo-width': 1.2,
         },
       },
       'marker',
@@ -2838,6 +2855,7 @@ export class ExtraLayers {
       case 'sondes':
         return { type: 'html', html: html('sonde', '#ff8fab') + '', lng: pt[0], lat: pt[1] };
       case 'aircraft':
+      case 'aircraft-vehicle':
       case 'ap3d-hit':
         return { type: 'flight', hex: String(p.hex), lng: pt[0], lat: pt[1] };
       case 'sats-icon':

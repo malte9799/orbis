@@ -162,13 +162,22 @@ interface Ac {
 export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
 
 function aircraftKind(a: Ac): AircraftKind {
-  // ground transponders typed "TWR" (vehicles, equipment on the airfield)
-  if (a.t === 'TWR') return 'vehicle';
-  switch (a.category) {
-    // surface emergency / service vehicles on the airfield
-    case 'C1':
-    case 'C2':
-      return 'vehicle';
+  const hex = (a.hex ?? '').toUpperCase();
+  const flight = (a.flight ?? '').trim().toUpperCase();
+  const type = (a.t ?? '').trim().toUpperCase();
+  const desc = (a.desc ?? '').trim().toUpperCase();
+  const cat = a.category ?? '';
+  // Ground transponders and airfield vehicles (e.g. Follow-Me, Pushback Tugs, Service Vehicles)
+  if (
+    type === 'TWR' || type === 'GND' || type === 'VEH' || type === 'CAR' ||
+    /^C[0-2]$/.test(cat) ||
+    /^(FM\d*|FOLLOW\w*|TUG\d*|PUSH\d*|MARSH\w*|SWEEP\w*|APRON\w*|GATE\w*|FEUER\w*|FIRE\w*|RAMP\w*)/i.test(flight) ||
+    /FOLLOW|PUSHBACK|TUG|SWEEPER|SURFACE VEHICLE|BODENFAHRZEUG/i.test(desc) ||
+    hex === '3C41FA' || hex === '3C41D0'
+  ) {
+    return 'vehicle';
+  }
+  switch (cat) {
     case 'A7':
       return 'heli';
     case 'B1':
@@ -357,6 +366,8 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
     if (a.lat == null || a.lon == null) continue;
     // ADS-B also carries fixed obstacles (category C3–C5, hex 000000): no aircraft and no vehicle
     if (/^C[3-5]$/.test(a.category ?? '') || /^0+$/.test(a.hex)) continue;
+    // a tower transponder (type TWR without any further description) is a fixed station, not a vehicle
+    if ((a.t ?? '').trim().toUpperCase() === 'TWR' && /^(TWR)?$/.test(clean(a.desc).toUpperCase())) continue;
     const onGround = a.alt_baro === 'ground';
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({
