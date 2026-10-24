@@ -69,11 +69,10 @@ const AIRPORTS: string[] = [
     // Germany
     'EDDF', 'EDDM', 'EDDB', 'EDDH', 'EDDL', 'EDDK', 'EDDS', 'EDDP',
     'EDDN', 'EDDV', 'EDDW', 'EDDG',
-    'EDDE', 'EDFH', 'EDFM', 'EDGS', 'EDHI', 'EDHK', 'EDHL', 'EDJA',
-    'EDLE', 'EDLP', 'EDLV', 'EDLW', 'EDMA', 'EDMO', 'EDNY', 'EDOP',
-    'EDQD', 'EDQM', 'EDRK', 'EDRY', 'EDSB', 'EDTD', 'EDTF', 'EDVE',
+    'EDDE', 'EDFH', 'EDFM', 'EDHI', 'EDHK', 'EDHL', 'EDJA',
+    'EDLE', 'EDLP', 'EDLV', 'EDLW', 'EDMA', 'EDMO', 'EDNY',     'EDQD', 'EDQM', 'EDRK', 'EDRY', 'EDSB', 'EDTD', 'EDTF', 'EDVE',
     'EDVK', 'EDVM', 'EDWI', 'EDWR', 'EDWY', 'EDAZ', 'EDBH', 'EDBN',
-    'EDCD', 'EDCG', 'EDCP', 'EDLA', 'EDLI', 'EDOV', 'EDPA',
+    'EDCG', 'EDCP', 'EDLA', 'EDLI', 'EDOV', 'EDPA',
     'EDQC', 'EDQH', 'EDRT', 'EDTM', 'EDTY',
 
     // Austria and Switzerland
@@ -119,7 +118,7 @@ const AIRPORTS: string[] = [
     'LTFM', 'LTBA',
     'OMDB', 'OMAA', 'OMDW', 'OMSJ',
     'OTHH', 'OTBD', 'OERK', 'OEJN', 'OEDF',
-    'OOMS', 'OKBK', 'OLBA', 'LLBG',
+    'OOMS', 'OLBA', 'LLBG', // Kuwait is OKKK since 2023 (see below)
 
     // Africa
     'FAOR', 'FACT', 'FALE',
@@ -137,7 +136,7 @@ const AIRPORTS: string[] = [
     'KSTL', 'KMCI', 'KIND', 'KCVG', 'KCLE',
     'KPIT', 'KBNA', 'KAUS', 'KSAT', 'KHOU',
     'KIAH', 'KDAL', 'KDFW', 'KMSY', 'KJAX',
-    'KANC', 'PHNL', 'KBUF', 'KRIC', 'KOMA',
+    'PANC', 'PHNL', 'KBUF', 'KRIC', 'KOMA',
     'KABQ',
 
     // Canada
@@ -161,7 +160,7 @@ const AIRPORTS: string[] = [
     // Southeast Asia
     'WSSS', 'WMKK', 'WMKP', 'WIII', 'WADD',
     'VTBS', 'VTBD', 'VTSP', 'VVNB', 'VVTS',
-    'RPLL', 'RPVM', 'VDPP', 'VLVT',
+    'RPLL', 'RPVM', 'VLVT',
 
     // South Asia
     'VIDP', 'VABB', 'VOBL', 'VOMM', 'VOHS',
@@ -196,7 +195,7 @@ const AIRPORTS: string[] = [
     'RKPC', 'RCKH',
     'WAAA', 'WARR', 'WIMM', 'VTCC', 'VVDN', 'VVCR', 'VVPQ', 'WBKK', 'VCBI', 'VNKT', 'VGHS',
     'VAAH', 'VAPO', 'VOGA', 'VEGT', 'VIJP', 'VILK', 'VOCI', 'OPKC',
-    'UTTT', 'UAAA',
+    'UAAA',
     'SBCT', 'MMSD',
   ]),
 ];

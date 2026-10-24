@@ -35,9 +35,11 @@ export type ExtraGlyph =
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
-export const SILHOUETTES: Partial<Record<ExtraGlyph, string>> = {
+export const SILHOUETTES: Partial<Record<ExtraGlyph | 'rotor', string>> = {
   plane: 'M12 2c.8 0 1.3.8 1.3 1.8v5.4l7.7 4.6v2l-7.7-2.4v4.8l2.2 1.6v1.7L12 20.6l-3.5 1v-1.7l2.2-1.6v-4.8L3 15.8v-2l7.7-4.6V3.8C10.7 2.8 11.2 2 12 2z',
-  heli: 'M11 6.5h2v2.7a3.6 3.6 0 0 1 2.6 3.4c0 1.6-1.1 3-2.6 3.4V21h3v1.5H8V21h3v-5c-1.5-.4-2.6-1.8-2.6-3.4s1.1-3 2.6-3.4zM3 4.2h18v1.8H3z',
+  // seen from above, the rotor hub in the icon centre: cabin, tail boom and stabiliser (the blades are `rotor`, turned separately)
+  heli: 'M12 8.6a2.8 4 0 1 0 0 8a2.8 4 0 1 0 0-8zM11.25 16h1.5v7h-1.5zM9.8 21.6h4.4V23H9.8z',
+  rotor: 'M17.87 18.86 L18.86 17.87 L6.13 5.14 L5.14 6.13zM5.14 17.87 L6.13 18.86 L18.86 6.13 L17.87 5.14z',
   glider: 'M11.2 4h1.6v6.5l9.2 1.2v1.6l-9.2-.6V19l2.2 1v1.2H9V20l2.2-1v-6.3l-9.2.6v-1.6l9.2-1.2z',
   balloon: 'M12 2a6 6 0 0 1 6 6c0 3.6-3.4 6.6-5 8h-2c-1.6-1.4-5-4.4-5-8a6 6 0 0 1 6-6zM10 17h4v3.5h-4z',
   drone: 'M5 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM5 16.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zm14 0a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM6.4 5.6L10 9.2h4l3.6-3.6 1.4 1.4-3.6 3.6v2.8l3.6 3.6-1.4 1.4-3.6-3.6h-4l-3.6 3.6L5 17l3.6-3.6v-2.8L5 7z',
@@ -75,7 +77,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   gauge: [{ mode: 'stroke', width: 2.2, d: 'M8 3v18M8 6h4M8 10h3M8 14h4M8 18h3M15 9l2-3 2 3M17 6v8' }],
   warn: [{ mode: 'stroke', width: 2.4, d: 'M12 3L2.5 20h19zM12 9.5v5M12 17.5v.3' }],
   plane: [{ mode: 'fill', d: SILHOUETTES.plane! }],
-  heli: [{ mode: 'fill', d: SILHOUETTES.heli! }],
+  heli: [{ mode: 'fill', d: SILHOUETTES.heli! + SILHOUETTES.rotor! }],
   glider: [{ mode: 'fill', d: SILHOUETTES.glider! }],
   balloon: [{ mode: 'fill', d: SILHOUETTES.balloon! }],
   drone: [{ mode: 'fill', d: SILHOUETTES.drone! }],

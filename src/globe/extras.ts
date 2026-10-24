@@ -203,7 +203,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   dwdwarn: ['dwd-warn-fill', 'dwd-warn-line'],
   gauges: ['gauges'],
   aq: ['aq-circle', 'aq-text'],
-  aircraft: ['aircraft', 'aircraft-vehicle'],
+  aircraft: ['aircraft', 'aircraft-rotor', 'aircraft-vehicle'],
   sondes: ['sondes'],
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
@@ -394,6 +394,9 @@ export class ExtraLayers {
   private aircraftErr = '';
   private airport3d: Airport3D | null = null;
   private lastAircraft: AircraftResult | null = null;
+  /** helicopters of the 2D icons (their rotor blades are drawn as an own, turning layer) */
+  private heliFeatures: Feature<Point>[] = [];
+  private rotorShown = false;
   private ready = false;
   private fiCams: FeatureCollection = empty();
   private windyCams: FeatureCollection = empty();
@@ -473,7 +476,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -1355,6 +1358,37 @@ export class ExtraLayers {
       },
       'marker',
     );
+    // the rotor blades of helicopters: an own icon around the same centre, turned by a timer (see below)
+    add(
+      {
+        id: 'aircraft-rotor',
+        type: 'symbol',
+        source: 'aircraft-rotor',
+        layout: {
+          ...hidden,
+          'icon-image': 'sil-rotor',
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.3],
+          'icon-rotate': ['get', 'rot'],
+          'icon-rotation-alignment': 'map',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+        paint: {
+          'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
+          'icon-halo-color': 'rgba(0,0,0,0.75)',
+          'icon-halo-width': 1,
+        },
+      },
+      'marker',
+    );
+    // the blades turn: the (few) helicopter positions go into their own source with a changing angle
+    window.setInterval(() => {
+      if (document.hidden || !this.on.has('aircraft')) return;
+      if (!this.heliFeatures.length && !this.rotorShown) return;
+      const rot = (performance.now() * 0.3) % 360;
+      this.rotorShown = this.heliFeatures.length > 0;
+      this.setData('aircraft-rotor', { type: 'FeatureCollection', features: this.heliFeatures.map((f) => ({ ...f, properties: { ...f.properties, rot } })) });
+    }, 90);
     // vehicles on the airfield (ADS-B category C1/C2): yellow dots for now
     add(
       {
@@ -1955,6 +1989,7 @@ export class ExtraLayers {
         return live ? { ...f, geometry: { type: 'Point', coordinates: [live.lon, live.lat] }, properties: { ...f.properties, track: live.track } } : f;
       });
     }
+    this.heliFeatures = features.filter((f) => f.properties?.kind === 'heli') as Feature<Point>[];
     this.setData('aircraft', { ...fc, features });
   }
 

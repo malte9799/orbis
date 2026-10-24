@@ -162,6 +162,8 @@ interface Ac {
 export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
 
 function aircraftKind(a: Ac): AircraftKind {
+  // ground transponders typed "TWR" (vehicles, equipment on the airfield)
+  if (a.t === 'TWR') return 'vehicle';
   switch (a.category) {
     // surface emergency / service vehicles on the airfield
     case 'C1':
@@ -353,8 +355,8 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
   const features: Feature<Point>[] = [];
   for (const a of list) {
     if (a.lat == null || a.lon == null) continue;
-    // ADS-B also carries ground stations and obstacles (category C3–C5, type TWR, hex 000000): no aircraft
-    if (/^C[3-5]$/.test(a.category ?? '') || a.t === 'TWR' || /^0+$/.test(a.hex)) continue;
+    // ADS-B also carries fixed obstacles (category C3–C5, hex 000000): no aircraft and no vehicle
+    if (/^C[3-5]$/.test(a.category ?? '') || /^0+$/.test(a.hex)) continue;
     const onGround = a.alt_baro === 'ground';
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({

@@ -246,6 +246,9 @@ interface HeliGeos {
   tail: THREE.BufferGeometry;
 }
 
+/** the helicopter model is built a little larger than its metre dimensions suggest */
+const HELI_K = 1.15;
+
 function heliParts(): HeliGeos {
   // only position + normal are needed; keep attributes identical so they can be merged
   const merge = (list: THREE.BufferGeometry[]) =>
@@ -255,7 +258,7 @@ function heliParts(): HeliGeos {
         n.deleteAttribute('uv');
         return n;
       }),
-    )!;
+    )!.scale(HELI_K, HELI_K, HELI_K);
   const parts: THREE.BufferGeometry[] = [
     new THREE.SphereGeometry(1, 16, 12).scale(1.5, 3.2, 1.55).translate(0, 0.8, 2.0), // cabin
     new THREE.SphereGeometry(1, 12, 8).scale(0.95, 1.8, 0.8).translate(0, -0.6, 3.5), // engine housing
@@ -290,10 +293,10 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
     group.add(new THREE.Mesh(g.heli.glass, mat));
     // the rotors turn: main rotor around z at the mast, tail rotor around x at the end of the boom
     const main = new THREE.Group();
-    main.position.set(0, 0.2, 4.85);
+    main.position.set(0, 0.2, 4.85).multiplyScalar(HELI_K);
     main.add(new THREE.Mesh(g.heli.rotor, mat));
     const tail = new THREE.Group();
-    tail.position.set(0.3, -8.9, 3.5);
+    tail.position.set(0.3, -8.9, 3.5).multiplyScalar(HELI_K);
     tail.add(new THREE.Mesh(g.heli.tail, mat));
     group.add(main, tail);
     group.userData = { main, tail };
