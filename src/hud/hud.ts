@@ -236,35 +236,34 @@ export function createHud(host: HudHost): Hud {
         x.main === 'lightning'
           ? boltOn && !f
           : !!f && x.main === f.id && x.mainVar === curVar;
-      // "Blitze Live" sits inside the Gewitter category (radio row like Vorhersage/Live),
-      // while it is on a second rows block shows its options (Ton, Kreis, Detektoren, Linien).
+      // option chips of "Blitze Live" as a further indented list inside the Gewitter rows
       const bolt = k.layers.find((x) => x.id === 'lightning');
       const boltOn = !!bolt && !bolt.hidden;
-      const boltRows = !boltOn
-        ? ''
-        : `<div class="subs">${(
-            [
-              ['sound', 'Ton'],
-              ['wave', 'Kreis'],
-              ['detectors', 'Detektoren'],
-              ['lines', 'Linien'],
-            ] as [string, string][]
-          )
-            .map(([v, label]) => {
-              const o = (bolt?.filter ?? '').split(',').includes(v);
-              return `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
-            })
-            .join('')}</div>`;
+      const boltChips = (
+        [
+          ['sound', 'Ton'],
+          ['wave', 'Kreis'],
+          ['detectors', 'Detektoren'],
+          ['lines', 'Linien'],
+        ] as [string, string][]
+      )
+        .map(([v, label]) => {
+          const o = (bolt?.filter ?? '').split(',').includes(v);
+          return `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
+        })
+        .join('');
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
-        return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
+        // when "Blitze Live" is chosen, its options follow as a nested list underneath
+        const extra = it.id === 'storm' && boltOn ? `<div class="subs">${boltChips}</div>` : '';
+        return rows.length || extra ? `<div class="subs">${rows.join('')}${extra}</div>` : '';
       };
       return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
       // the Gewitter entry stays active while the live strikes are switched on
       const on = it.id === 'storm' ? boltOn || it.subs.some(isOn) : it.subs.some(isOn);
-      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) + (it.id === 'storm' ? boltRows : '') : ''}`;
+      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
     const cur = tmodeOf(k);
