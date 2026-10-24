@@ -439,6 +439,22 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.3 },
       },
       {
+        id: 'buildings-3d',
+        // 3D buildings everywhere, from zoom 14 on (the map has to be tilted to see them) – a
+        // Grundkarten-Option (Karte "3D-Gebäude"), the colour follows the base map (applyBase)
+        type: 'fill-extrusion',
+        source: 'ofm',
+        'source-layer': 'building',
+        minzoom: 14,
+        layout: { visibility: 'none' },
+        paint: {
+          'fill-extrusion-color': '#1c2538', // the dark building colour of the map
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.8,
+        },
+      },
+      {
         id: 'marker',
         type: 'circle',
         source: 'marker',

@@ -16,14 +16,13 @@ import {
   TRAFFIC_LAYER_IDS,
   TRAFFIC_MENU,
   trafficCatOf,
-  WIND_OPTION_MAINS,
   WX_MENU,
   type CatalogEntry,
   type WxMenuItem,
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -228,7 +227,6 @@ export function createHud(host: HudHost): Hud {
       const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
-        if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
@@ -328,7 +326,6 @@ export function createHud(host: HudHost): Hud {
     const lg = host.legend();
     const variantId = k.mainVar ?? f.variants[0][0];
     const opts: string[] = [];
-    if (WIND_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind">Windpartikel</button>`);
     if (ISOBAR_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars">Isobaren</button>`);
     return `<div class="mainwx" style="--lc:${f.color}">
       <div class="t"><span class="glyph" style="background:${f.color}">${ico(f.icon, 2)}</span><div><b>${esc(f.label)}</b><small>${esc(f.hint)}</small></div>
@@ -356,6 +353,8 @@ export function createHud(host: HudHost): Hud {
         ${showMore ? `<div class="fl basemore">${others.map((b) => `<button type="button" class="chip ${k.base === b ? 'on' : ''}" data-act="base" data-id="${b}">${BASE_LABEL[b]}</button>`).join('')}</div>` : `<button type="button" class="linkbtn" data-act="morebases">Weitere Grundkarten</button>`}
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>nur bei Wind & Böen sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
         <div class="slot"><span>Gespeichert mit</span></div>
         <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
         <div class="opt">${ico('clock')}<div>Zeit<small>${timeTxt}</small></div></div>
@@ -952,7 +951,13 @@ export function createHud(host: HudHost): Hud {
     tog: (_, v) => {
       const d = edit();
       if (v === 'labels') d.labels = !d.labels;
-      else d.night = !d.night;
+      else if (v === 'night') d.night = !d.night;
+      else if (v === 'buildings3d') {
+        // write the choice explicitly, so the base map no longer decides the default
+        d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));
+      } else if (v === 'wind') {
+        d.wind = d.wind === false ? true : false;
+      }
       afterEdit();
     },
     viewtog: () => {

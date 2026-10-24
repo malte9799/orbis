@@ -109,8 +109,7 @@ export const TRAFFIC_MENU: TrafficCat[] = [
 export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.flatMap((r) => r.layers)]));
 export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
-/** families whose forecast model provides wind particles / isobars as options */
-export const WIND_OPTION_MAINS = ['wind'];
+/** families whose forecast model provides isobars as an option */
 export const ISOBAR_OPTION_MAINS = ['wind', 'pressure'];
 
 // ---------------------------------------------------------------------------
@@ -144,7 +143,7 @@ const CAT_OF: Record<CatId, string[]> = {
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
   verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
-  erde: ['terrain', 'buildings3d', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
+  erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
   netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'plants'],
   medien: ['webcams', 'radio', 'alpr'],
 };
@@ -153,7 +152,7 @@ const ICON_OF: Record<string, string> = {
   cities: 'city', dwdwarn: 'warn', gauges: 'gauge', nina: 'warn', aq: 'air', aurora: 'aurora', tsunami: 'tsunami', lightning: 'bolt', radiation: 'radiation',
   resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
-  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain', buildings3d: 'city',
+  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
   autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', webcams: 'cam', radio: 'radio',

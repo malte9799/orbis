@@ -54,7 +54,7 @@ import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
-import type { Karte, KView } from '../hud/karten';
+import { defaultBuildings3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
@@ -102,6 +102,8 @@ interface GlobeState {
   /** wind particle animation */
   wind: boolean;
   isobars: boolean;
+  /** 3D-Gebäude as a Grundkarten-Option (defaults on Dunkel and Hell) */
+  buildings3d: boolean;
   extras: Partial<Record<ExtraId, boolean>>;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
@@ -117,6 +119,7 @@ const DEFAULT_STATE: GlobeState = {
   overlay: 'none',
   wind: false,
   isobars: false,
+  buildings3d: false,
   extras: {},
   groups: {},
   projection: 'mercator',
@@ -334,7 +337,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
 
   function applyKarte(k: Karte) {
-    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars };
+    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
     if (fam) overlay = (fam.variants.find(([v]) => v === k.mainVar) ?? fam.variants[0])[0] as OverlayId;
@@ -346,6 +349,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
     state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
+    // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
+    state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
 
     const nextExtras: Partial<Record<ExtraId, boolean>> = {};
     const nextGroups: Partial<Record<GroupId, boolean>> = {};
@@ -371,6 +376,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map || !ready) return;
 
     if (prev.base !== state.base || prev.labels !== state.labels) applyBase();
+    else if (prev.buildings3d !== state.buildings3d) applyBuildings();
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
@@ -607,6 +613,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       else if (l.id.startsWith('vbase-light-')) vis(l.id, state.base === 'light');
       else if (l.id.startsWith('lbl-')) vis(l.id, state.labels);
     }
+    applyBuildings();
     // dark text on the light map, white text everywhere else
     const c = labelPaint(state.base === 'light' ? 'onLight' : 'onDark');
     for (const l of layers) {
@@ -625,6 +632,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!state.night) return;
     updateNight();
     nightTimer = window.setInterval(updateNight, 60000);
+  }
+
+  /** The 3D-Gebäude layer of the base map: light extrusions on the light map, dark ones elsewhere. */
+  function applyBuildings() {
+    if (!map?.getLayer('buildings-3d')) return;
+    vis('buildings-3d', state.buildings3d);
+    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
   }
 
   /** The terminator follows the forecast timeline when one is shown. */
