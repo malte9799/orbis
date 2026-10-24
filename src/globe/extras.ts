@@ -167,7 +167,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live – SondeHub', glyph: 'sonde', color: '#ff8fab' },
-  { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts weltweit mit Countdown – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
+  { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts, Countdown, Tracking & Stream – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
   { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
   { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
   { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
@@ -452,7 +452,7 @@ export class ExtraLayers {
 
   constructor(
     private map: MlMap,
-    private hooks: { changed(): void; toast(msg: string): void },
+    private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void },
   ) {}
 
   /** Adds runtime sources/layers; call once after the style has loaded. */
@@ -477,6 +477,7 @@ export class ExtraLayers {
       lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
       radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://remap.jrc.ec.europa.eu/">EURDEP</a>, <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
+      'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (Contains information licensed under the Open Government Licence – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA (Data provided by Chicago Transit Authority), Trafiklab',
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
@@ -493,7 +494,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -1202,6 +1203,40 @@ export class ExtraLayers {
           'text-optional': true,
         },
         paint: { 'text-color': '#ffccbc', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
+      },
+      'marker',
+    );
+    // live track of the rocket currently followed in the launch panel (trail + symbol);
+    // always rendered once the panel feeds data, independent of the launches toggle
+    add(
+      {
+        id: 'launch-live-line',
+        type: 'line',
+        source: 'launch-live-line',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'launch-live',
+        type: 'symbol',
+        source: 'launch-live',
+        layout: {
+          'icon-image': 'glyph-rocket',
+          'icon-size': 1.4,
+          'icon-allow-overlap': true,
+          'icon-rotate': ['get', 'rot'],
+          'icon-rotation-alignment': 'map',
+          'text-field': ['get', 'when'],
+          'text-font': FONT_BOLD,
+          'text-size': 10.5,
+          'text-offset': [0, 1.5],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#ff8a65', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
       },
       'marker',
     );
@@ -2478,6 +2513,13 @@ export class ExtraLayers {
     this.setData('launches', this.launchData);
   }
 
+  /** Simulated live track of the rocket followed in the launch panel (null: hide it). */
+  setLaunchLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
+    const none = empty();
+    this.setData('launch-live-line', data?.line ?? none);
+    this.setData('launch-live', data?.pos ?? none);
+  }
+
   private async loadShips() {
     let note: string | undefined;
     try {
@@ -2964,11 +3006,19 @@ export class ExtraLayers {
               ${safeUrl(l.video) ? `<br><a class="small" href="${escapeHtml(safeUrl(l.video)!)}" target="_blank" rel="noopener noreferrer">▶ Livestream</a>` : ''}</li>`,
           )
           .join('');
+        const trackBtn = this.hooks.openLaunch
+          ? `<button class="btn small wide pop-track" type="button" style="margin:8px 0 2px">Tracking &amp; Stream öffnen</button>`
+          : '';
         return {
           type: 'html',
-          html: cardHtml({ glyph: 'rocket', color: '#ff6e40', title: p.pad || 'Startplatz', subtitle: p.place, source: 'The Space Devs', url: 'https://thespacedevs.com/', extra: `<ol class="pop-list">${items}</ol>` }),
+          html: cardHtml({ glyph: 'rocket', color: '#ff6e40', title: p.pad || 'Startplatz', subtitle: p.place, source: 'The Space Devs', url: 'https://thespacedevs.com/', extra: `<ol class="pop-list">${items}</ol>${trackBtn}` }),
           lng: pt[0],
           lat: pt[1],
+          ...(this.hooks.openLaunch && list[0]
+            ? {
+                after: (node: HTMLElement) => node.querySelector('.pop-track')?.addEventListener('click', () => this.hooks.openLaunch?.(list[0], pt[0], pt[1])),
+              }
+            : {}),
         };
       }
       case 'resources':
