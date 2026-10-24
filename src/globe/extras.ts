@@ -7,7 +7,7 @@ import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
-import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
+import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream, LIGHTNING_LINES_MS, LIGHTNING_THUNDER_MS } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
 import { loadPorts } from '../api/ports';
@@ -67,6 +67,7 @@ export type ExtraId =
   | 'biomass'
   | 'webcams'
   | 'alpr'
+  | 'blitzer'
   | 'aurora'
   | 'gvp'
   | 'fireareas'
@@ -208,6 +209,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
   { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
+  { id: 'blitzer', section: 'infra', label: 'Blitzer & Rotlicht', hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap; Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)', glyph: 'blitzer', color: '#e53935' },
 ];
 
 /** the big airports of our own list for zoom 5–8 (the tiles have airports from zoom 8): by size, largest first */
@@ -284,6 +286,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],
+  blitzer: ['blitzer'],
 };
 
 const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
@@ -303,10 +306,11 @@ const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
 const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
 /** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
+export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'blitzer', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
+const CAM_ZOOM_RED = '#e53935';
 const ALPR_RED = '#ef4444';
 const CARDINAL = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
 const ALPR_ZONE: Record<string, string> = { traffic: 'Verkehr', parking: 'Parkplatz', town: 'Ortschaft', building: 'Gebäude', public: 'Öffentlich', shop: 'Geschäft' };
@@ -502,6 +506,7 @@ export class ExtraLayers {
   private alprTilesFailed = false;
   private alprLive: Feature[] = [];
   private alprFovKey = '';
+  private blitzerKey = '';
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
   private busnetKey = '';
@@ -556,6 +561,7 @@ export class ExtraLayers {
       webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>, <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://data.calgary.ca">City of Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (Open Government Licence – BC)',
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
+      blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung',
       aurora: 'Polarlicht: <a href="https://www.swpc.noaa.gov/products/aurora-30-minute-forecast">NOAA SWPC</a>',
       gvp: 'Vulkane: <a href="https://volcano.si.edu/">Smithsonian GVP</a>',
       fireareas: 'Brandflächen: <a href="https://data-nifc.opendata.arcgis.com/">NIFC</a>',
@@ -581,7 +587,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -1444,6 +1450,22 @@ export class ExtraLayers {
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
+    add(
+      {
+        id: 'blitzer',
+        type: 'circle',
+        source: 'blitzer',
+        layout: hidden,
+        paint: {
+          // red: fixed camera · orange: monitored stretch (average speed) · violet: red-light camera
+          'circle-color': ['match', ['get', 'kind'], 'section', '#fb8c00', 'signals', '#ba68c8', CAM_ZOOM_RED],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+        },
+      },
+      'marker',
+    );
     // field of view as real-size sectors (metres on the ground, so they scale with the zoom)
     add(
       {
@@ -1903,6 +1925,7 @@ export class ExtraLayers {
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
     if (this.on.has('webcams')) this.loadWebcamsNow();
     if (this.on.has('alpr')) this.loadAlprNow();
+    if (this.on.has('blitzer')) this.loadBlitzerNow();
     if (this.on.has('waves')) this.loadWavesNow();
     if (this.on.has('rivers')) this.loadRiversNow();
     if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
@@ -2089,6 +2112,9 @@ export class ExtraLayers {
         case 'alpr':
           this.ensureAlprTiles();
           this.loadAlprNow();
+          break;
+        case 'blitzer':
+          this.loadBlitzerNow();
           break;
         case 'aurora':
           this.loadOnce('aurora', 15 * 60000, async () => {
@@ -3271,6 +3297,34 @@ export class ExtraLayers {
       });
   }
 
+  private loadBlitzerNow() {
+    if (this.map.getZoom() < CAM_DETAIL_ZOOM) {
+      this.setData('blitzer', empty());
+      this.blitzerKey = '';
+      this.set('blitzer', { note: `Details ab Zoomstufe ${CAM_DETAIL_ZOOM} · messpunktgenau, mobile Blitzer fehlen` });
+      return;
+    }
+    const b = this.viewBounds();
+    const key = Object.values(b).join(',');
+    if (key === this.blitzerKey) return;
+    this.blitzerKey = key;
+    this.set('blitzer', { loading: true, note: undefined });
+    loadSpeedcams(b)
+      .then((fc) => {
+        if (this.blitzerKey !== key) return;
+        this.setData('blitzer', fc);
+        const notes = ['Lageplan – keine Fahrwarnung (in DE verboten während der Fahrt)'];
+        if (!fc.features.length) notes.unshift('keine Anlagen im Ausschnitt erfasst');
+        this.set('blitzer', { loading: false, count: fc.features.length, note: notes.join(' · ') });
+      })
+      .catch((e) => {
+        if (isSuperseded(e) || this.blitzerKey !== key) return;
+        console.warn('Overpass Blitzer', e);
+        this.blitzerKey = '';
+        this.set('blitzer', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      });
+  }
+
   // -------------------------------------------------------------------------
   // Clicks
 
@@ -3361,6 +3415,23 @@ export class ExtraLayers {
         const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
           <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
         return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap / DeFlock (Beispielfoto: deflock.org)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
+      }
+      case 'blitzer': {
+        const dir = Number(p.dir);
+        const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
+        const raw = String(p.speed ?? '');
+        const unit = /^\d+(\.\d+)?$/.test(raw) ? ' km/h' : '';
+        const speed = /\d/.test(raw) ? `${raw}${unit}` : '';
+        const rows = [
+          ['Tempo', speed === 'no' || speed === 'none' ? '' : speed ? `${speed} km/h` : ''],
+          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
+          ['Betreiber', p.operator],
+          ['Kennung', p.ref],
+          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
+        ].filter(([, v]) => v);
+        const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
+          <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
+        return { type: 'html', html: cardHtml({ glyph: 'blitzer', color: p.kind === 'section' ? '#fb8c00' : p.kind === 'signals' ? '#ba68c8' : CAM_ZOOM_RED, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
       case 'gvp':
         return { type: 'html', html: html('volcano', String(p.color)), lng: pt[0], lat: pt[1] };

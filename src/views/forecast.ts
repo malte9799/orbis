@@ -123,10 +123,16 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
 
   function staleNote(t: number, failed = false) {
     const at = new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    body.insertAdjacentHTML(
-      'afterbegin',
-      `<p class="muted small stale-note">${failed ? `Aktualisierung fehlgeschlagen – Stand ${at} Uhr` : `Stand ${at} Uhr – wird aktualisiert …`}</p>`,
-    );
+    const text = failed
+      ? `Stand ${at} Uhr – Aktualisierung fehlgeschlagen, es wird weiter versucht …`
+      : `Stand ${at} Uhr – wird aktualisiert …`;
+    // a single note that switches to the failed state instead of stacking a second line
+    const existing = body.querySelector<HTMLElement>('.stale-note');
+    if (existing) {
+      existing.textContent = text;
+      return;
+    }
+    body.insertAdjacentHTML('afterbegin', `<p class="muted small stale-note">${text}</p>`);
   }
 
   function render(f: Forecast, aq: AirQuality | null, alerts: Alert[]) {
