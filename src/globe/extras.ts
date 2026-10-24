@@ -239,7 +239,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
   tsunami: ['tsunami-ring', 'tsunami'],
-  lightning: ['lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'lightning-glow', 'lightning'],
+  lightning: ['lightning-thunder', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-glow', 'lightning'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
   airports: ['airports', 'airports-minor', ...AIRPORT_FAR],
@@ -430,13 +430,14 @@ const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [
 
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
- *  zoom range, so a km-based circle stays the same size on the map while zooming. */
+ *  zoom range, so a km-based circle stays the same size on the map while zooming. A small
+ *  minimum radius keeps fresh and far-zoomed circles visible at all. */
 const thunderRadius: ExpressionSpecification = (() => {
   const A = 1000 / 156543.03392;
   const cos = ['cos', ['/', ['*', ['get', 'lat'], 3.141592653589793], 180]] as unknown as ExpressionSpecification;
   const stops: unknown[] = [];
   for (let z = 0; z <= 12; z += 2) stops.push(z, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]);
-  return ['interpolate', ['exponential', 2], ['zoom'], ...stops] as unknown as ExpressionSpecification;
+  return ['max', 10, ['interpolate', ['exponential', 2], ['zoom'], ...stops]] as unknown as ExpressionSpecification;
 })();
 
 const ALT_COLOR: ExpressionSpecification = [
@@ -1045,6 +1046,24 @@ export class ExtraLayers {
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
     // expanding ring of a fresh strike (grows with "k", fades via "o"), detector line colours: green = close, blue = medium, red = far
     const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
+    // thunder (Unteroption "Donner"): drew the backmost lightning layer first, so it never
+    // washes out the wave, lines or strike dots
+    add(
+      {
+        id: 'lightning-thunder',
+        type: 'circle',
+        source: 'lightning-thunder',
+        layout: hidden,
+        paint: {
+          'circle-color': 'rgba(255,255,255,0.24)',
+          'circle-opacity': ['get', 'o'],
+          // real geographic radius: screen px = km * A * 2^zoom / cos(lat) – stops every second
+          // zoom make the exponential(2) interpolation exact, so the circle scales with the zoom
+          'circle-radius': thunderRadius,
+        },
+      },
+      'marker',
+    );
     // detector lines (Unteroption "Linien"): line from every capturing detector to the strike (like lightningmaps.org)
     add(
       {
@@ -1126,24 +1145,6 @@ export class ExtraLayers {
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1, 1.2, 8, 2.2],
           'circle-stroke-opacity': ['get', 'o'],
-        },
-      },
-      'marker',
-    );
-    // thunder (Unteroption "Donner"): a circle that starts at the strike and grows with the
-    // speed of sound (km property, already in kilometres), white alpha fill, very large
-    add(
-      {
-        id: 'lightning-thunder',
-        type: 'circle',
-        source: 'lightning-thunder',
-        layout: hidden,
-        paint: {
-          'circle-color': 'rgba(255,255,255,0.16)',
-          'circle-opacity': ['get', 'o'],
-          // real geographic radius: screen px = km * A * 2^zoom / cos(lat) – stops every second
-          // zoom make the exponential(2) interpolation exact, so the circle scales with the zoom
-          'circle-radius': thunderRadius,
         },
       },
       'marker',
