@@ -148,30 +148,27 @@ export const CAM_FEEDS: CamFeed[] = [
       return genericCams(fc, 'DDOT / Open Data DC', 'dc');
     },
   },
-  ...(
-    (['511on.ca', '511.alberta.ca'] as const).map((host): CamFeed => {
-      const keyName = host === '511on.ca' ? 'ontario511' : 'alberta511';
-      return {
-        id: host,
-        label: host === '511on.ca' ? '511 Ontario' : '511 Alberta',
-        bbox: host === '511on.ca' ? [-95.2, 41.6, -74.3, 56.9] : [-120.0, 49.0, -110.0, 60.0],
-        async load() {
-          // beide Feeds verlangen inzwischen einen kostenlosen Developer-Key (10 Aufrufe/min)
-          const key = store.getKeys()[keyName];
-          const keyParam = key ? `&key=${encodeURIComponent(key)}` : '';
-          const list = await fetchJson<{ Id: string | number; Roadway?: string; Location?: string; Latitude: number; Longitude: number; Views?: { Url: string; Status?: string; Description?: string }[] }[]>(
-            viaProxy(`https://${host}/api/v2/get/cameras?format=json${keyParam}`),
-            undefined,
-            30000,
-          );
-          return list
-            .filter((c) => ok(c.Longitude, c.Latitude))
-            .map((c) => {
-              const view = c.Views?.find((v) => v.Status !== 'Disabled') ?? c.Views?.[0];
-              return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, source: host === '511on.ca' ? '511 Ontario (Ministry of Transportation Ontario)' : '511 Alberta (Alberta Transportation)' });
-            });
-        },
-      };
+  ...(['511on.ca', '511.alberta.ca'] as const).map(
+    (host): CamFeed => ({
+      id: host,
+      label: host === '511on.ca' ? '511 Ontario' : '511 Alberta',
+      bbox: host === '511on.ca' ? [-95.2, 41.6, -74.3, 56.9] : [-120.0, 49.0, -110.0, 60.0],
+      async load() {
+        // beide Feeds verlangen inzwischen einen kostenlosen Developer-Key (10 Aufrufe/min)
+        const key = store.getKeys()[host === '511on.ca' ? 'ontario511' : 'alberta511'];
+        const keyParam = key ? `&key=${encodeURIComponent(key)}` : '';
+        const list = await fetchJson<{ Id: string | number; Roadway?: string; Location?: string; Latitude: number; Longitude: number; Views?: { Url: string; Status?: string; Description?: string }[] }[]>(
+          viaProxy(`https://${host}/api/v2/get/cameras?format=json${keyParam}`),
+          undefined,
+          30000,
+        );
+        return list
+          .filter((c) => ok(c.Longitude, c.Latitude))
+          .map((c) => {
+            const view = c.Views?.find((v) => v.Status !== 'Disabled') ?? c.Views?.[0];
+            return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, source: host === '511on.ca' ? '511 Ontario (Ministry of Transportation Ontario)' : '511 Alberta (Alberta Transportation)' });
+          });
+      },
     }),
   ),
   {
