@@ -138,8 +138,6 @@ export interface GlobeView {
   el: HTMLElement;
   activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
   deactivate(): void;
-  /** the HUD (Karten & Ebenen) – later from page start loaded (Infrastruktur page toggles its layers) */
-  getHud(): Hud | null;
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
@@ -1569,6 +1567,5 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       hideReadout();
       popup?.remove();
     },
-    getHud: () => hud,
   };
 }

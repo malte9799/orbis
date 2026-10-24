@@ -2,7 +2,6 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import './style.css';
 import './hud/hud.css';
 import './inspector/inspector.css';
-import './views/infra.css';
 import { installCapture } from './inspector/capture';
 import { setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -82,26 +81,8 @@ function loadGames(): Promise<GamesView> {
   return gamesLoading;
 }
 
-// Infrastruktur: the catalogue page whose switches drive the layers of the active Karte
-type InfraView = import('./views/infra').InfraView;
-let infra: InfraView | null = null;
-let infraLoading: Promise<InfraView> | null = null;
-function loadInfra(): Promise<InfraView> {
-  infraLoading ??= import('./views/infra').then(({ createInfraView }) => {
-    infra = createInfraView({
-      hud: () => globe.getHud(),
-      onOpenKarte() {
-        location.hash = '#/karte';
-      },
-    });
-    app.append(infra.el);
-    return infra;
-  });
-  return infraLoading;
-}
-
 let forecastLoaded = false;
-let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | 'infra' | null = null;
+let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | null = null;
 
 function route() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
@@ -109,29 +90,17 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/spiele')
-    ? 'games'
-    : path.startsWith('/infra')
-      ? 'infra'
-      : path.startsWith('/planet')
-        ? 'planet'
-        : path.startsWith('/weltall')
-          ? 'space'
-          : path.startsWith('/karte') || path.startsWith('/globus')
-            ? 'globe'
-            : 'forecast';
+  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   if (active === 'space' && next !== 'space') space?.deactivate();
   if (active === 'planet' && next !== 'planet') planet?.deactivate();
   if (active === 'games' && next !== 'games') games?.deactivate();
-  if (active === 'infra' && next !== 'infra') infra?.deactivate();
   forecast.el.hidden = next !== 'forecast';
   globe.el.hidden = next !== 'globe';
   if (space) space.el.hidden = next !== 'space';
   if (games) games.el.hidden = next !== 'games';
-  if (infra) infra.el.hidden = next !== 'infra';
-  document.body.classList.toggle('mode-globe', next === 'globe' || next === 'space' || next === 'planet' || next === 'games');
+  document.body.classList.toggle('mode-globe', next !== 'forecast');
   document.body.classList.toggle('mode-map', next === 'globe');
   document.querySelectorAll<HTMLAnchorElement>('.tabs a').forEach((a) => {
     const on = a.dataset.route === (next === 'planet' ? 'space' : next);
@@ -143,12 +112,6 @@ function route() {
   if (next === 'games') {
     loadGames().then((v) => {
       if (active !== 'games') return;
-      v.el.hidden = false;
-      v.activate();
-    });
-  } else if (next === 'infra') {
-    loadInfra().then((v) => {
-      if (active !== 'infra') return;
       v.el.hidden = false;
       v.activate();
     });

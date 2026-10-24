@@ -51,14 +51,14 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
-| 🏗️ **Infrastruktur** | Eigene Ansicht: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffe, Seekabel, Pipelines |
+| 🏗️ **Infrastruktur** | Dritte Standardkarte: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffvorkommen, Seekabel & Pipelines, Radio, Kameras |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |
 
 > 📚 **Woher kommen die Daten?** Die vollständige Liste aller Quellen mit Links, Lizenzen und Verwendung:
 > **[docs/DATENQUELLEN.md](docs/DATENQUELLEN.md)**
 
-## 🧭 Die Ansichten
+## 🧭 Die drei Ansichten
 
 ### 🌦️ Vorhersage
 
@@ -73,19 +73,6 @@ Interaktive Wetterkarte nach dem Vorbild von zoom.earth – standardmäßig 2D, 
 - Live-Ebenen und Vorhersage-Ebenen mit Zeitleiste (bis +5 Tage, abspielbar)
 - Animierte Windströmung, Isobaren und Naturereignisse
 - Wert unter dem Mauszeiger, Klick zeigt das Wetter an dieser Stelle
-
-### 🏗️ Infrastruktur
-
-Eigene Ansicht (`#/infra`) als Bedienpult für die Infrastruktur-Ebenen der Karte: jeder Schalter
-legt die Ebene auf der aktuell geöffneten Karte an, „Auf der Karte öffnen“ springt direkt hinein.
-
-| | |
-|---|---|
-| ⚡ **Energie** | Wind, Solar, Wasser (& Gezeiten), Kernkraft, Kohle, Gas, Öl, Biomasse & Abfall sowie weitere Kraftwerke – Kraftwerke nach Energieträger getrennt |
-| ⛏️ **Rohstoffe** | Öl & Gas, Kohle, Erze & Metalle, Steine & Salze – Ursprungsorte weltweit, beim Zoomen genauer |
-| 🛜 **Netze** | Seekabel & Internetknoten, Öl- & Gaspipelines |
-| 📻 **Radio** | über 50.000 Sender – direkt anhörbar |
-| 🎦 **Überwachung** | Live-Webcams, Kennzeichen-Kameras |
 
 ### 🚀 Weltall
 

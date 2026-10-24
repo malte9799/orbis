@@ -84,14 +84,15 @@ export const OWM_FAMILY: WxFamily = {
 };
 
 /**
- * The Verkehr menu: one category at a time (radio). `defaults` are switched on with the category
- * and always stay on; every row inside switches one more layer (toggle).
+ * The Karten menus under the bar: one category at a time (radio). `defaults` are switched on with
+ * the category and always stay on; every row inside switches one more layer (toggle).
  */
 export interface TrafficCat {
   id: string;
   label: string;
   icon: string;
-  defaults: string[];
+  /** switched on when the category is selected ('' for menu purely of toggle rows) */
+  defaults?: string[];
   /** a row switches one or more layers together */
   rows: { label: string; layers: string[] }[];
 }
@@ -106,8 +107,34 @@ export const TRAFFIC_MENU: TrafficCat[] = [
   { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
 ];
 /** every layer the Verkehr menu manages */
-export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...c.defaults, ...c.rows.flatMap((r) => r.layers)]));
-export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
+export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+
+/** the Infrastruktur menu – same pattern: category on, rows inside toggle layers */
+export const INFRA_MENU: TrafficCat[] = [
+  {
+    id: 'energie', label: 'Energie', icon: 'power',
+    rows: [
+      { label: 'Windkraft', layers: ['wind'] },
+      { label: 'Solarparks', layers: ['solar'] },
+      { label: 'Wasserkraft', layers: ['water'] },
+      { label: 'Kernkraftwerke', layers: ['nuclear'] },
+      { label: 'Kohlekraftwerke', layers: ['coal'] },
+      { label: 'Gaskraftwerke', layers: ['gas'] },
+      { label: 'Ölkraftwerke', layers: ['oil'] },
+      { label: 'Biomasse & Abfall', layers: ['biomass'] },
+      { label: 'Weitere Kraftwerke', layers: ['plants'] },
+    ],
+  },
+  { id: 'rohstoffe', label: 'Rohstoffe', icon: 'pick', defaults: ['resources'], rows: [{ label: 'Vorkommen', layers: ['resources'] }] },
+  { id: 'netze', label: 'Netze', icon: 'cable', rows: [{ label: 'Seekabel & Internetknoten', layers: ['cables'] }, { label: 'Öl- & Gaspipelines', layers: ['pipelines'] }] },
+  { id: 'radio', label: 'Radio', icon: 'radio', defaults: ['radio'], rows: [{ label: 'Radiosender', layers: ['radio'] }] },
+  { id: 'ueberwachung', label: 'Überwachung', icon: 'cam', rows: [{ label: 'Live-Kameras', layers: ['webcams'] }, { label: 'Kennzeichen-Kameras', layers: ['alpr'] }] },
+];
+export const INFRA_LAYER_IDS = new Set(INFRA_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
+export const infraCatOf = (layer: string) => INFRA_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+/** the menu type of a Karten menu id ('' = none) */
+export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra', Set<string>> = { wx: new Set(), traffic: TRAFFIC_LAYER_IDS, infra: INFRA_LAYER_IDS };
 
 /** families whose forecast model provides isobars as an option */
 export const ISOBAR_OPTION_MAINS = ['wind', 'pressure'];

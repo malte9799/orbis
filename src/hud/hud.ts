@@ -11,6 +11,9 @@ import {
   CATALOG,
   CATS,
   catalogOf,
+  INFRA_LAYER_IDS,
+  INFRA_MENU,
+  infraCatOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
   TRAFFIC_LAYER_IDS,
@@ -87,19 +90,6 @@ export interface Hud {
   placeOpen(): boolean;
   /** phone portrait: content inside the sheet changed size (legend / timeline shown or hidden) */
   syncSheet(): void;
-  // ---- control from other views (Infrastruktur page): switches drive the active Karte ----
-  /** name of the active Karte */
-  currentName(): string;
-  /** live status of a layer (count, loading …) for the toggles' subtitles */
-  info(id: string): LayerInfo;
-  /** the layer is switched on (present, not hidden) on the active Karte */
-  layerOn(id: string): boolean;
-  /** adds or removes the layer on the active Karte (same flow as the Karten stack itself) */
-  toggleLayer(id: string, on: boolean): void;
-  /** current filter value of the layer or null */
-  layerFilter(id: string): string | null;
-  /** sets or clears the layer filter; adds the layer first if still missing */
-  setLayerFilter(id: string, filter: string | null): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +221,8 @@ export function createHud(host: HudHost): Hud {
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
-   * and options); the traffic Karte switches car, train, plane and ship.
+   * and options); the traffic and infra Karten switch their categories (Auto, Energie …) whose
+   * rows toggle layers.
    */
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
@@ -248,6 +239,7 @@ export function createHud(host: HudHost): Hud {
         return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
     const toggle = (label: string, layers: string[]) => {
@@ -255,14 +247,17 @@ export function createHud(host: HudHost): Hud {
       const n = on ? host.info(layers[0]).count : null;
       return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
     };
-    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
-  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
   function tmodeOf(k: Karte): string {
-    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
+    const ids = k.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
+    const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
+    return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   function renderModes() {
     const r = reg('modes');
@@ -929,10 +924,12 @@ export function createHud(host: HudHost): Hud {
     },
     tcat: (id) => {
       const d = edit();
+      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
       const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.layers = d.layers.filter((l) => !ids.has(l.id));
       d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
       afterEdit();
     },
     ttog: (id) => {
@@ -1417,34 +1414,6 @@ export function createHud(host: HudHost): Hud {
     placeOpen: () => !!placeNode && layout === 'portrait',
     syncSheet: () => {
       if (!drag?.moved && !sheetEl?.style.height) syncSheetH();
-    },
-    // ----- Infrastruktur page (toggle layers without opening the stack) -----
-    currentName: () => view(cur).name,
-    info: (id) => host.info(id),
-    layerOn: (id) => view(cur).layers.some((l) => l.id === id && !l.hidden),
-    toggleLayer(id, on) {
-      const d = edit();
-      const katalog = catalogOf(id);
-      if (on && !d.layers.some((l) => l.id === id)) {
-        d.layers.unshift({ id });
-        fresh.add(id);
-        toast(`${katalog?.label ?? id} hinzugefügt`);
-      } else if (!on) d.layers = d.layers.filter((l) => l.id !== id);
-      afterEdit();
-    },
-    layerFilter: (id) => view(cur).layers.find((l) => l.id === id)?.filter ?? null,
-    setLayerFilter(id, filter) {
-      const d = edit();
-      let l = d.layers.find((x) => x.id === id);
-      if (!l && filter) {
-        l = { id };
-        d.layers.unshift(l);
-        fresh.add(id);
-      }
-      if (!l) return;
-      if (filter) l.filter = filter;
-      else delete l.filter;
-      afterEdit();
     },
   };
 }
