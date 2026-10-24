@@ -94,7 +94,8 @@ export async function loadOsmWebcams(b: Bounds): Promise<FeatureCollection<Point
       url: link,
       source: 'OpenStreetMap',
     };
-    features.push(point(lon, lat, { ...cam, kind: 'osm' }));
+    const dir = parseFloat((t['camera:direction'] ?? t.direction ?? '').split(';')[0]);
+    features.push(point(lon, lat, { ...cam, kind: 'osm', dir: Number.isFinite(dir) ? dir : -1 }));
   }
   return { type: 'FeatureCollection', features };
 }
