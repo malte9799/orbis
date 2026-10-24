@@ -3255,7 +3255,7 @@ export class ExtraLayers {
         paint: {
           'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 14, 0.6],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 12, 0],
           'heatmap-color': [
             'interpolate', ['linear'], ['heatmap-density'],
             0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.45)', 0.45, '#26c6da', 0.65, '#80deea', 0.8, '#ffffff', 1, '#ffffff',
