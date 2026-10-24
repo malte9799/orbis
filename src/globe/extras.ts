@@ -1537,7 +1537,7 @@ export class ExtraLayers {
           'circle-color': ['case', ['get', 'flock'], ALPR_RED, '#ff9800'],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 1.5],
         },
       },
       'marker',
