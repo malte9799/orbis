@@ -1458,15 +1458,10 @@ export class ExtraLayers {
     // cameras
     const camIcon = (id: string, source: string): LayerSpecification => ({
       id,
-      type: 'symbol',
+      type: 'circle',
       source,
-      layout: {
-        ...hidden,
-        'icon-image': 'glyph-webcam',
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.55, 9, 0.85],
-        'icon-allow-overlap': ['step', ['zoom'], false, 8, true],
-      },
-      paint: { 'icon-opacity': 0.95 },
+      layout: hidden,
+      paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
