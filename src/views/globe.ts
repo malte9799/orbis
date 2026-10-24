@@ -337,8 +337,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let hud = null as Hud | null;
   const families = () => (store.getKeys().owm ? [...WX_FAMILIES, OWM_FAMILY] : WX_FAMILIES);
   const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
+  /** the Karte the HUD last applied: decides whether a map click shows the weather tooltip */
+  let curKarte: Karte | null = null;
+  /**
+   * A map click shows the place weather only on a weather Karte: the standard "Wetter" Karte
+   * or an own Karte with a weather layer (menu 'wx' with a layer, or main set). Traffic and
+   * other Karten get their own tooltips later.
+   */
+  const isWeatherKarte = (k: Karte | null): boolean => !!k && (k.menu === 'wx' || k.main != null);
 
   function applyKarte(k: Karte) {
+    curKarte = k;
     const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
@@ -392,7 +401,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     refreshHud();
   }
 
-  /** per-layer options: quake magnitude, aircraft kinds, opacity */
+  /** per-layer options: quake magnitude, aircraft kinds, lightning extras, opacity */
   function applyLayerOptions(k: Karte) {
     if (!map || !ready) return;
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
@@ -400,6 +409,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
+    const volTok = opts.find((t) => t.startsWith('vol-'));
+    const vol = volTok ? Number(volTok.slice(4)) : NaN;
+    if (extras)
+      extras.setLightningOptions({
+        sound: opts.includes('sound'),
+        wave: opts.includes('wave'),
+        detectors: opts.includes('detectors'),
+        lines: opts.includes('lines'),
+        thunder: opts.includes('thunder'),
+        volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
+      });
     // Rohstoffe: per Komodität gefiltert (Kategorie-Filter), oder alles wenn kein Filter gesetzt
     const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
     if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
@@ -1485,7 +1506,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else {
+      } else if (isWeatherKarte(curKarte)) {
         const { lng, lat } = e.lngLat;
         const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
         weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
