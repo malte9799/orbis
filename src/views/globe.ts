@@ -400,6 +400,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    // Rohstoffe: per Komodität gefiltert (Kategorie-Filter), oder alles wenn kein Filter gesetzt
+    const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
+    if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
+    if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }

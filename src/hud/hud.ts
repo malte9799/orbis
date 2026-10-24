@@ -11,6 +11,9 @@ import {
   CATALOG,
   CATS,
   catalogOf,
+  INFRA_LAYER_IDS,
+  INFRA_MENU,
+  infraCatOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
   TRAFFIC_LAYER_IDS,
@@ -218,7 +221,8 @@ export function createHud(host: HudHost): Hud {
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
-   * and options); the traffic Karte switches car, train, plane and ship.
+   * and options); the traffic and infra Karten switch their categories (Auto, Energie …) whose
+   * rows toggle layers.
    */
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
@@ -235,21 +239,27 @@ export function createHud(host: HudHost): Hud {
         return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
     const toggle = (label: string, layers: string[]) => {
       const on = layers.every(have);
       const n = on ? host.info(layers[0]).count : null;
-      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+      const c = catalogOf(layers[0]);
+      // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
-    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
-  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
   function tmodeOf(k: Karte): string {
-    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
+    const ids = k.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
+    const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
+    return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   function renderModes() {
     const r = reg('modes');
@@ -916,10 +926,12 @@ export function createHud(host: HudHost): Hud {
     },
     tcat: (id) => {
       const d = edit();
+      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
       const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.layers = d.layers.filter((l) => !ids.has(l.id));
       d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
       afterEdit();
     },
     ttog: (id) => {

@@ -51,7 +51,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Pipelines, Rohstoffe, Geologie |
+| 🏗️ **Infrastruktur** | Dritte Standardkarte: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffvorkommen, Seekabel & Pipelines, Radio, Kameras |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |
 
@@ -176,7 +176,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
 | 📷 **Kameras** | Webcams weltweit (u. a. London, New York, Kalifornien, Hongkong, Singapur), ALPR-Kameras | [Digitraffic](https://weathercam.digitraffic.fi), [TfL](https://api.tfl.gov.uk), [Caltrans](https://cwwp2.dot.ca.gov), [ALERTCalifornia](https://cameras.alertcalifornia.org), [DeFlock](https://deflock.org) |
 | 📻 **Radio** | Über 50.000 Sender im Player | [Radio Browser](https://www.radio-browser.info) |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
+| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
 
 ### 🔑 Optional mit kostenlosem Schlüssel
 
