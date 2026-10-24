@@ -140,7 +140,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
   { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
   { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
-  { id: 'lightning', section: 'earth', label: 'Blitze live', hint: 'Einschläge der letzten 15 Minuten weltweit – Blitzortung.org (Hobby-Netzwerk, nicht amtlich, nur zur privaten Information, nicht für Warnzwecke)', glyph: 'bolt', color: '#ffd600' },
+  { id: 'lightning', section: 'earth', label: 'Blitze Live', hint: 'Einschläge der letzten 15 Minuten weltweit, mit Ton, Einschlagskreis und Detektoren – Blitzortung.org (Hobby-Netzwerk, nicht amtlich, nur zur privaten Information, nicht für Warnzwecke)', glyph: 'bolt', color: '#ffd600' },
   { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (40+ Länder, u. a. Frankreich, Türkei, Kanada), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
   { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
   { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
@@ -219,7 +219,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
   tsunami: ['tsunami-ring', 'tsunami'],
-  lightning: ['lightning-glow', 'lightning'],
+  lightning: ['lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-glow', 'lightning'],
   radiation: ['radiation', 'radiation-label'],
   launches: ['launches'],
   airports: ['airports', 'airports-minor', ...AIRPORT_FAR],
@@ -452,6 +452,14 @@ export class ExtraLayers {
   private ships3d?: ShipsLayer;
   private shipsAll = new Map<number, Ship>();
   private lightning: LightningStream | null = null;
+  /** Unteroptionen von "Blitze": Ton, Einschlagskreis, Detektoren + Linien */
+  private lightningOpts = { sound: false, wave: false, detectors: false, lines: false };
+  /** detector stations already pushed to the map source */
+  private lightningStationsPushed = -1;
+  /** strike wave / detector lines idle? (empty data pushed once, then the fast timer stops) */
+  private lightningIdle = true;
+  private lightningAudio: AudioContext | null = null;
+  private lightningLastTick = 0;
 
   constructor(
     private map: MlMap,
@@ -496,7 +504,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'airports-far', 'radiation', 'launches', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
       if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
@@ -961,6 +969,43 @@ export class ExtraLayers {
     );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
+    // shrinking wave of a fresh strike, detector line colours: green = close, blue = medium, red = far
+    const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
+    const waveRadius: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 1, ['*', 24, ['get', 'k']], 8, ['*', 46, ['get', 'k']], 12, ['*', 64, ['get', 'k']]];
+    const waveOpacity: ExpressionSpecification = ['*', 0.6, ['get', 'o']];
+    const waveStroke: ExpressionSpecification = ['*', 0.8, ['get', 'o']];
+    // detector lines (Unteroption "Linien"): line from every capturing detector to the strike (like lightningmaps.org)
+    add(
+      {
+        id: 'lightning-line',
+        type: 'line',
+        source: 'lightning-line',
+        layout: { ...hidden, 'line-join': 'round' },
+        paint: {
+          'line-color': lineColor,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6],
+          'line-opacity': ['get', 'o'],
+        },
+      },
+      'marker',
+    );
+    // detector stations (Unteroption "Detektoren"): small dots at every station that got
+    // learned from the feed while it was enabled
+    add(
+      {
+        id: 'lightning-sta',
+        type: 'circle',
+        source: 'lightning-sta',
+        layout: hidden,
+        paint: {
+          'circle-color': 'rgba(140,190,255,0.75)',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 6, 1.6, 10, 2.6],
+          'circle-stroke-color': 'rgba(20,30,50,0.6)',
+          'circle-stroke-width': 0.4,
+        },
+      },
+      'marker',
+    );
     add(
       {
         id: 'lightning-glow',
@@ -987,6 +1032,26 @@ export class ExtraLayers {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 1.6, 6, 3, 10, 5],
           'circle-stroke-color': 'rgba(0,0,0,0.5)',
           'circle-stroke-width': 0.5,
+        },
+      },
+      'marker',
+    );
+    // strike wave (Unteroption "Einschlagskreis"): like on Blitzortung.org a fresh strike
+    // starts with a big circle that shrinks and fades away
+    add(
+      {
+        id: 'lightning-wave',
+        type: 'circle',
+        source: 'lightning-wave',
+        layout: hidden,
+        paint: {
+          'circle-color': 'rgba(255,255,255,0.14)',
+          'circle-blur': 0.7,
+          'circle-radius': waveRadius,
+          'circle-opacity': waveOpacity,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1.4,
+          'circle-stroke-opacity': waveStroke,
         },
       },
       'marker',
@@ -1564,6 +1629,122 @@ export class ExtraLayers {
     return LAYERS[id] ?? [];
   }
 
+  /** Unteroptionen von "Blitze": Ton, Einschlagskreis, Detektoren, Detektor-Linien. */
+  setLightningOptions(o: { sound?: boolean; wave?: boolean; detectors?: boolean; lines?: boolean }) {
+    const next = { sound: !!o.sound, wave: !!o.wave, detectors: !!o.detectors, lines: !!o.lines };
+    const prev = this.lightningOpts;
+    if (prev.sound === next.sound && prev.wave === next.wave && prev.detectors === next.detectors && prev.lines === next.lines) return;
+    this.lightningOpts = next;
+    if (!this.ready) return;
+    this.updateLightningVis();
+    // the AudioContext must be created inside a user gesture once, so that the tick sounds work
+    if (next.sound && this.on.has('lightning')) this.ensureAudio();
+    if (!this.on.has('lightning')) return;
+    if (!next.wave) this.setData('lightning-wave', empty());
+    if (!next.lines) this.setData('lightning-line', empty());
+    if (!next.detectors) {
+      this.setData('lightning-sta', empty());
+      this.lightningStationsPushed = -1;
+    }
+    this.syncLightningAnim();
+  }
+
+  /** Visibility of the optional lightning sub layers follows the options. */
+  private updateLightningVis() {
+    const on = this.on.has('lightning');
+    this.vis('lightning-wave', on && this.lightningOpts.wave);
+    this.vis('lightning-line', on && this.lightningOpts.lines);
+    this.vis('lightning-sta', on && this.lightningOpts.detectors);
+  }
+
+  /** Wave and detector lines only animate while there are fresh strikes around. */
+  private syncLightningAnim() {
+    const want = this.on.has('lightning') && (this.lightningOpts.wave || this.lightningOpts.lines);
+    if (want) {
+      if (this.lightningIdle) {
+        this.lightningIdle = false;
+        this.updateLightningExtras();
+      } else {
+        this.every('lightning-anim', 200, () => this.updateLightningExtras());
+      }
+      return;
+    }
+    this.clear('lightning-anim');
+    if (!this.lightningIdle) {
+      this.lightningIdle = true;
+      this.setData('lightning-wave', empty());
+      this.setData('lightning-line', empty());
+    }
+  }
+
+  /** A fresh strike arrived: the sound plays right away, wave/lines get their first frame. */
+  private lightningStrike() {
+    if (!this.on.has('lightning')) return;
+    if (this.lightningOpts.sound) this.playStrikeTick();
+    if (this.lightningOpts.wave || this.lightningOpts.lines) this.updateLightningExtras();
+  }
+
+  /** Short click tone for a strike (like lightningmaps.org), throttled for strike bursts. */
+  private ensureAudio() {
+    if (this.lightningAudio) return;
+    try {
+      this.lightningAudio = new AudioContext();
+    } catch {
+      this.lightningAudio = null;
+      return;
+    }
+    void this.lightningAudio.resume().catch(() => {});
+  }
+
+  private playStrikeTick() {
+    if (document.hidden) return;
+    try {
+      this.lightningAudio ??= new AudioContext();
+      const ctx = this.lightningAudio;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume().catch(() => {});
+        return;
+      }
+      const t = ctx.currentTime;
+      if (t - this.lightningLastTick < 0.09) return;
+      this.lightningLastTick = t;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(660, t);
+      osc.frequency.exponentialRampToValueAtTime(190, t + 0.05);
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.2, t + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.09);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+    } catch {
+      /* no audio available */
+    }
+  }
+
+  private updateLightningExtras() {
+    const l = this.lightning;
+    if (!l || !this.on.has('lightning') || !(this.lightningOpts.wave || this.lightningOpts.lines)) {
+      this.syncLightningAnim();
+      return;
+    }
+    const now = Date.now();
+    const young = l.hasYoung(now);
+    if (!young && this.lightningIdle) return; // everything faded out, nothing left to do
+    this.lightningIdle = !young;
+    if (young) this.every('lightning-anim', 200, () => this.updateLightningExtras());
+    if (this.lightningOpts.wave) this.setData('lightning-wave', l.waveFeatures(now));
+    if (this.lightningOpts.lines) this.setData('lightning-line', l.lineFeatures(now));
+    if (!young) this.clear('lightning-anim');
+  }
+
   stop() {
     for (const t of Object.values(this.timers)) clearInterval(t);
     this.timers = {};
@@ -1648,6 +1829,8 @@ export class ExtraLayers {
     this.map.setFilter('osm-power', ['in', ['get', 'cat'], ['literal', cats]]);
     if (this.info.dwdwarn?.note && this.on.has('dwdwarn')) this.vis('dwd', true);
     else if (!this.on.has('dwdwarn')) this.vis('dwd', false);
+    // the optional lightning sub layers only show with their Unteroption enabled
+    this.updateLightningVis();
 
     // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
     this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
@@ -1772,6 +1955,7 @@ export class ExtraLayers {
         case 'lightning':
           this.lightning ??= new LightningStream(() => this.lightningStatus());
           this.lightning.start();
+          this.lightning.onStrike = () => this.lightningStrike();
           this.every('lightning', 3000, () => this.updateLightning());
           this.updateLightning();
           break;
@@ -1902,8 +2086,14 @@ export class ExtraLayers {
     if (!this.on.has('rivers')) this.riverKey = '';
     if (!this.on.has('lightning')) {
       this.clear('lightning');
+      this.clear('lightning-anim');
       this.lightning?.stop();
       this.setData('lightning', empty());
+      this.setData('lightning-wave', empty());
+      this.setData('lightning-line', empty());
+      this.setData('lightning-sta', empty());
+      this.lightningStationsPushed = -1;
+      this.lightningIdle = true;
     }
     if (!this.on.has('ships') || !hasAisLive()) {
       this.clear('ais-push');
@@ -2567,13 +2757,21 @@ export class ExtraLayers {
     const l = this.lightning;
     if (!l) return;
     this.setData('lightning', l.features());
+    if (this.lightningOpts.detectors && this.lightningStationsPushed !== l.stationCount) {
+      this.lightningStationsPushed = l.stationCount;
+      this.setData('lightning-sta', l.stationFeatures());
+    }
     this.lightningStatus();
   }
 
   private lightningStatus() {
     const l = this.lightning;
     if (!l) return;
-    const note = l.error || (l.connected ? `live verbunden · ${fmt.num(l.received)} Blitze seit Aktivierung · weiß = jetzt, rot = bis 15 min` : 'verbinde …');
+    const d = l.delay;
+    const note = l.error
+      || (l.connected
+        ? `live verbunden · ${fmt.num(l.received)} Blitze seit Aktivierung${d != null ? ` · Verzögerung ~${fmt.num(d, 1)} s` : ''} · weiß = jetzt, rot = bis 15 min`
+        : 'verbinde …');
     const prev = this.info.lightning;
     if (prev?.count !== l.count || prev?.note !== note) this.set('lightning', { count: l.count, note });
   }
@@ -2967,7 +3165,9 @@ export class ExtraLayers {
         const at = Number(p.at);
         const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
         const ago = secs < 90 ? `vor ${secs} s` : `vor ${Math.round(secs / 60)} min`;
-        const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b></div>`;
+        const n = Number(p.n);
+        const d = this.lightning?.delay;
+        const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
         return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
       }
       case 'launches': {

@@ -384,7 +384,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     refreshHud();
   }
 
-  /** per-layer options: quake magnitude, aircraft kinds, opacity */
+  /** per-layer options: quake magnitude, aircraft kinds, lightning extras, opacity */
   function applyLayerOptions(k: Karte) {
     if (!map || !ready) return;
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
@@ -392,6 +392,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
     const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
     if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
+    if (extras)
+      extras.setLightningOptions({
+        sound: opts.includes('sound'),
+        wave: opts.includes('wave'),
+        detectors: opts.includes('detectors'),
+        lines: opts.includes('lines'),
+      });
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
