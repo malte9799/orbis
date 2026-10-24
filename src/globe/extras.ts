@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gas: ['power', 'osm-power'],
   oil: ['power', 'osm-power'],
   biomass: ['power', 'osm-power'],
-  webcams: ['webcams-heat', 'webcams-glow', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
+  webcams: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
   aurora: ['aurora'],
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
@@ -3236,28 +3236,31 @@ export class ExtraLayers {
     this.webcamHeatAdded = true;
     const m = this.map;
     const before = m.getLayer('webcams') ? 'webcams' : undefined;
-    m.addLayer(
-      {
-        id: 'webcams-heat',
-        type: 'heatmap',
-        source: 'webcams-world',
-        maxzoom: CAM_DETAIL_ZOOM + 0.5,
-        paint: {
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 3, 8, 10],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.2, 8, 0.6],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.5, CAM_DETAIL_ZOOM + 0.5, 0],
-          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.25)', 0.45, '#26c6da', 0.7, '#ffffff', 1, '#ffffff'],
-        },
-      },
-      before,
-    );
+    // halo first, so it lies below the heatmap and does not tint its white core
     m.addLayer(
       {
         id: 'webcams-glow',
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 5, CAM_DETAIL_ZOOM, 11, 14, 19], 'circle-blur': 1, 'circle-opacity': 0.25 },
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 8, CAM_DETAIL_ZOOM, 9, 14, 7], 'circle-blur': 1, 'circle-opacity': 0.25 },
+      },
+      before,
+    );
+    m.addLayer(
+      {
+        id: 'webcams-heat',
+        type: 'heatmap',
+        source: 'webcams-world',
+        paint: {
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 14, 0.6],
+          'heatmap-color': [
+            'interpolate', ['linear'], ['heatmap-density'],
+            0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.45)', 0.45, '#26c6da', 0.65, '#80deea', 0.8, '#ffffff', 1, '#ffffff',
+          ],
+        },
       },
       before,
     );
@@ -3267,7 +3270,7 @@ export class ExtraLayers {
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.9 },
+        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
       },
       before,
     );
