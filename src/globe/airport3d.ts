@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, staticAirports, type Bounds, type StaticAirport } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
-import { loadRoute, plausible, type FlightRoute } from '../api/route';
+import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
@@ -518,7 +518,7 @@ export class Airport3D {
     const found = await loadRoute(String(p?.props.callsign ?? ''));
     const now = this.tracker.planes.get(hex);
     // the callsign of the route must still fit the aircraft's position
-    const route = found && now && plausible(found, now.dLon, now.dLat) ? found : null;
+    const route = found && now && plausible(found, now.dLon, now.dLat) ? orient(found, now.dLon, now.dLat, now.dTrack) : null;
     this.routes.set(hex, { route, at: Date.now() });
     this.applyRoute(hex, route);
   }
@@ -543,12 +543,19 @@ export class Airport3D {
   fitTrail(hex: string) {
     const p = this.tracker.planes.get(hex);
     if (!p) return;
-    const pts = [...p.trail, [p.dLon, p.dLat]];
+    // the trail is in the air: seen from the tilted camera every point lies `altitude · tan(pitch)` further ahead
+    const bearing = this.map.getBearing();
+    const pitch = this.map.getPitch();
+    const k = Math.tan((pitch * Math.PI) / 180);
+    const pts = [...p.trail.map((t) => [t[0], t[1], t[2]]), [p.dLon, p.dLat, p.ground ? 0 : p.dAlt]].map(([lon, lat, alt]) => {
+      const d = p.ground ? 0 : alt * k;
+      return [lon + (d * Math.sin((bearing * Math.PI) / 180)) / (111320 * Math.max(0.05, Math.cos((lat * Math.PI) / 180))), lat + (d * Math.cos((bearing * Math.PI) / 180)) / 111320];
+    });
     const w = Math.min(...pts.map((t) => t[0]));
     const e = Math.max(...pts.map((t) => t[0]));
     const s = Math.min(...pts.map((t) => t[1]));
     const n = Math.max(...pts.map((t) => t[1]));
-    this.map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 60, right: 400 }, maxZoom: 14, duration: 800 });
+    this.map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 60, right: 400 }, maxZoom: 14, duration: 800, bearing, pitch });
   }
 
   private setData(id: string, data: FeatureCollection) {

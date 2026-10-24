@@ -84,5 +84,28 @@ export function plausible(route: FlightRoute, lon: number, lat: number): boolean
   return haversine(o.lon, o.lat, lon, lat) + haversine(lon, lat, d.lon, d.lat) <= haversine(o.lon, o.lat, d.lon, d.lat) * 1.25 + 100_000;
 }
 
+const bearing = (aLon: number, aLat: number, bLon: number, bLat: number) => {
+  const r = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(r(bLon - aLon)) * Math.cos(r(bLat));
+  const x = Math.cos(r(aLat)) * Math.sin(r(bLat)) - Math.sin(r(aLat)) * Math.cos(r(bLat)) * Math.cos(r(bLon - aLon));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+};
+const angle = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180);
+
+/**
+ * adsbdb knows a callsign by its usual route, but the same callsign flies it in both directions
+ * (UAL1871 out of JFK is stored as "… → JFK"). The aircraft's course tells: it must head towards the
+ * destination. A far endpoint it flies away from is the origin; an endpoint within 5 km (just taken
+ * off / about to land) says nothing and is ignored.
+ */
+export function orient(route: FlightRoute, lon: number, lat: number, track: number): FlightRoute {
+  const { origin: o, destination: d } = route;
+  const far = (a: RouteAirport) => haversine(lon, lat, a.lon, a.lat) > 5000;
+  const towardDest = far(d) ? angle(track, bearing(lon, lat, d.lon, d.lat)) : null;
+  const towardOrigin = far(o) ? angle(track, bearing(lon, lat, o.lon, o.lat)) : null;
+  const reversed = (towardDest != null && towardDest > 110) || (towardOrigin != null && towardOrigin < 50 && (towardDest == null || towardDest > 50));
+  return reversed ? { origin: d, destination: o } : route;
+}
+
 /** Already loaded route (undefined: not asked yet / still loading). */
 export const cachedRoute = (callsign: string): FlightRoute | null | undefined => cache.get(callsign.trim().toUpperCase())?.route;
