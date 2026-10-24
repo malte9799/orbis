@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gas: ['power', 'osm-power'],
   oil: ['power', 'osm-power'],
   biomass: ['power', 'osm-power'],
-  webcams: ['webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm'],
+  webcams: ['webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
   aurora: ['aurora'],
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
@@ -352,8 +352,24 @@ function alprTileProps(t: Record<string, unknown> | null, lon: number, lat: numb
   };
 }
 const ALPR_FOV_ZOOM = 12; // sectors are drawn from here on
-const ALPR_FOV_RADIUS = 50; // metres
+const ALPR_FOV_RADIUS = 80; // metres
 const ALPR_FOV_ANGLE = 60; // degrees
+const CAM_FOV_RADIUS = 80; // metres
+const CAM_FOV_ANGLE = 60; // degrees
+
+/** Sector polygons on the ground (metres → degrees), one per [lon, lat, heading]. */
+function fovSectors(cams: [number, number, number][], radius: number, angle: number): Feature[] {
+  return cams.map(([lon, lat, dir]) => {
+    const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+    const ring: [number, number][] = [[lon, lat]];
+    for (let i = 0; i <= 12; i++) {
+      const a = ((dir - angle / 2 + (angle * i) / 12) * Math.PI) / 180;
+      ring.push([lon + (Math.sin(a) * radius) / kx, lat + (Math.cos(a) * radius) / 111320]);
+    }
+    ring.push([lon, lat]);
+    return { type: 'Feature' as const, geometry: { type: 'Polygon' as const, coordinates: [ring] }, properties: {} };
+  });
+}
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
@@ -508,6 +524,8 @@ export class ExtraLayers {
   private alprTilesFailed = false;
   private alprLive: Feature[] = [];
   private alprFovKey = '';
+  private osmCamFc: FeatureCollection<Point> | null = null;
+  private camFovKey = '';
   private blitzerKey = '';
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
@@ -590,7 +608,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -1440,18 +1458,34 @@ export class ExtraLayers {
     // cameras
     const camIcon = (id: string, source: string): LayerSpecification => ({
       id,
-      type: 'symbol',
+      type: 'circle',
       source,
-      layout: {
-        ...hidden,
-        'icon-image': 'glyph-webcam',
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.55, 9, 0.85],
-        'icon-allow-overlap': ['step', ['zoom'], false, 8, true],
-      },
-      paint: { 'icon-opacity': 0.95 },
+      layout: hidden,
+      paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
+    // viewing direction of OpenStreetMap webcams (camera:direction), same sectors as the ALPR cameras
+    add(
+      {
+        id: 'webcams-cone',
+        type: 'fill',
+        source: 'webcams-fov',
+        layout: hidden,
+        paint: { 'fill-color': '#00bfa5', 'fill-opacity': 0.28 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'webcams-cone-line',
+        type: 'line',
+        source: 'webcams-fov',
+        layout: hidden,
+        paint: { 'line-color': '#00bfa5', 'line-width': 1.2, 'line-opacity': 0.85 },
+      },
+      'marker',
+    );
     add(
       {
         id: 'blitzer',
@@ -1504,6 +1538,7 @@ export class ExtraLayers {
       },
       'marker',
     );
+    m.on('idle', () => this.updateCamFov());
     m.on('error', (ev) => {
       const e = ev as typeof ev & { sourceId?: string };
       if (e.sourceId !== 'alpr-us' && e.sourceId !== 'alpr-ca') return;
@@ -3147,7 +3182,9 @@ export class ExtraLayers {
           .then((fc) => {
             if (this.camKey !== key) return;
             this.setData('webcams-osm', fc);
+            this.osmCamFc = fc;
             this.osmCamCount = fc.features.length;
+            this.updateCamFov();
             this.mergeWebcams();
           })
           .catch((e) => {
@@ -3304,17 +3341,23 @@ export class ExtraLayers {
     const key = [...cams.keys()].sort().join('|');
     if (key === this.alprFovKey) return;
     this.alprFovKey = key;
-    const features: Feature[] = [...cams.values()].map(([lon, lat, dir]) => {
-      const kx = 111320 * Math.cos((lat * Math.PI) / 180);
-      const ring: [number, number][] = [[lon, lat]];
-      for (let i = 0; i <= 12; i++) {
-        const a = ((dir - ALPR_FOV_ANGLE / 2 + (ALPR_FOV_ANGLE * i) / 12) * Math.PI) / 180;
-        ring.push([lon + (Math.sin(a) * ALPR_FOV_RADIUS) / kx, lat + (Math.cos(a) * ALPR_FOV_RADIUS) / 111320]);
+    this.setData('alpr-fov', { type: 'FeatureCollection', features: fovSectors([...cams.values()], ALPR_FOV_RADIUS, ALPR_FOV_ANGLE) });
+  }
+
+  /** Viewing-direction sectors for the OpenStreetMap webcams that carry a camera:direction tag. */
+  private updateCamFov() {
+    if (!this.on.has('webcams')) return;
+    const cams: [number, number, number][] = [];
+    if (this.map.getZoom() >= ALPR_FOV_ZOOM && this.osmCamFc) {
+      for (const f of this.osmCamFc.features) {
+        const dir = Number(f.properties?.dir);
+        if (dir >= 0) cams.push([(f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], dir]);
       }
-      ring.push([lon, lat]);
-      return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
-    });
-    this.setData('alpr-fov', { type: 'FeatureCollection', features });
+    }
+    const key = cams.map((c) => c.join(',')).sort().join('|');
+    if (key === this.camFovKey) return;
+    this.camFovKey = key;
+    this.setData('webcams-fov', { type: 'FeatureCollection', features: fovSectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE) });
   }
 
   private updateAlprNote() {
@@ -3450,12 +3493,14 @@ export class ExtraLayers {
         // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
         const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
         const video = safeUrl(p.video);
+        const dir = Number(p.dir);
+        const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
         const extra = video
           ? `<video class="pop-cam" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
           : src
           ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
           : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
-        return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle: p.subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
+        return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
       case 'alpr': {
         const dir = Number(p.dir);
