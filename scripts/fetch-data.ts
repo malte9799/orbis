@@ -4,7 +4,7 @@
 // Live sources are refreshed on every run (every 15 min), slow-changing ones once a day;
 // if a download fails, the previous file is kept.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
@@ -264,6 +264,38 @@ await task('cams', DAY, async () => {
     }
   }
   if (!ok) throw new Error('no camera feed reachable');
+});
+
+// One merged position list from all camera snapshot files (plus the Finnish Digitraffic
+// cameras, which have no snapshot file) for the closeable webcam heatmap: it shows the complete
+// camera distribution worldwide at every zoom level. If individual feeds fail, their previous
+// snapshot file remains (see PREV copy at the top) and is used here – the heatmap loses no data.
+await task('cams-world', DAY, async () => {
+  const { loadDigitrafficCams } = await import('../src/api/cams');
+  const pts: [number, number][] = [];
+  const push = (lon: number, lat: number) => {
+    if (Number.isFinite(lon) && Number.isFinite(lat) && (lon || lat)) pts.push([Math.round(lon * 1e4) / 1e4, Math.round(lat * 1e4) / 1e4]);
+  };
+  try {
+    for (const f of (await loadDigitrafficCams()).features) push(f.geometry.coordinates[0], f.geometry.coordinates[1]);
+  } catch (e) {
+    console.warn(`  Digitraffic: ${e instanceof Error ? e.message : e}`);
+  }
+  const dir = join(OUT, 'cams');
+  for (const file of existsSync(dir) ? readdirSync(dir) : []) {
+    if (!/\.json$/.test(file) || file === 'world.json') continue;
+    try {
+      const fc = JSON.parse(readFileSync(join(dir, file), 'utf8')) as { features?: { geometry?: { type: string; coordinates?: number[] } }[] };
+      for (const f of fc.features ?? []) if (f.geometry?.type === 'Point') push(f.geometry.coordinates![0], f.geometry.coordinates![1]);
+    } catch (e) {
+      console.warn(`  ${file}: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  if (pts.length < 500) throw new Error(`only ${pts.length} camera positions`);
+  // exact duplicate positions (e.g. same place from two feeds) stay in – the heatmap counts them;
+  // for the dots they are harmless
+  write('cams/world.json', pts);
+  console.log(`  ${pts.length} Kamerapositionen`);
 });
 
 // places with Mapillary 360° photos for the panorama game; the long crawl runs once a month
