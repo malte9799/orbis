@@ -96,7 +96,7 @@ export interface TrafficCat {
   rows: { label: string; layers: string[] }[];
 }
 export const TRAFFIC_MENU: TrafficCat[] = [
-  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['autobahn'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['roadnet'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
   {
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
     rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
