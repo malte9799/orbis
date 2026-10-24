@@ -46,6 +46,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let radarIdx = 0;
   let modelMin = 0;
   let curSampler: ModelSampler | null = null;
+  let modelError: string | null = null;
 
   host.innerHTML = `
     <div class="fcm-head">
@@ -214,9 +215,14 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       .catch((e) => {
         if (destroyed) return;
         console.warn('Regionalraster', e);
-        statusEl.textContent = isLimitError(e)
-          ? 'Kostenloses Abrufkontingent von Open-Meteo gerade ausgeschöpft – bitte in ein paar Minuten erneut versuchen.'
-          : 'Kartendaten konnten nicht geladen werden.';
+        const reason = isLimitError(e)
+          ? 'Kostenloses Abrufkontingent von Open-Meteo gerade ausgeschöpft – Radar und Karte bleiben nutzbar, Vorhersageebenen sind erst morgen wieder verfügbar.'
+          : 'Modellvorhersage konnte nicht geladen werden – Radar und Karte bleiben nutzbar.';
+        modelError = reason;
+        // keep the map interactive: downgrade the blocking overlay to a notice
+        statusEl.remove();
+        showNotice(reason);
+        render();
       });
   }
 
@@ -241,6 +247,11 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       return;
     }
     radarGl?.setVisible(false);
+    if (modelError) {
+      host.querySelector<HTMLElement>('.fcm-empty')!.hidden = true;
+      whenEl.textContent = 'Modelllayer nicht verfügbar';
+      return;
+    }
     if (!grid || timeIdx < 0) return;
     const sampler = new ModelSampler(grid, null, timeIdx);
     curSampler = sampler;
@@ -339,6 +350,15 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       else if (p) rain = true;
     }
     return rain || snowfall ? '' : 'Kein Niederschlag im Kartenausschnitt';
+  }
+
+  /** Small non-blocking notice over the map (the map itself stays fully interactive). */
+  function showNotice(msg: string) {
+    host.querySelector('.fcm-note')?.remove();
+    const n = document.createElement('div');
+    n.className = 'fcm-note';
+    n.textContent = msg;
+    mapEl.appendChild(n);
   }
 
   /** Credits for the visible layer: radar comes from RainViewer, everything else from Open-Meteo. */
