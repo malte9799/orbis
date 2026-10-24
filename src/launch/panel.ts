@@ -2,7 +2,6 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import type { LaunchDetail } from './tracker';
 import { flightPhase, flightEndSec, getReminder, notifSupported, notifyPermission, requestNotifyPermission, setReminder, trackFeatures, tLabel } from './tracker';
-import { RocketView } from './model';
 import { escapeHtml, safeUrl, toast } from '../util';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
@@ -11,8 +10,9 @@ import '../globe/flightpanel.css';
 import './panel.css';
 
 // Right-hand panel with live tracking of a rocket launch: big countdown, reminder
-// (browser notifications), embedded live stream (splitscreen), simulated ascent
-// telemetry and the orbit track on the map.
+// (browser notifications), embedded live stream (splitscreen) and simulated ascent
+// telemetry on the map. The procedural 3D model (src/launch/model.ts) stays in the
+// repo but is not shown in the panel.
 
 export interface LaunchPanelHooks {
   map(): MlMap | null;
@@ -51,7 +51,6 @@ export class LaunchPanel {
   private followTimer: number | undefined;
   private following = false;
   private open_ = new Set<string>(['remind', 'track']);
-  private rocket: RocketView | null = null;
   private streamId = '';
 
   constructor(
@@ -67,7 +66,6 @@ export class LaunchPanel {
         <div class="lp-media">
           <div class="lp-count"><span class="dot"></span><span class="cd"></span><span class="lp-tplus"></span></div>
           <div class="lp-stream"></div>
-          <div class="lp-model" hidden><canvas></canvas><span class="lp-note">Vereinfachtes 3D-Modell · Pitch folgt der Simulationsbahn</span></div>
         </div>
         <div class="lp-info"></div>
       </div>`;
@@ -100,7 +98,6 @@ export class LaunchPanel {
     this.render();
     clearInterval(this.refresh);
     this.refresh = window.setInterval(() => this.tick(), 1000);
-    this.ensureRocket();
     const mp = mapOf(this.h);
     if (mp && Number.isFinite(d.lat) && (d.lat || d.lon)) mp.easeTo({ center: [d.lon, d.lat], zoom: Math.max(mp.getZoom(), 4.5), duration: 800 });
   }
@@ -111,8 +108,6 @@ export class LaunchPanel {
     clearInterval(this.followTimer);
     this.following = false;
     this.setLive(null);
-    this.rocket?.dispose();
-    this.rocket = null;
     this.root.hidden = true;
   }
 
@@ -123,23 +118,6 @@ export class LaunchPanel {
 
   private setLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
     this.h.live(data);
-  }
-
-  private ensureRocket() {
-    if (this.rocket) return;
-    const canvas = this.root.querySelector<HTMLCanvasElement>('.lp-model canvas');
-    if (!canvas) return;
-    RocketView.create(canvas)
-      .then((r) => {
-        if (!this.detail) {
-          r.dispose();
-          return;
-        }
-        this.rocket = r;
-      })
-      .catch(() => {
-        /* no WebGL – the panel works without the 3D model */
-      });
   }
 
   private render() {
@@ -347,12 +325,6 @@ export class LaunchPanel {
           ? `Spur: ${escapeHtml(d.place || d.pad || '')} → ${escapeHtml(d.orbit || 'Orbit')} (angenähert)`
           : `Brennschluss bei T+${tLabel(endSec)} · die Rakete ist in der Zielbahn`;
     }
-    // 3D model
-    if (this.rocket) {
-      this.rocket.setPhase(p.phase === 'pre' ? -1 : Math.min(p.tSec, endSec), p.phase === 'pre' ? 90 : p.pitchDeg, p.phase === 'pre' ? false : p.phase === 'active');
-    }
-    const model = this.root.querySelector<HTMLElement>('.lp-model')!;
-    model.hidden = !this.rocket;
   }
 }
 
