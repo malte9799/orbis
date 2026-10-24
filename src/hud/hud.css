@@ -45,7 +45,7 @@
 .hud .subs .n { margin-left: auto; font: 600 11px ui-monospace, Menlo, monospace; font-style: normal; color: var(--muted); }
 .hud .subs .n:empty { display: none; }
 .hud .subs button.tgl { margin-top: 0; }
-.hud .subs button.tgl.on { color: var(--text); font-weight: 600; }
+.hud .subs button.tgl.on { background: rgba(91,157,255,.16); border-color: rgba(91,157,255,.55); color: #d8e6ff; font-weight: 500; }
 
 /* Blitze Live: die Zeile selbst ist die Box, rechts daneben der Lautstärke-Regler */
 .hud .volrow { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px 0 12px; border: 1px solid transparent; border-radius: 8px; background: var(--card); cursor: default; }
