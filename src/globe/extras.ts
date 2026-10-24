@@ -203,7 +203,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   dwdwarn: ['dwd-warn-fill', 'dwd-warn-line'],
   gauges: ['gauges'],
   aq: ['aq-circle', 'aq-text'],
-  aircraft: ['aircraft'],
+  aircraft: ['aircraft', 'aircraft-vehicle'],
   sondes: ['sondes'],
   sats: ['sats-icon', 'sats-label', 'sat-track'],
   starlink: ['sats-dot', 'sat-track'],
@@ -1329,6 +1329,7 @@ export class ExtraLayers {
         id: 'aircraft',
         type: 'symbol',
         source: 'aircraft',
+        filter: ['!=', ['get', 'kind'], 'vehicle'],
         layout: {
           ...hidden,
           'icon-image': ['concat', 'sil-', ['get', 'kind']],
@@ -1350,6 +1351,24 @@ export class ExtraLayers {
           'text-color': '#ffffff',
           'text-halo-color': 'rgba(0,0,0,0.8)',
           'text-halo-width': 1.2,
+        },
+      },
+      'marker',
+    );
+    // vehicles on the airfield (ADS-B category C1/C2): yellow dots for now
+    add(
+      {
+        id: 'aircraft-vehicle',
+        type: 'circle',
+        source: 'aircraft',
+        minzoom: 12,
+        filter: ['==', ['get', 'kind'], 'vehicle'],
+        layout: hidden,
+        paint: {
+          'circle-color': '#ffd23f',
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 4.5, 19, 8],
+          'circle-stroke-color': 'rgba(0,0,0,0.6)',
+          'circle-stroke-width': 1,
         },
       },
       'marker',
