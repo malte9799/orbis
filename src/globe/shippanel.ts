@@ -3,7 +3,7 @@ import type { ShipInfo } from './extras';
 import { SHIP_COLORS, SHIP_LABELS, shipCat } from '../api/transport';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
-import { category, routeHero, tile } from './sidepanel';
+import { category, graph, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected ship (AIS), same layout as the flight panel.
@@ -21,6 +21,8 @@ export class ShipPanel {
   private refresh: number | undefined;
   private followTimer: number | undefined;
   private open_ = new Set<string>();
+  /** tile whose graph is shown (speed, track) */
+  private metric: string | null = null;
   private dragHooked = false;
   /** called when the panel opens, so the flight panel can step aside */
   onOpen?: () => void;
@@ -48,6 +50,12 @@ export class ShipPanel {
       if (act === 'zoom') this.zoomIn();
       else this.setFollow(!this.following);
     });
+    this.body.addEventListener('click', (e) => {
+      const m = (e.target as HTMLElement).closest<HTMLElement>('[data-metric]')?.dataset.metric;
+      if (!m) return;
+      this.metric = this.metric === m ? null : m;
+      this.render();
+    });
     this.body.addEventListener(
       'toggle',
       (e) => {
@@ -60,6 +68,7 @@ export class ShipPanel {
   }
 
   open(mmsi: number) {
+    if (mmsi !== this.mmsi) this.metric = null;
     this.mmsi = mmsi;
     this.root.hidden = false;
     this.onOpen?.();
@@ -124,11 +133,14 @@ export class ShipPanel {
     const hero = dest
       ? routeHero({ from: { code: moving ? 'Unterwegs' : 'Liegt', sub: `${fmt.num(s.sog, 1)} kn` }, to: { code: dest, sub: 'Ziel laut AIS' }, progress: 0, mark: glyphSvg('vessel', COLOR, 20), color: COLOR, note: moving ? `Kurs ${Math.round(rot)}° ${compass(rot)}` : 'macht gerade keine Fahrt' }).replace('class="sp-route"', 'class="sp-route sp-text"')
       : `<div class="sp-note" style="margin-top:10px">Kein Ziel gemeldet · ${moving ? `Kurs ${Math.round(rot)}° ${compass(rot)}` : 'liegt'}</div>`;
-    const tiles = `<div class="sp-tiles">${tile('Tempo', `${fmt.num(s.sog, 1)} kn`)}${tile('Kurs', `${Math.round(rot)}° ${compass(rot)}`)}${tile('Status', moving ? 'in Fahrt' : 'liegt')}${tile('Letzte Meldung', ago)}</div>`;
+    const tiles = `<div class="sp-tiles">${tile('Tempo', `${fmt.num(s.sog, 1)} kn`, { metric: 'speed', on: this.metric === 'speed' })}${tile('Kurs', `${Math.round(rot)}° ${compass(rot)}`, { metric: 'track', on: this.metric === 'track' })}${tile('Status', moving ? 'in Fahrt' : 'liegt')}${tile('Letzte Meldung', ago)}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { speed: ['Tempo', 'kn'], track: ['Kurs', '°'] };
+    const m = this.metric;
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history[m as 'speed' | 'track'], GRAPHS[m][1], COLOR) : '';
     const cats =
       category('ship', 'Schiff', [['Typ', escapeHtml(SHIP_LABELS[cat])], ['Rufzeichen', escapeHtml(s.callSign || '–')], ['MMSI', String(s.mmsi)], ['Ziel', escapeHtml(dest || '–')]], this.open_) +
       category('position', 'Position', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Geschwindigkeit', `${fmt.num(s.sog * 1.852, 0)} km/h`]], this.open_);
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(s.source)} · <a href="https://www.marinetraffic.com/de/ais/details/ships/mmsi:${s.mmsi}" target="_blank" rel="noopener noreferrer">Auf MarineTraffic ansehen ↗</a></div></details>`;
-    this.body.innerHTML = hero + tiles + cats + src;
+    this.body.innerHTML = hero + tiles + chart + cats + src;
   }
 }

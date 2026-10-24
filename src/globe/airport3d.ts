@@ -530,7 +530,7 @@ export class Airport3D {
   /** Displayed state of an aircraft (smoothed position, trail), if it is tracked. */
   planeInfo(hex: string) {
     const p = this.tracker.planes.get(hex);
-    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail } : null;
+    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist } : null;
   }
 
   /** The aircraft under a screen point (model, trail or wall), if any. */

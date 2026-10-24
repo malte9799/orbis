@@ -2,7 +2,7 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
-import { category, distKm, duration, routeHero, tile } from './sidepanel';
+import { category, clock, distKm, duration, graph, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected aircraft (everything ADS-B delivers) and
@@ -34,6 +34,8 @@ export class FlightPanel {
   private refresh: number | undefined;
   private followTimer: number | undefined;
   private open_ = new Set<string>();
+  /** tile whose graph is shown (alt, speed, track, vs) */
+  private metric: string | null = null;
   private dragHooked = false;
 
   constructor(
@@ -61,6 +63,12 @@ export class FlightPanel {
       else this.setFollow(this.follow === act ? 'off' : (act as Follow));
     });
     // remember which sections the user collapsed across the live updates
+    this.body.addEventListener('click', (e) => {
+      const m = (e.target as HTMLElement).closest<HTMLElement>('[data-metric]')?.dataset.metric;
+      if (!m) return;
+      this.metric = this.metric === m ? null : m;
+      this.render();
+    });
     this.body.addEventListener(
       'toggle',
       (e) => {
@@ -73,6 +81,7 @@ export class FlightPanel {
   }
 
   open(hex: string) {
+    if (hex !== this.hex) this.metric = null;
     this.hex = hex;
     this.root.hidden = false;
     this.h.select(hex);
@@ -144,10 +153,15 @@ export class FlightPanel {
       const done = distKm(r.origin.lon, r.origin.lat, i.lon, i.lat);
       const left = distKm(i.lon, i.lat, r.destination.lon, r.destination.lat);
       const progress = total > 0 ? Math.min(1, done / Math.max(1, done + left)) : 0;
-      const eta = i.speedKmh && i.speedKmh > 100 && !i.ground ? ` · noch ca. ${duration((left / i.speedKmh) * 60)}` : '';
+      // ADS-B has no schedule: arrival and departure are estimated from the distance and the current ground speed
+      const cruising = !!i.speedKmh && i.speedKmh > 300 && !i.ground;
+      const now = Date.now();
+      const arrive = cruising ? clock(now + (left / i.speedKmh!) * 3600_000) : undefined;
+      const depart = cruising ? clock(now - (done / i.speedKmh!) * 3600_000) : undefined;
+      const eta = cruising ? ` · noch ca. ${duration((left / i.speedKmh!) * 60)}` : '';
       hero = routeHero({
-        from: { code: r.origin.iata || r.origin.icao, sub: r.origin.city || r.origin.name },
-        to: { code: r.destination.iata || r.destination.icao, sub: r.destination.city || r.destination.name },
+        from: { code: r.origin.iata || r.origin.icao, sub: r.origin.city || r.origin.name, time: depart },
+        to: { code: r.destination.iata || r.destination.icao, sub: r.destination.city || r.destination.name, time: arrive },
         progress,
         mark: glyphSvg('plane', COLOR, 20),
         color: COLOR,
@@ -156,12 +170,15 @@ export class FlightPanel {
     } else {
       hero = `<div class="sp-note" style="margin-top:10px">${i.route === undefined ? 'Route wird geladen …' : 'Route unbekannt'}</div>`;
     }
-    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`)}${tile('Tempo', num(i.speedKmh, 'km/h'))}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`)}${tile('Steigrate', num(i.vsMs, 'm/s', 1))}</div>`;
+    const m = this.metric;
+    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Tempo', num(i.speedKmh, 'km/h'), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', num(i.vsMs, 'm/s', 1), { metric: 'vs', on: m === 'vs' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Tempo', 'km/h'], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history?.[m as 'alt' | 'speed' | 'track' | 'vs'] ?? [], GRAPHS[m][1], COLOR) : '';
     const cats =
       category('aircraft', 'Flugzeug', [['Betreiber', escapeHtml(i.operator || '–')], ['Typ', escapeHtml(i.type || '–')], ['ICAO-Typ', escapeHtml(i.icao || '–')], ['Kennzeichen', escapeHtml(i.reg || '–')], ['Mode-S (Hex)', escapeHtml(i.hex.toUpperCase())]], this.open_) +
       category('position', 'Position und Signal', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Squawk', escapeHtml(i.squawk || '–')], ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner']], this.open_);
     const source = i.source ? `${escapeHtml(i.source)} · ` : '';
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> (Schätzung nach Callsign, gestrichelt auf der Karte) · ' : ''}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
-    this.body.innerHTML = hero + tiles + cats + src;
+    this.body.innerHTML = hero + tiles + chart + cats + src;
   }
 }

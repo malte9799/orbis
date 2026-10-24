@@ -353,3 +353,61 @@
 .sp-route.sp-text .sp-end small {
   max-width: 120px;
 }
+
+.sp-end small.sp-time {
+  margin-top: 1px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.sp-end small.sp-time,
+.sp-end small {
+  max-width: 96px;
+}
+
+.sp-tile.click {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sp-tile.click:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.sp-tile.click.on {
+  border-color: #f2c94c;
+}
+.sp-k {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+.sp-chart {
+  position: relative;
+  margin: 0 0 8px;
+  padding: 8px 10px 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.sp-chart svg {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+.sp-chart .sp-dot {
+  position: absolute;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  margin-top: 14px;
+  margin-right: -3px;
+  border-radius: 50%;
+}
+.sp-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 0;
+}
