@@ -11,15 +11,15 @@ const HOSTS = ['ws1', 'ws7', 'ws8', 'ws3', 'ws5', 'ws6'].map((h) => `wss://${h}.
 export const LIGHTNING_WINDOW_MS = 15 * 60000;
 const MAX_STRIKES = 25000;
 /** How long a strike keeps its detector signals (for the lines), afterwards they are dropped. */
-const SIG_KEEP_MS = 90 * 1000;
+const SIG_KEEP_MS = 60 * 1000;
 /** A strike "wave" (highlight circle that shrinks onto the strike) lives this long. */
-export const LIGHTNING_WAVE_MS = 5000;
+export const LIGHTNING_WAVE_MS = 8000;
 /** Thunder circles grow with the speed of sound and fade; 73 s × 0.343 km/s ≈ 25 km radius. */
 export const LIGHTNING_THUNDER_MS = 73 * 1000;
 /** Speed of sound in km per second (as displayed rings, all directions). */
 export const SOUND_KM_S = 0.343;
-/** Detector lines are drawn for strikes younger than this. */
-export const LIGHTNING_LINES_MS = 30 * 1000;
+/** Detector lines are drawn for strikes younger than this (focus: quick fade). */
+export const LIGHTNING_LINES_MS = 10 * 1000;
 /** Maximum detector lines drawn at once. */
 const MAX_LINES = 600;
 /** Maximum detector stations kept for display. */
@@ -320,12 +320,12 @@ export class LightningStream {
       const s = this.strikes[i];
       if (s.at < now - maxAge) break;
       const p = Math.max(0, Math.min(1, (now - s.at) / maxAge));
-      // k = size of the ring (1 → 0, shrinks onto the point), o = fade (1 → 0)
+      // k = size of the ring (1 → 0, shrinks onto the point), o = fade that stays bright early
       const k = Math.max(0.05, Math.round((1 - p) * 100) / 100);
       features.push({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-        properties: { k, o: Math.round((1 - p) * 100) / 100 },
+        properties: { k, o: Math.round((1 - p * p) * 100) / 100 },
       });
     }
     return { type: 'FeatureCollection', features };
@@ -349,7 +349,8 @@ export class LightningStream {
         geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
         properties: {
           lat: s.lat,
-          km: Math.round(p * maxAge * SOUND_KM_S * 100) / 100,
+          // age in seconds × speed of sound: up to maxAge/1000 × 0.343 ≈ 25 km
+          km: Math.round(((now - s.at) / 1000) * SOUND_KM_S * 100) / 100,
           o: Math.round((1 - p) * 100) / 100,
         },
       });
