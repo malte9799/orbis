@@ -4,6 +4,7 @@ import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from 
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
+import { VehiclesLayer } from './vehicles3d';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
@@ -450,6 +451,7 @@ export class ExtraLayers {
   private feedErrors = new Set<string>();
   private ais: AisStream | null = null;
   private ships3d?: ShipsLayer;
+  private vehicles3d?: VehiclesLayer;
   private shipsAll = new Map<number, Ship>();
   private lightning: LightningStream | null = null;
 
@@ -1491,6 +1493,19 @@ export class ExtraLayers {
       },
     });
     m.addLayer(this.ships3d, 'marker');
+    // low-poly 3D trains, subways, trams, buses … from zoom 10 on the flat map; the 2D dots step aside
+    this.vehicles3d = new VehiclesLayer({
+      enabled: () => this.on.has('trains') || this.on.has('transit'),
+      modeChanged: (on) => {
+        for (const id of ['trains', 'transit-veh']) {
+          if (!m.getLayer(id)) continue;
+          m.setPaintProperty(id, 'circle-opacity', on ? 0 : 1);
+          m.setPaintProperty(id, 'circle-stroke-opacity', on ? 0 : 1);
+        }
+        for (const id of ['trains-label', 'transit-label']) if (m.getLayer(id)) m.setPaintProperty(id, 'text-opacity', on ? 0 : 1);
+      },
+    });
+    m.addLayer(this.vehicles3d, 'marker');
     this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons(), iconsTick: () => this.refreshAircraftIcons() });
     this.airport3d.init();
     this.ready = true;
@@ -2485,6 +2500,7 @@ export class ExtraLayers {
     const gps = [...this.feedVeh.values()].flatMap((f) => f.features).filter((f) => (f.properties?.rail ? rail : local));
     const features = [...live.features, ...gps, ...(rail ? this.gpsTrains.features : [])];
     this.setData('trains', { type: 'FeatureCollection', features });
+    this.vehicles3d?.setFeatures(features as Feature<Point>[]);
     const nRail = features.filter((f) => f.properties?.rail).length;
     if (rail && this.info.trains?.count !== nRail) this.set('trains', { count: nRail, loading: false });
     if (local && this.info.transit?.count !== features.length - nRail) this.set('transit', { count: features.length - nRail });
@@ -2588,6 +2604,19 @@ export class ExtraLayers {
     const ship = this.ships3d?.isActive() ? this.ships3d.pick(x, y) : null;
     if (!ship) return null;
     const feature = { ...shipFeatures([ship]).features[0], layer: { id: 'ships' } } as unknown as MapGeoJSONFeature;
+    return this.click(feature, at);
+  }
+
+  /** True while the 3D vehicle models are drawn: the 2D dots are not clickable then (see pickVehicle). */
+  vehicles3dActive() {
+    return !!this.vehicles3d?.isActive();
+  }
+
+  /** The 3D vehicle model under a screen point as a click result (popup), if any. */
+  pickVehicle(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const f = this.vehicles3d?.isActive() ? this.vehicles3d.pick(x, y) : null;
+    if (!f) return null;
+    const feature = { ...f, layer: { id: f.properties?.rail ? 'trains' : 'transit-veh' } } as unknown as MapGeoJSONFeature;
     return this.click(feature, at);
   }
 
