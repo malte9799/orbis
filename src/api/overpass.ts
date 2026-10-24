@@ -9,7 +9,7 @@
 
 import { proxyBase, viaProxy } from './proxy';
 
-const ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const ENDPOINTS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const MAX_PARALLEL = 2;
 
 interface Job {

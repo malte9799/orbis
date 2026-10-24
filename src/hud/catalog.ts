@@ -96,7 +96,7 @@ export interface TrafficCat {
   rows: { label: string; layers: string[] }[];
 }
 export const TRAFFIC_MENU: TrafficCat[] = [
-  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['roadnet'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }] },
+  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['roadnet'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }, { label: 'Blitzer & Rotlicht', layers: ['blitzer'] }] },
   {
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
     rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
@@ -141,7 +141,7 @@ export interface CatalogEntry {
 const CAT_OF: Record<CatId, string[]> = {
   wetter: ['cities', 'lightning', 'aq', 'aurora', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast'],
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
-  verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
+  verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'blitzer', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
   erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
   netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'pipelines', 'wind', 'solar', 'plants'],
@@ -154,7 +154,7 @@ const ICON_OF: Record<string, string> = {
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
   noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
-  transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain',
+  transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain', blitzer: 'blitzer',
   autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', webcams: 'cam', radio: 'radio',
   alpr: 'cam', fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
 };

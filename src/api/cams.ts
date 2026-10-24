@@ -180,3 +180,52 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
   }
   return { type: 'FeatureCollection', features };
 }
+
+// ---------------------------------------------------------------------------
+// Speed and red-light cameras as mapped in OpenStreetMap: nodes with
+// highway=speed_camera plus type=enforcement relations (the zone a device
+// governs – a monitored stretch or an intersection). Locations live from
+// Overpass when zoomed in; coverage depends on the OSM community. A map of
+// locations, not a warning system – in Germany using one while driving is
+// illegal (§ 23 StVO).
+
+export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  const bb = bboxStr(b);
+  const { elements: els } = await overpass<{ elements: OsmElement[] }>(
+    `[out:json][timeout:25];(node["highway"="speed_camera"](${bb});nwr["type"="enforcement"](${bb}););out center tags 4000;`,
+    'speedcams',
+    30000,
+  );
+  const features: Feature<Point>[] = [];
+  const nodePts: [number, number][] = [];
+  for (const el of els) {
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const t = el.tags ?? {};
+    const dir = parseFloat(String(t.direction ?? t['camera:direction'] ?? '').split(';')[0]);
+    const props: Record<string, unknown> = {
+      kind: 'cam',
+      title: 'Ortsfester Blitzer',
+      subtitle: 'Geschwindigkeit',
+      dir: Number.isFinite(dir) ? dir : -1,
+      speed: t.maxspeed ?? '',
+      operator: t.operator ?? '',
+      ref: t.ref ?? '',
+      url: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+    };
+    // enforcement relations complement the plain camera nodes: average-speed
+    // sections (Abschnittskontrolle) and red-light cameras; a section centred on
+    // a mapped camera node is a duplicate and gets dropped (rough 300 m check)
+    if (el.type !== 'node' && t.enforcement) {
+      if (t.enforcement === 'maxspeed' && nodePts.some(([x, y]) => Math.abs(y - lat) < 0.003 && Math.abs(x - lon) * Math.cos((lat * Math.PI) / 180) < 0.003)) continue;
+      props.kind = t.enforcement === 'traffic_signals' ? 'signals' : 'section';
+      props.title = t.enforcement === 'traffic_signals' ? 'Rotlicht-Blitzer' : 'Abschnittskontrolle';
+      props.subtitle = t.enforcement === 'traffic_signals' ? 'Geschwindigkeit & Ampel' : 'Durchschnittsgeschwindigkeit';
+      if (t.maxspeed) props.speed = t.maxspeed;
+    }
+    if (el.type === 'node') nodePts.push([lon, lat]);
+    features.push(point(lon, lat, props));
+  }
+  return { type: 'FeatureCollection', features };
+}

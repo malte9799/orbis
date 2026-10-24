@@ -22,6 +22,7 @@ export type ExtraGlyph =
   | 'plant'
   | 'webcam'
   | 'alpr'
+  | 'blitzer'
   | 'cone'
   | 'aurora'
   | 'rocket'
@@ -98,6 +99,10 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   alpr: [
     { mode: 'fill', d: 'M3 7h13l5-2.5v9L16 11H3z' },
     { mode: 'stroke', width: 2, d: 'M6 11v5M3 19h7' },
+  ],
+  blitzer: [
+    { mode: 'stroke', width: 2.2, d: 'M4.5 4.5h15v9h-15zM12 13.5v7.5M9 22h6' },
+    { mode: 'fill', d: 'M13.8 6.4L9.7 11.3h2.6l-1 3.6 4.5-5.5h-2.6z' },
   ],
   cone: [{ mode: 'fill', d: 'M12 12L6.2 1.6A12 12 0 0 1 17.8 1.6z' }],
   aurora: [{ mode: 'stroke', width: 2, d: 'M3 18c3-9 6-12 9-12s6 3 9 12M6 18c2-6 4-8 6-8s4 2 6 8M10 18c.6-2 1.2-3 2-3s1.4 1 2 3' }],

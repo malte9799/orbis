@@ -139,6 +139,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [CTA Train Tracker](https://www.transitchicago.com/developers/) | Chicago „L“ | 🔑 |
 | [Trafiklab](https://www.trafiklab.se) | Schweden | 🔑 |
 | [Autobahn GmbH – Verkehrslage](https://verkehr.autobahn.de) | Staus, Sperrungen, Baustellen, Autobahn-Webcams | 🟢 |
+| [OpenStreetMap (Overpass)](https://wiki.openstreetmap.org/wiki/DE:Tag:highway%3Dspeed_camera) (`highway=speed_camera`, `type=enforcement`) | Blitzer & Rotlicht: ortsfeste Messstellen, Strecken-Abschnitte und Ampelkameras im Kartenausschnitt (ab Zoom 9) – Lageplan aus der Community, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten, § 23 StVO) | 🟢 ODbL, 🌐 |
+| [MapAtlas Camera Index](https://mapatlas.eu/camera-index) | Alternative Blitzer-Übersicht (Treiber-Meldungen, 106 Länder, CC BY 4.0) – Vorauswahl für eine spätere Zoom-Übersicht | 🟢 CC BY 4.0 |
 | [OpenFreeMap](https://openfreemap.org) / OSM | Straßennetz mit Straßennummern | 🟢 ODbL |
 | [OpenRailwayMap](https://www.openrailwaymap.org) | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | 🟢 |
 | [OpenStreetMap Overpass](https://overpass-api.de) (+ [private.coffee](https://overpass.private.coffee)) | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | 🟢 🌐 |
