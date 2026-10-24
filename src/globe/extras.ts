@@ -3,6 +3,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
 import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
+import { ShipsLayer } from './ships3d';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../api/cams';
@@ -18,11 +19,9 @@ import {
   loadLaunches,
   loadTrainDetails,
   loadTrains,
-  SHIP_LABELS,
   shipFeatures,
   type Launch,
   type Ship,
-  type ShipCat,
 } from '../api/transport';
 import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
@@ -321,7 +320,19 @@ export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
   | { type: 'weather'; lng: number; lat: number }
   /** an aircraft was clicked: the flight panel shows it */
-  | { type: 'flight'; hex: string; lng: number; lat: number };
+  | { type: 'flight'; hex: string; lng: number; lat: number }
+  /** a ship was clicked: the ship panel shows it */
+  | { type: 'ship'; mmsi: number; lng: number; lat: number };
+
+/** What the ship panel shows about one vessel. */
+export interface ShipInfo {
+  ship: Ship;
+  /** speeds (kn) of the reports seen so far */
+  speeds: number[];
+  /** displayed position */
+  lon: number;
+  lat: number;
+}
 
 /** What the flight panel shows about one aircraft. */
 export interface FlightInfo {
@@ -343,6 +354,8 @@ export interface FlightInfo {
   source: string;
   /** departure / destination (adsbdb); null: unknown, undefined: still loading */
   route?: FlightRoute | null;
+  /** altitudes (m) along the trail seen so far */
+  profile?: number[];
 }
 
 interface Info {
@@ -432,6 +445,8 @@ export class ExtraLayers {
   private feedLoading = new Set<string>();
   private feedErrors = new Set<string>();
   private ais: AisStream | null = null;
+  private ships3d?: ShipsLayer;
+  private shipsAll = new Map<number, Ship>();
   private lightning: LightningStream | null = null;
 
   constructor(
@@ -1407,6 +1422,17 @@ export class ExtraLayers {
       },
       'marker',
     );
+    // low-poly 3D ships from zoom 11 on the flat map; the 2D icons (still clickable) fade out then
+    this.ships3d = new ShipsLayer({
+      enabled: () => this.on.has('ships'),
+      modeChanged: (on) => {
+        if (!m.getLayer('ships')) return;
+        m.setPaintProperty('ships', 'icon-opacity', on ? 0 : ['case', ['get', 'moving'], 1, 0.6]);
+        // the names move with the models as plain elements instead
+        m.setPaintProperty('ships', 'text-opacity', on ? 0 : 1);
+      },
+    });
+    m.addLayer(this.ships3d, 'marker');
     this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshAircraftIcons(), iconsTick: () => this.refreshAircraftIcons() });
     this.airport3d.init();
     this.ready = true;
@@ -2018,6 +2044,7 @@ export class ExtraLayers {
       lat: live ? live.lat : lat,
       source: this.lastAircraft?.source ?? '',
       route: this.airport3d?.route(hex),
+      profile: live?.trail.map((t) => t[2]),
     };
   }
 
@@ -2486,11 +2513,34 @@ export class ExtraLayers {
     if (prev?.count !== l.count || prev?.note !== note) this.set('lightning', { count: l.count, note });
   }
 
+  /** True while the 3D ship models are drawn: the 2D icons are not clickable then (see pickShip). */
+  ships3dActive() {
+    return !!this.ships3d?.isActive();
+  }
+
+  /** The 3D ship model under a screen point as a click result (popup), if any. */
+  pickShip(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const ship = this.ships3d?.isActive() ? this.ships3d.pick(x, y) : null;
+    if (!ship) return null;
+    const feature = { ...shipFeatures([ship]).features[0], layer: { id: 'ships' } } as unknown as MapGeoJSONFeature;
+    return this.click(feature, at);
+  }
+
+  /** Current data of a ship for the ship panel. */
+  shipInfo(mmsi: number): ShipInfo | null {
+    const ship = this.shipsAll.get(mmsi);
+    if (!ship) return null;
+    const pos = this.ships3d?.position(mmsi);
+    return { ship, speeds: this.ships3d?.history(mmsi) ?? [], lon: pos?.[0] ?? ship.lon, lat: pos?.[1] ?? ship.lat };
+  }
+
   private mergeShips() {
     const all = new Map<number, Ship>();
     for (const s of this.baltic) all.set(s.mmsi, s);
     if (this.ais) for (const s of this.ais.ships.values()) all.set(s.mmsi, s);
+    this.shipsAll = all;
     this.setData('ships', shipFeatures(all.values()));
+    this.ships3d?.setShips(all.values());
     const notes = [this.ais?.error, !hasAisLive() ? 'außerhalb der Ostsee mit Daten-Proxy oder kostenlosem aisstream.io-Schlüssel (Einstellungen)' : 'weltweit live im Kartenausschnitt (aisstream.io)'].filter(Boolean);
     const prev = this.info.ships;
     const note = notes.join(' · ');
@@ -2966,24 +3016,8 @@ export class ExtraLayers {
           },
         };
       }
-      case 'ships': {
-        const rows = [
-          ['Typ', SHIP_LABELS[p.cat as ShipCat] ?? 'Schiff'],
-          ['Geschwindigkeit', `${fmt.num(Number(p.sog), 1)} kn (${fmt.num(Number(p.sog) * 1.852, 0)} km/h)`],
-          ['Kurs', `${Math.round(Number(p.rot))}°`],
-          ['Ziel', p.dest],
-          ['Rufzeichen', p.call],
-          ['MMSI', p.mmsi],
-          ['Position von', new Date(Number(p.at)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'],
-        ].filter(([, v]) => v !== '' && v != null);
-        const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'vessel', color: String(p.color), title: p.name, source: p.source, url: `https://www.marinetraffic.com/de/ais/details/ships/mmsi:${encodeURIComponent(String(p.mmsi))}`, extra }),
-          lng: pt[0],
-          lat: pt[1],
-        };
-      }
+      case 'ships':
+        return { type: 'ship', mmsi: Number(p.mmsi), lng: pt[0], lat: pt[1] };
       case 'trains':
       case 'transit-veh': {
         if (p.src === 'transitous' || p.src === 'amtrak' || p.src === 'gps') return this.vehicleCard(p, pt);

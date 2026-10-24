@@ -213,3 +213,172 @@
     max-height: 56%;
   }
 }
+
+/* design B: route hero, profile line, tiles, collapsible categories (shared with the ship panel) */
+.fp-body .sp-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 4px 2px;
+}
+.sp-end b {
+  display: block;
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.sp-end small {
+  display: block;
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.sp-end.r {
+  text-align: right;
+}
+.sp-line {
+  position: relative;
+  flex: 1;
+  height: 26px;
+  min-width: 40px;
+}
+.sp-rest,
+.sp-done {
+  position: absolute;
+  left: 0;
+  top: 12px;
+}
+.sp-rest {
+  right: 0;
+  border-top: 1.5px dashed rgba(255, 255, 255, 0.22);
+}
+.sp-done {
+  height: 0;
+  border-top: 3px solid var(--c);
+  border-radius: 2px;
+}
+.sp-mark {
+  position: absolute;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  display: grid;
+  place-items: center;
+  transform: rotate(90deg);
+}
+.sp-mark svg {
+  width: 20px;
+  height: 20px;
+}
+.sp-note {
+  margin: 2px 4px 8px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: center;
+}
+.sp-k {
+  color: var(--muted);
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+.sp-chart {
+  position: relative;
+  margin: 6px 4px 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.sp-chart svg {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+.sp-chart .sp-dot {
+  position: absolute;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 50%;
+}
+.sp-empty {
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 0;
+}
+.sp-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.sp-tile {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  min-width: 0;
+}
+.sp-tile span {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.sp-tile b {
+  display: block;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sp-rows {
+  padding: 0 6px 4px;
+}
+.sp-kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.sp-kv:last-child {
+  border-bottom: 0;
+}
+.sp-kv span {
+  color: var(--muted);
+}
+.sp-kv b {
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.sp-kv b.warn {
+  color: var(--danger);
+}
+.fp-actions.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.fp-actions button i {
+  font-style: normal;
+}
+
+.sp-kv .warn {
+  color: var(--danger);
+}
+.sp-route.sp-text .sp-end b {
+  font-size: 18px;
+  line-height: 1.15;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-route.sp-text .sp-end small {
+  max-width: 120px;
+}

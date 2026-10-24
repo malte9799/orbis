@@ -13,7 +13,7 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 /** From this zoom on the airport layout is loaded and shown. */
 export const AIRPORT_ZOOM = 11;
 /** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
-const PLANE_ZOOM = 6.5;
+const PLANE_ZOOM = 9;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */

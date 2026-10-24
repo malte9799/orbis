@@ -166,6 +166,9 @@ export const SHIP_LABELS: Record<ShipCat, string> = {
   other: 'Schiff',
 };
 
+/** Rough half length (m) of a ship of this category; sizes the click area of the 3D models. */
+export const SHIP_HALF_LEN: Record<ShipCat, number> = { cargo: 90, tanker: 110, passenger: 75, fishing: 15, tug: 14, pleasure: 6, hsc: 20, special: 30, other: 30 };
+
 export function shipCat(type: number | undefined): ShipCat {
   if (type == null) return 'other';
   if (type >= 70 && type <= 79) return 'cargo';
@@ -206,6 +209,7 @@ export function shipFeatures(ships: Iterable<Ship>): FeatureCollection<Point> {
         cat,
         color: SHIP_COLORS[cat],
         moving,
+        half: SHIP_HALF_LEN[cat],
         rot: s.heading >= 0 && s.heading < 360 ? s.heading : s.cog,
         sog: s.sog,
         dest: s.destination ?? '',
