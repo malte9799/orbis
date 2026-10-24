@@ -352,7 +352,7 @@ function alprTileProps(t: Record<string, unknown> | null, lon: number, lat: numb
   };
 }
 const ALPR_FOV_ZOOM = 12; // sectors are drawn from here on
-const ALPR_FOV_RADIUS = 50; // metres
+const ALPR_FOV_RADIUS = 80; // metres
 const ALPR_FOV_ANGLE = 60; // degrees
 
 export type ClickResult =
