@@ -256,9 +256,12 @@ export function createHud(host: HudHost): Hud {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
-        // when "Blitze Live" is chosen, its options follow as a nested list underneath
-        const extra = it.id === 'storm' && boltOn ? `<div class="subs">${boltChips}</div>` : '';
-        return rows.length || extra ? `<div class="subs">${rows.join('')}${extra}</div>` : '';
+        // when "Blitze Live" is chosen, its options follow as a nested list right underneath it
+        if (it.id === 'storm' && boltOn) {
+          const i = it.subs.findIndex((x) => x.main === 'lightning');
+          if (i > -1 && rows[i]) rows.splice(i + 1, 0, `<div class="subs">${boltChips}</div>`);
+        }
+        return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
       return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
       // the Gewitter entry stays active while the live strikes are switched on
