@@ -1892,7 +1892,7 @@ export class ExtraLayers {
         this.aircraftErr = '';
         if (seq !== this.aircraftSeq || !this.wantsAircraft()) return;
         this.lastAircraft = fc;
-        this.airport3d?.feed(fc);
+        this.airport3d?.feed(fc, { lat: c.lat, lon: c.lng, nm });
         if (!this.on.has('aircraft')) return;
         this.refreshAircraftIcons();
         this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
@@ -1912,7 +1912,9 @@ export class ExtraLayers {
     if (!this.on.has('aircraft') || !this.lastAircraft) return;
     const fc = this.lastAircraft;
     const airport = this.airport3d;
-    let features = airport ? fc.features.filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
+    // aircraft of the cache that the latest request did not return stay visible (they keep flying on their course)
+    const cached = airport ? airport.cachedFeatures(new Set(fc.features.map((f) => String(f.properties?.hex)))) : [];
+    let features = airport ? [...fc.features, ...cached].filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
     // on a flat map the icons move like the 3D models: smoothed position and heading
     if (airport?.mode() === 'flat') {
       features = features.map((f) => {
@@ -1925,7 +1927,7 @@ export class ExtraLayers {
 
   /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
   flightInfo(hex: string): FlightInfo | null {
-    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex);
+    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex) ?? this.airport3d?.cachedFeatures(new Set())?.find((x) => x.properties?.hex === hex);
     if (!f) return null;
     const p = f.properties as Record<string, unknown>;
     const live = this.airport3d?.planeInfo(hex);

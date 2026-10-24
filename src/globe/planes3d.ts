@@ -47,7 +47,10 @@ export interface PlaneState extends PlaneReport {
   pulse?: THREE.Mesh;
 }
 
+/** an aircraft inside the area of the last request that is no longer reported has landed or left: gone after this */
 const EXPIRE_MS = 60000;
+/** outside that area (map moved or zoomed) the aircraft stays cached and keeps flying on its course this long */
+const CACHE_MS = 300000;
 const PULSE_MS = 1300;
 const TRAIL_MAX = 150;
 /** a trail fades out over this time (the one of the selected aircraft stays complete) */
@@ -72,8 +75,11 @@ function metres(aLon: number, aLat: number, bLon: number, bLat: number) {
 export class PlaneTracker {
   readonly planes = new Map<string, PlaneState>();
   private lastStep = 0;
+  /** area of the latest request: [lat, lon, radius nm] */
+  private area: { lat: number; lon: number; nm: number } | null = null;
 
-  feed(reports: PlaneReport[], now: number) {
+  feed(reports: PlaneReport[], now: number, area?: { lat: number; lon: number; nm: number }) {
+    if (area) this.area = area;
     for (const r of reports) {
       const prev = this.planes.get(r.hex);
       if (!prev) {
@@ -88,18 +94,31 @@ export class PlaneTracker {
       }
       Object.assign(prev, r, { at: now, seen: now, pulseAt: now });
     }
-    for (const [hex, p] of this.planes) if (now - p.seen > EXPIRE_MS) this.remove(hex, p);
+    for (const [hex, p] of this.planes) {
+      const age = now - p.seen;
+      if (age > CACHE_MS || (age > EXPIRE_MS && this.inArea(p.lat, p.lon))) this.remove(hex, p);
+    }
+  }
+
+  /** Was this position inside the area of the latest request (then a missing report means: gone)? */
+  private inArea(lat: number, lon: number) {
+    const a = this.area;
+    if (!a) return true;
+    const nm = Math.hypot((lon - a.lon) * Math.cos(rad(a.lat)), lat - a.lat) * 60;
+    return nm < a.nm * 0.95;
   }
 
   /** Advance the displayed state to `now` (ms). */
   step(now: number) {
+    // after a longer pause (layer off, tab hidden) the cached aircraft jump to where they must be by now
+    const snap = this.lastStep > 0 && now - this.lastStep > 2000;
     const dt = this.lastStep ? Math.min(0.25, (now - this.lastStep) / 1000) : 0;
     this.lastStep = now;
     const kPos = 1 - Math.exp(-dt / 1.0);
     const kAlt = 1 - Math.exp(-dt / 1.5);
     const kHdg = 1 - Math.exp(-dt / 0.7);
     for (const p of this.planes.values()) {
-      const elapsed = Math.min(30, (now - p.at) / 1000);
+      const elapsed = Math.min(CACHE_MS / 1000, (now - p.at) / 1000);
       // a little slower than reported: running ahead of the next report would pull the plane back
       const dist = p.speedMs * EXTRAPOLATE * elapsed;
       const cosLat = Math.max(0.2, Math.cos(rad(p.lat)));
@@ -113,8 +132,13 @@ export class PlaneTracker {
         dx -= along * Math.sin(rad(p.track));
         dy -= along * Math.cos(rad(p.track));
       }
-      p.dLon += (dx * kPos) / (M_PER_DEG * cosLat);
-      p.dLat += (dy * kPos) / M_PER_DEG;
+      if (snap) {
+        p.dLon = tLon;
+        p.dLat = tLat;
+      } else {
+        p.dLon += (dx * kPos) / (M_PER_DEG * cosLat);
+        p.dLat += (dy * kPos) / M_PER_DEG;
+      }
       p.dAlt += (p.altM - p.dAlt) * kAlt;
       p.dTrack = (p.dTrack + shortestDelta(p.dTrack, p.track) * kHdg + 360) % 360;
     }

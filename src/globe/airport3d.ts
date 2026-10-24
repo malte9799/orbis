@@ -417,13 +417,23 @@ export class Airport3D {
     });
   }
 
+  /** Cached aircraft that the latest request did not return (e.g. outside the view then), at their smoothed positions. */
+  cachedFeatures(skip: Set<string>): Feature<Point>[] {
+    const out: Feature<Point>[] = [];
+    for (const p of this.tracker.planes.values()) {
+      if (skip.has(p.hex)) continue;
+      out.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.dLon, p.dLat] }, properties: { ...p.props, altM: Math.round(p.dAlt), track: Math.round(p.dTrack) } });
+    }
+    return out;
+  }
+
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
     return this.mode() === '3d' && this.tracker.planes.has(hex);
   }
 
   /** Fresh aircraft positions from the data source. */
-  feed(fc: AircraftResult) {
+  feed(fc: AircraftResult, area?: { lat: number; lon: number; nm: number }) {
     if (!this.planesOn) return;
     const reports: PlaneReport[] = [];
     for (const f of fc.features) {
@@ -449,7 +459,7 @@ export class Airport3D {
         props: p,
       });
     }
-    this.tracker.feed(reports, performance.now());
+    this.tracker.feed(reports, performance.now(), area);
     if (this.mode() !== 'off') this.map.triggerRepaint();
   }
 
