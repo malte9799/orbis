@@ -1431,8 +1431,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       // the 3D ship models are picked by hand (their 2D icons are stale between two updates)
       const shipHit = extras?.pickShip(e.point.x, e.point.y, e.lngLat);
+      // the same holds for the 3D train, tram, subway and bus models
+      const vehHit = extras?.pickVehicle(e.point.x, e.point.y, e.lngLat);
       const ships3d = extras?.ships3dActive();
-      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships'));
+      const veh3d = extras?.vehicles3dActive();
+      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships') && !(veh3d && (l === 'trains' || l === 'transit-veh')));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
         [e.point.x - 4, e.point.y - 4],
@@ -1454,7 +1457,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return;
       }
       extras?.clearSelection();
-      const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
         sondePanel?.close();
