@@ -231,8 +231,12 @@ export function createHud(host: HudHost): Hud {
     if (k.menu === 'wx') {
       const f = mainFam(k);
       const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
-      const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
-      // "Blitze Live" sits inside the Gewitter category: the row toggles the live lightning layer,
+      const isOn = (x: WxMenuItem['subs'][number]) =>
+        // "Blitze Live" is on when the live layer is active and no storm main layer is chosen
+        x.main === 'lightning'
+          ? boltOn && !f
+          : !!f && x.main === f.id && x.mainVar === curVar;
+      // "Blitze Live" sits inside the Gewitter category (radio row like Vorhersage/Live),
       // while it is on a second rows block shows its options (Ton, Kreis, Detektoren, Linien).
       const bolt = k.layers.find((x) => x.id === 'lightning');
       const boltOn = !!bolt && !bolt.hidden;
@@ -255,13 +259,12 @@ export function createHud(host: HudHost): Hud {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
-        // the Gewitter category carries the live strikes as an extra toggle row
-        if (it.id === 'storm') rows.push(`<button type="button" class="tgl ${boltOn ? 'on' : ''}" data-act="boltcat" aria-pressed="${boltOn}" title="Blitzeinschläge live – Blitzortung.org (nicht amtlich)">Blitze Live</button>`);
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
       return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
-        const on = it.id === 'storm' ? boltOn || it.subs.some(isOn) : it.subs.some(isOn);
-        return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) + (it.id === 'storm' ? boltRows : '') : ''}`;
+      // the Gewitter entry stays active while the live strikes are switched on
+      const on = it.id === 'storm' ? boltOn || it.subs.some(isOn) : it.subs.some(isOn);
+      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) + (it.id === 'storm' ? boltRows : '') : ''}`;
       }).join('')}</div></div>`;
     }
     const cur = tmodeOf(k);
@@ -924,37 +927,43 @@ export function createHud(host: HudHost): Hud {
     },
     wxcat: (id) => {
       const it = WX_MENU.find((x) => x.id === id);
-      const f = mainFam(view(cur));
-      const curVar = f ? (view(cur).mainVar ?? f.variants[0][0]) : '';
-      // the active entry again switches the weather layer off
-      if (!it || it.subs.some((x) => f && x.main === f.id && x.mainVar === curVar)) ACT.main('', '', new Event('click'));
-      else ACT.wxsub(id, '0', new Event('click'));
+      const k0 = view(cur);
+      const f = mainFam(k0);
+      const curVar = f ? (k0.mainVar ?? f.variants[0][0]) : '';
+      const stormFam = !!it?.subs.some((x) => f && x.main === f.id && x.mainVar === curVar);
+      const boltOn = k0.layers.some((x) => x.id === 'lightning' && !x.hidden);
+      // the active entry again switches it off (also "Blitze Live" inside Gewitter)
+      if (!it || stormFam || (id === 'storm' && boltOn)) {
+        ACT.main('', '', new Event('click'));
+        if (id === 'storm' && boltOn) edit().layers = edit().layers.filter((x) => x.id !== 'lightning');
+        afterEdit();
+      } else ACT.wxsub(id, '0', new Event('click'));
     },
     wxsub: (id, v) => {
-      const sub = WX_MENU.find((x) => x.id === id)?.subs[Number(v)];
-      if (!sub) return;
+      const it = WX_MENU.find((x) => x.id === id);
+      const sub = it?.subs[Number(v)];
+      if (!sub || !it) return;
       const d = edit();
-      if (d.main !== sub.main) {
+      if (sub.main === 'lightning') {
+        // "Blitze Live": the extra layer takes over, no weather main layer on the Karte
+        d.main = null;
+        delete d.mainVar;
         delete d.wind;
         delete d.isobars;
-      }
-      d.main = sub.main;
-      d.mainVar = sub.mainVar;
-      afterEdit();
-    },
-    /** the "Blitze Live" row inside the Gewitter category: switches the live layer on and off */
-    boltcat: () => {
-      const d = edit();
-      const l = d.layers.find((x) => x.id === 'lightning');
-      if (!l) {
-        d.layers.unshift({ id: 'lightning' });
-        fresh.add('lightning');
-        toast('Blitze Live hinzugefügt');
-      } else if (l.hidden) {
-        delete l.hidden;
+        const l = d.layers.find((x) => x.id === 'lightning');
+        if (!l) {
+          d.layers.unshift({ id: 'lightning' });
+          fresh.add('lightning');
+        } else delete l.hidden;
       } else {
+        if (d.main !== sub.main) {
+          delete d.wind;
+          delete d.isobars;
+        }
+        d.main = sub.main;
+        d.mainVar = sub.mainVar;
+        // radio: another Gewitter row replaces "Blitze Live"
         d.layers = d.layers.filter((x) => x.id !== 'lightning');
-        toast('Blitze Live entfernt');
       }
       afterEdit();
     },
