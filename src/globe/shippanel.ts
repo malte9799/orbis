@@ -145,7 +145,7 @@ export class ShipPanel {
     sub.innerHTML = `${escapeHtml(SHIP_LABELS[cat])} · <b>${s.mmsi}</b>`;
     // head icon tinted with the category colour
     this.root.querySelector('.fp-ic')!.innerHTML = glyphSvg('vessel', COLOR, 30);
-    this.loadPhoto(cat, s.mmsi);
+    this.loadPhoto(cat);
     const age = Math.max(0, Math.round((Date.now() - s.at) / 1000));
     const ago = age < 90 ? `vor ${age} s` : age < 5400 ? `vor ${Math.round(age / 60)} min` : `vor ${Math.round(age / 3600)} h`;
     const dest = (s.destination ?? '').trim();
@@ -166,33 +166,34 @@ export class ShipPanel {
   /**
    * Photo of the ship type (Wikimedia Commons, cached per category) above the content –
    * there is no keyless photo API for individual ships such as Planespotters for aircraft.
+   * The card is only written when the category or result changes: rewriting it every second
+   * would restart the <img> load and the photo would never appear.
    */
-  private loadPhoto(cat: ShipCat, mmsi: number) {
-    if (this.photoCat === cat) return this.renderPhoto(mmsi);
+  private loadPhoto(cat: ShipCat) {
+    if (this.photoCat === cat) return;
     this.photoCat = cat;
     this.photo = null;
     this.photoEl.innerHTML = '';
     fetchShipPhoto(cat).then((p) => {
       if (this.photoCat !== cat) return;
       this.photo = p;
-      this.renderPhoto(mmsi);
+      this.renderPhoto();
     });
   }
 
-  private renderPhoto(mmsi: number) {
+  private renderPhoto() {
     if (!this.photo) {
       this.photoEl.innerHTML = '';
       return;
     }
-    const mtUrl = `https://www.marinetraffic.com/de/ais/details/ships/mmsi:${mmsi}`;
     const creditBits = [this.photo.license, 'Wikimedia Commons'].filter(Boolean).join(' · ');
     this.photoEl.innerHTML = `
       <div class="fp-photo-wrap">
         <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer" class="fp-photo-link" title="Foto in voller Auflösung auf Wikimedia Commons ansehen">
-          <img src="${escapeHtml(this.photo.src)}" alt="${escapeHtml(SHIP_LABELS[this.photoCat as ShipCat])} · Symbolbild" loading="lazy" />
+          <img src="${escapeHtml(this.photo.src)}" alt="${escapeHtml(SHIP_LABELS[this.photoCat as ShipCat])} · Symbolbild" />
         </a>
         <div class="fp-photo-credit">
-          <a href="${escapeHtml(mtUrl)}" target="_blank" rel="noopener noreferrer">Symbolbild · Schiffsdaten ↗</a>
+          <span>Symbolbild · ${escapeHtml(SHIP_LABELS[this.photoCat as ShipCat])}</span>
           <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer">Foto: © ${escapeHtml(this.photo.photographer)} (${escapeHtml(creditBits)}) ↗</a>
         </div>
       </div>`;
