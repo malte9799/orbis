@@ -310,6 +310,8 @@ export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'g
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;
+/** camera dots appear from this zoom on; below it the heatmap shows the distribution */
+const CAM_DOT_ZOOM = 6;
 const CAM_ZOOM_RED = '#e53935';
 const ALPR_RED = '#ef4444';
 const CARDINAL = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
@@ -1460,8 +1462,9 @@ export class ExtraLayers {
       id,
       type: 'circle',
       source,
+      minzoom: CAM_DOT_ZOOM,
       layout: hidden,
-      paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
+      paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
@@ -3237,11 +3240,11 @@ export class ExtraLayers {
         id: 'webcams-heat',
         type: 'heatmap',
         source: 'webcams-world',
-        maxzoom: CAM_DETAIL_ZOOM + 0.5,
+        maxzoom: CAM_DOT_ZOOM + 0.5,
         paint: {
           'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 9, 18],
           'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.3, 9, 1],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM - 1, 0.85, CAM_DOT_ZOOM + 0.5, 0],
           'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.4)', 0.5, '#26c6da', 0.8, '#80deea', 1, '#ffffff'],
         },
       },
@@ -3252,8 +3255,8 @@ export class ExtraLayers {
         id: 'webcams-dots',
         type: 'circle',
         source: 'webcams-world',
-        minzoom: 5,
-        paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
+        minzoom: CAM_DOT_ZOOM,
+        paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
       },
       before,
     );
