@@ -60,9 +60,9 @@ export const STANDARD: Karte[] = [
     layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
   },
   {
-    id: 'verkehr', name: 'Verkehr', icon: 'plane2', color: '#ffb547', std: true, menu: 'traffic',
+    id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',
     base: 'dark', labels: true, night: true, main: null,
-    tmode: 'air', layers: [{ id: 'aircraft' }],
+    tmode: 'auto', layers: [{ id: 'roadnet' }],
   },
 ];
 

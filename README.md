@@ -49,7 +49,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | ☁️ **Wetter** | Aktuell, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Luftqualität, Pollen, Sonnenzeiten, amtliche Warnungen (DWD, NWS) |
 | 🗺️ **Live-Karte** | 2D oder Globus, Radar, Satellit, Vorhersage bis +5 Tage mit Zeitleiste, Windströmung, Isobaren |
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
-| ✈️ **Verkehr** | Flugzeuge, Schiffe, Züge, Busse & Bahnen live, Staus, Verkehrsnetze, Raketenstarts |
+| 🚗 **Verkehr** | Straßen, Staus, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
 | 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Pipelines, Rohstoffe, Geologie |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
