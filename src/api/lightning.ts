@@ -12,14 +12,20 @@ export const LIGHTNING_WINDOW_MS = 15 * 60000;
 const MAX_STRIKES = 25000;
 /** How long a strike keeps its detector signals (for the lines), afterwards they are dropped. */
 const SIG_KEEP_MS = 90 * 1000;
-/** A strike "wave" (shrinking highlight circle) lives this long. */
+/** A strike "wave" (highlight circle that shrinks onto the strike) lives this long. */
 export const LIGHTNING_WAVE_MS = 5000;
+/** Thunder circles grow with the speed of sound and fade, they live this long (~31 km). */
+export const LIGHTNING_THUNDER_MS = 90 * 1000;
+/** Speed of sound in km per second (as displayed rings, all directions). */
+export const SOUND_KM_S = 0.343;
 /** Detector lines are drawn for strikes younger than this. */
 export const LIGHTNING_LINES_MS = 30 * 1000;
 /** Maximum detector lines drawn at once. */
 const MAX_LINES = 600;
 /** Maximum detector stations kept for display. */
 const MAX_STATIONS = 20000;
+/** Maximum thunder circles drawn at once (papering over very heavy strike bursts). */
+const MAX_THUNDER = 500;
 
 export interface StrikeSig {
   /** station number */
@@ -306,15 +312,16 @@ export class LightningStream {
     return { type: 'FeatureCollection', features };
   }
 
-  /** The expanding highlight rings ("wave") of very fresh strikes, fading out as they grow. */
+  /** The shrinking highlight circles ("wave") of very fresh strikes: big at birth, then
+   *  they zoom onto the point, fading away. */
   waveFeatures(now = Date.now(), maxAge = LIGHTNING_WAVE_MS): FeatureCollection<Point> {
     const features: Feature<Point>[] = [];
     for (let i = this.strikes.length - 1; i >= 0; i--) {
       const s = this.strikes[i];
       if (s.at < now - maxAge) break;
       const p = Math.max(0, Math.min(1, (now - s.at) / maxAge));
-      // k = growth of the ring (0 → 1), o = fade (1 → 0)
-      const k = Math.round(p * 100) / 100;
+      // k = size of the ring (1 → 0, shrinks onto the point), o = fade (1 → 0)
+      const k = Math.max(0.05, Math.round((1 - p) * 100) / 100);
       features.push({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
@@ -327,6 +334,27 @@ export class LightningStream {
   /** Young strikes exist? (decides whether the fast animation timer keeps running) */
   hasYoung(now = Date.now(), maxAge = LIGHTNING_LINES_MS) {
     return this.strikes.length > 0 && this.strikes[this.strikes.length - 1].at > now - maxAge;
+  }
+
+  /** Growing thunder circles: start at the strike, expand with the speed of sound,
+   *  older rings get weaker. maxAge 90 s ≈ 31 km radius. */
+  thunderFeatures(now = Date.now(), maxAge = LIGHTNING_THUNDER_MS): FeatureCollection<Point> {
+    const features: Feature<Point>[] = [];
+    for (let i = this.strikes.length - 1; i >= 0 && features.length < MAX_THUNDER; i--) {
+      const s = this.strikes[i];
+      if (s.at < now - maxAge) break;
+      const p = Math.max(0, Math.min(1, (now - s.at) / maxAge));
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
+        properties: {
+          lat: s.lat,
+          km: Math.round(p * maxAge * SOUND_KM_S * 100) / 100,
+          o: Math.round((1 - p) * 100) / 100,
+        },
+      });
+    }
+    return { type: 'FeatureCollection', features };
   }
 
   get count() {

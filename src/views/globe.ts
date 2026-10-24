@@ -401,6 +401,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         wave: opts.includes('wave'),
         detectors: opts.includes('detectors'),
         lines: opts.includes('lines'),
+        thunder: opts.includes('thunder'),
         volume: Number.isFinite(vol) ? Math.max(0, Math.min(100, vol)) : undefined,
       });
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);

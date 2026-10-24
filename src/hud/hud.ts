@@ -99,10 +99,10 @@ const FILTERS: Record<string, { multi?: boolean; options: [string, string][]; no
     options: [['plane', 'Flugzeuge'], ['heli', 'Hubschrauber'], ['glider', 'Segelflug'], ['drone', 'Drohnen'], ['balloon', 'Ballone']],
     none: '',
   },
-  // Unteroptionen von "Blitze Live": Ton bei jedem Einschlag, schrumpfender Kreis, Detektoren und Linien
+  // Unteroptionen von "Blitze Live": Ton bei jedem Einschlag, schrumpfender Kreis, Detektoren, Linien und Donner
   lightning: {
     multi: true,
-    options: [['sound', 'Ton'], ['wave', 'Einschlagskreis'], ['detectors', 'Detektoren'], ['lines', 'Detektor-Linien']],
+    options: [['sound', 'Ton'], ['wave', 'Einschlagskreis'], ['detectors', 'Detektoren'], ['lines', 'Detektor-Linien'], ['thunder', 'Donner']],
     none: '',
   },
 };
@@ -265,7 +265,8 @@ export function createHud(host: HudHost): Hud {
         (has('sound') ? volRow : chip(has('sound'), 'sound', 'Ton')) +
         chip(has('wave'), 'wave', 'Kreis') +
         chip(has('detectors'), 'detectors', 'Detektoren') +
-        chip(has('lines'), 'lines', 'Linien');
+        chip(has('lines'), 'lines', 'Linien') +
+        chip(has('thunder'), 'thunder', 'Donner');
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
         if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
