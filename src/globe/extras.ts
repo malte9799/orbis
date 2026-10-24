@@ -236,7 +236,7 @@ const LAYERS: Record<ExtraId, string[]> = {
   gas: ['power', 'osm-power'],
   oil: ['power', 'osm-power'],
   biomass: ['power', 'osm-power'],
-  webcams: ['webcams', 'webcams-osm'],
+  webcams: ['webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm'],
   aurora: ['aurora'],
   gvp: ['gvp'],
   fireareas: ['fireareas-fill', 'fireareas-line'],
@@ -502,6 +502,8 @@ export class ExtraLayers {
   private osmCamCount = 0;
   private windyKey = '';
   private alprKey = '';
+  private webcamHeatAdded = false;
+  private webcamHeatLoaded = false;
   private alprTilesAdded = false;
   private alprTilesFailed = false;
   private alprLive: Feature[] = [];
@@ -559,6 +561,7 @@ export class ExtraLayers {
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
       webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>, <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://data.calgary.ca">City of Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (Open Government Licence – BC)',
+      'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")',
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
       blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung',
@@ -587,8 +590,7 @@ export class ExtraLayers {
       tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
       plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-osm', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {
-      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -2107,6 +2109,8 @@ export class ExtraLayers {
             this.mergeWebcams();
             return {};
           });
+          this.ensureWebcamHeat();
+          void this.loadWorldHeat();
           this.loadWebcamsNow();
           break;
         case 'alpr':
@@ -3176,6 +3180,61 @@ export class ExtraLayers {
       }
     }
     this.updateWebcamNote();
+  }
+
+  /**
+   * Closeable heatmap over all known camera positions worldwide (`cams/world.json` –
+   * aggregate of all snapshot feeds plus Digitraffic, gathered daily by the data action).
+   * Fills the gap of the regional detail feeds: at every zoom level the complete camera
+   * distribution is visible. Built like the ALPR heatmap – 'heatmap' + 'circle' dots,
+   * the heat fades out below the detail zoom, the dots stay until the detail feed (images!)
+   * takes over. No shader work: MapLibre's built-in heatmap.
+   */
+  private ensureWebcamHeat() {
+    if (this.webcamHeatAdded) return;
+    this.webcamHeatAdded = true;
+    const m = this.map;
+    const before = m.getLayer('webcams') ? 'webcams' : undefined;
+    m.addLayer(
+      {
+        id: 'webcams-heat',
+        type: 'heatmap',
+        source: 'webcams-world',
+        maxzoom: CAM_DETAIL_ZOOM + 0.5,
+        paint: {
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 9, 18],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.3, 9, 1],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CAM_DETAIL_ZOOM + 0.5, 0],
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.4)', 0.5, '#26c6da', 0.8, '#80deea', 1, '#ffffff'],
+        },
+      },
+      before,
+    );
+    m.addLayer(
+      {
+        id: 'webcams-dots',
+        type: 'circle',
+        source: 'webcams-world',
+        minzoom: 5,
+        paint: { 'circle-color': '#00bfa5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 1.5, CAM_DETAIL_ZOOM, 3, 14, 5], 'circle-opacity': 0.75 },
+      },
+      before,
+    );
+  }
+
+  private async loadWorldHeat() {
+    if (this.webcamHeatLoaded) return;
+    this.webcamHeatLoaded = true;
+    try {
+      const pts = await snapshotJson<[number, number][]>('cams/world.json');
+      this.setData('webcams-world', {
+        type: 'FeatureCollection',
+        features: pts.map(([lon, lat]) => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lon, lat] }, properties: {} })),
+      });
+    } catch (e) {
+      this.webcamHeatLoaded = false;
+      console.warn('Webcam-Heatmap', e);
+    }
   }
 
   private ensureAlprTiles() {
