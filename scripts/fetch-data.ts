@@ -285,8 +285,10 @@ await task('cams-world', DAY, async () => {
   for (const file of existsSync(dir) ? readdirSync(dir) : []) {
     if (!/\.json$/.test(file) || file === 'world.json') continue;
     try {
-      const fc = JSON.parse(readFileSync(join(dir, file), 'utf8')) as { features?: { geometry?: { type: string; coordinates?: number[] } }[] };
-      for (const f of fc.features ?? []) if (f.geometry?.type === 'Point') push(f.geometry.coordinates![0], f.geometry.coordinates![1]);
+      // the snapshot files contain a plain Feature[] (the camFeeds interface), not a FeatureCollection
+      const raw = JSON.parse(readFileSync(join(dir, file), 'utf8')) as { features?: { geometry?: { type: string; coordinates?: number[] } }[] } | { geometry?: { type: string; coordinates?: number[] } }[];
+      const list = Array.isArray(raw) ? raw : (raw.features ?? []);
+      for (const f of list) if (f.geometry?.type === 'Point') push(f.geometry.coordinates![0], f.geometry.coordinates![1]);
     } catch (e) {
       console.warn(`  ${file}: ${e instanceof Error ? e.message : e}`);
     }
