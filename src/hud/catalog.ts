@@ -101,8 +101,9 @@ export const TRAFFIC_MENU: TrafficCat[] = [
     id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
     rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
   },
-  // aircraft always on; "Flughäfen" = the airport symbols plus the airports in 3D when zoomed in close
-  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
+  // aircraft always on, the weather balloons fly along ("Flughäfen" = the airport symbols plus the
+  // airports in 3D when zoomed in close); the eye switch of each layer turns them off separately
+  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft', 'sondes'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
   { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
 ];
 /** every layer the Verkehr menu manages */

@@ -407,6 +407,9 @@ interface SondeGeos {
   payload: THREE.BufferGeometry;
 }
 
+/** the sonde model is drawn much larger than its real 3 m (next to 40–60 m aircraft it would be invisible) */
+const SONDE_K = 3.2;
+
 function sondeParts(): SondeGeos {
   const merge = (list: THREE.BufferGeometry[]) =>
     mergeGeometries(
@@ -440,6 +443,9 @@ function sondeParts(): SondeGeos {
     new THREE.BoxGeometry(0.4, 0.34, 0.16),
     new THREE.CylinderGeometry(0.008, 0.008, 0.3, 5).translate(0, -0.22, 0),
   ]);
+  // the lathe axis (y = forward in model space) becomes up: balloon and payload hang above the anchor
+  balloon.rotateX(Math.PI / 2).scale(SONDE_K, SONDE_K, SONDE_K);
+  payload.rotateX(Math.PI / 2).scale(SONDE_K, SONDE_K, SONDE_K);
   return { balloon, payload };
 }
 
@@ -986,7 +992,8 @@ export class PlanesLayer implements CustomLayerInterface {
         const s = mc.meterInMercatorCoordinateUnits() * boost;
         // y is flipped between mercator space (south = +y) and the model (north = +y)
         m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
-        rot.makeRotationZ(-rad(p.dTrack));
+        if (p.model === 'sonde') rot.identity(); // the balloon hangs upright, no nose direction
+        else rot.makeRotationZ(-rad(p.dTrack));
         m.multiply(rot);
         p.obj.matrix.copy(m);
         p.obj.visible = true;
