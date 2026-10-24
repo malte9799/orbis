@@ -7,6 +7,7 @@ export type ExtraGlyph =
   | 'city'
   | 'air'
   | 'gauge'
+  | 'hydro'
   | 'warn'
   | 'plane'
   | 'heli'
@@ -91,6 +92,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   wind: [{ mode: 'stroke', width: 2, d: 'M12 11v11M9 22h6M12 11L12 2.5M12 11l7.5 4.3M12 11l-7.5 4.3' }],
   solar: [{ mode: 'stroke', width: 1.8, d: 'M3 18l3-10h12l3 10zM4.5 13h15M9.3 8l-1.3 10M14.7 8l1.3 10M12 18v4' }],
   plant: [{ mode: 'fill', d: 'M2 21V11l5 3v-3l5 3v-3l5 3V4h4v17z' }],
+  hydro: [{ mode: 'fill', d: 'M12 2.5s5.5 6.6 5.5 10.6a5.5 5.5 0 0 1-11 0C6.5 9.1 12 2.5 12 2.5zM9.5 14.7a2.3 2.3 0 0 0 2.3 2.3v-1.2a1.1 1.1 0 0 1-1.1-1.1z' }],
   webcam: [
     { mode: 'stroke', width: 2, d: 'M17 9.5a5 5 0 1 1-10 0a5 5 0 1 1 10 0M8.5 15.5L7 21h10l-1.5-5.5' },
     { mode: 'fill', d: 'M13.8 9.5a1.8 1.8 0 1 1-3.6 0a1.8 1.8 0 1 1 3.6 0' },

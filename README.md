@@ -49,9 +49,9 @@ in einer App und nahtlos per Zoom verbunden.**
 | ☁️ **Wetter** | Aktuell, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Luftqualität, Pollen, Sonnenzeiten, amtliche Warnungen (DWD, NWS) |
 | 🗺️ **Live-Karte** | 2D oder Globus, Radar, Satellit, Vorhersage bis +5 Tage mit Zeitleiste, Windströmung, Isobaren |
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
-| ✈️ **Verkehr** | Flugzeuge, Schiffe, Züge, Busse & Bahnen live, Staus, Verkehrsnetze, Raketenstarts |
+| 🚗 **Verkehr** | Straßen, Staus, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Pipelines, Rohstoffe, Geologie |
+| 🏗️ **Infrastruktur** | Dritte Standardkarte: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffvorkommen, Seekabel & Pipelines, Radio, Kameras |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |
 
@@ -171,12 +171,12 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | ⚡ **Blitze & Strahlung** | Blitze live (15 min), Radioaktivität (ODL, EURDEP, Safecast), Polarlicht/Kp, Sonnenwind | [Blitzortung](https://www.blitzortung.org), [BfS](https://odlinfo.bfs.de), [EURDEP](https://remap.jrc.ec.europa.eu), [Safecast](https://safecast.org), [NOAA SWPC](https://www.swpc.noaa.gov) |
 | 🌱 **Erde & Umwelt** | Geologie, Plattengrenzen, Rohstoffe, Landbedeckung, Vegetation, Schnee, Aerosole, Nachtlichter | [Macrostrat](https://macrostrat.org), [USGS MRDS](https://mrdata.usgs.gov/mrds/), [BGR](https://services.bgr.de), [Wikidata](https://www.wikidata.org), [ESA WorldCover](https://esa-worldcover.org), NASA GIBS |
 | 🌊 **Meer & Gewässer** | Seegang, Strömung, Flussabfluss, Pegel, Bojen, Gezeiten, Meerestiefe, Algenblüte, Meerestemperatur, Meereis | [Open-Meteo Marine/Flood](https://open-meteo.com), [PEGELONLINE](https://www.pegelonline.wsv.de), [NOAA NDBC](https://www.ndbc.noaa.gov), [CO-OPS](https://tidesandcurrents.noaa.gov), [GEBCO](https://www.gebco.net), [EMODnet](https://emodnet.ec.europa.eu) |
-| ✈️ **Luftraum** | Flugzeuge, Hubschrauber, Ballone, Drohnen live; Flughäfen; Wetterballons; Raketenstarts; Satelliten | [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [airplanes.live](https://airplanes.live), [OpenSky](https://opensky-network.org), [SondeHub](https://sondehub.org), [Launch Library 2](https://thespacedevs.com), [CelesTrak](https://celestrak.org) |
+| ✈️ **Luftraum** | Flugzeuge, Hubschrauber, Ballone, Drohnen live; Flughäfen; Wetterballons in 3D mit Detailpanel; Raketenstarts; Satelliten | [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [airplanes.live](https://airplanes.live), [OpenSky](https://opensky-network.org), [SondeHub](https://sondehub.org), [Launch Library 2](https://thespacedevs.com), [CelesTrak](https://celestrak.org) |
 | 🚆 **Verkehr** | Schiffe (AIS), Züge, Busse, Trams, U-Bahnen live; Autobahn-Staus; Schiffsrouten | [Digitraffic](https://www.digitraffic.fi), [Transitous](https://transitous.org), [Amtraker](https://amtraker.com), [Entur](https://developer.entur.org), [MBTA](https://api-v3.mbta.com), [SEPTA](https://www3.septa.org), [Autobahn GmbH](https://verkehr.autobahn.de) |
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
 | 📷 **Kameras** | Webcams weltweit (u. a. London, New York, Kalifornien, Hongkong, Singapur), ALPR-Kameras | [Digitraffic](https://weathercam.digitraffic.fi), [TfL](https://api.tfl.gov.uk), [Caltrans](https://cwwp2.dot.ca.gov), [ALERTCalifornia](https://cameras.alertcalifornia.org), [DeFlock](https://deflock.org) |
 | 📻 **Radio** | Über 50.000 Sender im Player | [Radio Browser](https://www.radio-browser.info) |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
+| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
 
 ### 🔑 Optional mit kostenlosem Schlüssel
 

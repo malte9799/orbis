@@ -1,10 +1,10 @@
 import { store } from '../store';
 import { BASES, type BaseId } from '../globe/style';
-import { catalogOf, TRAFFIC_LAYER_IDS } from './catalog';
+import { catalogOf, MENU_LAYERS } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
-// ordered list of overlay layers. Orbis ships four standard Karten; users can change any of them
+// ordered list of overlay layers. Orbis ships three standard Karten; users can change any of them
 // (the change lives in a per-Karte draft) and save the result as their own Karte.
 
 export interface KLayer {
@@ -40,10 +40,16 @@ export interface Karte {
   wind?: boolean;
   isobars?: boolean;
   /**
-   * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
-   * switches the traffic modes. What the menu picks is remembered but never counts as a change.
+   * 3D-Gebäude: explicitly true/false; unset = the default of the base map (on for Dunkel and
+   * Hell, off everywhere else – see defaultBuildings3d).
    */
-  menu?: 'wx' | 'traffic';
+  buildings3d?: boolean;
+  /**
+   * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
+   * and 'infra' switch the categories of their menu. What the menu picks is remembered but never
+   * counts as a change.
+   */
+  menu?: 'wx' | 'traffic' | 'infra';
   /** traffic menu: id of the chosen category ('' = none) */
   tmode?: string;
   layers: KLayer[];
@@ -60,9 +66,14 @@ export const STANDARD: Karte[] = [
     layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
   },
   {
-    id: 'verkehr', name: 'Verkehr', icon: 'plane2', color: '#ffb547', std: true, menu: 'traffic',
+    id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',
     base: 'dark', labels: true, night: true, main: null,
-    tmode: 'air', layers: [{ id: 'aircraft' }],
+    tmode: 'auto', layers: [{ id: 'roadnet' }],
+  },
+  {
+    id: 'infra', name: 'Infrastruktur', icon: 'power', color: '#00bfa5', std: true, menu: 'infra',
+    base: 'dark', labels: true, night: true, main: null,
+    tmode: 'energie', layers: [],
   },
 ];
 
@@ -70,6 +81,9 @@ export const STANDARD: Karte[] = [
 export const DEFAULT_PINNED = STANDARD.map((k) => k.id);
 
 export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
+
+/** whether 3D-Gebäude is on without an explicit choice: standard on Dunkel and Hell */
+export const defaultBuildings3d = (base: BaseId): boolean => base === 'dark' || base === 'light';
 
 export function blankKarte(): Karte {
   return {
@@ -91,13 +105,13 @@ const wxState = (k: Karte) => [k.main, k.mainVar ?? '', !!k.wind, !!k.isobars];
 export function signature(k: Karte): string {
   return JSON.stringify([
     k.name, k.icon, k.color, k.base, ...(k.menu === 'wx' ? [] : wxState(k)),
-    k.layers.filter((l) => k.menu !== 'traffic' || !TRAFFIC_LAYER_IDS.has(l.id)).map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
+    k.layers.filter((l) => !k.menu || !MENU_LAYERS[k.menu].has(l.id)).map((l) => [l.id, !!l.hidden, l.opacity ?? 100, l.filter ?? '']), !!k.view,
   ]);
 }
 
 /** signature plus everything remembered silently: two equal ones need no draft */
 export const fullSignature = (k: Karte): string =>
-  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.layers.map((l) => [l.id, !!l.hidden])]);
+  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.buildings3d === undefined, k.layers.map((l) => [l.id, !!l.hidden])]);
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -156,6 +170,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
   if (r.std === true) k.std = true;
   if (r.wind === false) k.wind = false;
   if (r.isobars === true) k.isobars = true;
+  if (typeof r.buildings3d === 'boolean') k.buildings3d = r.buildings3d;
   const v = r.view as Partial<KView> | undefined;
   if (v && Array.isArray(v.center) && Number.isFinite(v.center[0]) && Number.isFinite(v.center[1]) && Number.isFinite(v.zoom)) {
     k.view = { center: [Number(v.center[0]), Number(v.center[1])], zoom: Number(v.zoom) };

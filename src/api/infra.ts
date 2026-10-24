@@ -83,23 +83,23 @@ export async function loadIxps(): Promise<FeatureCollection<Point>> {
 // ---------------------------------------------------------------------------
 // Power plants – WRI Global Power Plant Database (CC BY 4.0, ~35 000 plants worldwide)
 
-export type PowerCat = 'wind' | 'solar' | 'other';
+export type PowerCat = 'wind' | 'solar' | 'hydro' | 'nuclear' | 'coal' | 'gas' | 'oil' | 'biomass' | 'other';
 
 export const FUELS: Record<string, { label: string; color: string; cat: PowerCat }> = {
   Wind: { label: 'Windkraft', color: '#4fc3f7', cat: 'wind' },
   Solar: { label: 'Solar', color: '#ffd54f', cat: 'solar' },
-  Hydro: { label: 'Wasserkraft', color: '#1e88e5', cat: 'other' },
-  Nuclear: { label: 'Kernkraft', color: '#ba68c8', cat: 'other' },
-  Coal: { label: 'Kohle', color: '#8d6e63', cat: 'other' },
-  Gas: { label: 'Gas', color: '#ff7043', cat: 'other' },
-  Oil: { label: 'Öl', color: '#a1887f', cat: 'other' },
-  Petcoke: { label: 'Petrolkoks', color: '#a1887f', cat: 'other' },
-  Biomass: { label: 'Biomasse', color: '#66bb6a', cat: 'other' },
-  Waste: { label: 'Müll', color: '#9e9d24', cat: 'other' },
+  Hydro: { label: 'Wasserkraft', color: '#1e88e5', cat: 'hydro' },
+  Nuclear: { label: 'Kernkraft', color: '#ba68c8', cat: 'nuclear' },
+  Coal: { label: 'Kohle', color: '#8d6e63', cat: 'coal' },
+  Petcoke: { label: 'Petrolkoks', color: '#a1887f', cat: 'coal' },
+  Gas: { label: 'Gas', color: '#ff7043', cat: 'gas' },
+  Oil: { label: 'Öl', color: '#a1887f', cat: 'oil' },
+  Biomass: { label: 'Biomasse', color: '#66bb6a', cat: 'biomass' },
+  Waste: { label: 'Müll', color: '#9e9d24', cat: 'biomass' },
   Geothermal: { label: 'Geothermie', color: '#ef5350', cat: 'other' },
   Storage: { label: 'Speicher', color: '#26a69a', cat: 'other' },
   Cogeneration: { label: 'Kraft-Wärme-Kopplung', color: '#ff8a65', cat: 'other' },
-  'Wave and Tidal': { label: 'Gezeiten', color: '#4dd0e1', cat: 'other' },
+  'Wave and Tidal': { label: 'Gezeiten', color: '#4dd0e1', cat: 'hydro' },
   Other: { label: 'Sonstige', color: '#9aa3b5', cat: 'other' },
 };
 

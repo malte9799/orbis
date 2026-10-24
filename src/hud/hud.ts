@@ -11,19 +11,21 @@ import {
   CATALOG,
   CATS,
   catalogOf,
+  INFRA_LAYER_IDS,
+  INFRA_MENU,
+  infraCatOf,
   ISOBAR_OPTION_MAINS,
   MAIN_BASES,
   TRAFFIC_LAYER_IDS,
   TRAFFIC_MENU,
   trafficCatOf,
-  WIND_OPTION_MAINS,
   WX_MENU,
   type CatalogEntry,
   type WxMenuItem,
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -219,7 +221,8 @@ export function createHud(host: HudHost): Hud {
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
-   * and options); the traffic Karte switches car, train, plane and ship.
+   * and options); the traffic and infra Karten switch their categories (Auto, Energie …) whose
+   * rows toggle layers.
    */
   function modesInner(k: Karte): string {
     if (k.menu === 'wx') {
@@ -228,7 +231,6 @@ export function createHud(host: HudHost): Hud {
       const isOn = (x: WxMenuItem['subs'][number]) => !!f && x.main === f.id && x.mainVar === curVar;
       const subs = (it: WxMenuItem): string => {
         const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
-        if (f && WIND_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind" aria-pressed="${k.wind !== false}">Windpartikel</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
@@ -237,21 +239,27 @@ export function createHud(host: HudHost): Hud {
         return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
     const toggle = (label: string, layers: string[]) => {
       const on = layers.every(have);
       const n = on ? host.info(layers[0]).count : null;
-      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em></button>`;
+      const c = catalogOf(layers[0]);
+      // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
-    return `<div class="wxm hud-glass" role="group" aria-label="Verkehrsmittel"><div class="mrow cats">${TRAFFIC_MENU.map((c) => {
+    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:#ffb547"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
-  /** the chosen traffic category (Karten saved before the menu: the one their layers belong to) */
+  /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
   function tmodeOf(k: Karte): string {
-    return k.tmode ?? trafficCatOf(k.layers.find((l) => TRAFFIC_LAYER_IDS.has(l.id))?.id ?? '')?.id ?? '';
+    const ids = k.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
+    const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
+    return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   function renderModes() {
     const r = reg('modes');
@@ -328,7 +336,6 @@ export function createHud(host: HudHost): Hud {
     const lg = host.legend();
     const variantId = k.mainVar ?? f.variants[0][0];
     const opts: string[] = [];
-    if (WIND_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.wind !== false ? 'on' : ''}" data-act="wopt" data-v="wind">Windpartikel</button>`);
     if (ISOBAR_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars">Isobaren</button>`);
     return `<div class="mainwx" style="--lc:${f.color}">
       <div class="t"><span class="glyph" style="background:${f.color}">${ico(f.icon, 2)}</span><div><b>${esc(f.label)}</b><small>${esc(f.hint)}</small></div>
@@ -356,6 +363,8 @@ export function createHud(host: HudHost): Hud {
         ${showMore ? `<div class="fl basemore">${others.map((b) => `<button type="button" class="chip ${k.base === b ? 'on' : ''}" data-act="base" data-id="${b}">${BASE_LABEL[b]}</button>`).join('')}</div>` : `<button type="button" class="linkbtn" data-act="morebases">Weitere Grundkarten</button>`}
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>nur bei Wind & Böen sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
         <div class="slot"><span>Gespeichert mit</span></div>
         <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
         <div class="opt">${ico('clock')}<div>Zeit<small>${timeTxt}</small></div></div>
@@ -917,10 +926,12 @@ export function createHud(host: HudHost): Hud {
     },
     tcat: (id) => {
       const d = edit();
+      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
       const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !TRAFFIC_LAYER_IDS.has(l.id));
+      d.layers = d.layers.filter((l) => !ids.has(l.id));
       d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(TRAFFIC_MENU.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
+      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
       afterEdit();
     },
     ttog: (id) => {
@@ -952,7 +963,13 @@ export function createHud(host: HudHost): Hud {
     tog: (_, v) => {
       const d = edit();
       if (v === 'labels') d.labels = !d.labels;
-      else d.night = !d.night;
+      else if (v === 'night') d.night = !d.night;
+      else if (v === 'buildings3d') {
+        // write the choice explicitly, so the base map no longer decides the default
+        d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));
+      } else if (v === 'wind') {
+        d.wind = d.wind === false ? true : false;
+      }
       afterEdit();
     },
     viewtog: () => {
