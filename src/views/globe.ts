@@ -34,9 +34,12 @@ import {
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
+import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
 import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
+import { LaunchPanel } from '../launch/panel';
+import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
@@ -216,6 +219,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let flightPanel: FlightPanel | null = null;
   let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
+  let launchPanel: LaunchPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
 
@@ -1159,6 +1163,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     </div>`;
   }
 
+  /** Opens the launch tracker panel for the next launch of a pad (popup button). */
+  async function openLaunchTracker(l: Launch, lng: number, lat: number) {
+    popup?.remove();
+    flightPanel?.close();
+    shipPanel?.close();
+    let d: LaunchDetail;
+    try {
+      const list = await getLaunchDetails();
+      d = list.find((x) => x.id && x.id === l.id) ?? detailFromLaunch(l, lng, lat);
+    } catch {
+      d = detailFromLaunch(l, lng, lat);
+      toast('Startdetails gerade nicht erreichbar – Tracking mit Basisdaten.', 'error');
+    }
+    launchPanel?.open(d);
+  }
+
   function openPopup(lngLat: { lng: number; lat: number }, html: string) {
     popup?.remove();
     const node = document.createElement('div');
@@ -1334,7 +1354,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error') });
+      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
@@ -1344,9 +1364,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
       shipPanel.onOpen = () => {
         flightPanel?.close();
         sondePanel?.close();
+        launchPanel?.close();
       };
       sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
@@ -1468,6 +1490,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
+        launchPanel?.close();
         if (picked.startsWith('sonde:')) {
           flightPanel?.close();
           sondePanel?.open(picked.slice('sonde:'.length));
@@ -1481,13 +1504,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         shipPanel?.close();
+        launchPanel?.close();
         sondePanel?.close();
         flightPanel?.open(extraResult.hex);
       } else if (extraResult?.type === 'sonde') {
         shipPanel?.close();
         flightPanel?.close();
+        launchPanel?.close();
         sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
+        flightPanel?.close();
+        launchPanel?.close();
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {
         weatherPopup(extraResult.lng, extraResult.lat);

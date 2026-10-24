@@ -16,6 +16,8 @@ const point = (lon: number, lat: number, properties: Record<string, unknown>): F
 // Cached for an hour in localStorage; one map point per launch pad.
 
 export interface Launch {
+  /** Launch Library 2 id – lets the launch tracker look up the full record */
+  id: string;
   name: string;
   net: string;
   status: string;
@@ -68,6 +70,7 @@ export async function loadLaunches(): Promise<FeatureCollection<Point>> {
     const entry = byPad.get(key) ?? { lon, lat, pad: l.pad?.name ?? '', place: l.pad?.location?.name ?? '', launches: [] };
     const video = [...(l.vid_urls ?? [])].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))[0]?.url;
     entry.launches.push({
+      id: l.id ?? '',
       name: l.name,
       net: l.net,
       status: STATUS_DE[l.status?.abbrev ?? ''] ?? l.status?.name ?? '',
