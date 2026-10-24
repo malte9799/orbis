@@ -35,6 +35,8 @@ export interface PlaneState extends PlaneReport {
   /** when the last report arrived (ms) */
   at: number;
   seen: number;
+  /** one entry per report: [altitude m, speed km/h, climb rate m/s, track °] (for the flight panel graphs) */
+  hist: [number, number, number, number][];
   /** [lon, lat, altitude m, time (performance.now ms)] of the positions reported so far */
   trail: [number, number, number, number][];
   obj?: THREE.Object3D;
@@ -55,6 +57,8 @@ const EXPIRE_MS = 60000;
 const CACHE_MS = 300000;
 const PULSE_MS = 1300;
 const TRAIL_MAX = 150;
+const HIST_MAX = 120;
+const histEntry = (r: PlaneReport): [number, number, number, number] => [r.altM, r.speedMs * 3.6, r.vsMs, r.track];
 /** a trail fades out over this time (the one of the selected aircraft stays complete) */
 const TRAIL_FADE_MS = 60000;
 /** the wall below a trail only exists at low altitude (take-off, landing, helicopters): full below, gone above */
@@ -87,7 +91,7 @@ export class PlaneTracker {
     for (const r of reports) {
       const prev = this.planes.get(r.hex);
       if (!prev) {
-        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, trail: [[r.lon, r.lat, trailAlt(r), now]] });
+        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, hist: [histEntry(r)], trail: [[r.lon, r.lat, trailAlt(r), now]] });
         continue;
       }
       // a plane that did not move since the last report keeps its old fix time → no new trail point
@@ -97,6 +101,8 @@ export class PlaneTracker {
         if (prev.trail.length > TRAIL_MAX) prev.trail.shift();
       }
       Object.assign(prev, r, { at: now, seen: now, pulseAt: now });
+      prev.hist.push(histEntry(r));
+      if (prev.hist.length > HIST_MAX) prev.hist.shift();
     }
     for (const [hex, p] of this.planes) {
       const age = now - p.seen;

@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
+import { proxyBase } from './proxy';
 import { fetchJson } from '../util';
 
 // Live transport and spaceflight: rocket launches, airports, ships (AIS) and trains.
@@ -165,6 +166,9 @@ export const SHIP_LABELS: Record<ShipCat, string> = {
   other: 'Schiff',
 };
 
+/** Rough half length (m) of a ship of this category; sizes the click area of the 3D models. */
+export const SHIP_HALF_LEN: Record<ShipCat, number> = { cargo: 90, tanker: 110, passenger: 75, fishing: 15, tug: 14, pleasure: 6, hsc: 20, special: 30, other: 30 };
+
 export function shipCat(type: number | undefined): ShipCat {
   if (type == null) return 'other';
   if (type >= 70 && type <= 79) return 'cargo';
@@ -205,6 +209,7 @@ export function shipFeatures(ships: Iterable<Ship>): FeatureCollection<Point> {
         cat,
         color: SHIP_COLORS[cat],
         moving,
+        half: SHIP_HALF_LEN[cat],
         rot: s.heading >= 0 && s.heading < 360 ? s.heading : s.cog,
         sog: s.sog,
         dest: s.destination ?? '',
@@ -263,6 +268,18 @@ export async function loadDigitrafficShips(): Promise<Ship[]> {
 
 export const hasAisKey = () => !!store.getKeys().aisstream;
 
+/** Worldwide AIS works with the user's own key or through the shared proxy (/ais relay). */
+export const hasAisLive = () => hasAisKey() || !!proxyBase();
+
+function aisSocketUrl(): string {
+  if (hasAisKey()) return 'wss://stream.aisstream.io/v0/stream';
+  const u = new URL(proxyBase());
+  u.protocol = 'wss:';
+  u.pathname = `${u.pathname.replace(/\/$/, '')}/ais`;
+  u.search = '';
+  return u.toString();
+}
+
 /** Live AIS stream for the visible map area (aisstream.io, free key). */
 export class AisStream {
   private ws: WebSocket | null = null;
@@ -291,9 +308,8 @@ export class AisStream {
   }
 
   private connect() {
-    const key = store.getKeys().aisstream;
-    if (!key) return;
-    const ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
+    if (!hasAisLive()) return;
+    const ws = new WebSocket(aisSocketUrl());
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
@@ -305,7 +321,7 @@ export class AisStream {
       this.handle(text);
     };
     ws.onerror = () => {
-      this.error = 'aisstream.io nicht erreichbar – Schlüssel prüfen';
+      this.error = hasAisKey() ? 'aisstream.io nicht erreichbar – Schlüssel prüfen' : 'AIS-Relay des Daten-Proxys nicht erreichbar (AISSTREAM_KEY im Worker gesetzt?)';
       this.onUpdate();
     };
     ws.onclose = () => {
@@ -318,9 +334,10 @@ export class AisStream {
   }
 
   private subscribe() {
+    if (!this.ws || !this.box) return;
+    // via the proxy the worker adds the key and the message filter
     const key = store.getKeys().aisstream;
-    if (!this.ws || !key || !this.box) return;
-    this.ws.send(JSON.stringify({ APIKey: key, BoundingBoxes: [this.box], FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ShipStaticData'] }));
+    this.ws.send(JSON.stringify(key ? { APIKey: key, BoundingBoxes: [this.box], FilterMessageTypes: ['PositionReport', 'StandardClassBPositionReport', 'ShipStaticData'] } : { BoundingBoxes: [this.box] }));
   }
 
   private handle(text: string) {

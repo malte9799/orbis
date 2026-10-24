@@ -2,6 +2,7 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { glyphSvg } from './icons';
+import { category, clock, distKm, duration, graph, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
 // Right-hand panel with the live data of the selected aircraft (everything ADS-B delivers) and
@@ -25,12 +26,6 @@ function shift(lon: number, lat: number, bearing: number, metres: number): [numb
   return [lon + (metres * Math.sin(rad(bearing))) / (M_PER_DEG * Math.max(0.05, Math.cos(rad(lat)))), lat + (metres * Math.cos(rad(bearing))) / M_PER_DEG];
 }
 
-const SECTIONS: { key: string; title: string }[] = [
-  { key: 'flight', title: 'Flugdaten' },
-  { key: 'position', title: 'Position' },
-  { key: 'aircraft', title: 'Flugzeug' },
-];
-
 export class FlightPanel {
   private root = document.createElement('aside');
   private body: HTMLElement;
@@ -38,7 +33,9 @@ export class FlightPanel {
   private follow: Follow = 'off';
   private refresh: number | undefined;
   private followTimer: number | undefined;
-  private closed = new Set<string>();
+  private open_ = new Set<string>();
+  /** tile whose graph is shown (alt, speed, track, vs) */
+  private metric: string | null = null;
   private dragHooked = false;
 
   constructor(
@@ -51,10 +48,10 @@ export class FlightPanel {
       <div class="fp-head"><i class="fp-ic">${glyphSvg('plane', 'currentColor', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>
-      <div class="fp-actions">
+      <div class="fp-actions three">
         <button type="button" data-act="route">Strecke</button>
         <button type="button" data-act="follow">Folgen</button>
-        <button type="button" data-act="cockpit" class="full">Cockpit-Ansicht</button>
+        <button type="button" data-act="cockpit">Cockpit</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
@@ -66,18 +63,25 @@ export class FlightPanel {
       else this.setFollow(this.follow === act ? 'off' : (act as Follow));
     });
     // remember which sections the user collapsed across the live updates
+    this.body.addEventListener('click', (e) => {
+      const m = (e.target as HTMLElement).closest<HTMLElement>('[data-metric]')?.dataset.metric;
+      if (!m) return;
+      this.metric = this.metric === m ? null : m;
+      this.render();
+    });
     this.body.addEventListener(
       'toggle',
       (e) => {
         const d = e.target as HTMLDetailsElement;
         const key = d.dataset.key;
-        if (key) d.open ? this.closed.delete(key) : this.closed.add(key);
+        if (key) d.open ? this.open_.add(key) : this.open_.delete(key);
       },
       true,
     );
   }
 
   open(hex: string) {
+    if (hex !== this.hex) this.metric = null;
     this.hex = hex;
     this.root.hidden = false;
     this.h.select(hex);
@@ -139,31 +143,42 @@ export class FlightPanel {
       return;
     }
     title.textContent = i.callsign || i.hex.toUpperCase();
-    sub.innerHTML = [i.type && escapeHtml(i.type), i.reg && `<b>${escapeHtml(i.reg)}</b>`].filter(Boolean).join(' · ');
+    sub.innerHTML = [i.operator && escapeHtml(i.operator), i.type && escapeHtml(i.type), i.reg && `<b>${escapeHtml(i.reg)}</b>`].filter(Boolean).join(' · ');
     const num = (n: number | null, unit: string, d = 0) => (n == null ? '–' : `${fmt.num(n, d)} ${unit}`);
-    const cell = (label: string, value: string, cls = '') => `<div class="fp-cell ${cls}"><span>${label}</span><b>${value}</b></div>`;
-    const place = (a: { icao: string; iata: string; city: string; name: string }) => `${escapeHtml(a.iata || a.icao)}<small>${escapeHtml(a.city || a.name)}</small>`;
-    const route =
-      i.route === undefined
-        ? cell('Route', 'wird geladen …', 'wide')
-        : i.route === null
-          ? cell('Route', 'unbekannt', 'wide')
-          : cell('Von', place(i.route.origin)) + cell('Nach', place(i.route.destination));
-    const sections: Record<string, string> = {
-      flight: route + cell('Betreiber', escapeHtml(i.operator || '–'), 'wide') + cell('Typ', escapeHtml(i.type || '–'), 'wide') + cell('ICAO-Typ', escapeHtml(i.icao || '–')) + cell('Notfall', escapeHtml(i.emergency || 'keiner'), i.emergency ? 'warn' : ''),
-      position:
-        cell('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`) +
-        cell('Geschwindigkeit', num(i.speedKmh, 'km/h')) +
-        cell('Breitengrad', fmt.num(i.lat, 3)) +
-        cell('Längengrad', fmt.num(i.lon, 3)) +
-        cell('Steigrate', num(i.vsMs, 'm/s', 1)) +
-        cell('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`) +
-        cell('Squawk', escapeHtml(i.squawk || '–')),
-      aircraft: cell('Kennzeichen', escapeHtml(i.reg || '–')) + cell('Mode-S (Hex)', escapeHtml(i.hex.toUpperCase())),
-    };
+    const COLOR = '#f2c94c';
+    const r = i.route;
+    let hero: string;
+    if (r) {
+      const total = distKm(r.origin.lon, r.origin.lat, r.destination.lon, r.destination.lat);
+      const done = distKm(r.origin.lon, r.origin.lat, i.lon, i.lat);
+      const left = distKm(i.lon, i.lat, r.destination.lon, r.destination.lat);
+      const progress = total > 0 ? Math.min(1, done / Math.max(1, done + left)) : 0;
+      // ADS-B has no schedule: arrival and departure are estimated from the distance and the current ground speed
+      const cruising = !!i.speedKmh && i.speedKmh > 300 && !i.ground;
+      const now = Date.now();
+      const arrive = cruising ? clock(now + (left / i.speedKmh!) * 3600_000) : undefined;
+      const depart = cruising ? clock(now - (done / i.speedKmh!) * 3600_000) : undefined;
+      const eta = cruising ? ` · noch ca. ${duration((left / i.speedKmh!) * 60)}` : '';
+      hero = routeHero({
+        from: { code: r.origin.iata || r.origin.icao, sub: r.origin.city || r.origin.name, time: depart },
+        to: { code: r.destination.iata || r.destination.icao, sub: r.destination.city || r.destination.name, time: arrive },
+        progress,
+        mark: glyphSvg('plane', COLOR, 20),
+        color: COLOR,
+        note: `${Math.round(progress * 100)} %${eta}`,
+      });
+    } else {
+      hero = `<div class="sp-note" style="margin-top:10px">${i.route === undefined ? 'Route wird geladen …' : 'Route unbekannt'}</div>`;
+    }
+    const m = this.metric;
+    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Tempo', num(i.speedKmh, 'km/h'), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', num(i.vsMs, 'm/s', 1), { metric: 'vs', on: m === 'vs' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Tempo', 'km/h'], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history?.[m as 'alt' | 'speed' | 'track' | 'vs'] ?? [], GRAPHS[m][1], COLOR) : '';
+    const cats =
+      category('aircraft', 'Flugzeug', [['Betreiber', escapeHtml(i.operator || '–')], ['Typ', escapeHtml(i.type || '–')], ['ICAO-Typ', escapeHtml(i.icao || '–')], ['Kennzeichen', escapeHtml(i.reg || '–')], ['Mode-S (Hex)', escapeHtml(i.hex.toUpperCase())]], this.open_) +
+      category('position', 'Position und Signal', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Squawk', escapeHtml(i.squawk || '–')], ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner']], this.open_);
     const source = i.source ? `${escapeHtml(i.source)} · ` : '';
-    this.body.innerHTML =
-      SECTIONS.map((s) => `<details data-key="${s.key}" ${this.closed.has(s.key) ? '' : 'open'}><summary>${s.title}</summary><div class="fp-grid">${sections[s.key]}</div></details>`).join('') +
-      `<details data-key="source" ${this.closed.has('source') ? '' : 'open'}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> (Schätzung nach Callsign, gestrichelt auf der Karte) · ' : ''}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
+    const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> (Schätzung nach Callsign, gestrichelt auf der Karte) · ' : ''}<a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;
+    this.body.innerHTML = hero + tiles + chart + cats + src;
   }
 }

@@ -35,6 +35,7 @@ import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import { FlightPanel } from '../globe/flightpanel';
+import { ShipPanel } from '../globe/shippanel';
 import { labelPaint } from '../globe/vector';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
@@ -209,6 +210,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let emscPoints: EventFeature[] = [];
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let shipPanel: ShipPanel | null = null;
   let firmsCount = 0;
   let firmsOk = false;
 
@@ -1299,6 +1301,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         fit: (hex) => extras?.fitFlight(hex),
         map: () => map,
       });
+      shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
+      shipPanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
@@ -1400,7 +1404,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         hud.clearPlace();
         return;
       }
-      const layers = interactive.filter((l) => map!.getLayer(l));
+      // the 3D ship models are picked by hand (their 2D icons are stale between two updates)
+      const shipHit = extras?.pickShip(e.point.x, e.point.y, e.lngLat);
+      const ships3d = extras?.ships3dActive();
+      const layers = interactive.filter((l) => map!.getLayer(l) && !(ships3d && l === 'ships'));
       // a few pixels of tolerance makes small/moving objects easier to hit
       const box: [[number, number], [number, number]] = [
         [e.point.x - 4, e.point.y - 4],
@@ -1409,15 +1416,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const hits = map!.queryRenderedFeatures(box, { layers });
       const hit = hits.find((h) => !areaLayers.includes(h.layer.id)) ?? hits[0];
       // an aircraft's 3D trail or the wall below it (MapLibre cannot pick those)
-      const picked = hit ? null : extras?.pickFlight(e.point.x, e.point.y);
+      const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
+        shipPanel?.close();
         flightPanel?.open(picked);
         return;
       }
       extras?.clearSelection();
-      const extraResult = hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null;
+      const extraResult = shipHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
+        shipPanel?.close();
         flightPanel?.open(extraResult.hex);
+      } else if (extraResult?.type === 'ship') {
+        shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {
         weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {

@@ -13,7 +13,7 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 /** From this zoom on the airport layout is loaded and shown. */
 export const AIRPORT_ZOOM = 11;
 /** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
-const PLANE_ZOOM = 6.5;
+const PLANE_ZOOM = 9;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
@@ -530,7 +530,7 @@ export class Airport3D {
   /** Displayed state of an aircraft (smoothed position, trail), if it is tracked. */
   planeInfo(hex: string) {
     const p = this.tracker.planes.get(hex);
-    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail } : null;
+    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist } : null;
   }
 
   /** The aircraft under a screen point (model, trail or wall), if any. */
