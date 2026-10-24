@@ -332,8 +332,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let hud = null as Hud | null;
   const families = () => (store.getKeys().owm ? [...WX_FAMILIES, OWM_FAMILY] : WX_FAMILIES);
   const sameKeys = (a: object, b: object) => Object.keys(a).sort().join() === Object.keys(b).sort().join();
+  /** the Karte the HUD last applied: decides whether a map click shows the weather tooltip */
+  let curKarte: Karte | null = null;
+  /**
+   * A map click shows the place weather only on a weather Karte: the standard "Wetter" Karte
+   * or an own Karte with a weather layer (menu 'wx' with a layer, or main set). Traffic and
+   * other Karten get their own tooltips later.
+   */
+  const isWeatherKarte = (k: Karte | null): boolean => !!k && (k.menu === 'wx' || k.main != null);
 
   function applyKarte(k: Karte) {
+    curKarte = k;
     const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
@@ -1458,7 +1467,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else {
+      } else if (isWeatherKarte(curKarte)) {
         const { lng, lat } = e.lngLat;
         const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
         weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
