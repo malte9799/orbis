@@ -51,14 +51,14 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Pipelines, Rohstoffe, Geologie |
+| 🏗️ **Infrastruktur** | Eigene Ansicht: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffe, Seekabel, Pipelines |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |
 
 > 📚 **Woher kommen die Daten?** Die vollständige Liste aller Quellen mit Links, Lizenzen und Verwendung:
 > **[docs/DATENQUELLEN.md](docs/DATENQUELLEN.md)**
 
-## 🧭 Die drei Ansichten
+## 🧭 Die Ansichten
 
 ### 🌦️ Vorhersage
 
@@ -73,6 +73,19 @@ Interaktive Wetterkarte nach dem Vorbild von zoom.earth – standardmäßig 2D, 
 - Live-Ebenen und Vorhersage-Ebenen mit Zeitleiste (bis +5 Tage, abspielbar)
 - Animierte Windströmung, Isobaren und Naturereignisse
 - Wert unter dem Mauszeiger, Klick zeigt das Wetter an dieser Stelle
+
+### 🏗️ Infrastruktur
+
+Eigene Ansicht (`#/infra`) als Bedienpult für die Infrastruktur-Ebenen der Karte: jeder Schalter
+legt die Ebene auf der aktuell geöffneten Karte an, „Auf der Karte öffnen“ springt direkt hinein.
+
+| | |
+|---|---|
+| ⚡ **Energie** | Wind, Solar, Wasser (& Gezeiten), Kernkraft, Kohle, Gas, Öl, Biomasse & Abfall sowie weitere Kraftwerke – Kraftwerke nach Energieträger getrennt |
+| ⛏️ **Rohstoffe** | Öl & Gas, Kohle, Erze & Metalle, Steine & Salze – Ursprungsorte weltweit, beim Zoomen genauer |
+| 🛜 **Netze** | Seekabel & Internetknoten, Öl- & Gaspipelines |
+| 📻 **Radio** | über 50.000 Sender – direkt anhörbar |
+| 🎦 **Überwachung** | Live-Webcams, Kennzeichen-Kameras |
 
 ### 🚀 Weltall
 
@@ -176,7 +189,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
 | 📷 **Kameras** | Webcams weltweit (u. a. London, New York, Kalifornien, Hongkong, Singapur), ALPR-Kameras | [Digitraffic](https://weathercam.digitraffic.fi), [TfL](https://api.tfl.gov.uk), [Caltrans](https://cwwp2.dot.ca.gov), [ALERTCalifornia](https://cameras.alertcalifornia.org), [DeFlock](https://deflock.org) |
 | 📻 **Radio** | Über 50.000 Sender im Player | [Radio Browser](https://www.radio-browser.info) |
-| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke, Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
+| 🏗️ **Infrastruktur** | Seekabel, Internetknoten, Kraftwerke (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Windräder, Pipelines | Seekabel aus [OpenStreetMap](https://www.openstreetmap.org/copyright), [PeeringDB](https://www.peeringdb.com), [WRI GPPD](https://datasets.wri.org/dataset/globalpowerplantdatabase), OSM |
 
 ### 🔑 Optional mit kostenlosem Schlüssel
 

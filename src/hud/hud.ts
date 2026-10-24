@@ -87,6 +87,19 @@ export interface Hud {
   placeOpen(): boolean;
   /** phone portrait: content inside the sheet changed size (legend / timeline shown or hidden) */
   syncSheet(): void;
+  // ---- control from other views (Infrastruktur page): switches drive the active Karte ----
+  /** name of the active Karte */
+  currentName(): string;
+  /** live status of a layer (count, loading …) for the toggles' subtitles */
+  info(id: string): LayerInfo;
+  /** the layer is switched on (present, not hidden) on the active Karte */
+  layerOn(id: string): boolean;
+  /** adds or removes the layer on the active Karte (same flow as the Karten stack itself) */
+  toggleLayer(id: string, on: boolean): void;
+  /** current filter value of the layer or null */
+  layerFilter(id: string): string | null;
+  /** sets or clears the layer filter; adds the layer first if still missing */
+  setLayerFilter(id: string, filter: string | null): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -1404,6 +1417,34 @@ export function createHud(host: HudHost): Hud {
     placeOpen: () => !!placeNode && layout === 'portrait',
     syncSheet: () => {
       if (!drag?.moved && !sheetEl?.style.height) syncSheetH();
+    },
+    // ----- Infrastruktur page (toggle layers without opening the stack) -----
+    currentName: () => view(cur).name,
+    info: (id) => host.info(id),
+    layerOn: (id) => view(cur).layers.some((l) => l.id === id && !l.hidden),
+    toggleLayer(id, on) {
+      const d = edit();
+      const katalog = catalogOf(id);
+      if (on && !d.layers.some((l) => l.id === id)) {
+        d.layers.unshift({ id });
+        fresh.add(id);
+        toast(`${katalog?.label ?? id} hinzugefügt`);
+      } else if (!on) d.layers = d.layers.filter((l) => l.id !== id);
+      afterEdit();
+    },
+    layerFilter: (id) => view(cur).layers.find((l) => l.id === id)?.filter ?? null,
+    setLayerFilter(id, filter) {
+      const d = edit();
+      let l = d.layers.find((x) => x.id === id);
+      if (!l && filter) {
+        l = { id };
+        d.layers.unshift(l);
+        fresh.add(id);
+      }
+      if (!l) return;
+      if (filter) l.filter = filter;
+      else delete l.filter;
+      afterEdit();
     },
   };
 }

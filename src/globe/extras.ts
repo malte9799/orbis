@@ -57,6 +57,12 @@ export type ExtraId =
   | 'wind'
   | 'solar'
   | 'plants'
+  | 'water'
+  | 'nuclear'
+  | 'coal'
+  | 'gas'
+  | 'oil'
+  | 'biomass'
   | 'webcams'
   | 'alpr'
   | 'aurora'
@@ -189,7 +195,13 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'cables', section: 'infra', label: 'Seekabel & Internetknoten', hint: 'Unterseekabel aus OpenStreetMap (unvollständig), Internetknoten von PeeringDB', glyph: 'cable', color: '#9c6bff' },
   { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
   { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
-  { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Kern, Kohle, Gas, Wasser, Biomasse …', glyph: 'plant', color: FUELS.Nuclear.color },
+  { id: 'water', section: 'infra', label: 'Wasserkraft', hint: 'Wasser- und Gezeitenkraftwerke', glyph: 'hydro', color: FUELS.Hydro.color },
+  { id: 'nuclear', section: 'infra', label: 'Kernkraftwerke', hint: 'Kernkraftwerke weltweit (WRI Global Power Plant Database)', glyph: 'radiation', color: FUELS.Nuclear.color },
+  { id: 'coal', section: 'infra', label: 'Kohlekraftwerke', hint: 'Kohle- und Petrolkoks-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Coal.color },
+  { id: 'gas', section: 'infra', label: 'Gaskraftwerke', hint: 'Gaskraftwerke weltweit', glyph: 'plant', color: FUELS.Gas.color },
+  { id: 'oil', section: 'infra', label: 'Ölkraftwerke', hint: 'Öl-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Oil.color },
+  { id: 'biomass', section: 'infra', label: 'Biomasse & Abfall', hint: 'Biomasse- und Müllheizkraftwerke weltweit', glyph: 'plant', color: FUELS.Biomass.color },
+  { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Geothermie, Speicher, Kraft-Wärme-Kopplung …', glyph: 'plant', color: FUELS.Geothermal.color },
   { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
   { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
   { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
@@ -212,6 +224,12 @@ const LAYERS: Record<ExtraId, string[]> = {
   wind: ['power', 'osm-power'],
   solar: ['power', 'osm-power'],
   plants: ['power', 'osm-power'],
+  water: ['power', 'osm-power'],
+  nuclear: ['power', 'osm-power'],
+  coal: ['power', 'osm-power'],
+  gas: ['power', 'osm-power'],
+  oil: ['power', 'osm-power'],
+  biomass: ['power', 'osm-power'],
   webcams: ['webcams', 'webcams-osm'],
   aurora: ['aurora'],
   gvp: ['gvp'],
@@ -266,7 +284,19 @@ const LAYERS: Record<ExtraId, string[]> = {
 
 const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
 
-const POWER_CAT: Partial<Record<ExtraId, PowerCat>> = { wind: 'wind', solar: 'solar', plants: 'other' };
+/** which power-plant categories each extra shows – all extras share the same point layers */
+const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
+  wind: ['wind'],
+  solar: ['solar'],
+  water: ['hydro'],
+  nuclear: ['nuclear'],
+  coal: ['coal'],
+  gas: ['gas'],
+  oil: ['oil'],
+  biomass: ['biomass'],
+  plants: ['other'],
+};
+const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
 /** Interactive layers this module answers clicks for. */
 export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
@@ -398,7 +428,7 @@ export class ExtraLayers {
   private starlinkLoading: Promise<void> | null = null;
   private powerLoaded = false;
   private powerLoading: Promise<void> | null = null;
-  private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, other: 0 };
+  private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
   private osmPowerKey = '';
   private aircraftSeq = 0;
   private aircraftBusy = false;
@@ -1567,7 +1597,7 @@ export class ExtraLayers {
     if (this.on.has('alpr')) this.loadAlprNow();
     if (this.on.has('waves')) this.loadWavesNow();
     if (this.on.has('rivers')) this.loadRiversNow();
-    if (this.on.has('wind') || this.on.has('solar') || this.on.has('plants')) this.loadOsmPowerNow();
+    if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
   }
 
   // -------------------------------------------------------------------------
@@ -1621,8 +1651,8 @@ export class ExtraLayers {
     for (const l of new Set(Object.values(LAYERS).flat())) this.vis(l, visible.has(l));
     // layers that were added lazily pick up the chosen opacity now
     for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
-    // power plants share layers – filter by enabled categories
-    const cats = (Object.keys(POWER_CAT) as ExtraId[]).filter((id) => this.on.has(id)).map((id) => POWER_CAT[id]!);
+    // power plants share layers – filter by the categories of the enabled extras
+    const cats = [...new Set(POWER_EXTRAS.filter((id) => this.on.has(id)).flatMap((id) => POWER_CATS[id]!))];
     this.map.setFilter('power', ['in', ['get', 'cat'], ['literal', cats]]);
     this.map.setFilter('osm-power', ['in', ['get', 'cat'], ['literal', cats]]);
     if (this.info.dwdwarn?.note && this.on.has('dwdwarn')) this.vis('dwd', true);
@@ -1694,6 +1724,12 @@ export class ExtraLayers {
           break;
         case 'wind':
         case 'solar':
+        case 'water':
+        case 'nuclear':
+        case 'coal':
+        case 'gas':
+        case 'oil':
+        case 'biomass':
         case 'plants':
           this.ensurePower();
           break;
@@ -2167,19 +2203,19 @@ export class ExtraLayers {
 
   private ensurePower() {
     if (!this.powerLoaded && !this.powerLoading) {
-      for (const id of ['wind', 'solar', 'plants'] as ExtraId[]) if (this.on.has(id)) this.set(id, { loading: true });
+      for (const id of POWER_EXTRAS) if (this.on.has(id)) this.set(id, { loading: true });
       this.powerLoading = loadPowerPlants()
         .then((fc) => {
           this.powerLoaded = true;
           this.setData('power', fc);
-          this.powerCounts = { wind: 0, solar: 0, other: 0 };
+          this.powerCounts = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
           for (const f of fc.features) this.powerCounts[f.properties!.cat as PowerCat]++;
         })
         .catch(() => this.hooks.toast('Kraftwerksdatenbank konnte nicht geladen werden.'))
         .finally(() => {
           this.powerLoading = null;
-          for (const id of ['wind', 'solar', 'plants'] as ExtraId[]) {
-            this.set(id, { loading: false, count: this.powerLoaded ? this.powerCounts[POWER_CAT[id]!] : undefined });
+          for (const id of POWER_EXTRAS) {
+            this.set(id, { loading: false, count: this.powerLoaded ? this.powerCounts[POWER_CATS[id]![0]] : undefined });
           }
         });
     }
@@ -3148,7 +3184,7 @@ export class ExtraLayers {
       }
       case 'power':
       case 'osm-power': {
-        const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : 'plant';
+        const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : p.cat === 'hydro' ? 'hydro' : p.cat === 'nuclear' ? 'radiation' : 'plant';
         return { type: 'html', html: html(glyph, String(p.color)), lng: pt[0], lat: pt[1] };
       }
     }
