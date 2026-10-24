@@ -366,6 +366,8 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
     if (a.lat == null || a.lon == null) continue;
     // ADS-B also carries fixed obstacles (category C3–C5, hex 000000): no aircraft and no vehicle
     if (/^C[3-5]$/.test(a.category ?? '') || /^0+$/.test(a.hex)) continue;
+    // a tower transponder (type TWR without any further description) is a fixed station, not a vehicle
+    if ((a.t ?? '').trim().toUpperCase() === 'TWR' && /^(TWR)?$/.test(clean(a.desc).toUpperCase())) continue;
     const onGround = a.alt_baro === 'ground';
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({

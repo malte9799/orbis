@@ -898,6 +898,11 @@ export class PlanesLayer implements CustomLayerInterface {
         for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
         continue;
       }
+      // ground vehicles are drawn by their 2D icon on the flat map (never both)
+      if (flat && (p.model === 'car' || p.model === 'tug')) {
+        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
+        continue;
+      }
       const elev = terrain ? (map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
       const air = !flat && !p.ground && p.dAlt > 3;
       if (models) {
