@@ -171,7 +171,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | ⚡ **Blitze & Strahlung** | Blitze live (15 min), Radioaktivität (ODL, EURDEP, Safecast), Polarlicht/Kp, Sonnenwind | [Blitzortung](https://www.blitzortung.org), [BfS](https://odlinfo.bfs.de), [EURDEP](https://remap.jrc.ec.europa.eu), [Safecast](https://safecast.org), [NOAA SWPC](https://www.swpc.noaa.gov) |
 | 🌱 **Erde & Umwelt** | Geologie, Plattengrenzen, Rohstoffe, Landbedeckung, Vegetation, Schnee, Aerosole, Nachtlichter | [Macrostrat](https://macrostrat.org), [USGS MRDS](https://mrdata.usgs.gov/mrds/), [BGR](https://services.bgr.de), [Wikidata](https://www.wikidata.org), [ESA WorldCover](https://esa-worldcover.org), NASA GIBS |
 | 🌊 **Meer & Gewässer** | Seegang, Strömung, Flussabfluss, Pegel, Bojen, Gezeiten, Meerestiefe, Algenblüte, Meerestemperatur, Meereis | [Open-Meteo Marine/Flood](https://open-meteo.com), [PEGELONLINE](https://www.pegelonline.wsv.de), [NOAA NDBC](https://www.ndbc.noaa.gov), [CO-OPS](https://tidesandcurrents.noaa.gov), [GEBCO](https://www.gebco.net), [EMODnet](https://emodnet.ec.europa.eu) |
-| ✈️ **Luftraum** | Flugzeuge, Hubschrauber, Ballone, Drohnen live; Flughäfen; Wetterballons in 3D mit Detailpanel; Raketenstarts; Satelliten | [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [airplanes.live](https://airplanes.live), [OpenSky](https://opensky-network.org), [SondeHub](https://sondehub.org), [Launch Library 2](https://thespacedevs.com), [CelesTrak](https://celestrak.org) |
+| ✈️ **Luftraum** | Flugzeuge, Hubschrauber, Ballone, Drohnen live; Flughäfen; Wetterballons in 3D mit Detailpanel; Raketenstarts; Satelliten | [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [OpenSky](https://opensky-network.org), [SondeHub](https://sondehub.org), [Launch Library 2](https://thespacedevs.com), [CelesTrak](https://celestrak.org) |
 | 🚆 **Verkehr** | Schiffe (AIS), Züge, Busse, Trams, U-Bahnen live; Autobahn-Staus; Blitzer & Rotlicht (ab Zoom 9); Schiffsrouten | [Digitraffic](https://www.digitraffic.fi), [Transitous](https://transitous.org), [Amtraker](https://amtraker.com), [Entur](https://developer.entur.org), [MBTA](https://api-v3.mbta.com), [SEPTA](https://www3.septa.org), [Autobahn GmbH](https://verkehr.autobahn.de), [OpenStreetMap](https://wiki.openstreetmap.org/wiki/DE:Tag:highway%3Dspeed_camera) |
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
 | 📷 **Kameras** | Webcams weltweit (u. a. London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Island, Estland, Neuseeland, NSW, Calgary), ALPR-Kameras | [Digitraffic](https://weathercam.digitraffic.fi), [TfL](https://api.tfl.gov.uk), [Caltrans](https://cwwp2.dot.ca.gov), [ALERTCalifornia](https://cameras.alertcalifornia.org), [DeFlock](https://deflock.org) |
@@ -232,7 +232,7 @@ Alle Änderungen an `gh-pages` laufen über `scripts/gh-pages.sh`, das gleichzei
 
 <br>
 
-adsb.fi, airplanes.live und OpenSky erlauben keine Abrufe direkt aus dem Browser (CORS), adsb.lol drosselt schnell, und die
+adsb.fi und OpenSky erlauben keine Abrufe direkt aus dem Browser (CORS), adsb.lol drosselt schnell, und die
 öffentlichen Overpass-Server (OpenStreetMap-Ebenen) lassen pro Nutzer nur wenige Anfragen zu. `proxy/cloudflare-worker.js`
 löst das: Er ergänzt die CORS-Header und speichert Antworten zwischen (Flugdaten ~8 s, Overpass 15 min), sodass viele
 Besucher am selben Ort nur eine Anfrage auslösen. Auch NOAA NDBC (Messbojen) und NOAA CO-OPS (Gezeitenpegel) laufen über den
@@ -309,7 +309,7 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
   zwischengespeichert.
 - **Tornados:** Daten gibt es nur für die USA – dort werden sie offiziell gewarnt und gemeldet.
 - **Lizenzen:** Einige Datensätze sind nur für nicht-kommerzielle Nutzung frei (u. a. Esri-Satellitenbild, Blitzortung.org,
-  airplanes.live, EOX Sentinel-2). Für eine kommerzielle Nutzung müssten diese ersetzt oder lizenziert werden.
+  EOX Sentinel-2). Für eine kommerzielle Nutzung müssten diese ersetzt oder lizenziert werden.
 - **Warnungen:** Die Rohdaten stammen von den jeweiligen Anbietern; für Warnungen gelten immer die amtlichen Stellen.
 - **Nicht zur Navigation:** Meerestiefe und Schiffsdaten dienen der Information, nicht der Navigation.
 
