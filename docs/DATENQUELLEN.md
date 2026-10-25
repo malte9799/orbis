@@ -210,12 +210,22 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [USGS Astrogeology Science Center](https://astrogeology.usgs.gov/) | Monde, Pluto, Ceres, Vesta (Voyager, Galileo, Cassini, New Horizons, Dawn) | gemeinfrei |
 | [NASA CGI Moon Kit (SVS 4720)](https://svs.gsfc.nasa.gov/4720) | Mond 4k/8k: LRO-Farbmosaik + LOLA-Höhenmodell (beim Deploy geladen) | gemeinfrei |
 
+### Planeten-, Mond- & Kleinkörper-Karten (`#/planet?body=…`)
+
+| Quelle | Verwendung |
+|---|---|
+| [NASA Trek-Portale](https://trek.nasa.gov) (Mars, Moon, Mercury, Venus, Titan, Enceladus, Io, Europa, Ganymede, Callisto, Phobos, Vesta, Ceres, Ryugu …) | Basiskarten aller Körper: Merkur (MESSENGER MDIS), Venus (Magellan), Mond (LRO-WAC), Mars (Viking, MOLA/HRSC, CTX, HiRISE), Titan, Phobos (Viking/MExLab), Io, Europa, Ganymede, Callisto (Galileo/Voyager), Mimas, Enceladus, Tethys, Dione, Rhea, Iapetus (Cassini/Voyager), Vesta & Ceres (Dawn), Ryugu (Hayabusa2) |
+| [Cassini ISS DEM 375 m](https://trek.nasa.gov/enceladus/) | 3D-Relief der Enceladus-Karte (gestrecktes Graustufenbild, Meter angenähert) |
+| Globale Höhenmodelle aus Trek (Magellan-Topographie, IoDEM, Phobos-DTM MExLab/HRSC, Vesta-DLR-DTM) | 3D-Relief der Venus-, Io-, Phobos- und Vesta-Karten; Listen per `scripts/trek-products.mjs` |
+
 ### Mond (Karte & Landestellen)
 
 | Quelle | Verwendung |
 |---|---|
 | [NASA Moon Trek](https://trek.nasa.gov/moon/) | LRO-WAC-Mosaik (≈ 100 m/px), LROC-NAC-Mosaike der Landestellen, Kaguya, Geologie, Mineralien, LOLA-Relief; Produktliste per `scripts/moon-products.mjs` |
 | [LRO / LROC](https://lroc.sese.asu.edu) | Kamerabilder des Mondes |
+| [LOLA-Höhenmodell](https://trek.nasa.gov/moon/) (LRO_LOLA_DEM_Global_128ppd_v04) | 3D-Relief der Mondkarte im Globus (als gestrecktes Graustufenbild, Meter angenähert) |
+| Regionale Höhenmodelle (Apollo-PanCam, LRO-NAC-DEM, polare LOLA-DEMs) | 3D-Relief der Landestellen beim Hineinzoomen; Liste per `scripts/moon-products.mjs` |
 | Chang’e-2-Mosaik, Kaguya (JAXA), LOLA | feinere Mosaike im Modus „Automatisch“ |
 | ~70 benannte Formationen | `src/space/moon-features.ts` (IAU-Nomenklatur) |
 
@@ -224,6 +234,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Quelle | Verwendung |
 |---|---|
 | [NASA Mars Trek](https://trek.nasa.gov/mars/) | Farbmosaik, MOLA-Höhe, THEMIS-Infrarot, HRSC-Farbmosaike (ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO), HiRISE-Regionalmosaike (bis 25 cm/px), Geologie, Täler, Mineralien; Produktliste per `scripts/mars-products.mjs` |
+| Regionale Höhenmodelle (HRSC-, CTX- und HiRISE-DEMs) | 3D-Relief beim Hineinzoomen (z. B. Gale, Columbia Hills, Victoria); Liste per `scripts/mars-products.mjs` |
 | [CTX Global Mosaic](https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer) (NASA/JPL/MSSS/Caltech Murray Lab via Esri) | 5-m-Basiskarte |
 | [NASA MMGIS](https://mars.nasa.gov/maps/) | Fahrspuren von Perseverance & Curiosity, 72 Ingenuity-Flüge (`scripts/mars-traverse.mjs`, Rückfall `public/data/mars-traverse.json`) |
 | [Landestellen-Steckbriefe](https://mars.nasa.gov/mars2020/) | Viking, Pathfinder, Spirit, Opportunity, Phoenix, Curiosity, InSight, Perseverance, Zhurong |

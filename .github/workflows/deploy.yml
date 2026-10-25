@@ -89,6 +89,12 @@ jobs:
         continue-on-error: true
         timeout-minutes: 10
         run: node scripts/moon-products.mjs
+      # Tile products of the Trek portals without their own script (Venus, Io, Europa, Callisto, Phobos, Titan …):
+      # Optional: on failure the committed src/space/trek-products.ts stays.
+      - name: Trek portal products
+        continue-on-error: true
+        timeout-minutes: 10
+        run: node scripts/trek-products.mjs
       - name: 'Status: Build'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Build"

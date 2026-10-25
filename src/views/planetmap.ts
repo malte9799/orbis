@@ -19,7 +19,7 @@ import { MARS_SITES, SOL_MS, getMarsTracks, heliAt, loadMarsTracks, roverAt, sol
 import { COUNTRY, LANDING_SITES, flagDataUrl, type LandingSite } from '../space/moon';
 import { KIND_LABEL, MOON_FEATURES, type MoonFeature } from '../space/moon-features';
 import { buildSiteScene, hasSceneModel } from '../space/surface-models';
-import { PLANET_MAPS, type TileLayer } from '../space/planets';
+import { PLANET_MAPS, type PlanetMapConfig, type TileLayer } from '../space/planets';
 import { FONT_BOLD, FONT_ITALIC, FONT_REGULAR, OFM_GLYPHS } from '../globe/vector';
 import { escapeHtml, fmt } from '../util';
 
@@ -235,6 +235,186 @@ function registerPlanetProtocol() {
   });
 }
 
+let demProtocolReady = false;
+/** grey min/max of a height layer under a footprint – sampled coarsely at level 1 and cached,
+    so every output tile of a region anchors its metres at the same range (no seams) */
+const footCache = new Map<string, Promise<{ min: number; max: number } | null>>();
+function footprint(layer: TileLayer, bbox: [number, number, number, number]) {
+  const key = `${layer.id}|${bbox.join(',')}`;
+  let p = footCache.get(key);
+  if (!p) {
+    if (footCache.size > 120) footCache.clear();
+    const L = 1;
+    const span = 180 / 2 ** L;
+    const c0 = Math.max(0, Math.floor((bbox[0] + 180) / span));
+    const c1 = Math.min(2 * 2 ** L - 1, Math.ceil((bbox[2] + 180) / span) - 1);
+    const r0 = Math.max(0, Math.floor((90 - bbox[3]) / span));
+    const r1 = Math.min(2 ** L - 1, Math.ceil((90 - bbox[1]) / span) - 1);
+    p = (async () => {
+      let min = 255;
+      let max = 0;
+      let n = 0;
+      for (let r = r0; r <= r1; r++)
+        for (let c = c0; c <= c1; c++) {
+          const img = await loadImg(layer.url(L, r, ((c % (2 * 2 ** L)) + 2 * 2 ** L) % (2 * 2 ** L)));
+          if (!img) continue;
+          const cv = new OffscreenCanvas(img.width, img.height);
+          const cg = cv.getContext('2d', { willReadFrequently: true })!;
+          cg.drawImage(img, 0, 0);
+          const px = cg.getImageData(0, 0, img.width, img.height).data;
+          const lonW = -180 + c * span;
+          const latN = 90 - r * span;
+          const x0 = Math.round(((Math.max(bbox[0], lonW) - lonW) / span) * img.width);
+          const x1 = Math.round(((Math.min(bbox[2], lonW + span) - lonW) / span) * img.width);
+          const y0 = Math.round(((latN - Math.min(bbox[3], latN)) / span) * img.height);
+          const y1 = Math.round(((latN - Math.max(bbox[1], latN - span)) / span) * img.height);
+          for (let y = y0; y < y1; y += 2)
+            for (let x = x0; x < x1; x += 2) {
+              const i = (y * img.width + x) * 4;
+              if (px[i + 3] < 128) continue;
+              n++;
+              if (px[i] < min) min = px[i];
+              if (px[i] > max) max = px[i];
+            }
+        }
+      return n > 40 ? { min, max } : null;
+    })();
+    footCache.set(key, p);
+  }
+  return p;
+}
+/** heights render on an Earth-sized ball: scale a body's metres so its relief keeps the true
+    proportion (Moon ×3.7, Enceladus ×25), capped by the terrarium range of ±32 km */
+function demScale(cfg: PlanetMapConfig) {
+  const dem = cfg.dem!;
+  return Math.min(EARTH_RADIUS_M / (cfg.radiusKm * 1000), 32000 / Math.max(Math.abs(dem.minM), dem.maxM));
+}
+function registerDemProtocol() {
+  if (demProtocolReady) return;
+  demProtocolReady = true;
+  // planetdem://<body>/<z>/<x>/<y> – Trek height tiles (grey stretched over the full range) as
+  // terrarium tiles for MapLibre terrain. Gaps (alpha) get the mean of the valid pixels.
+  addProtocol('planetdem', async (params) => {
+    const m = /^planetdem:\/\/(\w+)\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+    const cfg = m ? PLANET_MAPS[m[1]] : undefined;
+    const dem = cfg?.dem;
+    if (!m || !dem) throw new Error('unknown dem tile');
+    const [z, x, y] = [+m[2], +m[3], +m[4]];
+    const canvas = new OffscreenCanvas(256, 256);
+    const g = canvas.getContext('2d', { willReadFrequently: true })!;
+    const layer = dem.layer;
+    const L = Math.max(0, Math.min(layer.maxZ, z + Math.ceil(Math.log2(128 / layer.px))));
+    const span = 180 / 2 ** L;
+    const lon0 = (x / 2 ** z) * 360 - 180;
+    const lon1 = ((x + 1) / 2 ** z) * 360 - 180;
+    const latTop = tile2lat(y, z);
+    const latBot = tile2lat(y + 1, z);
+    const nCols = 2 * 2 ** L;
+    const c0 = Math.floor((lon0 + 180) / span);
+    const c1 = Math.min(Math.ceil((lon1 + 180) / span) - 1, c0 + 3);
+    const r0 = Math.max(0, Math.floor((90 - latTop) / span));
+    const r1 = Math.min(2 ** L - 1, Math.ceil((90 - latBot) / span) - 1);
+    const k = 256 / (latTop - latBot);
+    const jobs: Promise<void>[] = [];
+    for (let r = r0; r <= r1; r++)
+      for (let c = c0; c <= c1; c++)
+        jobs.push(
+          loadImg(layer.url(L, r, ((c % nCols) + nCols) % nCols)).then((img) => {
+            if (!img) return;
+            g.imageSmoothingEnabled = true;
+            g.imageSmoothingQuality = 'high';
+            const dx = ((-180 + c * span - lon0) / (lon1 - lon0)) * 256;
+            const dw = (span / (lon1 - lon0)) * 256;
+            const y0 = (latTop - (90 - r * span)) * k;
+            const y1 = (latTop - (90 - (r + 1) * span)) * k;
+            g.drawImage(img, 0, 0, img.width, img.height, dx - 0.25, y0 - 0.25, dw + 0.5, y1 - y0 + 0.5);
+          }),
+        );
+    await Promise.all(jobs);
+
+    // regional height models (Apollo/NAC/polar DEMs) over the global one. Trek stretches every DEM
+    // over its own range: anchor the regional stretch at the global heights of its footprint, so the
+    // metres stay comparable and no cliffs appear at the region's border.
+    const touchesBox = (b: [number, number, number, number]) => !(b[2] <= lon0 || b[0] >= lon1 || b[3] <= latBot || b[1] >= latTop);
+    // global height models are the cfg.dem base itself – only regional ones are composited on top
+    const dems = (cfg.products ?? []).filter((p) => p.group === 'dem' && !isGlobal(p.bbox) && touchesBox(p.bbox)).sort((a, b) => a.layer.maxZ - b.layer.maxZ);
+    for (const p of dems) {
+      const [pw, ps, pe, pn] = p.bbox;
+      const rx0 = Math.max(0, ((pw - lon0) / (lon1 - lon0)) * 256);
+      const rx1 = Math.min(256, ((pe - lon0) / (lon1 - lon0)) * 256);
+      const ry0 = Math.max(0, (latTop - pn) * k);
+      const ry1 = Math.min(256, (latTop - ps) * k);
+      if (rx1 - rx0 < 1 || ry1 - ry0 < 1) continue;
+      // regional tiles of this output tile (masked to the product's footprint)
+      const tmp = new OffscreenCanvas(256, 256);
+      const tg = tmp.getContext('2d', { willReadFrequently: true })!;
+      const PL = Math.max(0, Math.min(p.layer.maxZ, z + Math.ceil(Math.log2(128 / p.layer.px))));
+      const pSpan = 180 / 2 ** PL;
+      const pc0 = Math.max(Math.floor((Math.max(pw, lon0) + 180) / pSpan), 0);
+      const pc1 = Math.min(Math.ceil((Math.min(pe, lon1) + 180) / pSpan) - 1, pc0 + 4);
+      const pr0 = Math.max(Math.floor((90 - Math.min(pn, latTop)) / pSpan), 0);
+      const pr1 = Math.min(2 ** PL - 1, Math.ceil((90 - Math.max(ps, latBot)) / pSpan) - 1);
+      const pJobs: Promise<void>[] = [];
+      for (let r = pr0; r <= pr1; r++)
+        for (let c = pc0; c <= pc1; c++)
+          pJobs.push(
+            loadImg(p.layer.url(PL, r, ((c % (2 * 2 ** PL)) + 2 * 2 ** PL) % (2 * 2 ** PL))).then((img) => {
+              if (!img) return;
+              tg.imageSmoothingEnabled = true;
+              tg.imageSmoothingQuality = 'high';
+              const dx = ((-180 + c * pSpan - lon0) / (lon1 - lon0)) * 256;
+              const dw = (pSpan / (lon1 - lon0)) * 256;
+              const y0 = (latTop - (90 - r * pSpan)) * k;
+              const y1 = (latTop - (90 - (r + 1) * pSpan)) * k;
+              tg.drawImage(img, 0, 0, img.width, img.height, dx - 0.25, y0 - 0.25, dw + 0.5, y1 - y0 + 0.5);
+            }),
+          );
+      await Promise.all(pJobs);
+      const rd = tg.getImageData(0, 0, 256, 256).data;
+      // the global heights under the footprint (coarse, but stable across tiles): sampled at level 1
+      const stats = await footprint(dem.layer, p.bbox);
+      if (!stats) continue;
+      const hLo = dem.minM + (stats.min / 255) * (dem.maxM - dem.minM);
+      const hHi = dem.minM + (stats.max / 255) * (dem.maxM - dem.minM);
+      const read = g.getImageData(0, 0, 256, 256);
+      const d = read.data;
+      for (let y = Math.floor(ry0); y < Math.ceil(ry1); y++)
+        for (let x = Math.floor(rx0); x < Math.ceil(rx1); x++) {
+          const i = (y * 256 + x) * 4;
+          if (rd[i + 3] < 128) continue; // hole in the regional model
+          const h = hLo + (rd[i] / 255) * (hHi - hLo);
+          d[i] = Math.max(0, Math.min(255, Math.round(((h - dem.minM) / (dem.maxM - dem.minM)) * 255)));
+          d[i + 3] = 255;
+        }
+      g.putImageData(read, 0, 0);
+    }
+
+    const read = g.getImageData(0, 0, 256, 256);
+    const d = read.data;
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < 256 * 256; i++)
+      if (d[i * 4 + 3] >= 128) {
+        sum += d[i * 4];
+        n++;
+      }
+    const fill = n ? sum / n : 128;
+    const range = dem.maxM - dem.minM;
+    const scale = demScale(cfg);
+    for (let i = 0; i < 256 * 256; i++) {
+      const v = d[i * 4 + 3] >= 128 ? d[i * 4] : fill;
+      const t = Math.round((dem.minM + (v / 255) * range) * scale) + 32768; // terrarium: height + 32768
+      d[i * 4] = (t >> 8) & 255;
+      d[i * 4 + 1] = t & 255;
+      d[i * 4 + 2] = 0;
+      d[i * 4 + 3] = 255;
+    }
+    g.putImageData(read, 0, 0);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return { data: await blob.arrayBuffer() };
+  });
+}
+
 // ----- surface models (three.js custom layer, mercator) ------------------------------
 
 const EARTH_RADIUS_M = 6371008.8; // what MapLibre's mercator metres are based on
@@ -276,6 +456,8 @@ class SurfaceModels implements CustomLayerInterface {
   radiusM = 3_389_500;
   /** the globe projection only matches the mercator matrix once the map has flattened out */
   globe = true;
+  /** terrain is shown: models follow the height model instead of the mean sphere */
+  terrain = false;
   private loading = new Set<string>();
   private objects = new Map<string, THREE.Object3D>();
 
@@ -367,7 +549,9 @@ class SurfaceModels implements CustomLayerInterface {
     for (const it of this.items) {
       const obj = this.objects.get(it.id);
       if (!obj) continue;
-      const mc = MercatorCoordinate.fromLngLat([it.lon, it.lat], 0);
+      // with terrain the ground is not the mean sphere any more
+      const h = this.terrain ? (map.queryTerrainElevation([it.lon, it.lat]) ?? 0) : 0;
+      const mc = MercatorCoordinate.fromLngLat([it.lon, it.lat], h);
       const s = mc.meterInMercatorCoordinateUnits() * toBody * this.exaggeration(obj.userData.refM as number, it.lat, zoom);
       obj.matrixAutoUpdate = false;
       obj.matrix.copy(proj).multiply(new THREE.Matrix4().makeTranslation(mc.x, mc.y, mc.z).scale(new THREE.Vector3(s, -s, s)).multiply(rotX));
@@ -392,7 +576,22 @@ const TRACKS: { id: 'm20' | 'msl'; color: string; name: string; craft: string }[
 ];
 
 /** where a body's map opens without a position */
-const DEFAULT_VIEW: Record<string, { lat: number; lon: number }> = { mars: { lat: 18.44, lon: 77.45 }, moon: { lat: 0.67, lon: 23.47 } };
+const DEFAULT_VIEW: Record<string, { lat: number; lon: number }> = {
+  mars: { lat: 18.44, lon: 77.45 },
+  moon: { lat: 0.67, lon: 23.47 },
+  titan: { lat: -10.3, lon: 167.7 }, // Huygens-Landestelle
+  mimas: { lat: 1.4, lon: -111.9 }, // Herschel-Krater
+  enceladus: { lat: 0, lon: 0 },
+  tethys: { lat: 0, lon: 0 },
+  dione: { lat: 0, lon: 0 },
+  rhea: { lat: 0, lon: 0 },
+  iapetus: { lat: 0, lon: 0 },
+  vesta: { lat: 0, lon: 0 },
+  ceres: { lat: 0, lon: 0 },
+  ryugu: { lat: 0, lon: 0 },
+};
+/** airless bodies (and Titan, whose haze is orange) get no blue glow around the globe */
+const atmosphere = (body: string) => (body === 'mars' ? (['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] as unknown) : 0);
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 const MAX_ZOOM = 21; // beyond the imagery (≈ 5 m/px): the models are about real size
@@ -433,7 +632,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   let projection: 'globe' | 'mercator' = 'globe';
   let layerId = 'auto';
   let panelTab: 'layers' | 'places' = 'layers';
-  const show = { sites: true, tracks: true, heli: true, labels: true, models: true, features: true };
+  const show = { sites: true, tracks: true, heli: true, labels: true, models: true, features: true, terrain: true };
   let pending: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean } | null = null;
   let pendingSelect: { focus?: string; site?: string } | null = null;
   const models = new SurfaceModels();
@@ -461,6 +660,30 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   };
   const tileUrl = () => `planet://${bodyId}/${encodeURIComponent(layerId)}/{z}/{x}/{y}`;
   const setTiles = () => (map?.getSource('base') as { setTiles?: (t: string[]) => void } | undefined)?.setTiles?.([tileUrl()]);
+  const demUrl = () => `planetdem://${bodyId}/{z}/{x}/{y}`;
+  const demSource = () => ({
+    type: 'raster-dem' as const,
+    tiles: [demUrl()],
+    tileSize: 256,
+    maxzoom: cfg().dem!.layer.maxZ,
+    encoding: 'terrarium' as const,
+    attribution: cfg().dem!.layer.credit,
+  });
+  const demShadeLayer = () => ({
+    id: 'dem-shade',
+    type: 'hillshade' as const,
+    source: 'terrain-dem',
+    layout: { visibility: 'none' } as never,
+    paint: { 'hillshade-exaggeration': 0.55 / demScale(cfg()), 'hillshade-shadow-color': '#141018', 'hillshade-highlight-color': '#f6efe4', 'hillshade-accent-color': '#3d2f52' } as never,
+  });
+  /** relief as 3D terrain (globe) resp. shading (2D map) */
+  function applyTerrain() {
+    if (!map || !ready) return;
+    const on = !!cfg().dem && show.terrain;
+    map.setTerrain(on && projection === 'globe' ? { source: 'terrain-dem', exaggeration: 1 } : null);
+    if (map.getLayer('dem-shade')) map.setLayoutProperty('dem-shade', 'visibility', on && projection === 'mercator' ? 'visible' : 'none');
+    models.terrain = on && projection === 'globe';
+  }
 
   // ----- data on the map -------------------------------------------------------
   const setData = (id: string, features: Feature[]) => (map?.getSource(id) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features });
@@ -644,7 +867,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       version: 8 as const,
       projection: { type: projection },
       glyphs: OFM_GLYPHS,
-      sky: { 'atmosphere-blend': bodyId === 'moon' ? 0 : (['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0] as unknown) },
+      sky: { 'atmosphere-blend': atmosphere(bodyId) },
       sources: {
         base: {
           type: 'raster' as const,
@@ -653,6 +876,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
           maxzoom: 18, // regional HiRISE mosaics reach 25 cm/px
           attribution: baseCredit(),
         },
+        ...(cfg().dem ? { 'terrain-dem': demSource() } : {}),
         tracks: { type: 'geojson' as const, data: EMPTY },
         heli: { type: 'geojson' as const, data: EMPTY },
         points: { type: 'geojson' as const, data: EMPTY },
@@ -661,6 +885,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       layers: [
         { id: 'space', type: 'background' as const, paint: { 'background-color': '#05070d' } },
         { id: 'base', type: 'raster' as const, source: 'base' },
+        ...(cfg().dem ? [demShadeLayer()] : []),
         ...featureLayers(),
         { id: 'tracks-casing', type: 'line' as const, source: 'tracks', layout: round, paint: { 'line-color': 'rgba(0,0,0,0.6)', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } },
         { id: 'tracks', type: 'line' as const, source: 'tracks', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.6, 14, 4] } },
@@ -725,6 +950,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
 
   function initMap() {
     registerPlanetProtocol();
+    registerDemProtocol();
     map = new MlMap({
       container: mapEl,
       style: buildStyle() as never,
@@ -782,6 +1008,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       ready = true;
       map!.addLayer(models);
       applyLabels();
+      applyTerrain();
       if (pending) {
         goto(pending);
         pending = null;
@@ -843,9 +1070,18 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     if (map.getSource('base')) map.removeSource('base');
     map.addSource('base', { type: 'raster', tiles: [tileUrl()], tileSize: 256, maxzoom: 18, attribution: baseCredit() });
     map.addLayer({ id: 'base', type: 'raster', source: 'base' }, 'features-area');
+    // the height source carries the body in its URL: rebuild it
+    map.setTerrain(null);
+    if (map.getLayer('dem-shade')) map.removeLayer('dem-shade');
+    if (map.getSource('terrain-dem')) map.removeSource('terrain-dem');
+    if (cfg().dem) {
+      map.addSource('terrain-dem', demSource() as never);
+      map.addLayer(demShadeLayer() as never, 'features-area');
+    }
     (map.getSource('features') as GeoJSONSource | undefined)?.setData(featureCollection());
-    map.setSky({ 'atmosphere-blend': (bodyId === 'moon' ? 0 : ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0]) as never });
+    map.setSky({ 'atmosphere-blend': atmosphere(bodyId) as never });
     applyLabels();
+    applyTerrain();
     refreshData();
   }
 
@@ -855,6 +1091,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     map?.setProjection({ type: next });
     models.globe = next === 'globe';
     renderProj();
+    applyTerrain();
   }
 
   function goto(p: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean; pitch?: number }) {
@@ -934,6 +1171,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const chips: { label: string; color?: string; off?: string }[] = [];
     for (const p of ovProducts()) if (overlays.has(p.id)) chips.push({ label: overlayName(p), color: ovColor(p), off: `ov:${p.id}` });
     if (show.sites) chips.push({ label: 'Landestellen', color: '#ffffff', off: 'sites' });
+    if (cfg().dem && show.terrain) chips.push({ label: 'Relief', color: '#8fd3ff', off: 'terrain' });
     if (show.models && bodyId !== 'earth') chips.push({ label: '3D-Modelle', color: '#ffd23f', off: 'models' });
     if (bodyId === 'moon' && show.features) chips.push({ label: 'Mondformationen', color: '#bfe3ff', off: 'features' });
     if (mars && show.tracks) chips.push({ label: 'Rover-Spuren', color: 'linear-gradient(90deg,#ffb347,#5ad1ff)', off: 'tracks' });
@@ -952,6 +1190,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       show[k as keyof typeof show] = false;
       refreshData();
       applyLabels();
+      applyTerrain();
       renderPanel();
       renderActive();
     }
@@ -989,6 +1228,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
                 ${tile('sites', show.sites, '#ffffff', 'Landestellen')}
                 ${tile('models', show.models, '#ffd23f', '3D-Modelle')}
                 ${bodyId === 'moon' ? tile('features', show.features, '#bfe3ff', 'Mondformationen') : ''}
+                ${cfg().dem ? tile('terrain', show.terrain, '#8fd3ff', 'Relief (Höhenmodell)') : ''}
                 ${mars ? tile('tracks', show.tracks, 'linear-gradient(135deg,#ffb347,#5ad1ff)', 'Rover-Spuren') : ''}
                 ${mars ? tile('heli', show.heli, '#ff5ad1', 'Ingenuity') : ''}
                 ${tile('labels', show.labels, '#8899bb', 'Namen')}
@@ -1022,6 +1262,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         show[k] = !show[k];
         refreshData();
         applyLabels();
+        applyTerrain();
         renderPanel();
         renderActive();
       }),

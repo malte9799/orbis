@@ -21,7 +21,7 @@ for (let s = 0; s < 4000; s += 500) {
 const products = docs.filter((x) => (x.itemType === 'product' || x.itemType === 'dataset') && x.productLabel);
 console.log(products.length, 'products in the index');
 
-const KNOWN = new Set(['LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO_WAC_Mosaic_Global_303ppd']);
+const KNOWN = new Set(['LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO_WAC_Mosaic_Global_303ppd', 'LRO_LOLA_DEM_Global_128ppd_v04', 'LRO_LOLA_ClrShade_Global_128ppd_v04']);
 
 const BASE_CATS = new Set(['Imagery', 'Topography']);
 const OVERLAY_CATS = new Set(['Geology', 'Landforms', 'Mineral', 'Mineralogy', 'Composition', 'Spectrometer', 'Exploration Zones', 'Terrain', 'Geochemistry']);
@@ -37,8 +37,10 @@ await Promise.all(
       const x = products[i++];
       const title = x.title ?? '';
       const cat1 = x.productCat1;
+      // regional height models become 3D terrain (group "dem"); shaded/slope/quality variants of them stay out
+      const isDem = /DEM|DTM/i.test(`${x.productLabel} ${title}`) && !/Shade|Slope|Color|Confidence|Precision|Count|Error|Mask/i.test(`${x.productLabel} ${title}`);
       if (KNOWN.has(x.productLabel)) continue; // already a layer in planets.ts
-      if (/DEM/.test(title) || x.productCat2 === 'DEM' || x.productCat2 === 'Traverse Path') continue;
+      if (x.productCat2 === 'Traverse Path') continue;
       try {
         const t = await (await get(`https://trek.nasa.gov/tiles/Moon/EQ/${x.productLabel}/1.0.0/WMTSCapabilities.xml`)).text();
         const bb = /<ows:WGS84BoundingBox[^>]*>\s*<ows:LowerCorner>([-\d.eE ]+)<\/ows:LowerCorner>\s*<ows:UpperCorner>([-\d.eE ]+)<\/ows:UpperCorner>/.exec(t);
@@ -69,7 +71,8 @@ await Promise.all(
         }
         const global = e - w > 300;
         let group;
-        if (BASE_CATS.has(cat1)) group = global ? 'base' : isMosaic(title) && maxZ >= 13 ? 'mosaic' : 'region';
+        if (isDem) group = 'dem';
+        else if (BASE_CATS.has(cat1)) group = global ? 'base' : isMosaic(title) && maxZ >= 13 ? 'mosaic' : 'region';
         else if (isMosaic(title) && maxZ >= 13) group = 'mosaic';
         else if (OVERLAY_CATS.has(cat1)) group = 'overlay';
         else continue;
@@ -129,9 +132,21 @@ for (const m of mosaics) {
 // the geology overlay
 const geo = out.filter((m) => m.group === 'overlay' && isGlobal(m) && /Geolog/i.test(m.title) && !/South Pole|SPA/i.test(m.title)).sort((x, y) => y.maxZ - x.maxZ)[0];
 if (geo) keepers.add(geo);
+// regional height models (3D terrain): the finest model per area, global ones stay in planets.ts
+const demPool = out
+  .filter((m) => m.group === 'dem' && !isGlobal(m) && m.maxZ >= 3)
+  .sort((x, y) => y.maxZ - x.maxZ || area(y) - area(x));
+const demKeep = [];
+for (const m of demPool) {
+  if (demKeep.length >= 24) break;
+  if (demKeep.some((k) => covers(k, m))) continue;
+  demKeep.push(m);
+}
+for (const m of demKeep) keepers.add(m);
 const KEEP = (m) => keepers.has(m);
-for (const m of out) console.log(KEEP(m) ? 'keep' : 'drop', m.group, m.maxZ, m.label, '|', m.title);
-const order = { base: 0, mosaic: 1, region: 2, overlay: 3 };
+for (let k = out.length - 1; k >= 0; k--) if (!KEEP(out[k])) out.splice(k, 1);
+for (const m of out) console.log('keep', m.group, m.maxZ, m.label, '|', m.title);
+const order = { base: 0, mosaic: 1, region: 2, overlay: 3, dem: 4 };
 out.sort((a, b) => order[a.group] - order[b.group] || (a.group === 'mosaic' ? a.maxZ - b.maxZ || (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]) - (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]) : a.title.localeCompare(b.title)));
 const strip = (u) => u.replace(/^https:\/\/trek\.nasa\.gov\//, '~/');
 const body = out.map((m) => `  [${JSON.stringify(m.label)}, ${JSON.stringify(m.title)}, '${m.group}', ${JSON.stringify(strip(m.url))}, ${m.px}, [${m.bbox.join(', ')}], ${m.maxZ}],`).join('\n');
@@ -141,6 +156,7 @@ writeFileSync(
 // [label, title, group, tile url ("~/" = https://trek.nasa.gov/), tile px, [west, south, east, north], finest level]
 //   base: global maps · mosaic: regional LROC NAC mosaics (composited in "auto")
 //   region: other regional maps · overlay: thematic layers (geology, minerals …)
+//   dem: regional height models (3D terrain)
 // Curated by scripts/moon-products.mjs (KEEP).
 
 import type { TrekProduct } from './mars-products';
