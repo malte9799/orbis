@@ -213,7 +213,7 @@ export function createHud(host: HudHost): Hud {
     if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
     k.layers.slice(0, max).forEach((l) => {
       const c = catalogOf(l.id);
-      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${esc(c.label)}${l.hidden ? ' (ausgeblendet)' : ''}">${ico(c.icon, 2)}</span>`);
+      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${esc(c.label)}">${ico(c.icon, 2)}</span>`);
     });
     return { html: parts.join(''), more: Math.max(0, k.layers.length - max) };
   }
