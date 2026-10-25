@@ -4490,7 +4490,11 @@ svg.hourly {
 /* === NASA Eyes (testweise) === */
 .nasa-eyes {
   position: fixed;
-  inset: 0;
+  /* unter der Topbar beginnen, damit das iframe nicht überlappt wird */
+  top: var(--topbar-total);
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   z-index: 5;
