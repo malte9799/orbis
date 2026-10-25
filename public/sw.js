@@ -1,12 +1,12 @@
 // Orbis service worker: offline app shell + runtime caching of same-origin static files.
 // Live data (Wetter, Radar, Flugzeuge, Kartenkacheln …) is cross-origin and always goes to the network.
-const VERSION = 'orbis-v2';
+const VERSION = 'orbis-v3';
 const SHELL = `${VERSION}-shell`;
 const STATIC = `${VERSION}-static`;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL).then((c) => c.addAll(['./', './favicon.svg', './manifest.webmanifest', './icon-192.png'])).then(() => self.skipWaiting()),
+    caches.open(SHELL).then((c) => c.addAll(['./', './assets/', './favicon.svg', './manifest.webmanifest', './icon-192.png'])).then(() => self.skipWaiting()),
   );
 });
 

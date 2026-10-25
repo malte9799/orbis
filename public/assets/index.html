@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="description" content="Katalog aller Assets im Orbis-Repo: SVG-Dateien und per Quellcode definierte Inline-SVGs." />
+    <title>Assets – Orbis</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --card-solid: #151d38;
+        --card: rgba(255, 255, 255, 0.05);
+        --border: rgba(255, 255, 255, 0.09);
+        --text: #e9eef8;
+        --text-2: #aab4c8;
+        --muted: #7d889e;
+        --accent: #5b9dff;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        background:
+          radial-gradient(1200px 600px at 10% -10%, #1a2a5c 0%, transparent 60%),
+          radial-gradient(900px 500px at 110% 10%, #2a1a4c 0%, transparent 55%),
+          var(--bg);
+        color: var(--text);
+        font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        background: rgba(11, 16, 32, 0.82);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text);
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 1.05rem;
+      }
+      .brand svg { width: 30px; height: 30px; }
+      .brand small { color: var(--muted); font-size: 0.72rem; font-weight: 500; margin-left: 4px; }
+      .topbar a.back { color: var(--accent); font-size: 0.9rem; }
+      main { max-width: 1080px; margin: 0 auto; padding: 22px 16px 60px; }
+      h1 { font-size: 1.3rem; margin: 0 0 6px; }
+      .intro { color: var(--muted); margin: 0 0 14px; }
+      .intro code {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1px 6px;
+        font-size: 0.85em;
+      }
+      .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+      .toolbar input {
+        width: min(300px, 100%);
+        height: 40px;
+        padding: 0 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        font: inherit;
+      }
+      .stats { color: var(--muted); font-size: 0.8rem; }
+      h2 { font-size: 1.05rem; margin: 22px 0 10px; font-weight: 650; }
+      h2 .count { color: var(--muted); font-size: 0.8rem; font-weight: 400; margin-left: 6px; }
+      .badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--muted);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        vertical-align: middle;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        gap: 10px;
+      }
+      .tile {
+        position: relative;
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--card-solid);
+        overflow: hidden;
+        cursor: pointer;
+        transition: border-color 0.2s, transform 0.2s;
+      }
+      .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+      /* natives Dropdown: unsichtbares <select> über der ganzen Kachel, öffnet per Klick
+         das echte Browser-Menü (deaktivierte Einträge graut der Browser selbst aus) */
+      .tile-menu {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        appearance: none;
+        -webkit-appearance: none;
+        background: transparent;
+        border: 0;
+        cursor: pointer;
+      }
+      .tile::after {
+        content: '▾';
+        position: absolute;
+        top: 5px;
+        right: 9px;
+        font-size: 11px;
+        line-height: 1;
+        color: var(--text);
+        background: rgba(11, 16, 32, 0.75);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 3px 7px;
+        opacity: 0;
+        transition: opacity 0.15s;
+        pointer-events: none;
+      }
+      .tile:hover::after,
+      .tile:has(.tile-menu:focus-visible)::after { opacity: 0.9; }
+      .tile:has(.tile-menu:focus-visible) { border-color: var(--accent); }
+      .tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .pv {
+        aspect-ratio: 4 / 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px;
+        /* Schachbrett hinter transparenten Grafiken */
+        background:
+          conic-gradient(rgba(255, 255, 255, 0.045) 0 25%, transparent 0 50%, rgba(255, 255, 255, 0.045) 0 75%, transparent 0) 0 0 / 20px 20px,
+          #0d1530;
+        color: #9db4d0; /* currentColor für Inline-Icons */
+      }
+      .pv img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .pv > svg { max-width: 100%; max-height: 100%; }
+      .offline { color: var(--muted); font-size: 1.4rem; }
+      figcaption {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        padding: 7px 9px 9px;
+        border-top: 1px solid var(--border);
+      }
+      .name {
+        font-size: 0.8rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .meta { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .note { color: var(--muted); margin: 26px 0 0; font-size: 0.8rem; }
+      .note a { color: var(--accent); }
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        background: var(--card-solid);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px 16px;
+        border-radius: 999px;
+        font-size: 0.85rem;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+        z-index: 50;
+        max-width: calc(100% - 32px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .toast.on { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="../">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="orbisG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#5b3fd6"/></linearGradient><clipPath id="orbisFront"><rect x="0" y="16" width="32" height="16"/></clipPath></defs><g transform="rotate(-24 16 16)"><ellipse cx="16" cy="16" rx="14.6" ry="4.8" fill="none" stroke="#ffc533" stroke-width="1.6" opacity=".55"/><circle cx="16" cy="16" r="9" fill="url(#orbisG)"/><path d="M10 12.5c3 1.6 6-1.4 9 .3M9.4 18c3.4 1 6.2-1.6 10.4-.2" stroke="#d6ecff" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".7"/><ellipse cx="16" cy="16" rx="14.6" ry="4.8" fill="none" stroke="#ffc533" stroke-width="1.6" clip-path="url(#orbisFront)"/><circle cx="30.4" cy="15.2" r="1.9" fill="#ffe08a"/></g></svg>
+        <span>Assets <small>Katalog des Orbis-Repos</small></span>
+      </a>
+      <a class="back" href="../">← Zur App</a>
+    </header>
+    <main>
+      <h1>Grafik-Assets</h1>
+      <p class="intro">Alle Grafiken im Repo: Dateien unter <code>public/</code> und Inline-SVGs aus dem Quellcode. Der Katalog wird automatisch von <code>scripts/build-assets.mjs</code> erzeugt und bei jedem Build aktualisiert.</p>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Datei suchen …" aria-label="Assets durchsuchen" />
+        <span class="stats" id="stats" role="status"></span>
+      </div>
+      <div id="groups" aria-live="polite"><p class="intro">Lade Katalog …</p></div>
+      <p class="note">Klick auf eine Kachel öffnet das Browser-Menü (Öffnen, Kopieren, Pfad, Download). Quelle: <code>data/assets.json</code>, erzeugt von <code>scripts/build-assets.mjs</code>.</p>
+    </main>
+    <div id="toast" class="toast" role="status"></div>
+    <script>
+      const fmtBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
+      const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+      const tileHtml = (a, base, tokens) => {
+        const isFile = a.url !== null;
+        const href = isFile ? `${base}${a.url}` : '';
+        let preview;
+        let token = '';
+        if (isFile) preview = `<img loading="lazy" src="${esc(href)}" alt="${esc(a.name)}">`;
+        else if (a.svg) {
+          // rohes Markup (aus dem eigenen Repo, nicht aus Nutzereingaben) wird nach dem Setzen
+          // von innerHTML per Platzhalter injiziert – esc() würde das SVG sonst zerlegen
+          token = `@@SVG${tokens.length}@@`;
+          tokens.push(a.svg);
+          preview = token;
+        } else preview = `<div class="offline" title="${esc(a.path)}">–</div>`;
+        const unseen = !isFile && a.svg && (a.dynamic || a.svg.includes('d=""') || a.svg.includes('d=" "'));
+        const hasPreview = isFile || a.svg; // Download/Copy erzeugen bei dynamischen Inline-SVGs ggf. leere Grafiken – trotzdem erlaubt
+        const menu = `<select class="tile-menu" aria-label="Aktionen für ${esc(a.name)}">
+            <option value="" selected hidden>Aktionen</option>
+            ${href ? `<option value="open">Öffnen (neuer Tab)</option>` : `<option value="open" disabled>Öffnen (nur bei Datei-Assets)</option>`}
+            ${hasPreview ? `<option value="copy">Copy to clipboard</option>` : `<option value="copy" disabled>Copy to clipboard</option>`}
+            <option value="path">Pfad kopieren</option>
+            ${hasPreview ? `<option value="download">Download</option>` : `<option value="download" disabled>Download</option>`}
+          </select>`;
+        return `<figure class="tile" data-href="${esc(href)}" data-path="${esc(a.path)}" data-name="${esc(a.name)}" ${a.zeile ? `data-line="${a.zeile}"` : ''} ${a.width ? `data-w="${a.width}"` : ''} ${a.height ? `data-h="${a.height}"` : ''}>
+          <div class="pv">${preview}</div>
+          ${menu}
+          <figcaption>
+            <span class="name" title="${esc(a.path)}">${esc(a.name)}${unseen ? '<span class="badge">dynamisch</span>' : ''}</span>
+            <span class="meta">${isFile ? (a.width && a.height ? `${a.width}×${a.height} · ` : '') + fmtBytes(a.bytes) : `${esc(a.path)}${a.zeile ? `:${a.zeile}` : ''}`}</span>
+          </figcaption>
+        </figure>`;
+      };
+
+      const groupsEl = document.getElementById('groups');
+      const searchEl = document.getElementById('search');
+      const statsEl = document.getElementById('stats');
+      let doc = null;
+
+      const render = () => {
+        if (!doc) return;
+        const base = new URL('../', location.href).href; // Base-Path der App (z. B. /orbis/ in prod, / in dev)
+        const q = searchEl.value.trim().toLowerCase();
+        const tokens = [];
+        let shown = 0;
+        let html = '';
+        for (const g of doc.groups) {
+          const files = g.files.filter((a) => !q || a.name.toLowerCase().includes(q) || a.path.toLowerCase().includes(q));
+          if (!files.length) continue;
+          shown += files.length;
+          html += `<section><h2>${esc(g.label)} <span class="count">${g.count}</span>${g.kind === 'inline' ? '<span class="badge">im Quellcode definiert</span>' : ''}</h2>
+            <div class="grid">${files.map((a) => tileHtml(a, base, tokens)).join('')}</div></section>`;
+        }
+        // Platzhalter gegen rohe SVG-Markups tauschen
+        html = html.replace(/@@SVG(\d+)@@/g, (_, i) => tokens[+i]);
+        groupsEl.innerHTML = html;
+        statsEl.textContent = `${shown} von ${doc.total} · Stand ${new Date(doc.generated).toLocaleDateString('de-DE')}`;
+        if (!shown) groupsEl.innerHTML = `<p class="intro">Nichts gefunden für „${esc(q)}“.</p>`;
+      };
+
+      searchEl.addEventListener('input', render);
+
+      const toastEl = document.getElementById('toast');
+      let toastTimer;
+      const toast = (msg) => {
+        toastEl.textContent = msg;
+        toastEl.classList.add('on');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove('on'), 1800);
+      };
+      const copyText = (t) => navigator.clipboard?.writeText(t);
+
+      // SVG-Markup oder Bild-URL als PNG-Blob rendern (für die Zwischenablage)
+      const raster = (markup, srcUrl, w, h) => new Promise((resolve) => {
+        try {
+          const S = 128;
+          const ow = w && h ? Math.max(w, h) : w || h || S;
+          const scale = Math.min(1, S / ow);
+          const tw = Math.max(1, Math.round((w || S) * scale));
+          const th = Math.max(1, Math.round((h || S) * scale));
+          const img = new Image();
+          const draw = (url) => {
+            img.onload = () => {
+              const c = document.createElement('canvas');
+              c.width = tw; c.height = th;
+              c.getContext('2d').drawImage(img, 0, 0, tw, th);
+              c.toBlob((b) => { if (url) URL.revokeObjectURL(url); resolve(b); }, 'image/png');
+            };
+            img.onerror = () => { if (url) URL.revokeObjectURL(url); resolve(null); };
+          };
+          let objUrl = null;
+          if (markup) {
+            let svg = markup.replace('<svg', `<svg width="${tw}" height="${th}"`);
+            if (!/<svg[^>]+xmlns=/.test(svg)) svg = svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+            objUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+            img.src = objUrl;
+          } else {
+            img.src = srcUrl;
+          }
+          draw(objUrl);
+        } catch { resolve(null); }
+      });
+
+      const triggerDownload = (url, filename) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      };
+
+      groupsEl.addEventListener('change', async (event) => {
+        const sel = event.target;
+        if (!sel.classList?.contains('tile-menu')) return;
+        const action = sel.value;
+        sel.value = ''; // Auswahl zurücksetzen, damit dieselbe Aktion erneut gewählt werden kann
+        if (!action) return;
+        const tile = sel.closest('.tile');
+        const href = tile.dataset.href;
+        const path = tile.dataset.path;
+        const name = tile.dataset.name || path.split('/').pop();
+        const line = tile.dataset.line;
+        const isFile = !!href;
+        const sv = tile.querySelector('.pv > svg');
+        try {
+          if (action === 'open') {
+            if (href) window.open(href, '_blank', 'noopener');
+          } else if (action === 'copy') {
+            const blob = await raster(sv?.outerHTML, href, +tile.dataset.w || 0, +tile.dataset.h || 0);
+            if (blob && window.ClipboardItem && navigator.clipboard?.write) {
+              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+              toast('Grafik in die Zwischenablage kopiert');
+            } else {
+              await copyText(href || `${path}${line ? ':' + line : ''} (${name})`);
+              toast('Bildkopie nicht unterstützt – Referenz kopiert');
+            }
+          } else if (action === 'path') {
+            const ref = isFile ? href : `${path}${line ? ':' + line : ''} (${name})`;
+            await copyText(ref);
+            toast('Pfad kopiert: ' + ref);
+          } else if (action === 'download') {
+            if (isFile) {
+              triggerDownload(href, name + '.svg');
+              toast('Download gestartet');
+            } else if (sv) {
+              const url = URL.createObjectURL(new Blob([sv.outerHTML], { type: 'image/svg+xml' }));
+              triggerDownload(url, name.replace(/[^\w.-]+/g, '_') + '.svg');
+              URL.revokeObjectURL(url);
+              toast('SVG heruntergeladen');
+            }
+          }
+        } catch (err) {
+          toast('Aktion fehlgeschlagen: ' + err);
+        }
+      });
+
+      fetch('../data/assets.json')
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then((d) => { doc = d; render(); })
+        .catch((err) => { groupsEl.innerHTML = `<p class="intro">assets.json konnte nicht geladen werden (${esc(err)}). Läuft <code>npm run assets</code>?</p>`; });
+    </script>
+  </body>
+</html>
