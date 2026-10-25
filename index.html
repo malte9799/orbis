@@ -30,11 +30,41 @@
           <a href="#/weltall?eyes=asteroids" data-eyes="asteroids">Asteroiden</a>
           <a href="#/weltall?eyes=exo" data-eyes="exo">Exoplaneten</a>
         </div>
+        <div class="trek-group" hidden role="group" aria-label="Solar System Treks">
+          <details class="trek-dd">
+            <summary>Planeten</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planeten?trek=mercury" data-trek="mercury">Merkur</a>
+              <a href="#/planeten?trek=mars" data-trek="mars">Mars</a>
+            </div>
+          </details>
+          <details class="trek-dd">
+            <summary>Monde</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planeten?trek=moon" data-trek="moon">Mond</a>
+              <a href="#/planeten?trek=titan" data-trek="titan">Titan</a>
+              <a href="#/planeten?trek=dione" data-trek="dione">Dione</a>
+              <a href="#/planeten?trek=enceladus" data-trek="enceladus">Enceladus</a>
+              <a href="#/planeten?trek=tethys" data-trek="tethys">Tethys</a>
+              <a href="#/planeten?trek=rhea" data-trek="rhea">Rhea</a>
+              <a href="#/planeten?trek=mimas" data-trek="mimas">Mimas</a>
+              <a href="#/planeten?trek=iapetus" data-trek="iapetus">Iapetus</a>
+            </div>
+          </details>
+          <details class="trek-dd">
+            <summary>Asteroiden</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planeten?trek=vesta" data-trek="vesta">Vesta</a>
+              <a href="#/planeten?trek=ceres" data-trek="ceres">Ceres</a>
+            </div>
+          </details>
+        </div>
         <a href="#/vorhersage" data-route="forecast">Vorhersage</a>
         <a href="#/" data-route="globe">Karte</a>
+        <a href="#/planeten" data-route="treks">Planeten</a>
         <a href="#/weltall" data-route="space">Weltall</a>
         <a href="#/spiele" data-route="games">Spiele</a>
-        <a href="#/weltall" class="space-knob" aria-expanded="false" aria-label="NASA Eyes umschalten">Weltall</a>
+        <a href="#/" class="world-back" aria-label="Zurück zu Vorhersage, Karte & Spiele" title="Zurück">&#8592;</a>
       </nav>
     </header>
     <div id="app"></div>

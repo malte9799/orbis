@@ -4544,31 +4544,121 @@ svg.hourly {
   to { opacity: 1; transform: none; }
 }
 
-/* Eyes-Auswahl nur in der Weltall-Ansicht sichtbar */
-body:not(.mode-space) .space-knob,
-body:not(.mode-space) .eyes-group {
+/* Weltall-/Planeten-Leiste: nur in den Welt-Ansichten (Weltall/Planeten) sichtbar */
+body:not(.mode-world) .eyes-group,
+body:not(.mode-world) .trek-group,
+body:not(.mode-world) .world-back {
   display: none;
 }
-/* Eyes-Modus: alle Ansicht-Links ausblenden – der Weltall-Knopf übernimmt rechts */
-.tabs.mode-eyes a[data-route] {
+/* in Welt-Ansichten die normale Ansicht-Tabs ausblenden – Planeten/Weltall/Zurück bleiben */
+body.mode-world .tabs a[data-route="forecast"],
+body.mode-world .tabs a[data-route="globe"],
+body.mode-world .tabs a[data-route="games"] {
   display: none;
 }
-/* Weltall-Ansicht ohne Eyes-Modus: normaler Weltall-Tab wie auf den anderen Seiten,
-   nur der Umschalter-Knopf ist versteckt */
-body.mode-space .tabs:not(.mode-eyes) a.space-knob {
-  display: none;
-}
-
-/* Umschalter-Knopf: gleiche Maße wie die Links in der Eyes-Gruppe */
-.tabs a.space-knob {
+/* je nach Ansicht nur die passende Auswahl-Gruppe */
+body.mode-world .tabs a[data-route="space"].active,
+body.mode-world .tabs a[data-route="treks"].active {
   background: var(--accent);
   color: #fff;
+}
+
+/* Treks-Gruppe: drei Kategorie-Dropdowns (Planeten, Monde, Asteroiden) */
+.trek-group {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 4px;
+  border-radius: 999px;
+  margin-right: 8px;
+  animation: eyes-fade-in 0.25s ease;
+}
+.trek-group[hidden] {
+  display: none;
+}
+.trek-dd {
+  position: relative;
+}
+.trek-dd summary {
+  list-style: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  color: var(--text-2);
+  text-decoration: none;
   font-weight: 550;
   font-size: 0.88rem;
-  padding: 6px 14px;
-  align-self: center;
-  transition: background 0.2s ease;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
 }
-.tabs a.space-knob:hover {
-  filter: brightness(1.12);
+.trek-dd summary::-webkit-details-marker {
+  display: none;
+}
+.trek-dd summary::after {
+  content: '▾';
+  margin-left: 5px;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+.trek-dd summary:hover {
+  color: #fff;
+}
+.trek-dd-items {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  background: var(--bg, #0b1020);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 40;
+  animation: eyes-fade-in 0.2s ease;
+}
+.trek-group .trek-dd:nth-last-child(2) .trek-dd-items,
+.trek-group .trek-dd:last-child .trek-dd-items {
+  left: auto;
+  right: 0;
+}
+.trek-dd-items a {
+  padding: 7px 12px;
+  border-radius: 10px;
+  color: var(--text-2, #9fb4d8);
+  text-decoration: none;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+.trek-dd-items a:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.trek-dd-items a.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Trek-Karten-View füllt die Fläche unter der Topbar */
+.trek-map-map {
+  flex: 1;
+  min-height: 0;
+  background: #000;
+}
+.trek-map-map canvas {
+  display: block;
+  outline: none;
+}
+
+/* Zurück-Pfeil (kehrt zu den normalen Ansicht-Tabs zurück) */
+.tabs a.world-back {
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.tabs a.world-back:hover {
+  color: #fff;
 }
