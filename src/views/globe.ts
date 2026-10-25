@@ -809,10 +809,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
   }, 700);
 
-  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile) */
+  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile).
+   *  Runs only while "Satellit HD" is actually shown – no probe fetch on every map load. */
   let hdSat: string = HD_SAT;
+  let hdProbeDay = '';
   async function updateHdSource() {
     const date = gibsDate(1);
+    hdProbeDay = date;
     const works = (sat: string) =>
       fetch(gibsTrueColor(date, sat).replace('{z}/{y}/{x}', '2/1/2'), { signal: AbortSignal.timeout(8000) }).then(
         (r) => r.ok,
@@ -820,6 +823,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       );
     hdSat = (await works(HD_SAT)) ? HD_SAT : HD_SAT_BACKUP;
     (map?.getSource('hd') as RasterTileSource | undefined)?.setTiles([gibsTrueColor(date, hdSat)]);
+  }
+  /** the probe (and a later switch to the backup satellite) only when HD is really displayed */
+  function ensureHdSources() {
+    if (state.overlay !== 'sat-hd') return;
+    if (hdProbeDay !== gibsDate(1) || hdSat !== HD_SAT) void updateHdSource();
   }
 
   function setGeo(source: string, data: FeatureCollection) {
@@ -832,6 +840,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     stopAnimation();
     vis('field', false);
     vis('hd', o === 'sat-hd');
+    if (o === 'sat-hd') ensureHdSources();
     vis('sat-ir', o === 'sat-ir');
     vis('sat-storm', o === 'sat-storm');
     vis('dwd-radar', o === 'dwd-radar');
@@ -1356,7 +1365,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
-      void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
@@ -1624,7 +1632,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       clearInterval(liveTimer);
       liveTimer = window.setInterval(() => {
         if (!map || document.hidden) return;
-        if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
+        if (state.overlay === 'sat-hd' && hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
         // EUMETSAT layers get their own TIME parameter in the URL (newest published scan);
         // only static-URL sources need the generic cache buster.
