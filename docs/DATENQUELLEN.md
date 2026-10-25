@@ -186,7 +186,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
 | [EOX Sentinel-2 cloudless](https://s2maps.eu) | Wolkenloses Satellitenbild (Copernicus Sentinel-2) | 🟢 CC BY-NC-SA 4.0, 🚫 |
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
-| [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | 3D-Gelände & Schummerung (USGS 3DEP, SRTM, GMTED, ETOPO1) | 🟢 |
+| [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Höhenmodell für die 3D-Geländeanpassung (USGS 3DEP, SRTM, GMTED, ETOPO1) – wird nicht als sichtbare Ebene angezeigt | 🟢 |
 | [MapLibre GL JS](https://maplibre.org) | Kartendarstellung (2D & Globus) | 🟢 BSD-3 |
 
 ## 11. Weltall: Daten, Karten & Texturen
