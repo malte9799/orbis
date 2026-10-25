@@ -218,7 +218,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       events: {
         ...empty,
         attribution:
-          'Ereignisse: <a href="https://eonet.gsfc.nasa.gov/">NASA EONET</a>, <a href="https://www.gdacs.org/">GDACS</a>, <a href="https://www.spc.noaa.gov/">NOAA SPC</a>, <a href="https://www.weather.gov/">NWS</a>, USGS, <a href="https://www.emsc-csem.org/">EMSC</a>',
+          'Ereignisse: <a href="https://eonet.gsfc.nasa.gov/">EONET</a>, <a href="https://www.gdacs.org/">GDACS</a>, <a href="https://www.spc.noaa.gov/">SPC</a>, <a href="https://www.weather.gov/">NWS</a>, USGS, <a href="https://www.emsc-csem.org/">EMSC</a>',
       },
       marker: empty,
     },
