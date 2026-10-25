@@ -1400,7 +1400,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       };
       sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
-      extras.setTerrain(state.terrain3d && map.getPitch() > 10);
+      extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
       applyBase();
