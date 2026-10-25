@@ -1405,13 +1405,14 @@ export class ExtraLayers {
       'marker',
     );
     // live track of the rocket currently followed in the launch panel (trail + symbol);
-    // always rendered once the panel feeds data, independent of the launches toggle
+    // visible only while the panel feeds data (independent of the launches toggle) –
+    // the layers start hidden: 'visible' with empty data would keep the attribution
     add(
       {
         id: 'launch-live-line',
         type: 'line',
         source: 'launch-live-line',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        layout: { visibility: 'none' as const, 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
       },
       'marker',
@@ -1422,6 +1423,7 @@ export class ExtraLayers {
         type: 'symbol',
         source: 'launch-live',
         layout: {
+          visibility: 'none' as const,
           'icon-image': 'glyph-rocket',
           'icon-size': 1.4,
           'icon-allow-overlap': true,
@@ -2997,6 +2999,10 @@ export class ExtraLayers {
     const none = empty();
     this.setData('launch-live-line', data?.line ?? none);
     this.setData('launch-live', data?.pos ?? none);
+    // layer visibility follows the data: hidden layers drop their source's attribution
+    const has = (fc: FeatureCollection | undefined) => !!fc?.features.length;
+    this.vis('launch-live-line', has(data?.line));
+    this.vis('launch-live', has(data?.pos));
   }
 
   private async loadShips() {
