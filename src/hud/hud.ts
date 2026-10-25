@@ -206,14 +206,18 @@ export function createHud(host: HudHost): Hud {
   const statusLine = (k: Karte) => (isStd(k) ? `Standardkarte${dirty(k.id) ? ' · geändert' : ''}` : `Eigene Karte · ${dirty(k.id) ? 'geändert' : `gespeichert ${rel(k.savedAt)}`}`);
   const mainFam = (k: Karte) => (k.main ? host.families().find((f) => f.id === k.main) : undefined);
 
-  /** the glyph-square icons of a Karte: weather main first, then its layers */
-  function iconList(k: Karte, max: number): { html: string; more: number } {
+  /** the glyph-square icons of a Karte: weather main first, then its layers.
+   *  With toggle = true the layer icons (in the settings pill) switch the layer visibility. */
+  function iconList(k: Karte, max: number, toggle = false): { html: string; more: number } {
     const parts: string[] = [];
     const f = mainFam(k);
     if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
     k.layers.slice(0, max).forEach((l) => {
       const c = catalogOf(l.id);
-      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${esc(c.label)}">${ico(c.icon, 2)}</span>`);
+      if (!c) return;
+      const tip = `${esc(c.label)}${l.hidden ? ' – einblenden' : ' – ausblenden'}`;
+      if (toggle) parts.push(`<button type="button" class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-act="eye" data-id="${esc(l.id)}" data-tip="${tip}" aria-pressed="${!l.hidden}" title="${tip}">${ico(c.icon, 2)}</button>`);
+      else parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${tip}">${ico(c.icon, 2)}</span>`);
     });
     return { html: parts.join(''), more: Math.max(0, k.layers.length - max) };
   }
@@ -401,7 +405,7 @@ export function createHud(host: HudHost): Hud {
 
   /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
-    const { html, more } = iconList(k, 8);
+    const { html, more } = iconList(k, 8, true);
     return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="Einstellungen für ${esc(k.name)}">
       <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
       <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
