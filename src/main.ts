@@ -22,7 +22,7 @@ const forecast = createForecastView((p: Place) => {
 const globe = createGlobeView(
   (p: Place) => {
     store.setLastPlace(p);
-    location.hash = '#/';
+    location.hash = '#/vorhersage';
   },
   (lat, lon) => {
     location.hash = `#/weltall?from=earth&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}`;
@@ -90,7 +90,7 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : 'forecast';
+  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : path.startsWith('/vorhersage') ? 'forecast' : 'globe';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   if (active === 'space' && next !== 'space') space?.deactivate();

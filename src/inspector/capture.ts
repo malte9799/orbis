@@ -54,7 +54,7 @@ let installed = false;
 
 export function currentRoute(): string {
   const p = location.hash.replace(/^#/, '').split('?')[0];
-  return p.startsWith('/spiele') ? 'games' : p.startsWith('/planet') || p.startsWith('/weltall') ? 'space' : p.startsWith('/karte') || p.startsWith('/globus') ? 'globe' : 'forecast';
+  return p.startsWith('/spiele') ? 'games' : p.startsWith('/planet') || p.startsWith('/weltall') ? 'space' : p.startsWith('/vorhersage') ? 'forecast' : 'globe';
 }
 
 export function getCaptures(): Capture[] {
