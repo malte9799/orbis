@@ -699,6 +699,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const filter = ['in', ['get', 'group'], ['literal', on]] as const;
     map?.setFilter('ev-circle', filter as never);
     map?.setFilter('ev-glyph', filter as never);
+    // groups off = events layers visually AND formally hidden, so the attribution control
+    // drops the events sources (visibility 'none' is what counts, not empty features)
+    const evVisible = on.length > 0;
+    for (const id of ['ev-circle', 'ev-glyph']) vis(id, evVisible);
     vis('quakes', !!state.groups.quakes);
     vis('tracks', !!state.groups.storms);
     vis('nws-fill', !!state.groups.tornado);

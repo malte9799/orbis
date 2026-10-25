@@ -580,7 +580,7 @@ export class ExtraLayers {
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
-      webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>, <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://data.calgary.ca">City of Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (Open Government Licence – BC)',
+      webcams: 'Webcams: <a href="https://www.windy.com/webcams">Windy</a>, <a href="https://www.digitraffic.fi/">Digitraffic</a> (CC BY 4.0), <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://data.calgary.ca">Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (OGL), <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://www.nzta.govt.nz">NZTA</a>',
       'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")',
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
@@ -595,7 +595,7 @@ export class ExtraLayers {
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (Contains information licensed under the Open Government Licence – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA (Data provided by Chicago Transit Authority), Trafiklab',
+      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
@@ -760,14 +760,11 @@ export class ExtraLayers {
         tileSize: 512,
         maxzoom: DEM_NATIVE_ZOOM,
         encoding: 'terrarium',
-        // Lizenzpflichten der Quellen: Mapterhorn listet alle Modelle mapterhorn.com/attribution,
-        // für die Kacheln der AWS-Fallbacks gilt die tilezen-Liste (docs/attribution.md)
+        // Lizenzpflichten der Quellen: die verlinkten Seiten führen die komplette Modell-Liste
+        // (mapterhorn.com/attribution; docs/attribution.md für die AWS/tilezen-Fallbacks)
         attribution:
-          'Gelände: <a href="https://mapterhorn.com/attribution/">Mapterhorn</a> (Copernicus DEM GLO-30, nationale LIDAR-Höhenmodelle), ' +
-          '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
-          'ArcticDEM (DigitalGlobe-Bilder, NSF-gefördert); © Commonwealth of Australia (Geoscience Australia) 2017; © offene Daten Österreichs – DGM Österreich; ' +
-          'Open Government Licence – Canada; EU-DEM: produced using Copernicus data and information funded by the European Union; INEGI, Continental relief, 2016; ' +
-          '© Land Information New Zealand; © Kartverket; © Environment Agency copyright and/or database right 2015',
+          'Gelände: <a href="https://mapterhorn.com/attribution/">Mapterhorn</a>, ' +
+          '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a>',
       });
     }
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
@@ -1408,13 +1405,14 @@ export class ExtraLayers {
       'marker',
     );
     // live track of the rocket currently followed in the launch panel (trail + symbol);
-    // always rendered once the panel feeds data, independent of the launches toggle
+    // visible only while the panel feeds data (independent of the launches toggle) –
+    // the layers start hidden: 'visible' with empty data would keep the attribution
     add(
       {
         id: 'launch-live-line',
         type: 'line',
         source: 'launch-live-line',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        layout: { visibility: 'none' as const, 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
       },
       'marker',
@@ -1425,6 +1423,7 @@ export class ExtraLayers {
         type: 'symbol',
         source: 'launch-live',
         layout: {
+          visibility: 'none' as const,
           'icon-image': 'glyph-rocket',
           'icon-size': 1.4,
           'icon-allow-overlap': true,
@@ -3000,6 +2999,10 @@ export class ExtraLayers {
     const none = empty();
     this.setData('launch-live-line', data?.line ?? none);
     this.setData('launch-live', data?.pos ?? none);
+    // layer visibility follows the data: hidden layers drop their source's attribution
+    const has = (fc: FeatureCollection | undefined) => !!fc?.features.length;
+    this.vis('launch-live-line', has(data?.line));
+    this.vis('launch-live', has(data?.pos));
   }
 
   private async loadShips() {
