@@ -98,15 +98,15 @@ jobs:
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
           # optional Mapillary client token for the street game (public by nature, it ends up in the bundle) – same place, Variables
           VITE_MAPILLARY_TOKEN: ${{ vars.MAPILLARY_TOKEN }}
-      # Preview-Tab-Titel „Orbis – pr #N <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten
+      # Preview-Tab-Titel „Orbis – #prN <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten
       # (Index-Preview behält den Standardtitel). Ohne PR zum Branch → Branch-Name als Fallback.
-      - name: 'Preview-Titel: PR # + Titel'
+      - name: 'Preview-Titel: #pr + Titel'
         if: steps.n.outputs.dir != '.'
         run: |
           if meta=$(gh pr view "$BRANCH" --repo "$REPO" --json number,title 2>/dev/null); then
-            label="Orbis – pr #$(jq -r .number <<<"$meta") $(jq -r .title <<<"$meta")"
+            label="Orbis - #$(jq -r .number <<<"$meta") $(jq -r .title <<<"$meta")"
           else
-            label="Orbis – $BRANCH"
+            label="Orbis - $BRANCH"
           fi
           PREVIEW_TITLE="$label" node -e '
             const { readFileSync, writeFileSync } = require("fs");
