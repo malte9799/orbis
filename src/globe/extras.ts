@@ -454,13 +454,14 @@ const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
  *  zoom range, so a km-based circle stays the same size on the map while zooming. A small
- *  minimum radius keeps fresh and far-zoomed circles visible at all. */
+ *  minimum radius keeps fresh and far-zoomed circles visible at all – it sits inside every
+ *  stop, because the zoom interpolate has to stay top-level for the style spec. */
 const thunderRadius: ExpressionSpecification = (() => {
   const A = 1000 / 156543.03392;
   const cos = ['cos', ['/', ['*', ['get', 'lat'], 3.141592653589793], 180]] as unknown as ExpressionSpecification;
   const stops: unknown[] = [];
-  for (let z = 0; z <= 12; z += 2) stops.push(z, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]);
-  return ['max', 10, ['interpolate', ['exponential', 2], ['zoom'], ...stops]] as unknown as ExpressionSpecification;
+  for (let z = 0; z <= 12; z += 2) stops.push(z, ['max', 10, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]]);
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops] as ExpressionSpecification;
 })();
 
 const ALT_COLOR: ExpressionSpecification = [
@@ -1075,8 +1076,8 @@ export class ExtraLayers {
     );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
-    // expanding ring of a fresh strike (grows with "k", fades via "o"), detector line colours: green = close, blue = medium, red = far
-    const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
+    // expanding ring of a fresh strike (grows with "k", fades via "o"); detector lines: white,
+    // only a little thicker when the capturing detector sits close to the strike
     // thunder (Unteroption "Donner"): drew the backmost lightning layer first, so it never
     // washes out the wave, lines or strike dots
     add(
@@ -1103,8 +1104,16 @@ export class ExtraLayers {
         source: 'lightning-line',
         layout: { ...hidden, 'line-join': 'round' },
         paint: {
-          'line-color': lineColor,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6],
+          // weiß in jeder Entfernung; die Dicke kodiert sie: nah (dc 0) etwas dicker, sonst Basis.
+          // Zoom-Ausdruck bleibt top-level im Interpolate (der dc-Faktor sitzt in den Stops, sonst
+          // verwirft MapLibre das Paint und schaltet die Linien komplett aus)
+          'line-color': '#ffffff',
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            1, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 0.6],
+            8, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.1],
+            12, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.6],
+          ],
           'line-opacity': ['get', 'o'],
         },
       },
@@ -1166,9 +1175,12 @@ export class ExtraLayers {
         layout: hidden,
         paint: {
           'circle-color': 'rgba(255,50,50,0.28)',
+          // max. Größe erst ab Zoom 3: bei Weltansicht bleiben die Kreise klein (≤ 8 px),
+          // ab Zoom 3 bis 36 px und danach wie bisher weiterwachsen
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            1, ['+', 5, ['*', 44, ['get', 'k']]],
+            0, ['+', 2, ['*', 6, ['get', 'k']]],
+            3, ['+', 6, ['*', 30, ['get', 'k']]],
             6, ['+', 8, ['*', 96, ['get', 'k']]],
             12, ['+', 10, ['*', 180, ['get', 'k']]],
           ],
@@ -1537,7 +1549,7 @@ export class ExtraLayers {
           'circle-color': ['case', ['get', 'flock'], ALPR_RED, '#ff9800'],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 1.5],
         },
       },
       'marker',
@@ -1810,6 +1822,11 @@ export class ExtraLayers {
 
   note(id: ExtraId): string | undefined {
     return this.on.has(id) ? this.info[id]?.note : undefined;
+  }
+
+  /** Stream delay of the live lightning feed in seconds (undefined while unknown). */
+  lightningDelay(): number | undefined {
+    return this.lightning?.delay;
   }
 
   /** The map layers of a layer entry (for the draw order), in their style order. */
