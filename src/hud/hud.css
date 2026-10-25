@@ -87,8 +87,8 @@
 .hud-sx .suggestions { top: 44px; left: -36px; right: 0; background: var(--glass); backdrop-filter: blur(14px); }
 
 /* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
-/* mehr Innenabstand; Radien konzentrisch (Apple): 17 außen − 5 padding = 12 innen */
-.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px 8px 6px 5px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 16px; }
+/* symmetrischer Innenabstand; Radien konzentrisch (Apple): 17 außen − 6 padding = 11 innen */
+.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 17px; }
 /* ohne Ebenen keinen leeren Spalt neben dem Zahnrad */
 .hud .sum .lic:empty { display: none; }
 .hud .sum .lic + .pin { margin-left: 0; }
@@ -102,7 +102,7 @@
 /* ungespeicherte Änderungen am Zahnrad selbst: kleiner orangener Punkt (::before;
    ::after bleibt dem Tooltip vorbehalten – beides am selben Element würde kollidieren) */
 .hud .sum.changed .gear { position: relative; }
-.hud .sum.changed .gear::before { content: ''; position: absolute; top: -3px; right: -4px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0f1530; z-index: 3; }
+.hud .sum.changed .gear::before { content: ''; position: absolute; top: -2px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0f1530; z-index: 3; }
 
 /* css tooltips below the settings pill (native titles are too slow/inconsistent on the icons) */
 .hud .sum [data-tip] { position: relative; }
