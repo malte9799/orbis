@@ -4545,25 +4545,26 @@ body:not(.mode-space) .space-knob,
 body:not(.mode-space) .eyes-group {
   display: none;
 }
-/* in der Weltall-Ansicht ersetzt der Umschalter den normalen Weltall-Tab */
-body.mode-space .tabs a[data-route="space"] {
+/* Eyes-Modus: alle Ansicht-Links ausblenden – der Weltall-Knopf übernimmt rechts */
+.tabs.mode-eyes a[data-route] {
   display: none;
 }
-/* Eyes-Modus: die drei anderen Ansicht-Links ausblenden */
-.tabs.mode-eyes a[data-route]:not([data-route="space"]) {
+/* Weltall-Ansicht ohne Eyes-Modus: normaler Weltall-Tab wie auf den anderen Seiten,
+   nur der Umschalter-Knopf ist versteckt */
+body.mode-space .tabs:not(.mode-eyes) a.space-knob {
   display: none;
 }
 
-/* Umschalter-Knopf (kein Gradient, wie ein normaler Tab) */
+/* Umschalter-Knopf: gleiche Maße wie die Links in der Eyes-Gruppe */
 .tabs a.space-knob {
   background: var(--accent);
   color: #fff;
-  font-weight: 650;
-  transition: transform 0.25s ease, background 0.2s ease;
+  font-weight: 550;
+  font-size: 0.88rem;
+  padding: 6px 14px;
+  align-self: center;
+  transition: background 0.2s ease;
 }
 .tabs a.space-knob:hover {
   filter: brightness(1.12);
-}
-.tabs.mode-eyes a.space-knob {
-  transform: scale(1.08);
 }

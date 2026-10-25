@@ -79,12 +79,27 @@ let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | null = null;
 
 const nav = document.querySelector<HTMLElement>('.tabs')!;
 const knob = nav.querySelector<HTMLAnchorElement>('.space-knob')!;
-// Umschalter: Topbar zwischen normaler Ansicht-Meny und NASA-Eyes-Gruppe wechseln
+
+// Topbar in der Weltall-Ansicht: standardmäßig die NASA-Eyes-Gruppe zeigen,
+// per „Weltall“-Knopf zwischen Eyes-Auswahl und den übrigen Ansichts-Links umschalten.
+let eyesMode = false;
+function setEyesMode(on: boolean) {
+  eyesMode = on;
+  nav.classList.toggle('mode-eyes', on);
+  knob?.setAttribute('aria-expanded', String(on));
+  document.querySelector('.eyes-group')?.toggleAttribute('hidden', !on);
+}
 knob?.addEventListener('click', (e) => {
   e.preventDefault();
-  const eyesMode = nav.classList.toggle('mode-eyes');
-  knob.setAttribute('aria-expanded', String(eyesMode));
+  setEyesMode(!eyesMode);
   if (eyesMode && active !== 'space') location.hash = '#/weltall';
+});
+// In der Weltall-Ansicht schaltet der normale „Weltall“-Tab die Eyes-Gruppe wieder ein
+const spaceTab = nav.querySelector<HTMLAnchorElement>('a[data-route="space"]');
+spaceTab?.addEventListener('click', (e) => {
+  if (active !== 'space' || eyesMode) return; // sonst: normale Navigation
+  e.preventDefault();
+  setEyesMode(true);
 });
 
 function route() {
@@ -113,11 +128,14 @@ function route() {
     else a.removeAttribute('aria-current');
   });
 
-  // Eyes-Auswahl: Topbar-Anpassung nur in der Weltall-Ansicht
+  // Eyes-Auswahl: beim Betreten der Weltall-Ansicht standardmäßig die Eyes-Gruppe zeigen,
+  // außer innerhalb der Ansicht wurde per Knopf umgeschaltet
   const eyes = params.get('eyes');
-  const eyesMode = nav.classList.contains('mode-eyes');
-  if (next !== 'space') nav.classList.remove('mode-eyes');
-  document.querySelector('.eyes-group')?.toggleAttribute('hidden', !eyesMode);
+  if (next === 'space') {
+    if (active !== 'space') setEyesMode(true);
+  } else if (eyesMode) {
+    setEyesMode(false);
+  }
   document.querySelectorAll<HTMLAnchorElement>('.eyes-group a').forEach((a) => {
     a.classList.toggle('active', eyesMode && a.dataset.eyes === (eyes ?? 'earth'));
   });
@@ -132,7 +150,7 @@ function route() {
     loadSpace().then((v) => {
       if (active !== 'space') return;
       v.el.hidden = false;
-      v.activate({ eyes, focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, site: params.get('site') ?? undefined });
+      v.activate({ eyes: eyes ?? undefined, focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, site: params.get('site') ?? undefined });
     });
   } else if (next === 'planet') {
     const z = parseFloat(params.get('zoom') ?? '');
