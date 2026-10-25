@@ -1,4 +1,4 @@
-const APPS = ['earth', 'solar-system', 'asteroids', 'exo'] as const;
+const APPS = ['earth', 'mrn', 'solar-system', 'asteroids', 'exo'] as const;
 
 export interface NasaEyesView {
   el: HTMLElement;
@@ -33,7 +33,7 @@ export function createNasaEyesView(): NasaEyesView {
     activate(opts) {
       // eyes-Param aus der Topbar gewinnt; sonst aus focus ableiten (z. B. Erde / Planeten)
       const focus = opts?.focus;
-      const want = opts?.eyes ?? (!focus ? undefined : focus === 'earth' ? 'earth' : focus === 'asteroids' ? 'asteroids' : focus === 'exo' ? 'exo' : 'solar-system');
+      const want = opts?.eyes ?? (!focus ? undefined : focus === 'earth' ? 'earth' : focus === 'mrn' || focus === 'mars' ? 'mrn' : focus === 'asteroids' ? 'asteroids' : focus === 'exo' ? 'exo' : 'solar-system');
       select(want ?? current, opts);
     },
     deactivate() {
