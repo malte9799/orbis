@@ -5,6 +5,7 @@ import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippin
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
+import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
@@ -748,25 +749,26 @@ export class ExtraLayers {
     overlay('ecsnow', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RSNO&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Schneeradar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.85, { bounds: [-141, 41, -52, 70] });
     overlay('fmirain24', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_rr24h_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Regensumme: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
     overlay('jmanowcast', [JMA_RADAR_TILES('20000101000000')], 'Radar-Nowcast Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
-    // 3D terrain: AWS Terrarium tiles – used only to lift the real heights (mountains, 3D
-    // aircraft/sondes/boats), never shown as a visible map layer
+    // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der
+    // Anpassung der echten Höhen (Gebirge, 3D-Flugzeuge/Sonden/Boote), wird nie als Ebene gezeichnet
+    registerDemTiles();
     if (!m.getSource('terrain-dem')) {
       m.addSource('terrain-dem', {
         type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 14,
+        tiles: [DEM_TILES],
+        tileSize: 512,
+        maxzoom: DEM_NATIVE_ZOOM,
         encoding: 'terrarium',
-        // full credit list required by the terrain tiles (tilezen/joerd docs/attribution.md)
+        // Lizenzpflichten der Quellen: Mapterhorn listet alle Modelle mapterhorn.com/attribution,
+        // für die Kacheln der AWS-Fallbacks gilt die tilezen-Liste (docs/attribution.md)
         attribution:
-          'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
+          'Gelände: <a href="https://mapterhorn.com/attribution/">Mapterhorn</a> (Copernicus DEM GLO-30, nationale LIDAR-Höhenmodelle), ' +
+          '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
           'ArcticDEM (DigitalGlobe-Bilder, NSF-gefördert); © Commonwealth of Australia (Geoscience Australia) 2017; © offene Daten Österreichs – DGM Österreich; ' +
           'Open Government Licence – Canada; EU-DEM: produced using Copernicus data and information funded by the European Union; INEGI, Continental relief, 2016; ' +
           '© Land Information New Zealand; © Kartverket; © Environment Agency copyright and/or database right 2015',
       });
     }
-    // the height model stays on permanently – it adapts the true elevation, but nothing is drawn
-    if (!m.getTerrain()) m.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
     overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
     add(
@@ -1748,6 +1750,13 @@ export class ExtraLayers {
 
   isOn(id: ExtraId) {
     return this.on.has(id);
+  }
+
+  /** 3D-Gelände: echtes Höhenmodell an/aus – gezeichnet wird nie etwas davon (keine eigene Ebene) */
+  setTerrain(on: boolean) {
+    const has = !!this.map.getTerrain();
+    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
+    else if (!on && has) this.map.setTerrain(null);
   }
 
   setEnabled(ids: ExtraId[]) {

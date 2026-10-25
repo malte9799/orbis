@@ -25,7 +25,7 @@ import {
   type WxFamily,
 } from './catalog';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -411,6 +411,7 @@ export function createHud(host: HudHost): Hud {
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen der Landschaft (Mapterhorn, AWS)</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>nur bei Wind & Böen sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
         <div class="slot"><span>Gespeichert mit</span></div>
         <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
@@ -1039,6 +1040,8 @@ export function createHud(host: HudHost): Hud {
       else if (v === 'buildings3d') {
         // write the choice explicitly, so the base map no longer decides the default
         d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));
+      } else if (v === 'terrain3d') {
+        d.terrain3d = !(d.terrain3d ?? defaultTerrain3d());
       } else if (v === 'wind') {
         d.wind = d.wind === false ? true : false;
       }

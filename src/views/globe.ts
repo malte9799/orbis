@@ -58,7 +58,7 @@ import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
-import { defaultBuildings3d, type Karte, type KView } from '../hud/karten';
+import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
@@ -108,6 +108,8 @@ interface GlobeState {
   isobars: boolean;
   /** 3D-Gebäude as a Grundkarten-Option (defaults on Dunkel and Hell) */
   buildings3d: boolean;
+  /** 3D-Gelände as a Grundkarten-Option: the real elevation model (defaults on) */
+  terrain3d: boolean;
   extras: Partial<Record<ExtraId, boolean>>;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
@@ -124,6 +126,7 @@ const DEFAULT_STATE: GlobeState = {
   wind: false,
   isobars: false,
   buildings3d: false,
+  terrain3d: true,
   extras: {},
   groups: {},
   projection: 'mercator',
@@ -352,7 +355,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyKarte(k: Karte) {
     curKarte = k;
-    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
+    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d, terrain3d: state.terrain3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
     if (fam) overlay = (fam.variants.find(([v]) => v === k.mainVar) ?? fam.variants[0])[0] as OverlayId;
@@ -366,6 +369,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
     // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
     state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
+    // 3D-Gelände: explicit choice, otherwise on (the real elevation model)
+    state.terrain3d = k.terrain3d ?? defaultTerrain3d();
 
     const nextExtras: Partial<Record<ExtraId, boolean>> = {};
     const nextGroups: Partial<Record<GroupId, boolean>> = {};
@@ -392,6 +397,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
     if (prev.base !== state.base || prev.labels !== state.labels) applyBase();
     else if (prev.buildings3d !== state.buildings3d) applyBuildings();
+    else if (prev.terrain3d !== state.terrain3d) applyTerrain();
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
@@ -674,6 +680,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map?.getLayer('buildings-3d')) return;
     vis('buildings-3d', state.buildings3d);
     map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
+  }
+
+  /** 3D-Gelände: lifts/bares the real elevation model – nothing is drawn for it on the map. */
+  function applyTerrain() {
+    extras?.setTerrain(state.terrain3d);
   }
 
   /** The terminator follows the forecast timeline when one is shown. */
@@ -1376,6 +1387,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       };
       sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
+      extras.setTerrain(state.terrain3d);
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
       applyBase();
