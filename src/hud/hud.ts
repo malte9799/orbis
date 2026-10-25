@@ -897,8 +897,8 @@ export function createHud(host: HudHost): Hud {
     renderGallery();
     renderDialog();
     renderContent();
-    const sw = layout === 'portrait' ? 0 : ui.edit && (layout === 'landscape' || window.innerWidth > 900) ? (layout === 'landscape' ? 316 : 362) : 0;
-    const s = `${sw / 2}px`;
+    // the map keeps its centre when the editing stack opens: the stack overlays the map (no shift)
+    const s = '0px';
     if (s !== lastShift) {
       lastShift = s;
       (gv ?? root).style.setProperty('--hud-shift', s);
@@ -1560,7 +1560,7 @@ export function createHud(host: HudHost): Hud {
     el: root,
     current: () => view(cur),
     refreshLive,
-    stackWidth: () => (layout === 'portrait' || !ui.edit ? 0 : (root.querySelector<HTMLElement>('.stack')?.offsetWidth ?? 348) + 14),
+    stackWidth: () => 0, // the editing stack overlays the map: keep the map centred when it opens
     importShared,
     layout: () => layout,
     relayout,
