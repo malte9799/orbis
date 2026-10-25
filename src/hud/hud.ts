@@ -393,18 +393,17 @@ export function createHud(host: HudHost): Hud {
     else if (r > bar.scrollLeft + bar.clientWidth - 30) bar.scrollLeft = r - bar.clientWidth + 40;
   }
 
-  const dirtyBar = (k: Karte) =>
-    `<div class="dbar"><span><i></i>Geändert</span><button type="button" class="ebtn ghost" data-act="revert">Zurücksetzen</button>${isStd(k) ? '' : '<button type="button" class="ebtn" data-act="overwrite">Speichern</button>'}<button type="button" class="ebtn pri" data-act="saveas">Als neue Karte</button></div>`;
-
   const placeText = (v: KView) => `${v.name ?? fmt.coords(v.center[1], v.center[0])} · Zoom ${Math.round(v.zoom)}`;
 
+  /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
-    const { html, more } = iconList(k, 7);
-    return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(k.name)}: Ebenen aufklappen">
-      <div class="row1">${mglyph(k, 30)}<div class="tx"><b>${esc(k.name)}</b><small>${esc(statusLine(k))}</small></div><span class="vsep"></span>
-        <div class="lic">${html}${more ? `<span class="more">+${more}</span>` : ''}</div><span class="chevi" aria-hidden="true">${ico('chevd', 2.2)}</span></div>
-      ${k.view ? `<div class="placechip">${ico('pin')}${esc(placeText(k.view))}</div>` : ''}
-      ${dirty(k.id) ? dirtyBar(k) : ''}
+    const { html, more } = iconList(k, 8);
+    const tip = `${k.name} – Einstellungen${dirty(k.id) ? ' · geändert' : ''}`;
+    return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(tip)}" title="${esc(tip)}">
+      <span class="gear" title="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
+      <span class="lic">${html}${more ? `<span class="more" title="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
+      <i class="dd" ${dirty(k.id) ? `title="Ungespeicherte Änderungen"` : 'hidden'}></i>
+      ${k.view ? `<span class="pin" title="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
     </div>`;
   }
 
@@ -503,6 +502,12 @@ export function createHud(host: HudHost): Hud {
     reg('main').innerHTML = ui.edit ? stackPanel(k) : summary(k);
     const sc = reg('main').querySelector('.stack .scroll');
     if (sc) sc.scrollTop = scroll;
+    // the collapsed settings pill closes up to the menu row: directly beside the (folded) menu
+    if (!ui.edit) {
+      const s = reg('main').querySelector<HTMLElement>('.sum');
+      const m = reg('modes').querySelector<HTMLElement>('.wxm');
+      if (s && m && m.offsetWidth) s.style.left = `calc(var(--hud-l) + ${m.offsetWidth + 8}px)`;
+    }
   }
 
   // --- add popover

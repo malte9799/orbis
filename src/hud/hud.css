@@ -85,16 +85,16 @@
 .hud-sx .search input { height: 36px; padding: 0 12px 0 0; border: 0; background: transparent; backdrop-filter: none; outline: 0; font-size: 14px; }
 .hud-sx .suggestions { top: 44px; left: -36px; right: 0; background: var(--glass); backdrop-filter: blur(14px); }
 
-/* ---------- collapsed Karte card ---------- */
-.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 7px; display: grid; gap: 8px; cursor: pointer; transition: background .15s; }
+/* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
+.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 5px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: background .15s; }
 .hud .sum:hover { background: rgba(22,30,60,.92); }
-.hud .sum .row1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hud .sum .gear { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, #8a94a8 30%, transparent); color: #e6ebff; flex: none; }
+.hud .sum .gear svg { width: 16px; height: 16px; }
+.hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
+.hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
+.hud .sum .pin svg { width: 13px; height: 13px; }
+.hud .sum .dd { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); flex: none; box-shadow: 0 0 0 2px rgba(0,0,0,.25); cursor: help; }
 .hud .mglyph { border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none; }
-.hud .mglyph svg { width: 52%; height: 52%; }
-.hud .sum .tx { min-width: 0; }
-.hud .sum .tx b { font-size: 14px; display: block; line-height: 1.15; white-space: nowrap; max-width: 220px; }
-.hud .sum .tx small { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.hud .sum .vsep { width: 1px; height: 22px; background: var(--border); flex: none; }
 .hud .lic { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
 .hud .lic span { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; position: relative; flex: none; }
 .hud .lic span svg { width: 13px; height: 13px; }
