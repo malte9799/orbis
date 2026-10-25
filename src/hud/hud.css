@@ -17,7 +17,6 @@
 .hud-bar .mi svg { width: 14px; height: 14px; }
 .hud-bar button.on { background: #fff; color: #0b1020; font-weight: 600; }
 .hud-bar button.on .mi { background: var(--mc); color: #fff; }
-.hud-bar .dd { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0f1530; }
 .hud-bar .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex: none; }
 .hud-bar .all { padding: 0 12px; }
 .hud-bar .all svg { width: 15px; height: 15px; }
@@ -97,6 +96,8 @@
 .hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
 .hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
 .hud .sum .pin svg { width: 13px; height: 13px; }
+/* „Geändert“-Badge: an der Ecke oben rechts der Pill (statt in der Kartenleiste) */
+.hud .sum .dd { position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px rgba(10, 14, 30, .9); }
 
 /* css tooltips below the settings pill (native titles are too slow/inconsistent on the icons) */
 .hud .sum [data-tip] { position: relative; }
@@ -359,7 +360,6 @@
 .hud:not([data-layout='desktop']) .hud-bar .mi { width: 26px; height: 26px; border-radius: 8px; }
 .hud:not([data-layout='desktop']) .hud-bar kbd, .hud:not([data-layout='desktop']) .hud-bar .sep { display: none; }
 .hud:not([data-layout='desktop']) .hud-bar .all { padding: 0 12px; }
-.hud:not([data-layout='desktop']) .hud-bar .dd { top: 3px; right: 3px; }
 .hud:not([data-layout='desktop']).searching .hud-bar, .hud:not([data-layout='desktop']).searching .wxm { visibility: hidden; }
 .hud:not([data-layout='desktop']) .wxm { top: 56px; max-height: calc(100% - 56px - var(--sheet-h, 160px) - var(--safe-bottom, 0px) - 24px); }
 .hud:not([data-layout='desktop']) .subs button { height: 34px; }

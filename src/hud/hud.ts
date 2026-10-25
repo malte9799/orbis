@@ -239,7 +239,7 @@ export function createHud(host: HudHost): Hud {
           const k = view(k0.id);
           const folded = k.id === cur && !!k.menu;
           return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
-            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}${dirty(k.id) ? '<i class="dd" title="Ungespeicherte Änderungen"></i>' : ''}</button>`;
+            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}</button>`;
         })
         .join('')}
       <span class="sep"></span>
@@ -410,6 +410,7 @@ export function createHud(host: HudHost): Hud {
       <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
       <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
       ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
+      ${dirty(k.id) ? `<i class="dd" role="img" aria-label="Ungespeicherte Änderungen" data-tip="Ungespeicherte Änderungen"></i>` : ''}
     </div>`;
   }
 
