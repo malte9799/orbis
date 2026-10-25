@@ -454,13 +454,14 @@ const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
  *  zoom range, so a km-based circle stays the same size on the map while zooming. A small
- *  minimum radius keeps fresh and far-zoomed circles visible at all. */
+ *  minimum radius keeps fresh and far-zoomed circles visible at all – it sits inside every
+ *  stop, because the zoom interpolate has to stay top-level for the style spec. */
 const thunderRadius: ExpressionSpecification = (() => {
   const A = 1000 / 156543.03392;
   const cos = ['cos', ['/', ['*', ['get', 'lat'], 3.141592653589793], 180]] as unknown as ExpressionSpecification;
   const stops: unknown[] = [];
-  for (let z = 0; z <= 12; z += 2) stops.push(z, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]);
-  return ['max', 10, ['interpolate', ['exponential', 2], ['zoom'], ...stops]] as unknown as ExpressionSpecification;
+  for (let z = 0; z <= 12; z += 2) stops.push(z, ['max', 10, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]]);
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops] as ExpressionSpecification;
 })();
 
 const ALT_COLOR: ExpressionSpecification = [
