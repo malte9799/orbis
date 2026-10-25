@@ -313,13 +313,15 @@ export class LightningStream {
   }
 
   /** The shrinking highlight circles ("wave") of very fresh strikes: big at birth, then
-   *  they zoom onto the point, fading away. */
+   *  they zoom onto the point, fading away. Anchored to the arrival time (`recv`), not to the
+   *  detection time (`at`): the stream delay must not eat into the wave's life – otherwise
+   *  strikes with a delay near LIGHTNING_WAVE_MS pop up without any wave at all. */
   waveFeatures(now = Date.now(), maxAge = LIGHTNING_WAVE_MS): FeatureCollection<Point> {
     const features: Feature<Point>[] = [];
     for (let i = this.strikes.length - 1; i >= 0; i--) {
       const s = this.strikes[i];
-      if (s.at < now - maxAge) break;
-      const p = Math.max(0, Math.min(1, (now - s.at) / maxAge));
+      if (s.recv < now - maxAge) break;
+      const p = Math.max(0, Math.min(1, (now - s.recv) / maxAge));
       // k = size of the ring (1 → 0, shrinks onto the point), o = fade that stays bright early
       const k = Math.max(0.05, Math.round((1 - p) * 100) / 100);
       features.push({
