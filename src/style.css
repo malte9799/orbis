@@ -4560,8 +4560,13 @@ body.mode-space .tabs:not(.mode-eyes) a.world-link {
   display: none;
 }
 
-/* Planeten-Ansicht: Trek-Kategorien links, Planeten/Weltall rechts – Tabs entfallen */
-body.mode-planet .tabs a[data-route] {
+/* Planeten-Ansicht: im Trek-Modus Trek-Kategorien links, Planeten/Weltall rechts – Tabs entfallen;
+   ohne Trek-Modus die normale Leiste (wie in der Weltall-Ansicht ohne Eyes-Modus) */
+body.mode-planet .tabs.mode-trek a[data-route] {
+  display: none;
+}
+body.mode-planet .tabs:not(.mode-trek) a.space-knob,
+body.mode-planet .tabs:not(.mode-trek) a.world-link {
   display: none;
 }
 body:not(.mode-planet) .trek-group,

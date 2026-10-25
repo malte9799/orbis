@@ -94,12 +94,19 @@ knob?.addEventListener('click', (e) => {
   setEyesMode(!eyesMode);
   if (eyesMode && active !== 'space') location.hash = '#/weltall';
 });
-// In der Weltall-Ansicht schaltet der normale „Weltall“-Tab die Eyes-Gruppe wieder ein
+// In der Weltall-Ansicht schaltet der normale „Weltall“-Tab die Eyes-Gruppe wieder ein,
+// in der Planeten-Ansicht holt er die Trek-Leiste zurück
 const spaceTab = nav.querySelector<HTMLAnchorElement>('a[data-route="space"]');
 spaceTab?.addEventListener('click', (e) => {
-  if (active !== 'space' || eyesMode) return; // sonst: normale Navigation
-  e.preventDefault();
-  setEyesMode(true);
+  if (active === 'space' && !eyesMode) {
+    e.preventDefault();
+    setEyesMode(true);
+    return;
+  }
+  if (active === 'planet' && !trekMode) {
+    e.preventDefault();
+    setTrekMode(true);
+  }
 });
 
 // Trek-Kategorien (Planeten-Ansicht): Dropdown schließt bei Auswahl und Klick außerhalb
@@ -112,6 +119,22 @@ document.addEventListener('click', (e) => {
   nav.querySelectorAll<HTMLDetailsElement>('.trek-dd[open]').forEach((d) => {
     if (d !== dd) d.removeAttribute('open');
   });
+});
+
+// Topbar in der Planeten-Ansicht: die Trek-Kategorien stehen standardmäßig,
+// per „Planeten“-Knopf (wie „Weltall“ in der Weltall-Ansicht) kehrt man zur normalen Leiste zurück
+let trekMode = false;
+function setTrekMode(on: boolean) {
+  trekMode = on;
+  nav.classList.toggle('mode-trek', on);
+  trekGroup.toggleAttribute('hidden', !on);
+  worldLink?.setAttribute('aria-expanded', String(on));
+}
+const worldLink = nav.querySelector<HTMLAnchorElement>('a.world-link')!;
+worldLink.addEventListener('click', (e) => {
+  if (active !== 'planet') return; // sonst: normale Navigation zur Planeten-Karte
+  e.preventDefault();
+  setTrekMode(!trekMode);
 });
 
 function route() {
@@ -152,10 +175,14 @@ function route() {
   document.querySelectorAll<HTMLAnchorElement>('.eyes-group a').forEach((a) => {
     a.classList.toggle('active', eyesMode && a.dataset.eyes === (eyes ?? 'earth'));
   });
-  // Trek-Kategorien nur in der Planeten-Ansicht; der aktuelle Körper ist markiert,
-  // der Titel seiner Kategorie zeigt den Körpernamen (z. B. „Mars“ statt „Planeten“),
-  // rechts zeigt „Planeten“ die aktive Ansicht
-  trekGroup.toggleAttribute('hidden', next !== 'planet');
+  // Trek-Kategorien nur in der Planeten-Ansicht (beim Betreten standardmäßig an); der aktuelle
+  // Körper ist markiert, der Titel seiner Kategorie zeigt den Körpernamen (z. B. „Mars“ statt
+  // „Planeten“), rechts zeigt „Planeten“ die aktive Ansicht
+  if (next === 'planet') {
+    if (active !== 'planet') setTrekMode(true);
+  } else if (trekMode) {
+    setTrekMode(false);
+  }
   const bodyParam = params.get('body') ?? 'mars';
   document.querySelectorAll<HTMLAnchorElement>('.trek-group a').forEach((a) => {
     a.classList.toggle('active', next === 'planet' && a.dataset.body === bodyParam);
