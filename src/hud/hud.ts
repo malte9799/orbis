@@ -150,7 +150,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false };
+  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -231,8 +231,9 @@ export function createHud(host: HudHost): Hud {
       ${pins()
         .map((k0, i) => {
           const k = view(k0.id);
-          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}">
-            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span><kbd>${i + 1}</kbd>${dirty(k.id) ? '<i class="dd" title="Ungespeicherte Änderungen"></i>' : ''}</button>`;
+          const folded = k.id === cur && !!k.menu;
+          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
+            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}${dirty(k.id) ? '<i class="dd" title="Ungespeicherte Änderungen"></i>' : ''}</button>`;
         })
         .join('')}
       <span class="sep"></span>
@@ -308,6 +309,32 @@ export function createHud(host: HudHost): Hud {
     const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
     return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
+  /** the one line of the folded menu: the layer / category chosen right now, e. g. "Satellit (HD)" */
+  function foldedLabel(k: Karte): { label: string; icon: string; color: string } {
+    const boltOn = k.layers.some((l) => l.id === 'lightning' && !l.hidden);
+    if (k.menu === 'wx') {
+      if (boltOn) return { label: 'Gewitter (Blitze Live)', icon: 'bolt', color: '#ffcc33' };
+      const f = mainFam(k);
+      if (!f || !k.main) return { label: 'Keine Ebene', icon: k.icon, color: k.color };
+      const varId = k.mainVar ?? f.variants[0][0];
+      for (const it of WX_MENU) {
+        const sub = it.subs.find((x) => x.main === f.id && x.mainVar === varId);
+        if (!sub) continue;
+        const v = sub.label || f.variants.find(([id]) => id === varId)?.[1] || '';
+        return { label: v ? `${it.label} (${v})` : it.label, icon: it.icon, color: it.color };
+      }
+      return { label: f.label, icon: f.icon, color: f.color };
+    }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+    const cat = menu.find((c) => c.id === tmodeOf(k));
+    if (cat) {
+      // erste aktive Reihe zeigen (z. B. "Auto · Straßen"); ohne aktive Reihe nur die Kategorie
+      const on = cat.rows.filter((r) => r.layers.every((l) => k.layers.some((x) => x.id === l && !x.hidden)));
+      const row = on.length === 1 ? on[0] : null;
+      return row ? { label: `${cat.label} · ${row.label}`, icon: cat.icon, color: k.color } : { label: cat.id ? cat.label : 'Keine Kategorie', icon: cat.icon, color: k.color };
+    }
+    return { label: menu[0]?.label ?? k.name, icon: menu[0]?.icon ?? k.icon, color: k.color };
+  }
   function renderModes() {
     const r = reg('modes');
     // beside the editing stack the weather controls of the stack take over
@@ -315,10 +342,18 @@ export function createHud(host: HudHost): Hud {
       r.innerHTML = '';
       return;
     }
-    const left = r.querySelector('.wxm')?.scrollTop ?? 0;
-    r.innerHTML = modesInner(view(cur));
+    const lx = r.querySelector('.wxm')?.scrollTop ?? 0;
+    const k = view(cur);
+    // collapsed: a single line naming the chosen sub-point; tapping it (or the Karte again) unfolds
+    if (ui.folded) {
+      const f = foldedLabel(k);
+      r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="Ausgewählte Ebene"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="Menü aufklappen">
+        <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span><span class="arr down" aria-hidden="true">${ico('chevd', 2)}</span></button></div>`;
+      return;
+    }
+    r.innerHTML = modesInner(k);
     const m = r.querySelector('.wxm');
-    if (m) m.scrollTop = left;
+    if (m) m.scrollTop = lx;
   }
 
   /** keep the active pill visible in the scrolling Karten bar */
@@ -846,6 +881,18 @@ export function createHud(host: HudHost): Hud {
   // ----- actions -----------------------------------------------------------
   function go(id: string) {
     if (!allKarten().some((k) => k.id === id)) return;
+    // the active Karte toggles the menu below: fold it to the one sub-point line / unfold it
+    if (cur === id && view(id).menu) {
+      ui.folded = !ui.folded;
+      if (ui.folded && (ui.edit || ui.gallery || ui.add)) {
+        ui.edit = false;
+        ui.gallery = false;
+        ui.add = false;
+        ui.open = null;
+        ui.pick = false;
+      }
+      return;
+    }
     cur = id;
     ui.gallery = false;
     ui.add = false;
@@ -853,6 +900,7 @@ export function createHud(host: HudHost): Hud {
     ui.pick = false;
     ui.menu = false;
     ui.rename = false;
+    ui.folded = false;
     placeNode = null;
     fresh = new Set();
     persist();
@@ -1179,6 +1227,9 @@ export function createHud(host: HudHost): Hud {
     },
     menu: () => {
       ui.menu = !ui.menu;
+    },
+    menuunfold: () => {
+      ui.folded = false;
     },
     menuclose: () => {
       ui.menu = false;

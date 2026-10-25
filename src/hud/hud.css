@@ -25,6 +25,23 @@
 .hud-bar kbd { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; color: var(--muted); margin-left: 2px; }
 .hud-bar button.on kbd { color: #6b7590; }
 
+/* arrow of the active Karte instead of the number: up = menu open, down = folded */
+.hud-bar .arr { display: grid; place-items: center; width: 16px; height: 16px; color: #6b7590; transition: transform .18s ease; }
+.hud-bar .arr svg { width: 12px; height: 12px; }
+.hud-bar .arr.up { transform: rotate(180deg); }
+
+/* the folded menu: one line with the currently chosen sub-point */
+.hud .wxm.folded { max-height: none; width: max-content; max-width: calc(100% - var(--hud-l) - var(--hud-r)); }
+.hud .wxm.folded .mrow { display: flex; align-items: center; gap: 9px; width: auto; padding: 5px 12px 5px 6px; border: 1px solid transparent; border-radius: 10px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.hud .wxm.folded .mrow:hover { background: var(--card); color: var(--text); }
+.hud .wxm.folded .fl { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.hud .wxm.folded .fl i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--lc) 28%, transparent); color: var(--lc); flex: none; }
+.hud .wxm.folded .fl i svg { width: 14px; height: 14px; }
+.hud .wxm.folded .lb { overflow: hidden; text-overflow: ellipsis; }
+.hud .wxm.folded .arr { color: var(--muted); display: grid; place-items: center; }
+.hud .wxm.folded .arr svg { width: 12px; height: 12px; }
+
+
 /* ---------- menu under the bar: weather layers / traffic modes ---------- */
 .hud .wxm { position: absolute; left: var(--hud-l); top: 60px; z-index: 6; padding: 4px; border-radius: 14px; width: 232px; max-width: calc(100% - var(--hud-l) - var(--hud-r)); max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none; }
 .hud .wxm::-webkit-scrollbar { display: none; }
