@@ -330,7 +330,48 @@
         a.remove();
       };
 
-      groupsEl.addEventListener('change', async (event) => {
+      // Safari-Artefakte: Popup wird gemeldet, Clipboard braucht synchrone Gesten-Kette
+      const toastLink = (label, href) => {
+        toastEl.innerHTML = `${esc(label)} <a href="${esc(href)}" target="_blank" rel="noopener">direkt öffnen</a>`;
+        toastEl.classList.add('on');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toastEl.classList.remove('on'), 8000);
+      };
+
+      const openAsset = (href) => {
+        // ohne 'noopener'-Feature: öffnet verhalten sich normal, aber window.open gibt
+        // ein Handle zurück (bei 'noopener' immer null → Blocker nicht erkennbar)
+        const w = window.open(href, '_blank');
+        try { if (w) w.opener = null; } catch { /* frame-frei, egal */ }
+        if (!w) toastLink('Öffnen blockiert (Popup) –', href);
+      };
+
+      // Pfad-Referenz: bei Dateien der Link, bei Inline-Grafiken Datei:Zeile (Name)
+      const refOf = (tile) => tile.dataset.href || `${tile.dataset.path}${tile.dataset.line ? ':' + tile.dataset.line : ''} (${tile.dataset.name || 'inline'})`;
+
+      function copyAsset(tile) {
+        const sv = tile.querySelector('.pv > svg');
+        const ref = refOf(tile);
+        if (!(window.ClipboardItem && navigator.clipboard?.write)) {
+          copyText(ref)
+            .then(() => toast('Referenz kopiert: ' + ref))
+            .catch(() => toast('Kopieren von Safari blockiert'));
+          return;
+        }
+        // Safari verlangt clipboard.write() synchron in der Gesten-Kette: der Blob wird
+        // als Promise übergeben und erst fertig gerastert, während die Aktion läuft.
+        const png = raster(sv?.outerHTML, tile.dataset.href, +tile.dataset.w || 0, +tile.dataset.h || 0).then((b) => b ?? new Blob());
+        navigator.clipboard
+          .write([new ClipboardItem({ 'image/png': png })])
+          .then(() => toast('Grafik in die Zwischenablage kopiert'))
+          .catch(() =>
+            copyText(ref)
+              .then(() => toast('Bildkopie blockiert – Referenz kopiert'))
+              .catch(() => toast('Kopieren von Safari blockiert')),
+          );
+      }
+
+      groupsEl.addEventListener('change', (event) => {
         const sel = event.target;
         if (!sel.classList?.contains('tile-menu')) return;
         const action = sel.value;
@@ -340,25 +381,19 @@
         const href = tile.dataset.href;
         const path = tile.dataset.path;
         const name = tile.dataset.name || path.split('/').pop();
-        const line = tile.dataset.line;
         const isFile = !!href;
         const sv = tile.querySelector('.pv > svg');
+        // wichtig: alle Gesten-verknüpften Aufrufe (open/copy/path/download) synchron anstoßen
         try {
           if (action === 'open') {
-            if (href) window.open(href, '_blank', 'noopener');
+            if (href) openAsset(href);
           } else if (action === 'copy') {
-            const blob = await raster(sv?.outerHTML, href, +tile.dataset.w || 0, +tile.dataset.h || 0);
-            if (blob && window.ClipboardItem && navigator.clipboard?.write) {
-              await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-              toast('Grafik in die Zwischenablage kopiert');
-            } else {
-              await copyText(href || `${path}${line ? ':' + line : ''} (${name})`);
-              toast('Bildkopie nicht unterstützt – Referenz kopiert');
-            }
+            copyAsset(tile);
           } else if (action === 'path') {
-            const ref = isFile ? href : `${path}${line ? ':' + line : ''} (${name})`;
-            await copyText(ref);
-            toast('Pfad kopiert: ' + ref);
+            const ref = isFile ? href : `${path}${tile.dataset.line ? ':' + tile.dataset.line : ''} (${name})`;
+            void copyText(ref)
+              .then(() => toast('Pfad kopiert: ' + ref))
+              .catch(() => toast('Kopieren von Safari blockiert'));
           } else if (action === 'download') {
             if (isFile) {
               triggerDownload(href, name + '.svg');
