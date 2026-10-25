@@ -17,13 +17,27 @@
 .hud-bar .mi svg { width: 14px; height: 14px; }
 .hud-bar button.on { background: #fff; color: #0b1020; font-weight: 600; }
 .hud-bar button.on .mi { background: var(--mc); color: #fff; }
-.hud-bar .dd { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0f1530; }
 .hud-bar .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex: none; }
 .hud-bar .all { padding: 0 12px; }
 .hud-bar .all svg { width: 15px; height: 15px; }
 .hud-bar .all.open { background: var(--card-2); color: #fff; }
 .hud-bar kbd { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; color: var(--muted); margin-left: 2px; }
 .hud-bar button.on kbd { color: #6b7590; }
+
+/* arrow of the active Karte instead of the number: up = menu open, down = folded */
+.hud-bar .arr { display: grid; place-items: center; width: 16px; height: 16px; color: #6b7590; transition: transform .18s ease; }
+.hud-bar .arr svg { width: 12px; height: 12px; }
+.hud-bar .arr.up { transform: rotate(180deg); }
+
+/* the folded menu: one line with the currently chosen sub-point */
+.hud .wxm.folded { max-height: none; width: max-content; max-width: calc(100% - var(--hud-l) - var(--hud-r)); padding: 0; }
+/* gleiche Höhe wie die Settings-Pill daneben (46px, Radius 16) */
+.hud .wxm.folded .mrow { display: flex; flex-direction: row; align-items: center; gap: 9px; width: auto; height: 46px; padding: 0 8px 0 5px; border: 1px solid transparent; border-radius: 16px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.hud .wxm.folded .mrow:hover { background: var(--card); color: var(--text); }
+.hud .wxm.folded .fl { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.hud .wxm.folded .fl i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--lc) 28%, transparent); color: var(--lc); flex: none; }
+.hud .wxm.folded .fl i svg { width: 14px; height: 14px; }
+.hud .wxm.folded .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- menu under the bar: weather layers / traffic modes ---------- */
 .hud .wxm { position: absolute; left: var(--hud-l); top: 60px; z-index: 6; padding: 4px; border-radius: 14px; width: 232px; max-width: calc(100% - var(--hud-l) - var(--hud-r)); max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none; }
@@ -72,21 +86,43 @@
 .hud-sx .search input { height: 36px; padding: 0 12px 0 0; border: 0; background: transparent; backdrop-filter: none; outline: 0; font-size: 14px; }
 .hud-sx .suggestions { top: 44px; left: -36px; right: 0; background: var(--glass); backdrop-filter: blur(14px); }
 
-/* ---------- collapsed Karte card ---------- */
-.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 7px; display: grid; gap: 8px; cursor: pointer; transition: background .15s; }
+/* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
+/* symmetrischer Innenabstand; Radien konzentrisch (Apple): 17 außen − 6 padding = 11 innen */
+.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 17px; }
+/* ohne Ebenen keinen leeren Spalt neben dem Zahnrad */
+.hud .sum .lic:empty { display: none; }
+.hud .sum .lic + .pin { margin-left: 0; }
 .hud .sum:hover { background: rgba(22,30,60,.92); }
-.hud .sum .row1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.hud .sum .gear { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, #8a94a8 30%, transparent); color: #e6ebff; flex: none; border: 0; padding: 0; cursor: pointer; }
+.hud .sum .gear svg { width: 16px; height: 16px; }
+.hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
+.hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
+.hud .sum .pin svg { width: 13px; height: 13px; }
+
+/* ungespeicherte Änderungen am Zahnrad selbst: kleiner orangener Punkt (::before;
+   ::after bleibt dem Tooltip vorbehalten – beides am selben Element würde kollidieren) */
+.hud .sum.changed .gear { position: relative; }
+.hud .sum.changed .gear::before { content: ''; position: absolute; top: -2px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #0f1530; z-index: 3; }
+
+/* css tooltips below the settings pill (native titles are too slow/inconsistent on the icons) */
+.hud .sum [data-tip] { position: relative; }
+.hud .sum [data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #10162e; color: var(--text); font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--border); white-space: nowrap; pointer-events: none; z-index: 40; box-shadow: 0 5px 16px rgba(0, 0, 0, .45); }
 .hud .mglyph { border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none; }
-.hud .mglyph svg { width: 52%; height: 52%; }
-.hud .sum .tx { min-width: 0; }
-.hud .sum .tx b { font-size: 14px; display: block; line-height: 1.15; white-space: nowrap; max-width: 220px; }
-.hud .sum .tx small { font-size: 11px; color: var(--muted); white-space: nowrap; }
-.hud .sum .vsep { width: 1px; height: 22px; background: var(--border); flex: none; }
 .hud .lic { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
-.hud .lic span { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; position: relative; flex: none; }
-.hud .lic span svg { width: 13px; height: 13px; }
-.hud .lic span.off { opacity: .3; }
+.hud .lic span, .hud .lic button { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; position: relative; flex: none; border: 0; padding: 0; cursor: pointer; }
+
+.hud .lic span svg, .hud .lic button svg { width: 13px; height: 13px; }
+
+/* ausgeblendete Ebenen: dunkler transparenter Overlay-Chip statt opacity – so bleibt der
+   CSS-Tooltip (::after) voll deckkräftig lesbar ("ausgeblendet" sieht man am Alpha) */
+.hud .lic .off::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgba(10, 14, 26, .62); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+.hud .lic .off svg { opacity: .45; }
 .hud .lic span.main { box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+
+/* hover on the togglable layer icons of the settings pill */
+.hud .sum .lic button { cursor: pointer; }
+
+.hud .sum .lic button:hover { box-shadow: 0 0 0 2px rgba(255, 255, 255, .3); }
 .hud .lic .more { width: auto; padding: 0 8px; background: var(--card-2); font: 600 11px ui-monospace, Menlo, monospace; color: var(--text-2); }
 .hud .chevi { width: 20px; height: 20px; display: grid; place-items: center; color: var(--text-2); flex: none; }
 .hud .chevi svg { width: 18px; height: 18px; }
@@ -329,7 +365,6 @@
 .hud:not([data-layout='desktop']) .hud-bar .mi { width: 26px; height: 26px; border-radius: 8px; }
 .hud:not([data-layout='desktop']) .hud-bar kbd, .hud:not([data-layout='desktop']) .hud-bar .sep { display: none; }
 .hud:not([data-layout='desktop']) .hud-bar .all { padding: 0 12px; }
-.hud:not([data-layout='desktop']) .hud-bar .dd { top: 3px; right: 3px; }
 .hud:not([data-layout='desktop']).searching .hud-bar, .hud:not([data-layout='desktop']).searching .wxm { visibility: hidden; }
 .hud:not([data-layout='desktop']) .wxm { top: 56px; max-height: calc(100% - 56px - var(--sheet-h, 160px) - var(--safe-bottom, 0px) - 24px); }
 .hud:not([data-layout='desktop']) .subs button { height: 34px; }

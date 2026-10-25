@@ -152,7 +152,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false };
+  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -206,14 +206,18 @@ export function createHud(host: HudHost): Hud {
   const statusLine = (k: Karte) => (isStd(k) ? `Standardkarte${dirty(k.id) ? ' · geändert' : ''}` : `Eigene Karte · ${dirty(k.id) ? 'geändert' : `gespeichert ${rel(k.savedAt)}`}`);
   const mainFam = (k: Karte) => (k.main ? host.families().find((f) => f.id === k.main) : undefined);
 
-  /** the glyph-square icons of a Karte: weather main first, then its layers */
-  function iconList(k: Karte, max: number): { html: string; more: number } {
+  /** the glyph-square icons of a Karte: weather main first, then its layers.
+   *  With toggle = true the layer icons (in the settings pill) switch the layer visibility. */
+  function iconList(k: Karte, max: number, toggle = false): { html: string; more: number } {
     const parts: string[] = [];
     const f = mainFam(k);
-    if (f) parts.push(`<span class="main" style="background:${f.color}" title="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
+    if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
     k.layers.slice(0, max).forEach((l) => {
       const c = catalogOf(l.id);
-      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" title="${esc(c.label)}">${ico(c.icon, 2)}</span>`);
+      if (!c) return;
+      const tip = `${esc(c.label)}${l.hidden ? ' – einblenden' : ' – ausblenden'}`;
+      if (toggle) parts.push(`<button type="button" class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-act="eye" data-id="${esc(l.id)}" data-tip="${tip}" aria-pressed="${!l.hidden}" title="${tip}">${ico(c.icon, 2)}</button>`);
+      else parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${tip}">${ico(c.icon, 2)}</span>`);
     });
     return { html: parts.join(''), more: Math.max(0, k.layers.length - max) };
   }
@@ -233,8 +237,9 @@ export function createHud(host: HudHost): Hud {
       ${pins()
         .map((k0, i) => {
           const k = view(k0.id);
-          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}">
-            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span><kbd>${i + 1}</kbd>${dirty(k.id) ? '<i class="dd" title="Ungespeicherte Änderungen"></i>' : ''}</button>`;
+          const folded = k.id === cur && !!k.menu;
+          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
+            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}</button>`;
         })
         .join('')}
       <span class="sep"></span>
@@ -312,17 +317,77 @@ export function createHud(host: HudHost): Hud {
     const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
     return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
+  /** the one line of the folded menu: the layer / category chosen right now, e. g. "Satellit (HD)" */
+  const SOURCE_PARENS = /\s*\((?:RainViewer|DWD|NASA|NOAA|IMERG|VIIRS|Meteosat|Open-Meteo|OSM)\)$/i;
+  function foldedLabel(k: Karte): { label: string; icon: string; color: string } {
+    const boltOn = k.layers.some((l) => l.id === 'lightning' && !l.hidden);
+    if (k.menu === 'wx') {
+      if (boltOn) return { label: 'Gewitter (Blitze Live)', icon: 'bolt', color: '#ffcc33' };
+      const f = mainFam(k);
+      if (!f || !k.main) return { label: 'Keine Ebene', icon: k.icon, color: k.color };
+      const varId = k.mainVar ?? f.variants[0][0];
+      for (const it of WX_MENU) {
+        const sub = it.subs.find((x) => x.main === f.id && x.mainVar === varId);
+        if (!sub) continue;
+        const v = (sub.label || f.variants.find(([id]) => id === varId)?.[1] || '').replace(SOURCE_PARENS, '');
+        return { label: v ? `${it.label} (${v})` : it.label, icon: it.icon, color: it.color };
+      }
+      return { label: f.label, icon: f.icon, color: f.color };
+    }
+    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+    const cat = menu.find((c) => c.id === tmodeOf(k));
+    if (cat) {
+      // erste aktive Reihe zeigen (z. B. "Auto · Straßen"); ohne aktive Reihe nur die Kategorie
+      const on = cat.rows.filter((r) => r.layers.every((l) => k.layers.some((x) => x.id === l && !x.hidden)));
+      const row = on.length === 1 ? on[0] : null;
+      return row ? { label: `${cat.label} · ${row.label}`, icon: cat.icon, color: k.color } : { label: cat.id ? cat.label : 'Keine Kategorie', icon: cat.icon, color: k.color };
+    }
+    return { label: menu[0]?.label ?? k.name, icon: menu[0]?.icon ?? k.icon, color: k.color };
+  }
+  let lastFolded: boolean | null = null;
   function renderModes() {
     const r = reg('modes');
     // beside the editing stack the weather controls of the stack take over
     if (!view(cur).menu || (ui.edit && layout !== 'portrait')) {
       r.innerHTML = '';
+      lastFolded = null;
       return;
     }
-    const left = r.querySelector('.wxm')?.scrollTop ?? 0;
-    r.innerHTML = modesInner(view(cur));
-    const m = r.querySelector('.wxm');
-    if (m) m.scrollTop = left;
+    const lx = r.querySelector('.wxm')?.scrollTop ?? 0;
+    const k = view(cur);
+    // height of the rendered menu before the swap: the fold/unfold animation starts from it
+    const prevH = r.querySelector<HTMLElement>('.wxm')?.offsetHeight ?? 0;
+    const folding = lastFolded !== null && lastFolded !== ui.folded;
+    lastFolded = ui.folded;
+    // collapsed: a single line naming the chosen sub-point; tapping it (or the Karte again) unfolds
+    if (ui.folded) {
+      const f = foldedLabel(k);
+      r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="Ausgewählte Ebene"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="Menü aufklappen">
+        <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span></button></div>`;
+    } else {
+      r.innerHTML = modesInner(k);
+      const m = r.querySelector('.wxm');
+      if (m) m.scrollTop = lx;
+    }
+    if (folding) foldAnimate(r.querySelector<HTMLElement>('.wxm'), prevH);
+  }
+
+  /** animate the menu between the full list and the one line (height + fade) */
+  function foldAnimate(m: HTMLElement | null, fromH: number) {
+    if (!m || !fromH) return;
+    const toH = m.offsetHeight;
+    m.style.overflow = 'hidden';
+    void m.offsetHeight;
+    m.animate(
+      [
+        { height: `${fromH}px`, opacity: Math.min(1, fromH / Math.max(1, toH)), transform: 'translateY(-4px)' },
+        { height: `${toH}px`, opacity: 1, transform: 'translateY(0)' },
+      ],
+      { duration: 210, easing: 'cubic-bezier(.3,.9,.4,1)' },
+    ).finished.then(() => {
+      m.style.overflow = '';
+      if (!ui.folded) m.scrollTop = 0;
+    });
   }
 
   /** keep the active pill visible in the scrolling Karten bar */
@@ -336,18 +401,15 @@ export function createHud(host: HudHost): Hud {
     else if (r > bar.scrollLeft + bar.clientWidth - 30) bar.scrollLeft = r - bar.clientWidth + 40;
   }
 
-  const dirtyBar = (k: Karte) =>
-    `<div class="dbar"><span><i></i>Geändert</span><button type="button" class="ebtn ghost" data-act="revert">Zurücksetzen</button>${isStd(k) ? '' : '<button type="button" class="ebtn" data-act="overwrite">Speichern</button>'}<button type="button" class="ebtn pri" data-act="saveas">Als neue Karte</button></div>`;
-
   const placeText = (v: KView) => `${v.name ?? fmt.coords(v.center[1], v.center[0])} · Zoom ${Math.round(v.zoom)}`;
 
+  /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
-    const { html, more } = iconList(k, 7);
-    return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(k.name)}: Ebenen aufklappen">
-      <div class="row1">${mglyph(k, 30)}<div class="tx"><b>${esc(k.name)}</b><small>${esc(statusLine(k))}</small></div><span class="vsep"></span>
-        <div class="lic">${html}${more ? `<span class="more">+${more}</span>` : ''}</div><span class="chevi" aria-hidden="true">${ico('chevd', 2.2)}</span></div>
-      ${k.view ? `<div class="placechip">${ico('pin')}${esc(placeText(k.view))}</div>` : ''}
-      ${dirty(k.id) ? dirtyBar(k) : ''}
+    const { html, more } = iconList(k, 8, true);
+    return `<div class="sum hud-glass${dirty(k.id) ? ' changed' : ''}" role="group" aria-label="Einstellungen für ${esc(k.name)}${dirty(k.id) ? ' – geändert' : ''}">
+      <button type="button" class="gear" data-act="edit" aria-expanded="false" aria-label="Einstellungen öffnen" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</button>
+      <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
+      ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
     </div>`;
   }
 
@@ -446,6 +508,12 @@ export function createHud(host: HudHost): Hud {
     reg('main').innerHTML = ui.edit ? stackPanel(k) : summary(k);
     const sc = reg('main').querySelector('.stack .scroll');
     if (sc) sc.scrollTop = scroll;
+    // the collapsed settings pill closes up to the menu row: directly beside the (folded) menu
+    if (!ui.edit) {
+      const s = reg('main').querySelector<HTMLElement>('.sum');
+      const m = reg('modes').querySelector<HTMLElement>('.wxm');
+      if (s && m && m.offsetWidth) s.style.left = `calc(var(--hud-l) + ${m.offsetWidth + 8}px)`;
+    }
   }
 
   // --- add popover
@@ -837,8 +905,8 @@ export function createHud(host: HudHost): Hud {
     renderContent();
     // fill live numbers once with the current values (delay of "Blitze Live" is already known)
     refreshLive();
-    const sw = layout === 'portrait' ? 0 : ui.edit && (layout === 'landscape' || window.innerWidth > 900) ? (layout === 'landscape' ? 316 : 362) : 0;
-    const s = `${sw / 2}px`;
+    // the map keeps its centre when the editing stack opens: the stack overlays the map (no shift)
+    const s = '0px';
     if (s !== lastShift) {
       lastShift = s;
       (gv ?? root).style.setProperty('--hud-shift', s);
@@ -852,6 +920,18 @@ export function createHud(host: HudHost): Hud {
   // ----- actions -----------------------------------------------------------
   function go(id: string) {
     if (!allKarten().some((k) => k.id === id)) return;
+    // the active Karte toggles the menu below: fold it to the one sub-point line / unfold it
+    if (cur === id && view(id).menu) {
+      ui.folded = !ui.folded;
+      if (ui.folded && (ui.edit || ui.gallery || ui.add)) {
+        ui.edit = false;
+        ui.gallery = false;
+        ui.add = false;
+        ui.open = null;
+        ui.pick = false;
+      }
+      return;
+    }
     cur = id;
     ui.gallery = false;
     ui.add = false;
@@ -859,6 +939,7 @@ export function createHud(host: HudHost): Hud {
     ui.pick = false;
     ui.menu = false;
     ui.rename = false;
+    ui.folded = false;
     placeNode = null;
     fresh = new Set();
     persist();
@@ -1187,6 +1268,9 @@ export function createHud(host: HudHost): Hud {
     menu: () => {
       ui.menu = !ui.menu;
     },
+    menuunfold: () => {
+      ui.folded = false;
+    },
     menuclose: () => {
       ui.menu = false;
     },
@@ -1490,7 +1574,7 @@ export function createHud(host: HudHost): Hud {
     el: root,
     current: () => view(cur),
     refreshLive,
-    stackWidth: () => (layout === 'portrait' || !ui.edit ? 0 : (root.querySelector<HTMLElement>('.stack')?.offsetWidth ?? 348) + 14),
+    stackWidth: () => 0, // the editing stack overlays the map: keep the map centred when it opens
     importShared,
     layout: () => layout,
     relayout,
