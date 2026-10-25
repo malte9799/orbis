@@ -406,8 +406,8 @@ export function createHud(host: HudHost): Hud {
   /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
     const { html, more } = iconList(k, 8, true);
-    return `<div class="sum hud-glass${dirty(k.id) ? ' changed' : ''}" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="Einstellungen für ${esc(k.name)}${dirty(k.id) ? ' – geändert' : ''}">
-      <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
+    return `<div class="sum hud-glass${dirty(k.id) ? ' changed' : ''}" role="group" aria-label="Einstellungen für ${esc(k.name)}${dirty(k.id) ? ' – geändert' : ''}">
+      <button type="button" class="gear" data-act="edit" aria-expanded="false" aria-label="Einstellungen öffnen" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</button>
       <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
       ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
     </div>`;

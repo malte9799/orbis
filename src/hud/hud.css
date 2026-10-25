@@ -86,12 +86,13 @@
 .hud-sx .suggestions { top: 44px; left: -36px; right: 0; background: var(--glass); backdrop-filter: blur(14px); }
 
 /* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
-.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 5px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: background .15s; }
+/* mehr Innenabstand; Radien konzentrisch (Apple): 17 außen − 5 padding = 12 innen */
+.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px 10px 6px 6px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 17px; }
 /* ohne Ebenen keinen leeren Spalt neben dem Zahnrad */
 .hud .sum .lic:empty { display: none; }
 .hud .sum .lic + .pin { margin-left: 0; }
 .hud .sum:hover { background: rgba(22,30,60,.92); }
-.hud .sum .gear { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, #8a94a8 30%, transparent); color: #e6ebff; flex: none; }
+.hud .sum .gear { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: color-mix(in srgb, #8a94a8 30%, transparent); color: #e6ebff; flex: none; border: 0; padding: 0; cursor: pointer; }
 .hud .sum .gear svg { width: 16px; height: 16px; }
 .hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
 .hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
