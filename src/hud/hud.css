@@ -32,7 +32,7 @@
 /* the folded menu: one line with the currently chosen sub-point */
 .hud .wxm.folded { max-height: none; width: max-content; max-width: calc(100% - var(--hud-l) - var(--hud-r)); padding: 0; }
 /* gleiche Höhe wie die Settings-Pill daneben (46px, Radius 16) */
-.hud .wxm.folded .mrow { display: flex; align-items: center; gap: 9px; width: auto; height: 46px; padding: 0 8px 0 5px; border: 1px solid transparent; border-radius: 16px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.hud .wxm.folded .mrow { display: flex; flex-direction: row; align-items: center; gap: 9px; width: auto; height: 46px; padding: 0 8px 0 5px; border: 1px solid transparent; border-radius: 16px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 .hud .wxm.folded .mrow:hover { background: var(--card); color: var(--text); }
 .hud .wxm.folded .fl { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .hud .wxm.folded .fl i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--lc) 28%, transparent); color: var(--lc); flex: none; }
