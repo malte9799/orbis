@@ -87,7 +87,7 @@
 
 /* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
 /* mehr Innenabstand; Radien konzentrisch (Apple): 17 außen − 5 padding = 12 innen */
-.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px 10px 6px 6px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 17px; }
+.hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 6px 10px 6px 5px; display: flex; align-items: center; gap: 8px; cursor: default; transition: background .15s; border-radius: 16px; }
 /* ohne Ebenen keinen leeren Spalt neben dem Zahnrad */
 .hud .sum .lic:empty { display: none; }
 .hud .sum .lic + .pin { margin-left: 0; }
