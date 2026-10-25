@@ -5,6 +5,7 @@ import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippin
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
+import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
@@ -104,7 +105,6 @@ export type ExtraId =
   | 'tides'
   | 'waves'
   | 'rivers'
-  | 'terrain'
   | 'bathymetry'
   | 'chlorophyll'
   | 'ecradar'
@@ -131,7 +131,7 @@ export interface ExtraDef {
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
   { id: 'earth', title: 'Erde & Umwelt' },
-  { id: 'ocean', title: 'Meer, Radar & Gelände' },
+  { id: 'ocean', title: 'Meer & Radar' },
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
   { id: 'networks', title: 'Verkehrsnetze' },
@@ -173,7 +173,6 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'ecsnow', section: 'ocean', label: 'Schneeradar Kanada', hint: 'Radar nur für Schneefall, 1 km – Environment Canada', glyph: 'ice', color: '#81d4fa' },
   { id: 'fmirain24', section: 'ocean', label: 'Regensumme 24 h Finnland', hint: 'Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute', glyph: 'flood', color: '#0277bd' },
   { id: 'jmanowcast', section: 'ocean', label: 'Radar-Nowcast Japan', hint: 'Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency', glyph: 'storm', color: '#ad1457' },
-  { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
   { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live (SondeHub) – mit dem Flugverkehr als 3D-Modell und Detaildaten zum Klick', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts, Countdown, Tracking & Stream – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
@@ -282,7 +281,6 @@ const LAYERS: Record<ExtraId, string[]> = {
   ecsnow: ['ecsnow'],
   fmirain24: ['fmirain24'],
   jmanowcast: ['jmanowcast'],
-  terrain: ['hillshade'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],
@@ -752,26 +750,26 @@ export class ExtraLayers {
     overlay('ecsnow', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RSNO&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Schneeradar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.85, { bounds: [-141, 41, -52, 70] });
     overlay('fmirain24', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_rr24h_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Regensumme: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
     overlay('jmanowcast', [JMA_RADAR_TILES('20000101000000')], 'Radar-Nowcast Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
-    // 3D terrain: AWS Terrarium tiles (also used for the hillshade below)
+    // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der
+    // Anpassung der echten Höhen (Gebirge, 3D-Flugzeuge/Sonden/Boote), wird nie als Ebene gezeichnet
+    registerDemTiles();
     if (!m.getSource('terrain-dem')) {
       m.addSource('terrain-dem', {
         type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 14,
+        tiles: [DEM_TILES],
+        tileSize: 512,
+        maxzoom: DEM_NATIVE_ZOOM,
         encoding: 'terrarium',
-        // full credit list required by the terrain tiles (tilezen/joerd docs/attribution.md)
+        // Lizenzpflichten der Quellen: Mapterhorn listet alle Modelle mapterhorn.com/attribution,
+        // für die Kacheln der AWS-Fallbacks gilt die tilezen-Liste (docs/attribution.md)
         attribution:
-          'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
+          'Gelände: <a href="https://mapterhorn.com/attribution/">Mapterhorn</a> (Copernicus DEM GLO-30, nationale LIDAR-Höhenmodelle), ' +
+          '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
           'ArcticDEM (DigitalGlobe-Bilder, NSF-gefördert); © Commonwealth of Australia (Geoscience Australia) 2017; © offene Daten Österreichs – DGM Österreich; ' +
           'Open Government Licence – Canada; EU-DEM: produced using Copernicus data and information funded by the European Union; INEGI, Continental relief, 2016; ' +
           '© Land Information New Zealand; © Kartverket; © Environment Agency copyright and/or database right 2015',
       });
     }
-    add(
-      { id: 'hillshade', type: 'hillshade', source: 'terrain-dem', layout: hidden, paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#1a1a2e' } },
-      'lbl-border-country',
-    );
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
     overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
     add(
@@ -1766,6 +1764,13 @@ export class ExtraLayers {
     return this.on.has(id);
   }
 
+  /** 3D-Gelände: echtes Höhenmodell an/aus – gezeichnet wird nie etwas davon (keine eigene Ebene) */
+  setTerrain(on: boolean) {
+    const has = !!this.map.getTerrain();
+    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
+    else if (!on && has) this.map.setTerrain(null);
+  }
+
   setEnabled(ids: ExtraId[]) {
     this.on = new Set(ids);
     if (this.ready) this.apply();
@@ -2244,9 +2249,6 @@ export class ExtraLayers {
         case 'jmanowcast':
           this.loadOnce('jmanowcast', 5 * 60000, () => this.loadJmaRadar('jmanowcast'));
           break;
-        case 'terrain':
-          this.setTerrain(true);
-          break;
         case 'radiation':
           this.loadOnce('radiation', 60 * 60000, async () => {
             const r = await loadRadiation();
@@ -2346,7 +2348,6 @@ export class ExtraLayers {
       this.clear('veh-fetch');
       this.clear('veh-feeds');
     }
-    if (!this.on.has('terrain')) this.setTerrain(false);
     if (!this.on.has('waves')) this.waveKey = '';
     if (!this.on.has('rivers')) this.riverKey = '';
     if (!this.on.has('lightning')) {
@@ -3057,12 +3058,6 @@ export class ExtraLayers {
         this.riverKey = '';
         this.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Flood nicht erreichbar' });
       });
-  }
-
-  private setTerrain(on: boolean) {
-    const has = !!this.map.getTerrain();
-    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
-    else if (!on && has) this.map.setTerrain(null);
   }
 
   private updateLightning() {
