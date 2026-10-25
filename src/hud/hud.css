@@ -37,10 +37,7 @@
 .hud .wxm.folded .fl { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .hud .wxm.folded .fl i { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--lc) 28%, transparent); color: var(--lc); flex: none; }
 .hud .wxm.folded .fl i svg { width: 14px; height: 14px; }
-.hud .wxm.folded .lb { overflow: hidden; text-overflow: ellipsis; }
-.hud .wxm.folded .arr { color: var(--muted); display: grid; place-items: center; }
-.hud .wxm.folded .arr svg { width: 12px; height: 12px; }
-
+.hud .wxm.folded .lb { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- menu under the bar: weather layers / traffic modes ---------- */
 .hud .wxm { position: absolute; left: var(--hud-l); top: 60px; z-index: 6; padding: 4px; border-radius: 14px; width: 232px; max-width: calc(100% - var(--hud-l) - var(--hud-r)); max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: none; }

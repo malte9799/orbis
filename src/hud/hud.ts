@@ -310,6 +310,7 @@ export function createHud(host: HudHost): Hud {
     return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   /** the one line of the folded menu: the layer / category chosen right now, e. g. "Satellit (HD)" */
+  const SOURCE_PARENS = /\s*\((?:RainViewer|DWD|NASA|NOAA|IMERG|VIIRS|Meteosat|Open-Meteo|OSM)\)$/i;
   function foldedLabel(k: Karte): { label: string; icon: string; color: string } {
     const boltOn = k.layers.some((l) => l.id === 'lightning' && !l.hidden);
     if (k.menu === 'wx') {
@@ -320,7 +321,7 @@ export function createHud(host: HudHost): Hud {
       for (const it of WX_MENU) {
         const sub = it.subs.find((x) => x.main === f.id && x.mainVar === varId);
         if (!sub) continue;
-        const v = sub.label || f.variants.find(([id]) => id === varId)?.[1] || '';
+        const v = (sub.label || f.variants.find(([id]) => id === varId)?.[1] || '').replace(SOURCE_PARENS, '');
         return { label: v ? `${it.label} (${v})` : it.label, icon: it.icon, color: it.color };
       }
       return { label: f.label, icon: f.icon, color: f.color };
@@ -348,7 +349,7 @@ export function createHud(host: HudHost): Hud {
     if (ui.folded) {
       const f = foldedLabel(k);
       r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="Ausgewählte Ebene"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="Menü aufklappen">
-        <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span><span class="arr down" aria-hidden="true">${ico('chevd', 2)}</span></button></div>`;
+        <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span></button></div>`;
       return;
     }
     r.innerHTML = modesInner(k);
