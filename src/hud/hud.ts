@@ -478,7 +478,7 @@ export function createHud(host: HudHost): Hud {
         <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen, nur bei geneigter Kamera (Strg + Ziehen) – von oben deaktiviert</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>nur bei Wind & Böen sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>bei Wind & Böen und Satellit/Wolken (IR) sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
         <div class="slot"><span>Gespeichert mit</span></div>
         <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
         <div class="opt">${ico('clock')}<div>Zeit<small>${timeTxt}</small></div></div>
@@ -1022,7 +1022,8 @@ export function createHud(host: HudHost): Hud {
     addlayer: (id) => {
       const d = edit();
       if (d.layers.some((l) => l.id === id)) return;
-      d.layers.unshift({ id });
+      // "Blitze Live" kommt mit Ton ab Werk
+      d.layers.unshift(id === 'lightning' ? { id, filter: 'sound' } : { id });
       fresh.add(id);
       ui.open = null;
       afterEdit();
@@ -1069,8 +1070,8 @@ export function createHud(host: HudHost): Hud {
         delete d.isobars;
         const l = d.layers.find((x) => x.id === 'lightning');
         if (!l) {
-          // neuer Layer: der schrumpfende Einschlagskreis ("Kreis") ist ab Werk aktiv
-          d.layers.unshift({ id: 'lightning', filter: 'wave' });
+          // neuer Layer: der schrumpfende Einschlagskreis ("Kreis") und der Ton sind ab Werk aktiv
+          d.layers.unshift({ id: 'lightning', filter: 'wave,sound' });
           fresh.add('lightning');
         } else delete l.hidden;
       } else {

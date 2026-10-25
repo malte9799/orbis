@@ -65,7 +65,7 @@ export const STANDARD: Karte[] = [
   {
     id: 'wetter', name: 'Wetter', icon: 'cloud', color: '#4f8dff', std: true, menu: 'wx',
     base: 'satellite', labels: true, night: true, main: 'radar', mainVar: 'radar',
-    layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
+    layers: [{ id: 'cities', hidden: true }, { id: 'dwdwarn', hidden: true }],
   },
   {
     id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',

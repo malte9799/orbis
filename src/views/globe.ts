@@ -364,8 +364,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.labels = k.labels;
     state.night = k.night;
     state.overlay = overlay;
-    // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
-    state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
+    // wind layers bring their particles along (can be switched off), and Satellit/Wolken (IR)
+    // shows them as well; isobars are an option of wind/pressure
+    state.wind = ((isField(overlay) && !!FIELDS[overlay].particles) || overlay === 'sat-ir') && k.wind !== false;
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
     // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
     state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
