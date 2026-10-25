@@ -23,10 +23,17 @@
         <span class="brand-name">Orbis</span><span class="brand-tag">Wetter · Erde · All</span>
       </a>
       <nav class="tabs" aria-label="Ansicht">
+        <div class="eyes-group" hidden role="group" aria-label="NASA Eyes">
+          <a href="#/weltall?eyes=earth" data-eyes="earth">Erde</a>
+          <a href="#/weltall?eyes=solar-system" data-eyes="solar-system">Sonnensystem</a>
+          <a href="#/weltall?eyes=asteroids" data-eyes="asteroids">Asteroiden</a>
+          <a href="#/weltall?eyes=exo" data-eyes="exo">Exoplaneten</a>
+        </div>
         <a href="#/" data-route="forecast">Vorhersage</a>
         <a href="#/karte" data-route="globe">Karte</a>
         <a href="#/weltall" data-route="space">Weltall</a>
         <a href="#/spiele" data-route="games">Spiele</a>
+        <a href="#/weltall" class="space-knob" aria-expanded="false" aria-label="NASA Eyes umschalten">Weltall</a>
       </nav>
     </header>
     <div id="app"></div>

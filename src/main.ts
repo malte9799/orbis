@@ -30,22 +30,15 @@ const globe = createGlobeView(
 );
 app.append(forecast.el, globe.el);
 
-// The 3D solar system (three.js) is loaded on demand.
-type SpaceView = import('./space/view').SpaceView;
+// TEST: Weltall-Ansicht testweise durch NASA Eyes (iframes) ersetzt – eigenes three.js-System ausgehängt.
+// Zum Zurückkehren: stattdessen import('./space/view') + createSpaceView(latLon, bodyPick) verwenden (siehe git history).
+type SpaceView = import('./space/nasa-eyes').NasaEyesView;
 type PlanetMapView = import('./views/planetmap').PlanetMapView;
 let space: SpaceView | null = null;
 let spaceLoading: Promise<SpaceView> | null = null;
 function loadSpace(): Promise<SpaceView> {
-  spaceLoading ??= import('./space/view').then(({ createSpaceView }) => {
-    space = createSpaceView(
-      (lat, lon) => {
-        location.hash = `#/karte?lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&proj=globe&from=space`;
-      },
-      // a planet / rover / landing site was picked: its map (3D globe by default)
-      (body, lat, lon, o) => {
-        location.hash = `#/planet?body=${body}&lat=${lat.toFixed(3)}&lon=${lon.toFixed(3)}&from=space${o?.focus ? `&focus=${o.focus}` : ''}${o?.site ? `&site=${o.site}` : ''}`;
-      },
-    );
+  spaceLoading ??= import('./space/nasa-eyes').then(({ createNasaEyesView }) => {
+    space = createNasaEyesView();
     app.append(space.el);
     return space;
   });
@@ -84,6 +77,16 @@ function loadGames(): Promise<GamesView> {
 let forecastLoaded = false;
 let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | null = null;
 
+const nav = document.querySelector<HTMLElement>('.tabs')!;
+const knob = nav.querySelector<HTMLAnchorElement>('.space-knob')!;
+// Umschalter: Topbar zwischen normaler Ansicht-Meny und NASA-Eyes-Gruppe wechseln
+knob?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const eyesMode = nav.classList.toggle('mode-eyes');
+  knob.setAttribute('aria-expanded', String(eyesMode));
+  if (eyesMode && active !== 'space') location.hash = '#/weltall';
+});
+
 function route() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
   const params = new URLSearchParams(query);
@@ -102,11 +105,21 @@ function route() {
   if (games) games.el.hidden = next !== 'games';
   document.body.classList.toggle('mode-globe', next !== 'forecast');
   document.body.classList.toggle('mode-map', next === 'globe');
-  document.querySelectorAll<HTMLAnchorElement>('.tabs a').forEach((a) => {
+  document.body.classList.toggle('mode-space', next === 'space');
+  document.querySelectorAll<HTMLAnchorElement>('.tabs a[data-route]').forEach((a) => {
     const on = a.dataset.route === (next === 'planet' ? 'space' : next);
     a.classList.toggle('active', on);
     if (on) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
+  });
+
+  // Eyes-Auswahl: Topbar-Anpassung nur in der Weltall-Ansicht
+  const eyes = params.get('eyes');
+  const eyesMode = nav.classList.contains('mode-eyes');
+  if (next !== 'space') nav.classList.remove('mode-eyes');
+  document.querySelector('.eyes-group')?.toggleAttribute('hidden', !eyesMode);
+  document.querySelectorAll<HTMLAnchorElement>('.eyes-group a').forEach((a) => {
+    a.classList.toggle('active', eyesMode && a.dataset.eyes === (eyes ?? 'earth'));
   });
 
   if (next === 'games') {
@@ -116,11 +129,10 @@ function route() {
       v.activate();
     });
   } else if (next === 'space') {
-    const wasActive = active === 'space';
     loadSpace().then((v) => {
       if (active !== 'space') return;
       v.el.hidden = false;
-      if (!wasActive) v.activate({ focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, site: params.get('site') ?? undefined });
+      v.activate({ eyes, focus: params.get('focus') ?? params.get('from') ?? undefined, lat: hasPos ? lat : undefined, lon: hasPos ? lon : undefined, site: params.get('site') ?? undefined });
     });
   } else if (next === 'planet') {
     const z = parseFloat(params.get('zoom') ?? '');
