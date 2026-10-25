@@ -997,11 +997,17 @@ svg.hourly {
 
 .maplibregl-ctrl-attrib {
   background: rgba(13, 18, 38, 0.75) !important;
-  color: var(--text-2);
 }
 
-.maplibregl-ctrl-attrib a {
-  color: var(--text-2);
+/* Quellenangabe: alle Texte/Links dauerhaft hell (MapLibre-Defaults #333 & Hover-Dunkelblau überschreiben) */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib * {
+  color: var(--text-2) !important;
+}
+
+.maplibregl-ctrl-attrib a:hover,
+.maplibregl-ctrl-attrib a:focus-visible {
+  color: var(--text) !important;
 }
 
 .maplibregl-ctrl-attrib-button {
