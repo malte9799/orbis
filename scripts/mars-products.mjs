@@ -32,8 +32,10 @@ await Promise.all(
       const x = products[i++];
       const title = x.title ?? '';
       const cat1 = x.productCat1;
+      // regional height models become 3D terrain (group "dem"); shaded/slope/quality variants of them stay out
+      const isDem = /DEM|DTM/i.test(`${x.productLabel} ${title}`) && !/Shade|Slope|Color|Confidence|Precision|Count|Error|Mask/i.test(`${x.productLabel} ${title}`);
       if (x.productLabel === 'CTX_beta01_uncontrolled_5m_Caltech') continue; // = the CTX layer of planets.ts
-      if (/DEM/.test(title) || x.productCat2 === 'DEM' || x.productCat2 === 'Traverse Path') continue;
+      if (x.productCat2 === 'Traverse Path') continue;
       try {
         const t = await (await get(`https://trek.nasa.gov/tiles/Mars/EQ/${x.productLabel}/1.0.0/WMTSCapabilities.xml`)).text();
         const bb = /<ows:WGS84BoundingBox[^>]*>\s*<ows:LowerCorner>([-\d.eE ]+)<\/ows:LowerCorner>\s*<ows:UpperCorner>([-\d.eE ]+)<\/ows:UpperCorner>/.exec(t);
@@ -64,7 +66,8 @@ await Promise.all(
         }
         const global = e - w > 300;
         let group;
-        if (BASE_CATS.has(cat1)) group = global ? 'base' : isMosaic(title, x.productLabel) && maxZ >= 13 ? 'mosaic' : 'region';
+        if (isDem) group = 'dem';
+        else if (BASE_CATS.has(cat1)) group = global ? 'base' : isMosaic(title, x.productLabel) && maxZ >= 13 ? 'mosaic' : 'region';
         else if (isMosaic(title, x.productLabel) && maxZ >= 13) group = 'mosaic';
         else if (OVERLAY_CATS.has(cat1)) group = 'overlay';
         else continue;
@@ -96,8 +99,20 @@ await Promise.all(
 // hillshade fragments, per-tile slopes), very coarse (TES, 7 km/px) or worse than what the map
 // already has (global 5 m CTX, Viking colour). Only these remain selectable; the HiRISE mosaics
 // stay (composited into "auto").
+// regional height models (3D terrain): the finest per area, capped
+const isGlobal = (m) => m.bbox[2] - m.bbox[0] >= 300;
+const area = (m) => (m.bbox[2] - m.bbox[0]) * (m.bbox[3] - m.bbox[1]);
+const covers = (a, b) => a.bbox[0] <= b.bbox[0] + 0.01 && a.bbox[1] <= b.bbox[1] + 0.01 && a.bbox[2] >= b.bbox[2] - 0.01 && a.bbox[3] >= b.bbox[3] - 0.01;
+const demPool = out.filter((m) => m.group === 'dem' && !isGlobal(m) && m.maxZ >= 3).sort((x, y) => y.maxZ - x.maxZ || area(y) - area(x));
+const demKeep = [];
+for (const m of demPool) {
+  if (demKeep.length >= 12) break;
+  if (demKeep.some((k) => covers(k, m))) continue;
+  demKeep.push(m);
+}
 const KEEP = (m) => {
   const t = m.title;
+  if (demKeep.includes(m)) return true;
   if (m.group === 'mosaic') return true;
   if (m.group === 'base') return m.label === 'Mars_MOLA_blend200ppx_HRSC_ClrShade_clon0dd_200mpp_lzw' || /THEMIS-IR Day/.test(t);
   if (m.group === 'region') return /^Mars Express HRSC/.test(t) && /Color|Viking/.test(t);
@@ -105,7 +120,7 @@ const KEEP = (m) => {
 };
 for (let k = out.length - 1; k >= 0; k--) if (!KEEP(out[k])) out.splice(k, 1);
 
-const order = { base: 0, mosaic: 1, region: 2, overlay: 3 };
+const order = { base: 0, mosaic: 1, region: 2, overlay: 3, dem: 4 };
 out.sort((a, b) => order[a.group] - order[b.group] || (a.group === 'mosaic' ? a.maxZ - b.maxZ || (b.bbox[2] - b.bbox[0]) * (b.bbox[3] - b.bbox[1]) - (a.bbox[2] - a.bbox[0]) * (a.bbox[3] - a.bbox[1]) : a.title.localeCompare(b.title)));
 const strip = (u) => u.replace(/^https:\/\/trek\.nasa\.gov\//, '~/');
 const body = out.map((m) => `  [${JSON.stringify(m.label)}, ${JSON.stringify(m.title)}, '${m.group}', ${JSON.stringify(strip(m.url))}, ${m.px}, [${m.bbox.join(', ')}], ${m.maxZ}],`).join('\n');
@@ -117,7 +132,7 @@ writeFileSync(
 //   region: other regional maps (HRSC colour) · overlay: thematic layers (geology, valleys, minerals)
 // Curated by scripts/mars-products.mjs (KEEP): duplicates, low-resolution and regional CTX/hillshade fragments left out.
 
-export type TrekProduct = [label: string, title: string, group: 'base' | 'mosaic' | 'region' | 'overlay', url: string, px: number, bbox: [number, number, number, number], maxZ: number];
+export type TrekProduct = [label: string, title: string, group: 'base' | 'mosaic' | 'region' | 'overlay' | 'dem', url: string, px: number, bbox: [number, number, number, number], maxZ: number];
 
 export const MARS_PRODUCTS: TrekProduct[] = [
 ${body}

@@ -126,12 +126,19 @@ automatisch hier; Hineinzoomen auf die Erde führt zurück zur Wetterkarte.
 - Kartentyp-Wechsler nur mit echten Basiskarten (Automatisch, Farbmosaik, CTX ≈ 5 m, Höhe & Tiefe MOLA/HRSC, Infrarot THEMIS,
   HRSC-Farbmosaike am Kartenmittelpunkt). Überlagerungen (Geologie, Täler, Mineralien) und Markierungen schaltet das Ebenen-Panel;
   eine Leiste unten zeigt, was gerade dargestellt wird.
+- Weitere Körper aus den NASA-Trek-Portalen: Merkur (MESSENGER), Venus (Magellan), Titan, Phobos, die Galileischen Monde
+  Io, Europa, Ganymed und Callisto sowie die Saturnmonde Mimas, Enceladus, Tethys, Dione, Rhea und Iapetus (Cassini/Voyager)
+  und die Kleinkörper Vesta, Ceres und Ryugu (Dawn, Hayabusa2) – im Panel unter „Himmelskörper“, in der Weltall-Leiste auch
+  als Dropdowns.
+- **Relief:** Mond und Enceladus erhalten im 3D-Globus ein echtes Höhenmodell (LOLA bzw. Cassini-DEM, schaltbar) statt der perfekten
+  Kugel; die 2D-Karte schattiert es. Regionale Höhenmodelle legen sich beim Hineinzoomen automatisch darüber (Mond: Apollo-/NAC-DEMs,
+  Mars: HRSC-, CTX- und HiRISE-DEMs). Die Meter-Werte sind angenähert (Trek liefert die Höhen als gestrecktes Graustufenbild).
 - Herauszoomen aus dem Globus bzw. das Weltall-Symbol führt ins Sonnensystem, Hineinzoomen auf den Mars von dort auf die Karte.
   Aus der Weltall-Ansicht öffnet sich die Mondkarte beim Heranzoomen bis dicht über die Oberfläche (`openAt`).
 - Rover erscheinen beim Heranzoomen als 3D-Modell, mit der Zoomstufe mitskalierend (ab ca. Zoom 7 in 2D bzw. 11 im Globus,
   bei sehr hoher Zoomstufe in Originalgröße; `modelPx` in `views/planetmap.ts`).
 - In der Weltall-Ansicht haben die Planeten nur ihre feste Textur; Detailkacheln gibt es nur auf der Karte
-  (`src/space/planets.ts`: `enabled` – derzeit Erde, Mars und Mond, Merkur/Venus vorbereitet).
+  (`src/space/planets.ts`: `enabled` – derzeit Erde, Mars, Mond, Merkur, Titan, Saturnmonde, Vesta und Ceres).
 - Die Trek-Produktliste stammt aus Trek selbst (`scripts/mars-products.mjs` → `src/space/mars-products.ts`) und ist kuratiert
   (Duplikate, sehr grobe TES-Karten und regionale CTX-/Hillshade-Fragmente entfallen).
   Die Quellen sind Äquirektangular-Kacheln und werden per `planet://`-Protokoll in Mercator-Kacheln umgerechnet.
