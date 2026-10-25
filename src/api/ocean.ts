@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { fetchJson, rampColor } from '../util';
+import { windTxt, pressureTxt, tempTxt } from '../units';
 import { fetchText } from './data';
 import { omFetch } from './omlimit';
 import { viaProxy } from './proxy';
@@ -57,10 +58,10 @@ export async function loadBuoys(): Promise<FeatureCollection<Point>> {
     if (wspd == null && wvht == null && atmp == null && wtmp == null && pres == null) continue;
     const rows = [
       wvht != null && `Wellenhöhe ${wvht.toLocaleString('de-DE')} m${dpd != null ? ` (Periode ${dpd} s)` : ''}`,
-      wspd != null && `Wind ${Math.round(wspd * MS_TO_KMH)} km/h${wdir != null ? ` aus ${compass(wdir)}` : ''}${gst != null ? `, Böen ${Math.round(gst * MS_TO_KMH)} km/h` : ''}`,
-      pres != null && `Luftdruck ${Math.round(pres)} hPa`,
-      atmp != null && `Luft ${atmp.toLocaleString('de-DE')} °C`,
-      wtmp != null && `Wasser ${wtmp.toLocaleString('de-DE')} °C`,
+      wspd != null && `Wind ${windTxt(wspd * MS_TO_KMH)}${wdir != null ? ` aus ${compass(wdir)}` : ''}${gst != null ? `, Böen ${windTxt(gst * MS_TO_KMH)}` : ''}`,
+      pres != null && `Luftdruck ${pressureTxt(pres)}`,
+      atmp != null && `Luft ${tempTxt(atmp)}`,
+      wtmp != null && `Wasser ${tempTxt(wtmp)}`,
     ].filter(Boolean);
     const time = new Date(Date.UTC(+c[3], +c[4] - 1, +c[5], +c[6], +c[7]));
     features.push(

@@ -5,7 +5,8 @@ import { mountRawDataLink } from '../inspector/inspector';
 import { createForecastMap, type ForecastMap } from './fcmap';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
-import { beaufort, compass, escapeHtml, fmt, tempColor, toast } from '../util';
+import { beaufort, escapeHtml, fmt, tempColor, toast } from '../util';
+import { windTxt, windDirTxt, pressureTxt, precipSumTxt, distTxt } from '../units';
 import { aqiLabel, describe, pollenLabel, uvLabel, weatherIcon } from '../weather';
 
 const CACHE_KEY = 'wg.fccache';
@@ -191,12 +192,12 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       </section>
 
       <section class="details">
-        ${tile('Wind', `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${Math.round(c.wind_speed_10m)} <small>km/h</small>`, `aus ${compass(c.wind_direction_10m)} · Bft ${beaufort(c.wind_speed_10m)}`)}
-        ${tile('Böen', `${Math.round(c.wind_gusts_10m)} <small>km/h</small>`, `max. heute ${Math.round(d.wind_gusts_10m_max[0])} km/h`)}
+        ${tile('Wind', `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${windTxt(c.wind_speed_10m)}`, `aus ${windDirTxt(c.wind_direction_10m)} · Bft ${beaufort(c.wind_speed_10m)}`)}
+        ${tile('Böen', windTxt(c.wind_gusts_10m), `max. heute ${windTxt(d.wind_gusts_10m_max[0])}`)}
         ${tile('Luftfeuchte', `${Math.round(c.relative_humidity_2m)} <small>%</small>`, `Taupunkt ${fmt.temp(dew)}`)}
-        ${tile('Luftdruck', `${Math.round(c.pressure_msl)} <small>hPa</small>`, 'auf Meereshöhe')}
-        ${tile('Niederschlag', `${fmt.num(d.precipitation_sum[0], 1)} <small>mm</small>`, `heute · ${d.precipitation_probability_max[0] ?? '–'} % Wahrsch.`)}
-        ${tile('Bewölkung', `${Math.round(c.cloud_cover)} <small>%</small>`, vis != null ? `Sicht ${fmt.num(vis / 1000, vis < 10000 ? 1 : 0)} km` : '')}
+        ${tile('Luftdruck', pressureTxt(c.pressure_msl), 'auf Meereshöhe')}
+        ${tile('Niederschlag', precipSumTxt(d.precipitation_sum[0]), `heute · ${d.precipitation_probability_max[0] ?? '–'} % Wahrsch.`)}
+        ${tile('Bewölkung', `${Math.round(c.cloud_cover)} <small>%</small>`, vis != null ? `Sicht ${distTxt(vis / 1000, vis < 10000 ? 1 : 0)}` : '')}
         ${tile('UV-Index', `${fmt.num(uvNow, 0)} <small>jetzt</small>`, `<span class="dot" style="background:${uv.color}"></span>max. ${fmt.num(d.uv_index_max[0], 0)} · ${uv.label}`)}
         ${tile('Sonne', `${fmt.hour(d.sunrise[0])} <small>↑</small> ${fmt.hour(d.sunset[0])} <small>↓</small>`, daylight(d.sunrise[0], d.sunset[0]))}
         ${aq ? tile('Luftqualität', `${fmt.num(aq.current.european_aqi, 0)} <small>EAQI</small>`, `<span class="dot" style="background:${air.color}"></span>${air.label} · PM2.5 ${fmt.num(aq.current.pm2_5, 0)} µg/m³`) : ''}
@@ -320,11 +321,11 @@ function renderDaily(f: Forecast) {
         <button type="button" class="d-row" aria-expanded="false" aria-controls="d-hours-${i}" data-day="${i}">
         <span class="d-day"><b>${i === 0 ? 'Heute' : escapeHtml(fmt.weekday(t))}</b> <small>${escapeHtml(fmt.dayMonth(t))}</small></span>
         <span class="d-icon" title="${escapeHtml(describe(d.weather_code[i]))}">${weatherIcon(d.weather_code[i], true, 34)}</span>
-        <span class="d-prec ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : ''}<small>${d.precipitation_sum[i] > 0 ? `${fmt.num(d.precipitation_sum[i], 1)} mm` : ''}</small></span>
+        <span class="d-prec ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : ''}<small>${d.precipitation_sum[i] > 0 ? precipSumTxt(d.precipitation_sum[i]) : ''}</small></span>
         <span class="d-min">${fmt.temp(min)}</span>
         <span class="d-bar"><span style="left:${left}%;width:${width}%;background:linear-gradient(90deg, ${tempColor(min)}, ${tempColor(max)})"></span></span>
         <span class="d-max">${fmt.temp(max)}</span>
-        <span class="d-wind"><span class="wind-arrow" style="transform:rotate(${d.wind_direction_10m_dominant[i] + 180}deg)">↑</span> ${Math.round(d.wind_speed_10m_max[i])} km/h</span>
+        <span class="d-wind"><span class="wind-arrow" style="transform:rotate(${d.wind_direction_10m_dominant[i] + 180}deg)">↑</span> ${windTxt(d.wind_speed_10m_max[i])}</span>
         </button>
         <div class="d-hours" id="d-hours-${i}" hidden></div>
       </li>`;
@@ -345,9 +346,9 @@ function renderDayHours(f: Forecast, date: string) {
       <span class="h-temp">${fmt.temp(h.temperature_2m[i])}</span>
       <small>gef. ${fmt.temp(h.apparent_temperature[i])}</small>
       <span class="h-rain ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : '–'}</span>
-      <small>${h.precipitation[i] > 0 ? `${fmt.num(h.precipitation[i], 1)} mm` : '&nbsp;'}</small>
-      <span>${Math.round(h.wind_speed_10m[i])}<small> km/h</small></span>
-      <small>Böen ${Math.round(h.wind_gusts_10m[i])}</small>
+      <small>${h.precipitation[i] > 0 ? precipSumTxt(h.precipitation[i]) : '&nbsp;'}</small>
+      <span>${windTxt(h.wind_speed_10m[i])}</span>
+      <small>Böen ${windTxt(h.wind_gusts_10m[i])}</small>
       <small>UV ${uv != null ? fmt.num(uv, 0) : '–'}</small>
     </div>`);
   });
