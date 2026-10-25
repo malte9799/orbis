@@ -553,7 +553,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const INFO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>';
 
   type KeyStep = { t: string; u?: string };
-  type KeyDef = { key: keyof ApiKeys; label: string; hint: string; ph?: string; url?: boolean; steps: KeyStep[] };
+  /** `opt` = we deliver a global fallback ourselves (public source, built-in proxy or shared snapshot) */
+  type KeyDef = { key: keyof ApiKeys; label: string; hint: string; ph?: string; url?: boolean; opt?: boolean; steps: KeyStep[] };
   const KEY_GROUPS: { sub: string; defs: KeyDef[] }[] = [
     {
       sub: 'Wetter, Feuer & Radar',
@@ -574,6 +575,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           label: 'Radar-Server',
           ph: 'https://radar.example.org',
           url: true,
+          opt: true, // public RainViewer source as fallback
           hint: 'Eigener RainViewer-kompatibler Server statt der begrenzten RainViewer-Quelle.',
           steps: [
             { t: '1. LibreWXR selbst hosten (open source, RainViewer- Ersatz)', u: 'https://librewxr.net/' },
@@ -662,6 +664,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         {
           key: 'adsbProxy',
           label: 'Daten-Proxy',
+          opt: !!builtInProxy(), // built-in worker, if deployed
           ph: 'https://mein-proxy.workers.dev/',
           url: true,
           hint: `Cloudflare-Worker für Flugdaten & OpenStreetMap. ${builtInProxy() ? 'Leer lassen = eingebauter Proxy.' : ''}`,
@@ -680,6 +683,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           key: 'firms',
           label: 'NASA FIRMS',
           ph: 'MAP_KEY',
+          opt: true, // shared snapshot from the data branch
           hint: 'Aktuellere Feuer-Hotspots (ohne Key: gemeinsamer Snapshot).',
           steps: [
             { t: '1. Formular ausfüllen (Name, E-Mail)', u: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/' },
@@ -690,6 +694,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         {
           key: 'nps',
           label: 'National Park Service',
+          opt: true, // shared snapshot
           hint: 'Webcams der US-Nationalparks (ohne Key: gemeinsamer Snapshot).',
           steps: [
             { t: '1. Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
@@ -733,8 +738,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const filled = Object.entries(keys).filter(([, v]) => !!v).length;
     const keyRow = (d: KeyDef) => `
       <div class="krow">
-        <span class="k-l"><span class="k-t">${escapeHtml(d.label)}<details class="ii"><summary aria-label="Kurzanleitung für ${escapeHtml(d.label)}">${INFO_ICON}</summary><span class="ii-t"><ol>${d.steps.map((s) => `<li>${s.u ? `<a href="${s.u}" target="_blank" rel="noopener">${escapeHtml(s.t)}</a>` : escapeHtml(s.t)}</li>`).join('')}</ol></span></details></span>
-          <small>${escapeHtml(d.hint)}</small></span>
+        <span class="k-l"><span class="k-n">${escapeHtml(d.label)}${d.opt ? ' <span class="k-opt">(optional)</span>' : ''}</span><span class="k-tip" role="tooltip">${escapeHtml(d.hint)}</span><details class="ii"><summary aria-label="Kurzanleitung für ${escapeHtml(d.label)}">${INFO_ICON}</summary><span class="ii-t"><ol>${d.steps.map((s) => `<li>${s.u ? `<a href="${s.u}" target="_blank" rel="noopener">${escapeHtml(s.t)}</a>` : escapeHtml(s.t)}</li>`).join('')}</ol></span></details></span>
         <input type="${d.url ? 'url' : 'password'}" data-key="${d.key}" value="${escapeHtml((keys[d.key] as string) ?? '')}" placeholder="${escapeHtml(d.ph ?? 'API-Key')}" autocomplete="off" ${d.url ? 'spellcheck="false"' : ''}/>
       </div>`;
     panel.innerHTML = `
@@ -789,6 +793,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       </div>`;
     mountRawDataLink(panel.querySelector<HTMLElement>('[data-rdi]')!, 'row');
     updateKeyBadge();
+    wireGuides();
+  };
+
+  /** ⓘ-guided guides open on hover (with a small close delay so the tooltip gap
+   *  can be crossed); on touch devices the click toggle stays as before. */
+  const wireGuides = () => {
+    if (!window.matchMedia('(hover: hover)').matches) return;
+    for (const d of panel.querySelectorAll<HTMLDetailsElement>('details.ii')) {
+      let timer: number | undefined;
+      d.addEventListener('mouseenter', () => {
+        clearTimeout(timer);
+        for (const other of panel.querySelectorAll<HTMLDetailsElement>('details.ii[open]')) if (other !== d) other.open = false;
+        d.open = true;
+      });
+      d.addEventListener('mouseleave', () => {
+        clearTimeout(timer);
+        timer = window.setTimeout(() => { d.open = false; }, 200);
+      });
+    }
   };
 
   const updateKeyBadge = () => {
