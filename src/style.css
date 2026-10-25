@@ -2391,7 +2391,8 @@ svg.hourly {
   position: absolute;
   inset: 0;
   z-index: 9;
-  background: rgba(4, 7, 16, 0.45);
+  /* invisible: only closes the panel on outside click, no dimming */
+  background: none;
 }
 
 .settings-scrim[hidden] {
@@ -2641,16 +2642,28 @@ svg.hourly {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 0;
+  padding: 5px 0;
 }
 
 .krow .k-l {
   flex: 0 0 42%;
   min-width: 0;
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  font-size: 0.83rem;
+}
+
+.krow .k-t {
+  display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.83rem;
+}
+
+.krow .k-l small {
+  font-size: 0.71rem;
+  line-height: 1.25;
+  color: var(--muted);
 }
 
 .krow input {
@@ -2721,10 +2734,6 @@ svg.hourly {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   display: grid;
   gap: 4px;
-}
-
-.ii .ii-h {
-  color: var(--text);
 }
 
 .ii .ii-t ol {

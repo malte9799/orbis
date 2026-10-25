@@ -570,17 +570,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           ],
         },
         {
-          key: 'firms',
-          label: 'NASA FIRMS',
-          ph: 'MAP_KEY',
-          hint: 'Aktuellere Feuer-Hotspots (sonst gemeinsamer Snapshot).',
-          steps: [
-            { t: '1. Formular ausfüllen (Name, E-Mail)', u: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/' },
-            { t: '2. Bestätigungs-Mail anklicken' },
-            { t: '3. MAP_KEY wird angezeigt – hier einfügen' },
-          ],
-        },
-        {
           key: 'radarHost',
           label: 'Radar-Server',
           ph: 'https://radar.example.org',
@@ -614,15 +603,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
             { t: '1. Anmelden / registrieren (kostenlos)', u: 'https://aisstream.io' },
             { t: '2. Im Dashboard „API Keys“ → Create', u: 'https://dashboard.aisstream.io' },
             { t: '3. Key hier einfügen' },
-          ],
-        },
-        {
-          key: 'nps',
-          label: 'National Park Service',
-          hint: 'Webcams der US-Nationalparks (sonst gemeinsamer Snapshot).',
-          steps: [
-            { t: '1. Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
-            { t: '2. Key hier einfügen' },
           ],
         },
       ],
@@ -693,6 +673,31 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         },
       ],
     },
+    {
+      sub: 'Schon mit Daten im Repo (Fallback-Snapshot)',
+      defs: [
+        {
+          key: 'firms',
+          label: 'NASA FIRMS',
+          ph: 'MAP_KEY',
+          hint: 'Aktuellere Feuer-Hotspots (ohne Key: gemeinsamer Snapshot).',
+          steps: [
+            { t: '1. Formular ausfüllen (Name, E-Mail)', u: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/' },
+            { t: '2. Bestätigungs-Mail anklicken' },
+            { t: '3. MAP_KEY wird angezeigt – hier einfügen' },
+          ],
+        },
+        {
+          key: 'nps',
+          label: 'National Park Service',
+          hint: 'Webcams der US-Nationalparks (ohne Key: gemeinsamer Snapshot).',
+          steps: [
+            { t: '1. Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
+            { t: '2. Key hier einfügen' },
+          ],
+        },
+      ],
+    },
   ];
 
   type UnitRow = { key: keyof AppOptions; label: string; opts: [string, string][] };  const UNIT_SETS: UnitRow[] = [
@@ -728,7 +733,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const filled = Object.entries(keys).filter(([, v]) => !!v).length;
     const keyRow = (d: KeyDef) => `
       <div class="krow">
-        <span class="k-l">${escapeHtml(d.label)}<details class="ii"><summary aria-label="Kurzanleitung für ${escapeHtml(d.label)}">${INFO_ICON}</summary><span class="ii-t"><span class="ii-h">${escapeHtml(d.hint)}</span><ol>${d.steps.map((s) => `<li>${s.u ? `<a href="${s.u}" target="_blank" rel="noopener">${escapeHtml(s.t)}</a>` : escapeHtml(s.t)}</li>`).join('')}</ol></span></details></span>
+        <span class="k-l"><span class="k-t">${escapeHtml(d.label)}<details class="ii"><summary aria-label="Kurzanleitung für ${escapeHtml(d.label)}">${INFO_ICON}</summary><span class="ii-t"><ol>${d.steps.map((s) => `<li>${s.u ? `<a href="${s.u}" target="_blank" rel="noopener">${escapeHtml(s.t)}</a>` : escapeHtml(s.t)}</li>`).join('')}</ol></span></details></span>
+          <small>${escapeHtml(d.hint)}</small></span>
         <input type="${d.url ? 'url' : 'password'}" data-key="${d.key}" value="${escapeHtml((keys[d.key] as string) ?? '')}" placeholder="${escapeHtml(d.ph ?? 'API-Key')}" autocomplete="off" ${d.url ? 'spellcheck="false"' : ''}/>
       </div>`;
     panel.innerHTML = `
@@ -828,6 +834,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   scrim.addEventListener('click', closeSettings);
+  // only one info guide open at a time ('toggle' does not bubble → capture)
+  document.addEventListener('toggle', (e) => {
+    const d = e.target as HTMLDetailsElement;
+    if (d.tagName !== 'DETAILS' || !d.open || !d.matches('.ii') || !panel.contains(d)) return;
+    for (const other of panel.querySelectorAll<HTMLDetailsElement>('details.ii[open]')) if (other !== d) other.open = false;
+  }, true);
   panel.addEventListener('click', (e) => {
     const t = e.target as HTMLElement;
     if (t.closest('.sp-x') || t.closest('.sp-x *')) {
