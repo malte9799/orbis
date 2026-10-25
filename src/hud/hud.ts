@@ -981,7 +981,8 @@ export function createHud(host: HudHost): Hud {
         delete d.isobars;
         const l = d.layers.find((x) => x.id === 'lightning');
         if (!l) {
-          d.layers.unshift({ id: 'lightning' });
+          // neuer Layer: der schrumpfende Einschlagskreis ("Kreis") ist ab Werk aktiv
+          d.layers.unshift({ id: 'lightning', filter: 'wave' });
           fresh.add('lightning');
         } else delete l.hidden;
       } else {

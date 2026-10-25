@@ -1075,8 +1075,8 @@ export class ExtraLayers {
     );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
-    // expanding ring of a fresh strike (grows with "k", fades via "o"), detector line colours: green = close, blue = medium, red = far
-    const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
+    // expanding ring of a fresh strike (grows with "k", fades via "o"); detector lines: white,
+    // only a little thicker when the capturing detector sits close to the strike
     // thunder (Unteroption "Donner"): drew the backmost lightning layer first, so it never
     // washes out the wave, lines or strike dots
     add(
@@ -1103,8 +1103,9 @@ export class ExtraLayers {
         source: 'lightning-line',
         layout: { ...hidden, 'line-join': 'round' },
         paint: {
-          'line-color': lineColor,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6],
+          // weiß in jeder Entfernung; die Dicke kodiert sie: nah (dc 0) etwas dicker, sonst Basis
+          'line-color': '#ffffff',
+          'line-width': ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6]] as ExpressionSpecification,
           'line-opacity': ['get', 'o'],
         },
       },
