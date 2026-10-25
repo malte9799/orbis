@@ -336,25 +336,50 @@ export function createHud(host: HudHost): Hud {
     }
     return { label: menu[0]?.label ?? k.name, icon: menu[0]?.icon ?? k.icon, color: k.color };
   }
+  let lastFolded: boolean | null = null;
   function renderModes() {
     const r = reg('modes');
     // beside the editing stack the weather controls of the stack take over
     if (!view(cur).menu || (ui.edit && layout !== 'portrait')) {
       r.innerHTML = '';
+      lastFolded = null;
       return;
     }
     const lx = r.querySelector('.wxm')?.scrollTop ?? 0;
     const k = view(cur);
+    // height of the rendered menu before the swap: the fold/unfold animation starts from it
+    const prevH = r.querySelector<HTMLElement>('.wxm')?.offsetHeight ?? 0;
+    const folding = lastFolded !== null && lastFolded !== ui.folded;
+    lastFolded = ui.folded;
     // collapsed: a single line naming the chosen sub-point; tapping it (or the Karte again) unfolds
     if (ui.folded) {
       const f = foldedLabel(k);
       r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="Ausgewählte Ebene"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="Menü aufklappen">
         <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span></button></div>`;
-      return;
+    } else {
+      r.innerHTML = modesInner(k);
+      const m = r.querySelector('.wxm');
+      if (m) m.scrollTop = lx;
     }
-    r.innerHTML = modesInner(k);
-    const m = r.querySelector('.wxm');
-    if (m) m.scrollTop = lx;
+    if (folding) foldAnimate(r.querySelector<HTMLElement>('.wxm'), prevH);
+  }
+
+  /** animate the menu between the full list and the one line (height + fade) */
+  function foldAnimate(m: HTMLElement | null, fromH: number) {
+    if (!m || !fromH) return;
+    const toH = m.offsetHeight;
+    m.style.overflow = 'hidden';
+    void m.offsetHeight;
+    m.animate(
+      [
+        { height: `${fromH}px`, opacity: Math.min(1, fromH / Math.max(1, toH)), transform: 'translateY(-4px)' },
+        { height: `${toH}px`, opacity: 1, transform: 'translateY(0)' },
+      ],
+      { duration: 210, easing: 'cubic-bezier(.3,.9,.4,1)' },
+    ).finished.then(() => {
+      m.style.overflow = '';
+      if (!ui.folded) m.scrollTop = 0;
+    });
   }
 
   /** keep the active pill visible in the scrolling Karten bar */
