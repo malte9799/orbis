@@ -407,10 +407,9 @@ export function createHud(host: HudHost): Hud {
   function summary(k: Karte) {
     const { html, more } = iconList(k, 8, true);
     return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="Einstellungen für ${esc(k.name)}">
-      <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
+      <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}${dirty(k.id) ? '<i class="dd" role="img" aria-label="Ungespeicherte Änderungen" data-tip="Ungespeicherte Änderungen"></i>' : ''}</span>
       <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
       ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
-      ${dirty(k.id) ? `<i class="dd" role="img" aria-label="Ungespeicherte Änderungen" data-tip="Ungespeicherte Änderungen"></i>` : ''}
     </div>`;
   }
 

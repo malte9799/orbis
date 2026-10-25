@@ -96,8 +96,9 @@
 .hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
 .hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
 .hud .sum .pin svg { width: 13px; height: 13px; }
-/* „Geändert“-Badge: direkt auf dem Zahnrad oben rechts (Zahnrad sitzt links in der Pill) */
-.hud .sum .dd { position: absolute; top: 2px; left: 31px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); cursor: pointer; }
+/* „Geändert“-Badge: direkt oben rechts auf dem Zahnrad (als Kind des gear-Elements) */
+.hud .sum .gear { position: relative; }
+.hud .sum .dd { position: absolute; top: -1px; right: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); cursor: pointer; }
 
 /* css tooltips below the settings pill (native titles are too slow/inconsistent on the icons) */
 .hud .sum [data-tip] { position: relative; }
