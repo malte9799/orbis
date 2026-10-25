@@ -21,7 +21,7 @@ const PORTALS = [
   { slug: 'io', body: 'io', folder: 'Io', pages: 1, filter: /Global|Mosaic|DEM|Atlas|Color/i, seeds: ['IoDEM', 'TvashtarPaterae_DEM_900m'] },
   { slug: 'phobos', body: 'phobos', folder: 'Phobos', pages: 1, filter: /Global|Mosaic|DEM|DTM|Mosaic|Atlas/i, seeds: ['DTM_MExLab_200_final', 'Phobos_ME_HRSC_DEM_Global_2ppd'] },
   { slug: 'titan', body: 'titan', folder: 'Titan', pages: 1, filter: /Global|HiSAR|32ppd|shape/i, known: ['Titan_global_32ppd_ColorRatio_v2'], seeds: ['TitanISS2018June.proj.scale', 'Titan_global_32ppd_2microns_v2', 'Titan_global_32ppd_5microns_v2', 'Titan_SAR_HiSAR_MosaicThru_T104_Jan2015_clon180_128ppd', 'Titan_ISS_P19658_Mosaic_Global_4km', 'shape_4PPD_geoid_corrected0'] },
-  { slug: 'callisto', body: 'callisto', folder: 'Callisto', pages: 0, seeds: ['Callisto_NIMS_composite_30_local_30_global_USGS_back_600_dpi_clipt_QGIS'] },
+  { slug: 'callisto', body: 'callisto', folder: 'Callisto', pages: 0, seeds: ['Callisto_Voyager_GalileoSSI_global_mosaic_1km', 'Callisto_NIMS_composite_30_local_30_global_USGS_back_600_dpi_clipt_QGIS'] },
   { slug: 'mercury', body: 'mercury', folder: 'Mercury', pages: 1, filter: /Global|DEM|Mosaic|Geolog/i, known: ['Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'Mercury_MESSENGER_MDIS_Basemap_EnhancedColor_Mosaic_Global_665m'] },
   { slug: 'enceladus', body: 'enceladus', folder: 'Enceladus', pages: 1, filter: /Global|DEM|Mosaic|Hillshade|Geologic/i, known: ['Enceladus_Cassini_mosaic_global_110m', 'Cassini_ISS_DEM_375m_Global'] },
   { slug: 'ganymede', body: 'ganymede', folder: 'Ganymede', pages: 1, filter: /Global|Mosaic|DEM/i, seeds: [] },

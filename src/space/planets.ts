@@ -155,8 +155,8 @@ const DEM_RANGE: Record<string, [number, number]> = { venus: [-2600, 11400], io:
 const trekBody = (id: string, name: string, radiusKm: number, manual: TileLayer[] = []): PlanetMapConfig => {
   const list = trekList(id);
   const bases = list.filter((p) => p.group === 'base');
-  // default map: a real global imagery mosaic (largest footprint, then the finest level)
-  const score = (p: { layer: { maxZ: number }; bbox: [number, number, number, number] }) => (wide(p.bbox) ? 1e12 : 0) + (p.bbox[2] - p.bbox[0]) * (p.bbox[3] - p.bbox[1]) * 1e3 + p.layer.maxZ;
+  // default map: a real global imagery mosaic (resolution first, then footprint)
+  const score = (p: { layer: { maxZ: number }; bbox: [number, number, number, number] }) => (wide(p.bbox) ? 1e12 : 0) + p.layer.maxZ * 1e9 + (p.bbox[2] - p.bbox[0]) * (p.bbox[3] - p.bbox[1]) * 1e3;
   const first = bases.filter((p) => !/Slope|Hillshade|Shade/i.test(p.title)).sort((a, b) => score(b) - score(a))[0] ?? bases[0];
   const products = list.filter((p) => p !== first);
   const gdem = list.find((p) => p.group === 'dem' && wide(p.bbox));

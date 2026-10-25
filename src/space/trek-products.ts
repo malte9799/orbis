@@ -46,6 +46,7 @@ export const TREK_PRODUCTS: Record<string, TrekProduct[]> = {
   ],
   callisto: [
     ["Callisto_NIMS_composite_30_local_30_global_USGS_back_600_dpi_clipt_QGIS", "Callisto_NIMS_composite_30_local_30_global_USGS_back_600_dpi_clipt_QGIS", 'base', "~/tiles/Callisto/EQ/Callisto_NIMS_composite_30_local_30_global_USGS_back_600_dpi_clipt_QGIS/1.0.0/default/default028mm/{z}/{r}/{c}.png", 256, [-180, -90, 180, 90], 3],
+    ["Callisto_Voyager_GalileoSSI_global_mosaic_1km", "Callisto_Voyager_GalileoSSI_global_mosaic_1km", 'base', "~/tiles/Callisto/EQ/Callisto_Voyager_GalileoSSI_global_mosaic_1km/1.0.0/default/default028mm/{z}/{r}/{c}.png", 256, [-180, -90, 180, 90], 5],
   ],
   mercury: [
     ["Mercury_MESSENGER_ClrMosaic_global_665m_v3", "MSGR MDIS, Color Mosaic Global", 'base', "~/tiles/Mercury/EQ/Mercury_MESSENGER_ClrMosaic_global_665m_v3/1.0.0/default/default028mm/{z}/{r}/{c}.png", 256, [-180, -90, 180, 90], 5],

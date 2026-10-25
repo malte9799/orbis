@@ -581,6 +581,12 @@ const DEFAULT_VIEW: Record<string, { lat: number; lon: number }> = {
   moon: { lat: 0.67, lon: 23.47 },
   titan: { lat: -10.3, lon: 167.7 }, // Huygens-Landestelle
   mimas: { lat: 1.4, lon: -111.9 }, // Herschel-Krater
+  venus: { lat: 0, lon: 0 },
+  phobos: { lat: 0, lon: 0 },
+  io: { lat: 0, lon: 0 },
+  europa: { lat: 1.3, lon: 0 }, // im Cilix-Streifenmosaik (das schärfste Europas)
+  ganymede: { lat: 0, lon: 0 },
+  callisto: { lat: 0, lon: 0 },
   enceladus: { lat: 0, lon: 0 },
   tethys: { lat: 0, lon: 0 },
   dione: { lat: 0, lon: 0 },
