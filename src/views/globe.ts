@@ -126,7 +126,7 @@ const DEFAULT_STATE: GlobeState = {
   wind: false,
   isobars: false,
   buildings3d: false,
-  terrain3d: true,
+  terrain3d: false,
   extras: {},
   groups: {},
   projection: 'mercator',
@@ -364,8 +364,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.labels = k.labels;
     state.night = k.night;
     state.overlay = overlay;
-    // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
-    state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
+    // wind layers bring their particles along (can be switched off), and Satellit/Wolken (IR)
+    // shows them as well; isobars are an option of wind/pressure
+    state.wind = ((isField(overlay) && !!FIELDS[overlay].particles) || overlay === 'sat-ir') && k.wind !== false;
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
     // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
     state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
@@ -682,9 +683,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
   }
 
-  /** 3D-Gelände: lifts/bares the real elevation model – nothing is drawn for it on the map. */
+  /** 3D-Gelände: only lifts the real elevation model when the camera is tilted – top-down it stays flat. */
   function applyTerrain() {
-    extras?.setTerrain(state.terrain3d);
+    const tilted = !!map && map.getPitch() > 10;
+    extras?.setTerrain(state.terrain3d && tilted);
   }
 
   /** The terminator follows the forecast timeline when one is shown. */
@@ -1399,7 +1401,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       };
       sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
-      extras.setTerrain(state.terrain3d);
+      extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
       applyBase();
@@ -1466,6 +1468,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
     map.on('rotate', syncRotated);
     map.on('pitch', syncRotated);
+    // 3D-Gelände folgt der Neigung: erst ab geneigter Kamera aktiv, von oben immer flach
+    let terrainTilted = false;
+    const syncTerrainPitch = () => {
+      if (!map) return;
+      const tilted = map.getPitch() > 10;
+      if (tilted !== terrainTilted) {
+        terrainTilted = tilted;
+        applyTerrain();
+      }
+    };
+    map.on('pitch', syncTerrainPitch);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
