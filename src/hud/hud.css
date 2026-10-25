@@ -43,6 +43,7 @@
 .hud .subs button:hover { background: var(--card); color: var(--text); }
 .hud .subs button.on { background: #fff; border-color: #fff; color: #0b1020; font-weight: 600; }
 .hud .subs .n { margin-left: auto; font: 600 11px ui-monospace, Menlo, monospace; font-style: normal; color: var(--muted); }
+.hud .subs button.on .n { color: var(--text-2); }
 .hud .subs .n:empty { display: none; }
 .hud .subs button.tgl { margin-top: 0; }
 

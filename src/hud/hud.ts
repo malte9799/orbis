@@ -48,6 +48,8 @@ export interface LayerInfo {
   sub: string;
   live: boolean;
   count: number | null;
+  /** stream delay in seconds (Blitze Live: shown beside the menu row, live updated) */
+  delay?: number;
 }
 
 export interface HudHost {
@@ -271,7 +273,9 @@ export function createHud(host: HudHost): Hud {
         chip(has('lines'), 'lines', 'Linien') +
         chip(has('thunder'), 'thunder', 'Donner');
       const subs = (it: WxMenuItem): string => {
-        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}</button>`);
+        // beside "Blitze Live" the stream delay in seconds (live refresh via refreshLive, data-d)
+        const delay = (x: WxMenuItem['subs'][number]) => (x.main === 'lightning' && boltOn ? '<em class="n" data-d="lightning"></em>' : '');
+        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}${delay(x)}</button>`);
         if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
         // when "Blitze Live" is chosen, its options follow as a nested list right underneath it
         if (it.id === 'storm' && boltOn) {
@@ -831,6 +835,8 @@ export function createHud(host: HudHost): Hud {
     renderGallery();
     renderDialog();
     renderContent();
+    // fill live numbers once with the current values (delay of "Blitze Live" is already known)
+    refreshLive();
     const sw = layout === 'portrait' ? 0 : ui.edit && (layout === 'landscape' || window.innerWidth > 900) ? (layout === 'landscape' ? 316 : 362) : 0;
     const s = `${sw / 2}px`;
     if (s !== lastShift) {
@@ -1450,6 +1456,11 @@ export function createHud(host: HudHost): Hud {
     root.querySelectorAll<HTMLElement>('[data-n]').forEach((s) => {
       const n = host.info(s.dataset.n!).count;
       s.textContent = n != null ? n.toLocaleString('de-DE') : '';
+    });
+    // delay of a live feed in seconds ("Blitze Live" beside its menu row)
+    root.querySelectorAll<HTMLElement>('[data-d]').forEach((s) => {
+      const d = host.info(s.dataset.d!).delay;
+      s.textContent = d != null ? `~${fmt.num(d, 1)} s` : '';
     });
     if (root.querySelector('.evcard')) renderContent();
     if (layout === 'portrait' && !drag?.moved && !sheetEl?.style.height) syncSheetH();

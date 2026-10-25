@@ -502,7 +502,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (n != null) parts.push(`${fmt.num(n)} geladen`);
     const note = extras?.note(e);
     if (note) parts.push(note);
-    return { sub: parts.join(' · '), live: live && n != null, count: n ?? null };
+    return { sub: parts.join(' · '), live: live && n != null, count: n ?? null, delay: id === 'lightning' ? extras?.lightningDelay() : undefined };
   }
 
   function eventList(hours: number): HudEvent[] {

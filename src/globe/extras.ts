@@ -1813,6 +1813,11 @@ export class ExtraLayers {
     return this.on.has(id) ? this.info[id]?.note : undefined;
   }
 
+  /** Stream delay of the live lightning feed in seconds (undefined while unknown). */
+  lightningDelay(): number | undefined {
+    return this.lightning?.delay;
+  }
+
   /** The map layers of a layer entry (for the draw order), in their style order. */
   layerIds(id: ExtraId): string[] {
     return LAYERS[id] ?? [];
