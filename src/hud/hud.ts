@@ -208,10 +208,10 @@ export function createHud(host: HudHost): Hud {
   function iconList(k: Karte, max: number): { html: string; more: number } {
     const parts: string[] = [];
     const f = mainFam(k);
-    if (f) parts.push(`<span class="main" style="background:${f.color}" title="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
+    if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
     k.layers.slice(0, max).forEach((l) => {
       const c = catalogOf(l.id);
-      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" title="${esc(c.label)}">${ico(c.icon, 2)}</span>`);
+      if (c) parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${esc(c.label)}${l.hidden ? ' (ausgeblendet)' : ''}">${ico(c.icon, 2)}</span>`);
     });
     return { html: parts.join(''), more: Math.max(0, k.layers.length - max) };
   }
@@ -398,12 +398,10 @@ export function createHud(host: HudHost): Hud {
   /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
     const { html, more } = iconList(k, 8);
-    const tip = `${k.name} – Einstellungen${dirty(k.id) ? ' · geändert' : ''}`;
-    return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="${esc(tip)}" title="${esc(tip)}">
-      <span class="gear" title="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
-      <span class="lic">${html}${more ? `<span class="more" title="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
-      <i class="dd" ${dirty(k.id) ? `title="Ungespeicherte Änderungen"` : 'hidden'}></i>
-      ${k.view ? `<span class="pin" title="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
+    return `<div class="sum hud-glass" data-act="edit" role="button" tabindex="0" aria-expanded="false" aria-label="Einstellungen für ${esc(k.name)}">
+      <span class="gear" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</span>
+      <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
+      ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
     </div>`;
   }
 

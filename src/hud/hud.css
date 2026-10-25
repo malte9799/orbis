@@ -93,7 +93,10 @@
 .hud .sum:hover .gear { background: color-mix(in srgb, #8a94a8 55%, transparent); }
 .hud .sum .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--card-2); color: var(--text-2); flex: none; }
 .hud .sum .pin svg { width: 13px; height: 13px; }
-.hud .sum .dd { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); flex: none; box-shadow: 0 0 0 2px rgba(0,0,0,.25); cursor: help; }
+
+/* css tooltips below the settings pill (native titles are too slow/inconsistent on the icons) */
+.hud .sum [data-tip] { position: relative; }
+.hud .sum [data-tip]:hover::after { content: attr(data-tip); position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: #10162e; color: var(--text); font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif; padding: 5px 9px; border-radius: 8px; border: 1px solid var(--border); white-space: nowrap; pointer-events: none; z-index: 40; box-shadow: 0 5px 16px rgba(0, 0, 0, .45); }
 .hud .mglyph { border-radius: 10px; display: grid; place-items: center; color: #fff; flex: none; }
 .hud .lic { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
 .hud .lic span { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; position: relative; flex: none; }
