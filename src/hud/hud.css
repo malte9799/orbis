@@ -88,6 +88,9 @@
 
 /* ---------- collapsed Karte card: settings pill (gear + layer icons, icons only) ---------- */
 .hud .sum { position: absolute; left: var(--hud-l); top: calc(60px); width: max-content; max-width: min(520px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 6; padding: 5px; display: flex; align-items: center; gap: 7px; cursor: pointer; transition: background .15s; }
+/* ohne Ebenen keinen leeren Spalt neben dem Zahnrad */
+.hud .sum .lic:empty { display: none; }
+.hud .sum .lic + .pin { margin-left: 0; }
 .hud .sum:hover { background: rgba(22,30,60,.92); }
 .hud .sum .gear { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: color-mix(in srgb, #8a94a8 30%, transparent); color: #e6ebff; flex: none; }
 .hud .sum .gear svg { width: 16px; height: 16px; }
