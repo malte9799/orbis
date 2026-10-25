@@ -1103,9 +1103,16 @@ export class ExtraLayers {
         source: 'lightning-line',
         layout: { ...hidden, 'line-join': 'round' },
         paint: {
-          // weiß in jeder Entfernung; die Dicke kodiert sie: nah (dc 0) etwas dicker, sonst Basis
+          // weiß in jeder Entfernung; die Dicke kodiert sie: nah (dc 0) etwas dicker, sonst Basis.
+          // Zoom-Ausdruck bleibt top-level im Interpolate (der dc-Faktor sitzt in den Stops, sonst
+          // verwirft MapLibre das Paint und schaltet die Linien komplett aus)
           'line-color': '#ffffff',
-          'line-width': ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6]] as ExpressionSpecification,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            1, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 0.6],
+            8, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.1],
+            12, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.6],
+          ],
           'line-opacity': ['get', 'o'],
         },
       },
@@ -1167,9 +1174,12 @@ export class ExtraLayers {
         layout: hidden,
         paint: {
           'circle-color': 'rgba(255,50,50,0.28)',
+          // max. Größe erst ab Zoom 3: bei Weltansicht bleiben die Kreise klein (≤ 8 px),
+          // ab Zoom 3 bis 36 px und danach wie bisher weiterwachsen
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            1, ['+', 5, ['*', 44, ['get', 'k']]],
+            0, ['+', 2, ['*', 6, ['get', 'k']]],
+            3, ['+', 6, ['*', 30, ['get', 'k']]],
             6, ['+', 8, ['*', 96, ['get', 'k']]],
             12, ['+', 10, ['*', 180, ['get', 'k']]],
           ],
