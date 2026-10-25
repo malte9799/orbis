@@ -239,12 +239,6 @@ const AC_SOURCES: AcSource[] = [
     parse: readsb,
   },
   {
-    id: 'airplanes.live',
-    label: 'airplanes.live',
-    url: (lat, lon, r) => `https://api.airplanes.live/v2/point/${lat.toFixed(3)}/${lon.toFixed(3)}/${r}`,
-    parse: readsb,
-  },
-  {
     id: 'opensky',
     label: 'OpenSky Network',
     url: (lat, lon, r) => {
@@ -307,7 +301,6 @@ export async function loadAircraftByHex(hex: string): Promise<AircraftResult> {
   resetOnProxyChange();
   const sources: [string, string][] = [
     ['adsb.lol (ODbL)', 'https://api.adsb.lol/v2/hex/'],
-    ['airplanes.live', 'https://api.airplanes.live/v2/hex/'],
   ];
   let last: unknown;
   for (const [label, base] of sources) {
