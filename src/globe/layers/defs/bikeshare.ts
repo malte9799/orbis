@@ -63,7 +63,12 @@ export default defineExtra({
   icon: 'bike',
   color: COLOR,
   sources: {
-    bikeshare: 'Leihräder: offene <a href="https://gbfs.org/">GBFS</a>-Feeds der Betreiber (Lyft, BCycle, PBSC, Urban Sharing, Entur, JCDecaux, nextbike u. a.)',
+    // operator credits as required by the feeds (list after God's Eye View's data credits)
+    bikeshare:
+      'Leihräder: offene <a href="https://gbfs.org/">GBFS</a>-Feeds der Betreiber (Lyft, BCycle, PBSC, Tembici, nextbike u. a.); ' +
+      'BiciMAD: <a href="https://www.emtmadrid.es">Powered by EMT de Madrid</a>; Bicing: Ajuntament de Barcelona (B:SM); AMBici: Àrea Metropolitana de Barcelona; ' +
+      'Norwegen: enthält Daten unter der <a href="https://data.norge.no/nlod/en/2.0">NLOD</a> von Oslo, Bergen und Trondheim Bysykkel sowie Entur (Kolumbus, Farte Bysykkel); ' +
+      'JCDecaux (Lillestrøm, Valenbisi, Sevici): <a href="https://developer.jcdecaux.com/files/Open-Licence-fr.pdf">Licence Ouverte</a>',
     'bikeshare-systems': '',
   },
   addLayers({ add, hidden }) {
