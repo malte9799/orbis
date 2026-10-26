@@ -7,6 +7,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { propagate } from 'satellite.js';
 import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
+import { distTxt, distVal, distUnit, localizeText } from '../units';
 import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
 import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt } from './mars';
@@ -1390,7 +1391,7 @@ export function createSpaceView(
 
   const blurb = (b: Body) => {
     const d = b.description?.split(/(?<=[.!])\s/)[0];
-    return d || KIND_LABEL[b.kind] || '';
+    return d ? localizeText(d) : KIND_LABEL[b.kind] || '';
   };
 
   function rowHtml(b: Body, child = false) {
@@ -1446,8 +1447,8 @@ export function createSpaceView(
   }
 
   function distanceText(au: number) {
-    if (au < 0.01) return `${fmt.num(au * AU_KM, 0)} km`;
-    return `${fmt.num(au, au < 10 ? 3 : 1)} AE (${fmt.num((au * AU_KM) / 1e6, au < 10 ? 1 : 0)} Mio. km)`;
+    if (au < 0.01) return distTxt(au * AU_KM, 0);
+    return `${fmt.num(au, au < 10 ? 3 : 1)} AE (${fmt.num(distVal(au * AU_KM) / 1e6, au < 10 ? 1 : 0)} Mio. ${distUnit()})`;
   }
 
   function lightTime(au: number) {
@@ -1514,9 +1515,9 @@ export function createSpaceView(
     info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
       <div class="sp-kind">${KIND_LABEL[b.kind]}${b.parent ? ` · ${escapeHtml(byId.get(b.parent)?.name ?? '')}` : ''}</div>
       <h2>${escapeHtml(b.name)}</h2>
-      ${b.description ? `<p>${escapeHtml(b.description)}</p>` : ''}
+      ${b.description ? `<p>${escapeHtml(localizeText(b.description))}</p>` : ''}
       <dl class="sp-live"></dl>
-      ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>` : ''}
+      ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(localizeText(v))}</dd>`).join('')}</dl>` : ''}
       ${b.approx ? '<p class="small note">Position/Flugbahn angenähert.</p>' : ''}
       ${
         b.id === 'moon' || b.id === 'mars'

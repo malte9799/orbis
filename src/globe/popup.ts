@@ -1,4 +1,5 @@
 import { escapeHtml, fmt, safeUrl } from '../util';
+import { resolveUnits } from '../units';
 import { glyphSvg, type GlyphId } from './icons';
 
 export interface CardProps {
@@ -20,9 +21,9 @@ export function cardHtml(p: CardProps): string {
   const date = typeof p.date === 'string' && p.date ? p.date : null;
   return `<div class="pop">
     <div class="pop-head">${glyphSvg(p.glyph, p.color, 26)}<b>${escapeHtml(p.title)}</b></div>
-    ${p.subtitle ? `<div class="pop-sub">${escapeHtml(p.subtitle)}</div>` : ''}
+    ${p.subtitle ? `<div class="pop-sub">${resolveUnits(escapeHtml(p.subtitle))}</div>` : ''}
     ${date ? `<div class="pop-sub">${escapeHtml(fmt.dateTime(date))} (${escapeHtml(fmt.relative(date))})</div>` : ''}
-    ${desc ? `<p class="pop-desc">${escapeHtml(desc)}${desc.length >= 500 ? ' …' : ''}</p>` : ''}
+    ${desc ? `<p class="pop-desc">${resolveUnits(escapeHtml(desc))}${desc.length >= 500 ? ' …' : ''}</p>` : ''}
     ${p.extra ?? ''}
     ${p.source || url ? `<div class="pop-foot">${p.source ? `Quelle: ${escapeHtml(p.source)}` : ''}${url ? `${p.source ? ' · ' : ''}<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Details ↗</a>` : ''}</div>` : ''}
   </div>`;

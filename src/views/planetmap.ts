@@ -22,6 +22,7 @@ import { buildSiteScene, hasSceneModel } from '../space/surface-models';
 import { PLANET_MAPS, type PlanetMapConfig, type TileLayer } from '../space/planets';
 import { FONT_BOLD, FONT_ITALIC, FONT_REGULAR, OFM_GLYPHS } from '../globe/vector';
 import { escapeHtml, fmt } from '../util';
+import { distTxt } from '../units';
 
 // Map of another planet – the counterpart of the Earth map (views/globe.ts): MapLibre with
 // 2D (mercator) / 3D (globe) switch, zooming far out hands over to the solar system.
@@ -787,7 +788,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const f = MOON_FEATURES.find((x) => featureId(x) === id);
       if (!f) return;
       label = KIND_LABEL[f.kind];
-      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', `${fmt.num(f.km, 0)} km`]);
+      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', distTxt(f.km, 0)]);
       [coordLon, coordLat] = [f.lon, f.lat];
       zoomTo = featureZoom(f);
     } else if (kind === 'rover') {
@@ -798,13 +799,13 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       [coordLon, coordLat] = p0 ?? (tr.id === 'm20' ? [77.45, 18.44] : [137.44, -4.59]);
       if (t) {
         const n = trackCount(t, Date.now());
-        rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', `${fmt.num(trackKm(t, n), 1)} km`]);
+        rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', distTxt(trackKm(t, n), 1)]);
       }
       body = '<p>Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell – vergrößert und mit dem Zoom mitskalierend.</p>';
     } else {
       label = 'Hubschrauber';
       const f = getMarsTracks()?.heli.flights ?? [];
-      rows.push(['Flüge', String(f.length)], ['Flugstrecke gesamt', `${fmt.num(f.reduce((a, x) => a + x.len, 0) / 1000, 1)} km`]);
+      rows.push(['Flüge', String(f.length)], ['Flugstrecke gesamt', distTxt(f.reduce((a, x) => a + x.len, 0) / 1000, 1)]);
       [coordLon, coordLat] = heliAt(Date.now()) ?? [77.45, 18.44];
       body = '<p>Ingenuity flog zwischen April 2021 und Januar 2024 72-mal. Der Punkt markiert den letzten Landeplatz.</p>';
     }

@@ -108,38 +108,6 @@
   border-color: var(--accent);
 }
 
-.settings-dialog {
-  width: min(460px, calc(100% - 24px));
-  padding: 20px 22px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--card-solid);
-  color: var(--text);
-}
-
-.settings-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.settings-dialog h2 {
-  margin-bottom: 8px;
-}
-
-.settings-dialog h3 {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin: 16px 0 6px;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);

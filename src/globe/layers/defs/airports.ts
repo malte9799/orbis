@@ -7,6 +7,7 @@ import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { loadAirportFlights } from '../../../api/transport';
 import { staticAirports } from '../../../api/airport';
+import { heightTxt, clockTxt } from '../../../units';
 
 export const AIRPORT_FAR = ['airports-far-1', 'airports-far-2', 'airports-far-3'];
 
@@ -90,7 +91,7 @@ export default defineExtra({
         glyph: 'airport',
         color: '#90caf9',
         title: name,
-        subtitle: [code, p.ele != null ? `${p.ele} m ü. NN` : ''].filter(Boolean).join(' · '),
+        subtitle: [code, p.ele != null ? `${heightTxt(Number(p.ele))} ü. NN` : ''].filter(Boolean).join(' · '),
         source: 'OpenStreetMap, OpenSky Network',
         url: icao ? `https://opensky-network.org/network/explorer?airport=${encodeURIComponent(icao)}` : undefined,
         extra: icao ? '<div class="pop-loading small">Flüge vom Vortag werden geladen …</div>' : '',
@@ -104,7 +105,7 @@ export default defineExtra({
             const list = (l: { callsign: string; other: string; time: number }[], arrow: string) =>
               l
                 .slice(0, 6)
-                .map((f) => `<span>${escapeHtml(new Date(f.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span><b>${escapeHtml(f.callsign || '–')} ${arrow} ${escapeHtml(f.other)}</b>`)
+                .map((f) => `<span>${escapeHtml(clockTxt(f.time))}</span><b>${escapeHtml(f.callsign || '–')} ${arrow} ${escapeHtml(f.other)}</b>`)
                 .join('');
             const el = node.querySelector('.pop-loading');
             if (!el) return;

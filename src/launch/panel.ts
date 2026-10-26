@@ -2,7 +2,8 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import type { LaunchDetail } from './tracker';
 import { flightPhase, flightEndSec, getReminder, notifSupported, notifyPermission, requestNotifyPermission, setReminder, trackFeatures, tLabel } from './tracker';
-import { escapeHtml, safeUrl, toast } from '../util';
+import { escapeHtml, fmt, safeUrl, toast } from '../util';
+import { clockTxt, distTxt, heightTxt, speedTxt } from '../units';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
 import { countdown as relCountdown } from '../api/transport';
@@ -191,12 +192,12 @@ export class LaunchPanel {
   private padRows(d: LaunchDetail): string {
     const clockOf = (iso: string) => {
       const t = new Date(iso);
-      return `${escapeHtml(t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))} Uhr`;
+      return escapeHtml(clockTxt(t));
     };
     const rows: [string, string][] = [
       ['Startfenster', d.windowStart !== d.windowEnd ? `${clockOf(d.windowStart)} – ${clockOf(d.windowEnd)}` : clockOf(d.net)],
-      ['Startzeit', `${escapeHtml(d.net ? new Date(d.net).toLocaleString('de-DE') : '?')} (${escapeHtml(relCountdown(d.net))})`],
-      ['Zielorbit', escapeHtml([d.orbit, d.orbitName].filter(Boolean).join(' – ') + (d.altKm ? ` · ≈ ${Math.round(d.altKm)} km` : ''))],
+      ['Startzeit', `${escapeHtml(d.net ? fmt.dateTime(d.net) : '?')} (${escapeHtml(relCountdown(d.net))})`],
+      ['Zielorbit', escapeHtml([d.orbit, d.orbitName].filter(Boolean).join(' – ') + (d.altKm ? ` · ≈ ${distTxt(d.altKm, 0)}` : ''))],
     ];
     if (d.pad) rows.push(['Rampe', escapeHtml(d.pad)]);
     if (d.place) rows.push(['Ort', escapeHtml(d.place)]);
@@ -308,9 +309,9 @@ export class LaunchPanel {
     };
     if (p.at) {
       tileText('t', `+${tLabel(p.tSec)}`);
-      tileText('alt', p.at.altKm < 1 ? `${Math.round(p.at.altKm * 1000)} m` : `${p.at.altKm.toFixed(0)} km`);
-      tileText('v', `${Math.round(p.at.speedKmh).toLocaleString('de-DE')} km/h`);
-      tileText('r', `${Math.round(p.at.downrangeKm)} km`);
+      tileText('alt', p.at.altKm < 1 ? heightTxt(p.at.altKm * 1000) : distTxt(p.at.altKm, 0));
+      tileText('v', speedTxt(p.at.speedKmh));
+      tileText('r', distTxt(p.at.downrangeKm, 0));
     } else {
       tileText('t', p.phase === 'pre' ? '–' : '–');
       tileText('alt', p.phase === 'pre' ? '–' : 'in Orbit');

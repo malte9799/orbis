@@ -1,6 +1,7 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
+import { climbTxt, climbUnit, climbVal, distTxt, heightBoth, heightTxt, heightUnit, heightVal, speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
 import { category, clock, distKm, duration, graph, routeHero, tile } from './sidepanel';
 import { fetchAircraftPhoto, lookupAircraftSpec, seatmapUrl, type AircraftPhoto } from '../api/aircraft';
@@ -200,7 +201,6 @@ export class FlightPanel {
     title.textContent = i.callsign || i.hex.toUpperCase();
     sub.innerHTML = [i.operator && escapeHtml(i.operator), displayType && escapeHtml(displayType), i.reg && `<b>${escapeHtml(i.reg)}</b>`].filter(Boolean).join(' · ');
 
-    const num = (n: number | null, unit: string, d = 0) => (n == null ? '–' : `${fmt.num(n, d)} ${unit}`);
     const COLOR = '#f2c94c';
     const r = i.route;
     let hero: string;
@@ -228,9 +228,9 @@ export class FlightPanel {
     }
 
     const m = this.metric;
-    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Tempo', num(i.speedKmh, 'km/h'), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', num(i.vsMs, 'm/s', 1), { metric: 'vs', on: m === 'vs' })}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Tempo', 'km/h'], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history?.[m as 'alt' | 'speed' | 'track' | 'vs'] ?? [], GRAPHS[m][1], COLOR) : '';
+    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : heightTxt(i.altM), { metric: 'alt', on: m === 'alt' })}${tile('Tempo', i.speedKmh == null ? '–' : speedTxt(i.speedKmh), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', i.vsMs == null ? '–' : climbTxt(i.vsMs), { metric: 'vs', on: m === 'vs' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', heightUnit()], speed: ['Tempo', speedUnit()], track: ['Kurs', '°'], vs: ['Steigrate', climbUnit()] };
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : m === 'alt' ? (i.history?.alt ?? []).map(heightVal) : m === 'vs' ? (i.history?.vs ?? []).map(climbVal) : (i.history?.track ?? [])), GRAPHS[m][1], COLOR) : '';
 
     // Flugzeug-Identifikation
     const planeRows: [string, string][] = [
@@ -248,10 +248,10 @@ export class FlightPanel {
       const techRows: [string, string][] = [
         ['Triebwerke', escapeHtml(spec.engines)],
         ['Passagiere', escapeHtml(spec.seats)],
-        ['Reichweite', `${fmt.num(spec.rangeKm)} km`],
-        ['Spannweite / Länge', `${spec.spanM} m / ${spec.lengthM} m`],
-        ['Reisetempo', `ca. ${spec.speedKmh} km/h`],
-        ['Dienstgipfelhöhe', `${fmt.num(Math.round(spec.ceilingFt * 0.3048))} m (${fmt.num(spec.ceilingFt)} ft)`],
+        ['Reichweite', distTxt(spec.rangeKm, 0)],
+        ['Spannweite / Länge', `${heightTxt(spec.spanM, 1)} / ${heightTxt(spec.lengthM, 1)}`],
+        ['Reisetempo', `ca. ${speedTxt(spec.speedKmh)}`],
+        ['Dienstgipfelhöhe', heightBoth(spec.ceilingFt * 0.3048)],
         ['Wirbelschleppe (WTC)', escapeHtml(spec.wtc)],
       ];
       techCat = category('specs', 'Technische Daten', techRows, this.open_);
@@ -269,7 +269,7 @@ export class FlightPanel {
     const posRows: [string, string][] = [
       ['Breitengrad', fmt.num(i.lat, 3)],
       ['Längengrad', fmt.num(i.lon, 3)],
-      ['Höhe (baro)', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m (${fmt.num(Math.round(i.altM / 0.3048))} ft)`],
+      ['Höhe (baro)', i.ground ? 'am Boden' : heightBoth(i.altM)],
       ['Squawk', escapeHtml(i.squawk || '–')],
       ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner'],
     ];

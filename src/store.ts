@@ -1,6 +1,55 @@
 /** API keys of the user (see src/settings/keys: one file per key) */
 export type ApiKeys = Record<string, string | undefined>;
 
+export interface AppOptions {
+  /** a click on an empty spot of the map shows the weather there */
+  clickWx?: boolean;
+  /** precipitation rate */
+  rain?: 'mm' | 'in' | 'dbz';
+  /** temperature */
+  temp?: 'c' | 'f';
+  /** wind speed */
+  wind?: 'kmh' | 'ms' | 'mph' | 'kn' | 'bft';
+  /** wind direction */
+  windDir?: 'compass' | 'deg';
+  /** air pressure */
+  pressure?: 'hpa' | 'mb' | 'mmhg' | 'inhg';
+  /** distances */
+  dist?: 'km' | 'mi' | 'nmi';
+  /** areas */
+  area?: 'km2' | 'mi2' | 'acre' | 'ha';
+  /** burned area */
+  burned?: 'km2' | 'mi2' | 'acre' | 'ha';
+  /** heights, depths, wave heights (m / ft) */
+  height?: 'm' | 'ft';
+  /** coordinates */
+  coords?: 'dec' | 'gms';
+  /** clock */
+  hour12?: '12h' | '24h';
+  /** absolute event/report times in UTC or the device's time zone */
+  tz?: 'auto' | 'utc';
+}
+
+/** fired on `window` after the unit/display options changed */
+export const OPTIONS_EVENT = 'wg:options';
+
+/** defaults for whatever is not stored yet */
+const APP_OPTION_DEFAULTS: AppOptions = {
+  clickWx: true,
+  rain: 'mm',
+  temp: 'c',
+  wind: 'kmh',
+  windDir: 'compass',
+  pressure: 'hpa',
+  dist: 'km',
+  height: 'm',
+  area: 'km2',
+  burned: 'km2',
+  coords: 'dec',
+  hour12: '24h',
+  tz: 'auto',
+};
+
 export interface Place {
   name: string;
   lat: number;
@@ -52,6 +101,13 @@ export const store = {
 
   getKeys: (): ApiKeys => read('wg.keys', {}),
   setKeys: (k: ApiKeys) => write('wg.keys', k),
+
+  getOptions: (): AppOptions => ({ ...APP_OPTION_DEFAULTS, ...read('wg.options', {}) }),
+  setOptions: (o: AppOptions) => {
+    write('wg.options', o);
+    // visible legends/readouts re-render with the new units
+    window.dispatchEvent(new Event(OPTIONS_EVENT));
+  },
 
   cacheGet<T>(key: string, maxAgeMs: number): T | null {
     const entry = read<{ t: number; v: T } | null>(`wg.cache.${key}`, null);

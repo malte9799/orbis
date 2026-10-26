@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, MultiPolygon, Point, Polygon } from 'geojson';
 import { fetchJson, fmt } from '../util';
+import { uTok } from '../units';
 import { omFetch } from './omlimit';
 import { aqiLabel, describe, pollenLabel } from '../weather';
 import { EUROPE_CITIES, WORLD_CITIES, type City } from './cities';
@@ -102,7 +103,7 @@ export async function loadPegel(): Promise<FeatureCollection<Point, EventProps &
         kind: 'flood',
         state,
         title: `Pegel ${titleCase(s.longname)} (${titleCase(s.water?.longname ?? '')})`,
-        subtitle: `Wasserstand ${fmt.num(m.value, 0)} ${ts!.unit}${trend} · ${st.label}`,
+        subtitle: `Wasserstand ${ts!.unit === 'cm' ? uTok('level', m.value) : `${fmt.num(m.value, 0)} ${ts!.unit}`}${trend} · ${st.label}`,
         date: m.timestamp,
         source: `PEGELONLINE (WSV)${s.agency ? ` / ${titleCase(s.agency)}` : ''}`,
         url: `https://www.pegelonline.wsv.de/gast/stammdaten?pegelnr=${encodeURIComponent(s.number)}`,

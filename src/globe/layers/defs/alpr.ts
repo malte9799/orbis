@@ -6,6 +6,7 @@ import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, loadAlpr } from '../..
 import { cardHtml } from '../../popup';
 import { escapeHtml, safeUrl } from '../../../util';
 import { isSuperseded } from '../../../api/overpass';
+import { coordsTxt } from '../../../units';
 
 type St = { key: string; tilesAdded: boolean; tilesFailed: boolean; live: Feature[]; fovKey: string };
 const getState = (ctx: ExtraCtx) => ctx.state<St>('alpr', () => ({ key: '', tilesAdded: false, tilesFailed: false, live: [], fovKey: '' }));
@@ -195,7 +196,7 @@ export default defineExtra({
       ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
       ['Seit', p.since],
       ['Kennung', p.ref],
-      ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
+      ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const photo = alprVendorImg(String(p.brand ?? ''));
     const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}

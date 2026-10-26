@@ -1,3 +1,5 @@
+import { tempVal, tempUnit, hourTxt, is12, tzUtc, coordsTxt } from './units';
+
 export function escapeHtml(value: unknown): string {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -88,8 +90,12 @@ const de = 'de-DE';
 export const fmt = {
   temp: (t: number | null | undefined, digits = 0) => {
     if (t == null || Number.isNaN(t)) return '–';
-    const s = t.toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    return `${/^-0(,0*)?$/.test(s) ? s.slice(1) : s}°`;
+    const n = tempVal(t);
+    if (Number.isNaN(n)) return '–';
+    const s = n.toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    const clean = /^-0(,0*)?$/.test(s) ? s.slice(1) : s;
+    // keep the compact bare "°" for °C, but make °F unmistakable
+    return tempUnit() === '°F' ? `${clean} °F` : `${clean}°`;
   },
   num: (n: number | null | undefined, digits = 0) =>
     n == null || Number.isNaN(n)
@@ -97,7 +103,7 @@ export const fmt = {
       : // avoid "-0" for tiny negative values
         (Math.abs(n) < 0.5 / 10 ** digits ? 0 : n).toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits }),
   /** Open-Meteo returns local wall-clock times without offset ("2026-10-12T14:00"). */
-  hour: (iso: string) => iso.slice(11, 16),
+  hour: (iso: string) => hourTxt(iso.slice(11, 16)),
   weekday: (isoDate: string, long = false) => {
     const d = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`);
     return d.toLocaleDateString(de, { weekday: long ? 'long' : 'short', timeZone: 'UTC' });
@@ -107,7 +113,15 @@ export const fmt = {
     return d.toLocaleDateString(de, { day: 'numeric', month: 'short', timeZone: 'UTC' });
   },
   dateTime: (date: Date | number | string) =>
-    new Date(date).toLocaleString(de, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    new Date(date).toLocaleString(de, {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: is12() ? 'h12' : 'h23',
+      timeZone: tzUtc() ? 'UTC' : undefined,
+    }),
   relative: (date: Date | number | string) => {
     const diff = (Date.now() - new Date(date).getTime()) / 1000;
     const rtf = new Intl.RelativeTimeFormat(de, { numeric: 'auto' });
@@ -115,8 +129,7 @@ export const fmt = {
     if (Math.abs(diff) < 86400) return rtf.format(-Math.round(diff / 3600), 'hour');
     return rtf.format(-Math.round(diff / 86400), 'day');
   },
-  coords: (lat: number, lon: number) =>
-    `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'O' : 'W'}`,
+  coords: (lat: number, lon: number) => coordsTxt(lat, lon),
 };
 
 const DIRS = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];

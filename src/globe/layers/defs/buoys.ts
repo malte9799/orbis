@@ -1,6 +1,7 @@
 import { defineExtra } from '../types';
 import { loadBuoys } from '../../../api/ocean';
 import { waveLabel } from '../shared/ocean';
+import { heightUnit } from '../../../units';
 
 export default defineExtra({
   id: 'buoys',
@@ -30,7 +31,7 @@ export default defineExtra({
     ctx.loadOnce('buoys', 10 * 60000, async () => {
       const fc = await loadBuoys();
       ctx.setData('buoys', fc);
-      return { count: fc.features.length, note: 'Farbe = Wellenhöhe, Zahl = Wellenhöhe in m (sonst Wind in kn)' };
+      return { count: fc.features.length, note: `Farbe = Wellenhöhe, Zahl = Wellenhöhe in ${heightUnit()} (sonst Wind in kn)` };
     });
   },
   click({ p, pt, html }) {

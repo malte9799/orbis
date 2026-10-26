@@ -9,9 +9,10 @@ import { ExpressionSpecification } from 'maplibre-gl';
 import { FONT_BOLD } from '../../vector';
 import { RAIL_MODES, loadAmtrak, loadSegments, modeStyle, positionsAt } from '../../../api/transit';
 import { cardHtml } from '../../popup';
-import { escapeHtml, fmt } from '../../../util';
+import { escapeHtml } from '../../../util';
 import { feedsInView, vehicleFeatures } from '../../../api/vehicles';
 import { loadTrainDetails, loadTrains } from '../../../api/transport';
+import { clockTxt, speedTxt } from '../../../units';
 
 type St = { segs: Segment[]; segKey: string; segAt: number; segLoading: boolean; gpsTrains: FeatureCollection; feedVeh: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; vehicles3d: VehiclesLayer | undefined };
 export const getState = (ctx: ExtraCtx) =>
@@ -119,7 +120,7 @@ export function updateVehicles(ctx: ExtraCtx) {
 
 export function vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResult {
   const st = modeStyle(String(p.mode));
-  const t = (ms: unknown) => new Date(Number(ms)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const t = (ms: unknown) => clockTxt(Number(ms));
   const delay = Number(p.delay);
   const rows =
     p.src === 'amtrak' || p.src === 'gps'
@@ -128,13 +129,13 @@ export function vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResu
           ...(p.src === 'gps' ? [['Von', p.from], ['Nach', p.to], ['Verspätung', delay === -999 ? '' : delay > 0 ? `+${delay} min` : 'pünktlich']] : []),
 
           ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
-          ['Geschwindigkeit', p.speed != null ? `${p.speed} km/h` : ''],
+          ['Geschwindigkeit', p.speed != null ? speedTxt(Number(p.speed)) : ''],
           ['Status', p.timely],
         ]
       : [
           ['Art', st.label],
           ['Abschnitt', `${p.from} → ${p.to}`],
-          ['Ankunft', `${t(p.arr)} Uhr`],
+          ['Ankunft', t(p.arr)],
           ['Verspätung', delay === -999 ? 'keine Echtzeitdaten' : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : 'pünktlich'],
         ];
   const extra = `<div class="pop-grid two">${rows
@@ -247,7 +248,7 @@ export function vehicleClick({ p, pt }: ClickCtx): ClickResult | null {
       glyph: 'train',
       color: '#ffca28',
       title: `Zug ${num}`,
-      subtitle: `${fmt.num(Number(p.speed))} km/h`,
+      subtitle: speedTxt(Number(p.speed)),
       source: 'Fintraffic Digitraffic',
       url: `https://www.junat.net/en/train/${num}`,
       extra: '<div class="pop-loading small">Details werden geladen …</div>',

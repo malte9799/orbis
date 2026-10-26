@@ -48,14 +48,15 @@ import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
-import { openSettings } from '../settings';
 import { createEvents } from '../globe/events/engine';
 import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
 import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
 import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
-import { store, type Place } from '../store';
+import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
+import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
+import { createSettingsPanel } from './settings';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -143,7 +144,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   el.className = 'view globe-view';
   el.innerHTML = `
     <div class="map" id="map"></div>
-    <dialog class="settings-dialog"></dialog>
+    <div class="settings-scrim" hidden></div>
+    <aside class="settings-panel" hidden></aside>
     <div class="globe-bottom">
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
@@ -383,18 +385,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
-  // ----- settings dialog (API keys, sources) --------------------------------
-  const settings = el.querySelector<HTMLDialogElement>('.settings-dialog')!;
-  const openSettingsDialog = () =>
-    openSettings(settings, () => {
+  // ----- settings: right slide-over panel (see views/settings.ts) ----------
+  const settings = createSettingsPanel(el.querySelector<HTMLElement>('.settings-panel')!, el.querySelector<HTMLElement>('.settings-scrim')!, {
+    onKeysSaved() {
       ev.reset('firms');
       if (hud) applyKarte(hud.current());
       ev.apply();
       ev.ensure();
       extras?.resume();
       refreshHud();
-      toast('Einstellungen gespeichert');
-    });
+    },
+  });
+  const openSettings = settings.open;
+  const closeSettings = settings.close;
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
@@ -740,7 +743,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.overlay === 'radar' ? (radar?.frames.length ? 'radar' : 'none') : needsModel() && globalModel ? 'model' : 'none';
 
   const timeLabel = (ms: number) =>
-    new Date(ms).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    dateTimeTxt(ms, { weekday: 'short', hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }) + (tzUtc() ? ' UTC' : '');
 
   let timelineKey = '';
   function renderTimeline() {
@@ -770,7 +773,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
     }</small>`;
     // day ticks under the slider (only rebuilt when the time axis changes)
-    const key = `${mode}:${times[0]}:${times.length}`;
+    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}`;
     if (key !== timelineKey) {
       timelineKey = key;
       let html = '';
@@ -778,8 +781,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         let lastDay = '';
         times.forEach((tt, i) => {
           const d = new Date(tt);
-          const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
-          if (day !== lastDay && d.getHours() < 3) {
+          const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
+          if (day !== lastDay && (tzUtc() ? d.getUTCHours() : d.getHours()) < 3) {
             html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
           }
           lastDay = day;
@@ -875,13 +878,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       case 'sat-storm':
         return t('Satellit Gewitter', 'Meteosat Konvektions-RGB · live, Europa & Afrika', 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, 'ruhig'], [100, 'kräftige Gewitter']]);
       case 'water':
-        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'sst':
-        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'seaice':
         return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
       case 'imerg':
-        return t('Niederschlag Satellit', 'NASA IMERG · mm/h', 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, '0,1'], [50, '5'], [100, '50+']]);
+        return t('Niederschlag Satellit', 'NASA IMERG · ' + rainUnit(), 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, rainNum(0.1)], [50, rainNum(5)], [100, rainNum(50) + '+']]);
       default:
         return null;
     }
@@ -907,6 +910,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const hideReadout = () => {
     readout.hidden = true;
   };
+  // units changed in the settings: legend and (stale) readout follow at once
+  window.addEventListener(OPTIONS_EVENT, () => {
+    renderLegend();
+    renderTimeline();
+    hideReadout();
+    popup?.remove(); // an open card still shows the old unit
+  });
   function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }, touch = false) {
     const o = state.overlay;
     if (touch && o === 'radar') {
@@ -914,7 +924,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const byte = radarGl?.sample(lngLat.lng, lngLat.lat);
       if (byte == null) return hideReadout();
       const rr = rainRate(byte);
-      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${fmt.num(rr, rr < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag';
+      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${rainTxt(rr, rr < 1 ? 1 : 0)}` : 'kein Niederschlag';
       readout.style.transform = `translate(${Math.max(8, point.x - 40)}px, ${Math.max(8, point.y - 64)}px)`;
       readout.hidden = false;
       return;
@@ -976,7 +986,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   async function weatherPopup(lng: number, lat: number, rain?: number | null) {
     // radar read-out of the Orbis composites: available even if the weather request fails
     const radarLine =
-      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${fmt.num(rain, rain < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag')}</b></div>` : '';
+      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${rainTxt(rain, rain < 1 ? 1 : 0)}` : 'kein Niederschlag')}</b></div>` : '';
     const loadingHtml = `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`;
     let node: HTMLElement;
     if (hud?.layout() === 'portrait') {
@@ -997,11 +1007,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div><div class="pop-temp">${fmt.temp(c.temperature_2m, 1)}</div><div>${escapeHtml(describe(c.weather_code))}</div></div></div>
         <div class="pop-grid">
           <span>Gefühlt</span><b>${fmt.temp(c.apparent_temperature)}</b>
-          <span>Wind</span><b>${Math.round(c.wind_speed_10m)} km/h ${compass(c.wind_direction_10m)}</b>
-          <span>Böen</span><b>${Math.round(c.wind_gusts_10m)} km/h</b>
+          <span>Wind</span><b>${windTxt(c.wind_speed_10m)} ${windDirTxt(c.wind_direction_10m)}</b>
+          <span>Böen</span><b>${windTxt(c.wind_gusts_10m)}</b>
           <span>Feuchte</span><b>${Math.round(c.relative_humidity_2m)} %</b>
           <span>Wolken</span><b>${Math.round(c.cloud_cover)} %</b>
-          <span>Druck</span><b>${Math.round(c.pressure_msl)} hPa</b>
+          <span>Druck</span><b>${pressureTxt(c.pressure_msl)}</b>
         </div>
         <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
       </div>`;
@@ -1314,7 +1324,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         launchPanel?.close();
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'weather') {
-        weatherPopup(extraResult.lng, extraResult.lat);
+        if (store.getOptions().clickWx) weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {
         const node = openPopup({ lng: extraResult.lng, lat: extraResult.lat }, extraResult.html);
         extraResult.after?.(node);
@@ -1331,9 +1341,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else if (isWeatherKarte(curKarte)) {
-        const { lng, lat } = e.lngLat;
-        const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
-        weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
+        if (store.getOptions().clickWx) {
+          const { lng, lat } = e.lngLat;
+          const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
+          weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
+        }
       }
     });
     for (const l of interactive) {
@@ -1370,7 +1382,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       store.setLastPlace(p);
       focusPlace(p.lat, p.lon, 7, true);
     },
-    openSettings: openSettingsDialog,
+    openSettings,
     layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
@@ -1439,6 +1451,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras?.stop();
       hideReadout();
       popup?.remove();
+      closeSettings();
     },
   };
 }

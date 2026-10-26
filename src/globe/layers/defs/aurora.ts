@@ -1,6 +1,7 @@
 import { defineExtra } from '../types';
 import { fmt } from '../../../util';
 import { loadAurora, loadSpaceWeather } from '../../../api/earth';
+import { clockTxt } from '../../../units';
 
 export default defineExtra({
   id: 'aurora',
@@ -42,7 +43,7 @@ export default defineExtra({
       const sun = sw
         ? ` · Sonnenwind ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? ' (günstig)' : ''}` : ''}${sw.xray ? `, Röntgen ${sw.xray}` : ''}`
         : '';
-      return { count: undefined, note: `${kp}Vorhersage für ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr${sun}` };
+      return { count: undefined, note: `${kp}Vorhersage für ${clockTxt(t)}${sun}` };
     });
   },
   layers: ['aurora'],

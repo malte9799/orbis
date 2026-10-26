@@ -16,6 +16,8 @@ import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { cardHtml } from './popup';
+import { heightNum } from '../units';
+import { OPTIONS_EVENT } from '../store';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
 // infrastructure. Every source is free and keyless.
@@ -159,6 +161,7 @@ export class ExtraLayers {
   /** Adds runtime sources/layers; call once after the style has loaded. */
   init() {
     const m = this.map;
+    window.addEventListener(OPTIONS_EVENT, this.relabelAll);
     registerSilhouettes(m);
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -368,7 +371,20 @@ export class ExtraLayers {
     this.hooks.changed();
   }
 
+  /** wave/buoy labels show the wave height as a bare number → redrawn when the height unit changes */
+  private labelled = new Map<string, FeatureCollection>();
+  private relabelAll = () => {
+    for (const [source, fc] of this.labelled) {
+      for (const f of fc.features) {
+        const w = f.properties?.wave;
+        if (typeof w === 'number' && w >= 0) f.properties!.label = heightNum(w);
+      }
+      (this.map.getSource(source) as GeoJSONSource | undefined)?.setData(fc);
+    }
+  };
+
   private setData(source: string, data: FeatureCollection) {
+    if (source === 'waves' || source === 'buoys') this.labelled.set(source, data);
     (this.map.getSource(source) as GeoJSONSource | undefined)?.setData(data);
   }
 

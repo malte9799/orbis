@@ -5,6 +5,7 @@ import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { isSuperseded } from '../../../api/overpass';
 import { loadSpeedcams } from '../../../api/cams';
+import { speedTxt, coordsTxt } from '../../../units';
 
 type St = { key: string };
 const getState = (ctx: ExtraCtx) => ctx.state<St>('blitzer', () => ({ key: '' }));
@@ -75,14 +76,13 @@ export default defineExtra({
     const dir = Number(p.dir);
     const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
     const raw = String(p.speed ?? '');
-    const unit = /^\d+(\.\d+)?$/.test(raw) ? ' km/h' : '';
-    const speed = /\d/.test(raw) ? `${raw}${unit}` : '';
+    const speed = /^\d+(\.\d+)?$/.test(raw) ? speedTxt(Number(raw)) : /\d/.test(raw) ? raw : '';
     const rows = [
-      ['Tempo', speed === 'no' || speed === 'none' ? '' : speed ? `${speed} km/h` : ''],
+      ['Tempo', speed],
       ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
       ['Betreiber', p.operator],
       ['Kennung', p.ref],
-      ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
+      ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
       <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
