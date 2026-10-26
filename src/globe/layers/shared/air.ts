@@ -65,7 +65,7 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
       .then((fc) => {
         if (seq !== st.aircraftSeq || !ctx.isOn('aircraft')) return;
         ctx.setData('aircraft', fc);
-        ctx.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min) – reinzoomen für Live-Details' });
+        ctx.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min; zuvor herangezoomte Gebiete aktueller) – reinzoomen für Live-Details' });
       })
       .catch(() => {
         if (seq !== st.aircraftSeq) return;

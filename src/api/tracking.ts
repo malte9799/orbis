@@ -284,6 +284,97 @@ let globalCache: { at: number; fc: AircraftResult } | null = null;
 let globalFailedAt = 0;
 let lastProxy: string | undefined;
 
+// ---------------------------------------------------------------------------
+// Browser cache (IndexedDB – the worldwide overview is too big for localStorage)
+
+const idb = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const req = indexedDB.open('orbis-cache', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+async function kvGet<T>(key: string): Promise<T | undefined> {
+  try {
+    const db = await idb();
+    return await new Promise((resolve) => {
+      const r = db.transaction('kv').objectStore('kv').get(key);
+      r.onsuccess = () => resolve(r.result as T | undefined);
+      r.onerror = () => resolve(undefined);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function kvSet(key: string, value: unknown) {
+  idb()
+    .then((db) => db.transaction('kv', 'readwrite').objectStore('kv').put(value, key))
+    .catch(() => undefined);
+}
+
+/** Latest position of every aircraft seen in a zoomed-in request – they beat the (older) overview when zooming out. */
+const LIVE_KEEP_MS = 3600000;
+const LIVE_MAX = 30000;
+const liveSeen = new Map<string, { at: number; f: Feature<Point> }>();
+let liveSavedAt = 0;
+
+function rememberLive(fc: AircraftResult) {
+  const now = Date.now();
+  for (const f of fc.features) liveSeen.set(String(f.properties?.hex), { at: now, f });
+  if (liveSeen.size > LIVE_MAX) {
+    const oldest = [...liveSeen.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, liveSeen.size - LIVE_MAX);
+    for (const [k] of oldest) liveSeen.delete(k);
+  }
+  if (now - liveSavedAt > 30000) {
+    liveSavedAt = now;
+    kvSet('ac-live', [...liveSeen.entries()]);
+  }
+}
+
+let hydrated: Promise<void> | null = null;
+function hydrate(): Promise<void> {
+  hydrated ??= (async () => {
+    const [live, glob] = await Promise.all([kvGet<[string, { at: number; f: Feature<Point> }][]>('ac-live'), kvGet<{ at: number; fc: AircraftResult }>('ac-global')]);
+    const now = Date.now();
+    for (const [k, v] of live ?? []) if (now - v.at < LIVE_KEEP_MS && !liveSeen.has(k)) liveSeen.set(k, v);
+    if (glob && !globalCache) globalCache = glob;
+  })();
+  return hydrated;
+}
+
+/** Position of an aircraft seen `ageS` seconds ago, carried forward along its course. */
+function advance(f: Feature<Point>, ageS: number): Feature<Point> {
+  const p = f.properties ?? {};
+  const v = Number(p.speedKmh);
+  if (p.ground || !(v > 0) || ageS < 1) return f;
+  const km = (v * Math.min(ageS, 600)) / 3600;
+  const th = (Number(p.track) * Math.PI) / 180;
+  const [lon, lat] = f.geometry.coordinates;
+  return { ...f, geometry: { type: 'Point', coordinates: [lon + (km * Math.sin(th)) / (111.2 * Math.max(0.05, Math.cos((lat * Math.PI) / 180))), lat + (km * Math.cos(th)) / 111.2] } };
+}
+
+/** Overview aircraft that were seen more recently in a zoomed-in view are replaced by that newer position. */
+function mergeLive(base: AircraftResult | null, baseAt: number): AircraftResult {
+  const now = Date.now();
+  const used = new Set<string>();
+  const features: Feature<Point>[] = [];
+  for (const f of base?.features ?? []) {
+    const hex = String(f.properties?.hex);
+    const seen = liveSeen.get(hex);
+    if (seen && seen.at > baseAt) {
+      used.add(hex);
+      features.push(advance(seen.f, (now - seen.at) / 1000));
+    } else features.push(f);
+  }
+  // overview not available: the recently seen aircraft are still better than an empty map
+  if (!base) {
+    for (const [hex, v] of liveSeen) if (now - v.at < 600000 && !used.has(hex)) features.push(advance(v.f, (now - v.at) / 1000));
+  }
+  return { type: 'FeatureCollection', features, source: base ? base.source : 'Zwischenspeicher (zuletzt gesehen)' };
+}
+
 /** A newly entered proxy may fix what failed before – retry everything right away. */
 function resetOnProxyChange() {
   const proxy = proxyBase();
@@ -295,11 +386,14 @@ function resetOnProxyChange() {
 
 /**
  * Worldwide overview of all aircraft from OpenSky (anonymous: 4 of 400 daily credits per
- * call) – cached for two minutes and shown when zoomed out.
+ * call) – cached for two minutes (also across page reloads) and shown when zoomed out.
+ * Aircraft seen more recently in a zoomed-in view show their newer position instead.
  */
 export async function loadGlobalAircraft(): Promise<AircraftResult> {
   resetOnProxyChange();
-  if (globalCache && Date.now() - globalCache.at < 120000) return globalCache.fc;
+  await hydrate();
+  if (globalCache && Date.now() - globalCache.at < 120000) return mergeLive(globalCache.fc, globalCache.at);
+  const stale = () => (globalCache ? mergeLive(globalCache.fc, globalCache.at) : liveSeen.size ? mergeLive(null, 0) : null);
   const [osk, mil] = await Promise.allSettled([
     Date.now() - globalFailedAt < 300000
       ? Promise.reject(new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)'))
@@ -309,15 +403,21 @@ export async function loadGlobalAircraft(): Promise<AircraftResult> {
         }),
     loadMilitaryAircraft(),
   ]);
-  if (osk.status === 'rejected' && mil.status === 'rejected') throw osk.reason;
-  // OpenSky has no military flag: the worldwide military list of adsb.lol replaces those aircraft (and fills in when OpenSky is down)
+  // OpenSky has no military flag: the worldwide military list of adsb.lol replaces those aircraft
   const milFc = mil.status === 'fulfilled' ? mil.value : null;
+  if (osk.status === 'rejected') {
+    // older overview (with its military aircraft) first, else at least the military list
+    const s = stale();
+    if (s) return s;
+    if (milFc) return { ...milFc, source: 'nur Militär (adsb.lol) – OpenSky nicht erreichbar' };
+    throw osk.reason;
+  }
   const milHex = new Set(milFc?.features.map((f) => String(f.properties?.hex)) ?? []);
-  const base = osk.status === 'fulfilled' ? toFeatures(parseOpenSky(osk.value), '').features.filter((f) => !milHex.has(String(f.properties?.hex))) : [];
-  const source = osk.status === 'fulfilled' ? (milFc ? 'OpenSky Network + adsb.lol (Militär)' : 'OpenSky Network (Weltübersicht)') : 'nur Militär (adsb.lol) – OpenSky nicht erreichbar';
-  const fc: AircraftResult = { type: 'FeatureCollection', features: [...base, ...(milFc?.features ?? [])], source };
+  const base = toFeatures(parseOpenSky(osk.value), '').features.filter((f) => !milHex.has(String(f.properties?.hex)));
+  const fc: AircraftResult = { type: 'FeatureCollection', features: [...base, ...(milFc?.features ?? [])], source: milFc ? 'OpenSky Network + adsb.lol (Militär)' : 'OpenSky Network (Weltübersicht)' };
   globalCache = { at: Date.now(), fc };
-  return fc;
+  kvSet('ac-global', globalCache);
+  return mergeLive(fc, globalCache.at);
 }
 
 let milFailedAt = 0;
@@ -341,7 +441,9 @@ export async function loadAircraftByHex(hex: string): Promise<AircraftResult> {
   let last: unknown;
   for (const [label, base] of sources) {
     try {
-      return toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+      const fc = toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+      rememberLive(fc);
+      return fc;
     } catch (e) {
       last = e;
     }
@@ -374,6 +476,7 @@ export async function loadAircraft(lat: number, lon: number, radiusNm: number): 
       preferredSource = i;
       health.fails = 0;
       lastResult = { at: Date.now(), lat, lon, nm: r, fc };
+      rememberLive(fc);
       return fc;
     } catch (e) {
       health.fails++;

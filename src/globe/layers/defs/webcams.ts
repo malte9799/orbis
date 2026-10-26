@@ -12,6 +12,9 @@ import { hasWindyKey, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } fr
 import { isSuperseded } from '../../../api/overpass';
 import { snapshotJson } from '../../../api/data';
 
+/** the overview dots/halo (not clickable) end here – above it only the live camera dots are drawn, otherwise every camera shows twice */
+const CAM_OVERVIEW_MAXZOOM = 14;
+
 type St = { fi: FeatureCollection; windy: FeatureCollection; feeds: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; key: string; osmCount: number; windyKey: string; heatAdded: boolean; heatLoaded: boolean; osmFc: FeatureCollection<Point> | null; fovKey: string };
 const getState = (ctx: ExtraCtx) => ctx.state<St>('webcams', () => ({ fi: empty(), windy: empty(), feeds: new Map(), feedLoading: new Set(), feedErrors: new Set(), key: '', osmCount: 0, windyKey: '', heatAdded: false, heatLoaded: false, osmFc: null, fovKey: '' }));
 
@@ -123,6 +126,7 @@ function ensureHeat(ctx: ExtraCtx) {
       type: 'circle',
       source: 'webcams-world',
       minzoom: CAM_DOT_ZOOM,
+      maxzoom: CAM_OVERVIEW_MAXZOOM,
       paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 8, CAM_DETAIL_ZOOM, 9, 14, 7], 'circle-blur': 1, 'circle-opacity': 0.25 },
     },
     before,
@@ -150,6 +154,7 @@ function ensureHeat(ctx: ExtraCtx) {
       type: 'circle',
       source: 'webcams-world',
       minzoom: CAM_DOT_ZOOM,
+      maxzoom: CAM_OVERVIEW_MAXZOOM,
       paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
     },
     before,
