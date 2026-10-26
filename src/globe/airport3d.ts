@@ -16,6 +16,8 @@ export const AIRPORT_ZOOM = 11;
 const PLANE_ZOOM = 9;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
+/** The globe projection is fully flat (mercator) from this zoom on, so the 3D layers work there too. */
+const GLOBE_FLAT_ZOOM = 12;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
 /**
@@ -104,7 +106,12 @@ export class Airport3D {
   /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route (not on the globe). */
   private onlySelected(): string | null {
     const hex = this.layer.selected;
-    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && this.map.getProjection()?.type !== 'globe' && this.tracker.planes.has(hex) ? hex : null;
+    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && !this.globeShown() && this.tracker.planes.has(hex) ? hex : null;
+  }
+
+  /** The globe is really drawn as a ball: from GLOBE_FLAT_ZOOM on MapLibre has faded it into the flat map. */
+  private globeShown(): boolean {
+    return this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM;
   }
 
   /** The selected aircraft, if any. */
@@ -113,7 +120,7 @@ export class Airport3D {
   }
 
   mode(): PlaneMode {
-    if (!this.planesOn || this.map.getProjection()?.type === 'globe') return 'off';
+    if (!this.planesOn || this.globeShown()) return 'off';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
@@ -267,8 +274,8 @@ export class Airport3D {
   /** Called after the map stopped moving: load the layout for the visible box. */
   onMoveEnd() {
     if (!this.layoutOn) return;
-    if (this.map.getProjection()?.type === 'globe') {
-      this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht (Projektion „Karte“)' });
+    if (this.globeShown()) {
+      this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht oder auf dem Globus ab Zoomstufe 12' });
       return;
     }
     if (this.map.getZoom() < AIRPORT_ZOOM) {

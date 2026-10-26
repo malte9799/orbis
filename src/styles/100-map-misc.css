@@ -1,0 +1,617 @@
+/* ---------- base map switcher (Google-Maps style) ---------- */
+.base-switch {
+  position: absolute;
+  z-index: 5;
+  left: 12px;
+  bottom: 28px;
+}
+
+.base-current {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  background: #222;
+}
+
+.base-current .thumb,
+.base-opt .thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.thumb img,
+.thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.base-current-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px 0 4px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.base-current-label svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.base-pop {
+  position: absolute;
+  left: 86px;
+  bottom: 0;
+  padding: 10px;
+  background: rgba(13, 18, 38, 0.95);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+.base-options {
+  display: flex;
+  gap: 8px;
+}
+
+.base-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 72px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.base-opt .thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 2px solid transparent;
+}
+
+.base-opt.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.base-opt.on .thumb {
+  border-color: var(--accent);
+}
+
+.settings-dialog {
+  width: min(460px, calc(100% - 24px));
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card-solid);
+  color: var(--text);
+}
+
+.settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.settings-dialog h2 {
+  margin-bottom: 8px;
+}
+
+.settings-dialog h3 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .globe-view .panel {
+    bottom: 8px;
+  }
+
+  .base-switch {
+    bottom: 40px;
+  }
+
+  body:has(.globe-view .panel:not([hidden])) .base-switch {
+    display: none;
+  }
+
+  .base-pop {
+    left: 0;
+    bottom: 86px;
+  }
+
+  .base-options {
+    gap: 6px;
+  }
+
+  .base-opt {
+    width: 60px;
+  }
+
+  .base-opt .thumb {
+    width: 56px;
+    height: 56px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Forecast page weather map */
+.fcm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.fcm-head h2 {
+  margin: 0;
+}
+.fcm-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fcm-modes .seg-chip {
+  height: 32px;
+  font-size: 0.85rem;
+}
+.fcm-hint {
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: -2px 0 8px;
+}
+.fcm-map {
+  position: relative;
+  height: 440px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0b1220;
+  border: 1px solid var(--border);
+}
+.fcm-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  z-index: 2;
+  pointer-events: none;
+}
+/* error notice that keeps the map interactive */
+.fcm-note {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(8, 14, 26, 0.85);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+}
+.fcm-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+}
+.fcm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin: 10px 0 2px;
+}
+.fcm-leg {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 3px;
+}
+.fcm-leg-label {
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+.fcm-leg-label small {
+  color: var(--muted);
+}
+.fcm-leg-bar {
+  height: 8px;
+  border-radius: 4px;
+}
+.fcm-leg-ticks {
+  position: relative;
+  height: 14px;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.fcm-leg-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+.fcm-leg-ticks span:first-child {
+  transform: none;
+}
+.fcm-leg-ticks span:last-child {
+  transform: translateX(-100%);
+}
+.fcm-time {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.fcm-time input[type='range'] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.fcm-when {
+  min-width: 128px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+.fcm-play svg {
+  fill: currentColor;
+  stroke: none;
+}
+.fcm-src {
+  margin: 6px 0 0;
+}
+.fc-src {
+  margin: 4px 4px 0;
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .fcm-map {
+    height: 320px;
+  }
+  .fcm-when {
+    min-width: 0;
+    font-size: 0.82rem;
+  }
+}
+.fcm-empty {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 2;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(10, 16, 32, 0.8);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* webcam popups */
+.pop-cam {
+  display: block;
+  margin: 8px 0 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  min-height: 120px;
+}
+.pop-cam img {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+.pop-cam-link {
+  display: inline-flex;
+  margin: 8px 0 4px;
+  text-decoration: none;
+}
+
+/* lists in popups (rocket launches) */
+.pop-list {
+  margin: 8px 0 4px;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.pop-list li {
+  line-height: 1.35;
+}
+
+/* radio player */
+.radio-player {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(560px, calc(100vw - 24px));
+  padding: 8px 10px 8px 12px;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.radio-player[hidden] {
+  display: none;
+}
+.rp-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+  flex: none;
+}
+.rp-text {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+.rp-text b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.rp-vol {
+  width: 90px;
+  accent-color: #ff4081;
+}
+.rp-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.rp-actions .btn {
+  text-decoration: none;
+}
+@media (max-width: 640px) {
+  .radio-player {
+    bottom: 150px;
+  }
+  .rp-vol {
+    display: none;
+  }
+}
+
+/* planet map (MapLibre, shares the Earth map's controls) */
+.planet-view .pm-info {
+  top: 140px;
+  z-index: 6;
+}
+
+.planet-view .base-pop {
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  width: min(360px, calc(100vw - 24px));
+}
+
+.sp-site.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.planet-view .base-options {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+/* planet map: what is currently drawn (base map + overlays) */
+.pm-active {
+  position: absolute;
+  z-index: 4;
+  left: 100px;
+  bottom: 28px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.pm-active .pm-chip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(13, 18, 38, 0.82);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pm-active .pm-chip.base {
+  cursor: default;
+  color: var(--muted);
+}
+
+.pm-active .pm-chip.base::before {
+  content: 'Karte: ';
+}
+
+.pm-active .pm-chip i {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.pm-active .pm-chip b {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.pm-active button.pm-chip:hover b {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .pm-active {
+    left: 8px;
+    bottom: 124px;
+  }
+}
+
+/* ---------- bottom dock: legend and time controls share one card ---------- */
+.globe-bottom {
+  gap: 0;
+  padding: 0;
+  background: rgba(13, 18, 38, 0.88);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.globe-bottom:not(:has(.legend:not([hidden]), .timeline:not([hidden]))) {
+  display: none;
+}
+
+.globe-bottom .legend,
+.globe-bottom .timeline {
+  background: none;
+  backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 14px 9px;
+}
+
+.globe-bottom .legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.globe-bottom .legend-title {
+  margin-bottom: 5px;
+  font-size: 0.76rem;
+}
+
+.globe-bottom .legend-bar {
+  height: 6px;
+}
+
+.globe-bottom .legend-ticks {
+  height: 14px;
+  font-size: 0.68rem;
+}
+
+.globe-bottom .legend:not([hidden]) + .timeline:not([hidden]) {
+  border-top: 1px solid var(--border);
+}
+
+.ptab.on {
+  flex-grow: 1;
+}
+
+/* planet map: switch between the bodies that have a map */
+.pm-bodies {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+/* legend labels inside the bar */
+
+.globe-bottom .legend-bar {
+  height: 20px;
+  border-radius: 6px;
+}
+
+.globe-bottom .legend-ticks {
+  height: 20px;
+  margin: -20px 0 0;
+  line-height: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.85), 0 0 1px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.globe-bottom .legend-ticks span:first-child {
+  transform: none;
+  margin-left: 4px;
+}
+
+.globe-bottom .legend-ticks span:last-child {
+  transform: translateX(-100%);
+  margin-left: -4px;
+}
+
+.globe-bottom .legend-ticks span:only-child {
+  transform: none;
+  margin-left: 4px;
+}

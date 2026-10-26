@@ -1,0 +1,83 @@
+:root {
+  --bg: #0b1020;
+  --bg-2: #111832;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-solid: #151d38;
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #e9eef8;
+  --text-2: #aab4c8;
+  --muted: #7d889e;
+  --accent: #5b9dff;
+  --accent-2: #3f7fe8;
+  --danger: #ff5a5f;
+  --radius: 16px;
+  --topbar: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --topbar-total: calc(var(--topbar) + var(--safe-top));
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #1a2a5c 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #2a1a4c 0%, transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+body.mode-globe {
+  overflow: hidden;
+}
+
+/* on the map views the bar is (almost) opaque so it does not read as a band over the map */
+body.mode-globe .topbar {
+  background: rgba(11, 16, 32, 0.96);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.05rem;
+  margin-bottom: 12px;
+}
+
+small,
+.small {
+  font-size: 0.8rem;
+}
+
+.muted {
+  color: var(--muted);
+}

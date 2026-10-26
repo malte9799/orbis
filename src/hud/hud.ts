@@ -1,6 +1,6 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
-import { BASES, type BaseId } from '../globe/style';
+import { BASES } from '../globe/style';
 import { createSearch } from '../search';
 import type { Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
@@ -24,8 +24,12 @@ import {
   type WxMenuItem,
   type WxFamily,
 } from './catalog';
+import { buildActions } from './actions';
+import { createSheet } from './sheet';
+import { FILTERS } from './filters';
+import type { HudCore, HudUi } from './core';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { clone, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -96,20 +100,6 @@ export interface Hud {
 
 // ---------------------------------------------------------------------------
 
-const FILTERS: Record<string, { multi?: boolean; options: [string, string][]; none: string }> = {
-  quakes: { options: [['', 'Alle'], ['4', 'ab M 4'], ['5', 'ab M 5'], ['6', 'ab M 6']], none: '' },
-  aircraft: {
-    multi: true,
-    options: [['plane', 'Flugzeuge'], ['heli', 'Hubschrauber'], ['glider', 'Segelflug'], ['drone', 'Drohnen'], ['balloon', 'Ballone']],
-    none: '',
-  },
-  // Unteroptionen von "Blitze Live": Ton bei jedem Einschlag, schrumpfender Kreis, Detektoren, Linien und Donner
-  lightning: {
-    multi: true,
-    options: [['sound', 'Ton'], ['wave', 'Einschlagskreis'], ['detectors', 'Detektoren'], ['lines', 'Detektor-Linien'], ['thunder', 'Donner']],
-    none: '',
-  },
-};
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
@@ -152,7 +142,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -477,8 +467,8 @@ export function createHud(host: HudHost): Hud {
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen der Landschaft (Mapterhorn, AWS)</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>nur bei Wind & Böen sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen, nur bei geneigter Kamera (Strg + Ziehen) – von oben deaktiviert</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>bei Wind & Böen und Satellit/Wolken (IR) sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
         <div class="slot"><span>Gespeichert mit</span></div>
         <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
         <div class="opt">${ico('clock')}<div>Zeit<small>${timeTxt}</small></div></div>
@@ -675,196 +665,42 @@ export function createHud(host: HudHost): Hud {
   }
 
   // ----- phone portrait: bottom sheet with three detents ----------------------
-  let sheetEl: HTMLElement | null = null;
-  let peekH = 190;
-  let drag: { y0: number; h0: number; t0: number; moved: boolean; id: number } | null = null;
-  let suppressClick = false;
-  const halfH = () => Math.round(window.innerHeight * 0.55);
-  const detentOf = (): 'peek' | 'half' | 'full' => (ui.save || ui.gallery || ui.add ? 'full' : ui.edit ? 'half' : 'peek');
-  const globeView = () => root.closest<HTMLElement>('.globe-view');
-
-  function detachDock() {
-    const dock = host.dock();
-    const gv = globeView();
-    if (gv && dock.parentElement !== gv) gv.appendChild(dock);
-  }
-
-  function sheetHeader(k: Karte, d: 'peek' | 'half' | 'full'): string {
-    if (d === 'full') {
-      const title = ui.save ? 'Als neue Karte speichern' : ui.gallery ? 'Alle Karten' : 'Ebene hinzufügen';
-      return `<div class="sh-title"><b>${title}</b><button type="button" class="sh-done" data-act="${ui.save ? 'cancel' : 'sheetdone'}">${ui.save ? 'Abbrechen' : 'Fertig'}</button></div>`;
-    }
-    const { html, more } = iconList(k, 4);
-    return `<div class="kh" data-act="sheettoggle" role="button" tabindex="0" aria-expanded="${d === 'half'}" aria-label="${esc(k.name)}: Ebenen ${d === 'half' ? 'zuklappen' : 'aufklappen'}">${mglyph(k, 32)}
-      <div class="tx">${d === 'half' ? nameEl(k) : `<b>${esc(k.name)}</b>`}<small>${esc(statusLine(k))}</small></div>
-      <div class="lic">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
-      <span class="cv ${d === 'peek' ? 'up' : ''}" aria-hidden="true">${ico('chevd', 2.2)}</span></div>`;
-  }
-
-  /** the newest event, one line (phone sheet, hazard Karten) */
-  function tickerInner(): string {
-    const e = host.events(ui.evHours)[0];
-    return e
-      ? `<span class="evg">${glyphSvg(e.kind, e.color, 28)}</span><div><b>${esc(e.title)}</b><small>${esc(e.sub)}</small></div><time>${esc(e.when)}</time>`
-      : '<span class="muted">Keine Ereignisse im Zeitraum (oder Daten laden noch).</span>';
-  }
-
-  function renderSheet() {
-    const r = reg('sheet');
-    const gv = globeView();
-    if (layout !== 'portrait') {
-      r.innerHTML = '';
-      sheetEl = null;
-      detachDock();
-      gv?.style.removeProperty('--sheet-h');
-      lastSheetH = -1;
-      if (gv) delete gv.dataset.detent;
-      return;
-    }
-    const k = view(cur);
-    const d = placeNode ? 'peek' : detentOf();
-    if (!sheetEl || !r.contains(sheetEl)) {
-      r.innerHTML = '<div class="hud-sheet hud-glass"></div>';
-      sheetEl = r.firstElementChild as HTMLElement;
-      sheetObserver.disconnect();
-      sheetObserver.observe(sheetEl);
-    }
-    const el = sheetEl;
-    const prevH = el.offsetHeight;
-    const prevD = el.dataset.detent;
-    const scroll = el.querySelector('.sh-body')?.scrollTop ?? 0;
-    const { hazard, traffic } = contentOf(k);
-    let body = '';
-    let foot = '';
-    let header = sheetHeader(k, d);
-    if (placeNode) {
-      header = '';
-      body = '<div class="sh-place"></div>';
-    } else if (d === 'full') body = ui.save ? `<div class="dlg" role="group" aria-label="Als neue Karte speichern">${dialogInner()}</div>` : ui.gallery ? galleryInner() : addInner();
-    else if (d === 'half') {
-      body = stackBody(k);
-      foot = `<div class="foot">${stackFoot(k)}</div>`;
-    } else if (k.main) body = '<div class="sh-dock"></div>';
-    else if (hazard) {
-      body = `<div class="ticker" aria-live="polite">${tickerInner()}</div>${evSeg()}`;
-    } else if (traffic.length && !k.menu) body = `<div class="chipsr">${trafficChips(k, traffic)}</div>`;
-
-    el.innerHTML = `<div class="sh-drag"><div class="grab"></div>${header}</div><div class="sh-body">${body}</div>${foot}`;
-    el.dataset.detent = d;
-    el.classList.toggle('is-place', !!placeNode);
-    el.classList.toggle('is-dialog', ui.save && d === 'full');
-    const dockSlot = el.querySelector('.sh-dock');
-    if (dockSlot) dockSlot.appendChild(host.dock());
-    else detachDock();
-    if (placeNode) el.querySelector('.sh-place')!.appendChild(placeNode);
-    const sb = el.querySelector('.sh-body');
-    if (sb) sb.scrollTop = scroll;
-    if (gv) gv.dataset.detent = placeNode ? 'peek' : d;
-    if (d === 'full' && ui.add && finePointer()) el.querySelector<HTMLInputElement>('#hud-aq')?.focus();
-
-    // animate from the previous height (also settles a drag that left an inline height)
-    const dragged = el.style.height !== '';
-    el.style.height = '';
-    el.style.transition = 'none';
-    const nh = el.offsetHeight;
-    if (d === 'peek' && !placeNode) peekH = nh;
-    if (prevH && Math.abs(prevH - nh) > 2 && (prevD !== d || dragged)) {
-      el.style.height = `${prevH}px`;
-      void el.offsetHeight;
-      el.style.transition = 'height .22s ease';
-      el.style.height = `${nh}px`;
-      const done = () => {
-        el.style.transition = '';
-        el.style.height = '';
-        el.removeEventListener('transitionend', done);
-        syncSheetH();
-      };
-      el.addEventListener('transitionend', done);
-      window.setTimeout(done, 320);
-    } else el.style.transition = '';
-    // the map controls ride on the sheet: hand them the height it is heading to right away
-    syncSheetH(nh);
-  }
-  /**
-   * --sheet-h on the map view = the sheet's current height above the bottom safe area (the map
-   * controls sit 12px above the sheet).
-   * Set on every render, while dragging and whenever the sheet resizes for other reasons (legend,
-   * timeline or ticker loading, safe area changes).
-   */
-  let lastSheetH = -1;
-  function syncSheetH(h = sheetEl?.offsetHeight ?? 0) {
-    if (!sheetEl || layout !== 'portrait') return;
-    const gv = globeView();
-    if (!gv) return;
-    // without the bottom safe area: the CSS adds that itself, so a changing safe area needs no JS
-    const pad = parseFloat(getComputedStyle(sheetEl).paddingBottom) || 0;
-    h = Math.round(h - pad);
-    if (h === lastSheetH) return;
-    lastSheetH = h;
-    gv.style.setProperty('--sheet-h', `${h}px`);
-  }
-  const sheetObserver = new ResizeObserver(() => syncSheetH());
-
-  function closeOverlay() {
-    ui.add = false;
-    ui.gallery = false;
-    if (ui.save) {
-      ui.save = false;
-      form = null;
-    }
-  }
-
-  // drag the handle / header between the detents
-  root.addEventListener('pointerdown', (e) => {
-    const zone = (e.target as HTMLElement).closest('.sh-drag');
-    if (!zone || !sheetEl || layout !== 'portrait' || (e.target as HTMLElement).closest('.sh-done, input')) return;
-    drag = { y0: e.clientY, h0: sheetEl.offsetHeight, t0: performance.now(), moved: false, id: e.pointerId };
+  const sheet = createSheet({
+    host,
+    root,
+    ui,
+    layout: () => layout,
+    get placeNode() {
+      return placeNode;
+    },
+    set placeNode(v) {
+      placeNode = v;
+    },
+    get form() {
+      return form;
+    },
+    set form(v) {
+      form = v;
+    },
+    cur: () => cur,
+    view,
+    iconList,
+    nameEl,
+    statusLine,
+    contentOf,
+    stackBody,
+    stackFoot,
+    dialogInner,
+    galleryInner,
+    evSeg,
+    trafficChips,
+    render,
+    reg,
+    finePointer,
+    addInner,
+    mglyph,
   });
-  window.addEventListener('pointermove', (e) => {
-    if (!drag || !sheetEl || e.pointerId !== drag.id) return;
-    const dy = e.clientY - drag.y0;
-    if (!drag.moved) {
-      if (Math.abs(dy) < 8) return;
-      drag.moved = true;
-      sheetEl.style.transition = 'none';
-      globeView()?.classList.add('sheet-dragging');
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    }
-    const d = sheetEl.dataset.detent;
-    const lo = d === 'full' ? halfH() : peekH;
-    const hi = d === 'full' ? drag.h0 : halfH();
-    const h = Math.max(lo, Math.min(hi, drag.h0 - dy));
-    sheetEl.style.height = `${h}px`;
-    syncSheetH(h);
-  });
-  const endDrag = (e: PointerEvent) => {
-    if (!drag || e.pointerId !== drag.id) return;
-    const dr = drag;
-    drag = null;
-    globeView()?.classList.remove('sheet-dragging');
-    if (!dr.moved || !sheetEl) return;
-    suppressClick = true;
-    window.setTimeout(() => (suppressClick = false), 60);
-    const dy = e.clientY - dr.y0;
-    const v = -dy / Math.max(1, performance.now() - dr.t0); // px/ms, positive = upwards
-    const d = sheetEl.dataset.detent;
-    if (placeNode) {
-      if (dy > 40) placeNode = null;
-    } else if (d === 'full') {
-      if (dy > 70) closeOverlay();
-    } else {
-      const curH = Math.max(peekH, Math.min(halfH(), dr.h0 - dy));
-      const half = v > 0.4 ? true : v < -0.4 ? false : curH > (peekH + halfH()) / 2;
-      ui.edit = half;
-      if (!half) {
-        ui.open = null;
-        ui.pick = false;
-      }
-    }
-    render();
-  };
-  window.addEventListener('pointerup', endDrag);
-  window.addEventListener('pointercancel', endDrag);
+  const { renderSheet, detentOf, globeView, closeOverlay, tickerInner, syncSheetH } = sheet;
 
   // ----- phone landscape: Orbis menu -----------------------------------------
   function renderMenu() {
@@ -966,322 +802,49 @@ export function createHud(host: HudHost): Hud {
     return edit().layers.find((l) => l.id === id);
   }
 
-  const ACT: Record<string, (id: string, v: string, ev: Event) => void> = {
-    go: (id) => go(id),
-    gallery: () => {
-      ui.gallery = !ui.gallery;
-      setSearch(false);
+  const core: HudCore = {
+    host,
+    root,
+    ui,
+    st,
+    get cur() {
+      return cur;
     },
-    edit: () => {
-      ui.edit = true;
-      ui.gallery = false;
+    set cur(v) {
+      cur = v;
     },
-    close: () => {
-      ui.rename = false;
-      ui.edit = false;
-      ui.add = false;
-      ui.open = null;
-      ui.pick = false;
+    get form() {
+      return form;
     },
-    eye: (id) => {
-      const l = layerOf(id);
-      if (!l) return;
-      l.hidden = !l.hidden;
-      if (!l.hidden) delete l.hidden;
-      afterEdit();
+    set form(v) {
+      form = v;
     },
-    open: (id) => {
-      ui.open = ui.open === id ? null : id;
+    get fresh() {
+      return fresh;
     },
-    remove: (id) => {
-      const d = edit();
-      d.layers = d.layers.filter((l) => l.id !== id);
-      ui.open = null;
-      afterEdit();
+    set fresh(v) {
+      fresh = v;
     },
-    filter: (id, v) => {
-      const l = layerOf(id);
-      const f = FILTERS[id];
-      if (!l || !f) return;
-      if (f.multi) {
-        // extra tokens (vol-n from the volume slider) survive every chip toggle
-        const toks = (l.filter ?? '').split(',').filter(Boolean);
-        const names = new Set(f.options.map(([o]) => o));
-        const set = new Set(toks.filter((t) => names.has(t)));
-        if (set.has(v)) set.delete(v);
-        else set.add(v);
-        l.filter = [...toks.filter((t) => !names.has(t)), ...f.options.map(([o]) => o).filter((o) => set.has(o))].join(',') || undefined;
-      } else l.filter = v || undefined;
-      if (!l.filter) delete l.filter;
-      afterEdit();
-    },
-    add: () => {
-      ui.add = !ui.add;
-      ui.q = '';
-    },
-    addlayer: (id) => {
-      const d = edit();
-      if (d.layers.some((l) => l.id === id)) return;
-      d.layers.unshift({ id });
-      fresh.add(id);
-      ui.open = null;
-      afterEdit();
-      toast(`${catalogOf(id)?.label ?? id} hinzugefügt`);
-    },
-    pick: () => {
-      ui.pick = !ui.pick;
-    },
-    main: (id) => {
-      const d = edit();
-      const f = host.families().find((x) => x.id === id);
-      d.main = f ? f.id : null;
-      if (f) d.mainVar = f.variants[0][0];
-      else delete d.mainVar;
-      delete d.wind;
-      delete d.isobars;
-      ui.pick = false;
-      afterEdit();
-    },
-    wxcat: (id) => {
-      const it = WX_MENU.find((x) => x.id === id);
-      const k0 = view(cur);
-      const f = mainFam(k0);
-      const curVar = f ? (k0.mainVar ?? f.variants[0][0]) : '';
-      const stormFam = !!it?.subs.some((x) => f && x.main === f.id && x.mainVar === curVar);
-      const boltOn = k0.layers.some((x) => x.id === 'lightning' && !x.hidden);
-      // the active entry again switches it off (also "Blitze Live" inside Gewitter)
-      if (!it || stormFam || (id === 'storm' && boltOn)) {
-        ACT.main('', '', new Event('click'));
-        if (id === 'storm' && boltOn) edit().layers = edit().layers.filter((x) => x.id !== 'lightning');
-        afterEdit();
-      } else ACT.wxsub(id, '0', new Event('click'));
-    },
-    wxsub: (id, v) => {
-      const it = WX_MENU.find((x) => x.id === id);
-      const sub = it?.subs[Number(v)];
-      if (!sub || !it) return;
-      const d = edit();
-      if (sub.main === 'lightning') {
-        // "Blitze Live": the extra layer takes over, no weather main layer on the Karte
-        d.main = null;
-        delete d.mainVar;
-        delete d.wind;
-        delete d.isobars;
-        const l = d.layers.find((x) => x.id === 'lightning');
-        if (!l) {
-          // neuer Layer: der schrumpfende Einschlagskreis ("Kreis") ist ab Werk aktiv
-          d.layers.unshift({ id: 'lightning', filter: 'wave' });
-          fresh.add('lightning');
-        } else delete l.hidden;
-      } else {
-        if (d.main !== sub.main) {
-          delete d.wind;
-          delete d.isobars;
-        }
-        d.main = sub.main;
-        d.mainVar = sub.mainVar;
-        // radio: another Gewitter row replaces "Blitze Live"
-        d.layers = d.layers.filter((x) => x.id !== 'lightning');
-      }
-      afterEdit();
-    },
-    tcat: (id) => {
-      const d = edit();
-      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
-      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
-      const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !ids.has(l.id));
-      d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
-      afterEdit();
-    },
-    ttog: (id) => {
-      const d = edit();
-      const ids = id.split(',');
-      // all of a row's layers on → switch them off, otherwise switch the missing ones on
-      if (ids.every((x) => d.layers.some((l) => l.id === x))) d.layers = d.layers.filter((l) => !ids.includes(l.id));
-      else for (const x of ids) if (!d.layers.some((l) => l.id === x)) d.layers.unshift({ id: x });
-      afterEdit();
-    },
-    var: (_, v) => {
-      edit().mainVar = v;
-      afterEdit();
-    },
-    wopt: (_, v) => {
-      const d = edit();
-      if (v === 'wind') d.wind = d.wind === false ? true : false;
-      else d.isobars = !d.isobars;
-      if (!d.isobars) delete d.isobars;
-      afterEdit();
-    },
-    base: (id) => {
-      edit().base = id as BaseId;
-      afterEdit();
-    },
-    morebases: () => {
-      ui.moreBases = true;
-    },
-    tog: (_, v) => {
-      const d = edit();
-      if (v === 'labels') d.labels = !d.labels;
-      else if (v === 'night') d.night = !d.night;
-      else if (v === 'buildings3d') {
-        // write the choice explicitly, so the base map no longer decides the default
-        d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));
-      } else if (v === 'terrain3d') {
-        d.terrain3d = !(d.terrain3d ?? defaultTerrain3d());
-      } else if (v === 'wind') {
-        d.wind = d.wind === false ? true : false;
-      }
-      afterEdit();
-    },
-    viewtog: () => {
-      const d = edit();
-      if (d.view) delete d.view;
-      else d.view = captureView();
-      afterEdit();
-    },
-    revert: () => {
-      delete st.drafts[cur];
-      ui.open = null;
-      fresh = new Set();
-      persist();
-      host.apply(view(cur));
-      const k = view(cur);
-      if (k.view) host.goTo(k.view);
-    },
-    overwrite: () => {
-      const d = st.drafts[cur];
-      const i = st.own.findIndex((k) => k.id === cur);
-      if (!d || i < 0) return;
-      st.own[i] = { ...clone(d), savedAt: Date.now() };
-      delete st.drafts[cur];
-      fresh = new Set();
-      persist();
-      toast(`„${d.name}“ gespeichert`);
-    },
-    saveas: () => {
-      const k = view(cur);
-      form = { name: dirty(cur) ? suggestName(k) : `${k.name} (Kopie)`, icon: k.icon, color: k.color, place: !!k.view, pin: true };
-      ui.save = true;
-      ui.add = false;
-    },
-    cancel: () => {
-      ui.save = false;
-      form = null;
-    },
-    ficon: (_, v) => {
-      if (form) form.icon = v;
-    },
-    fcol: (_, v) => {
-      if (form) form.color = v;
-    },
-    fplace: () => {
-      if (form) form.place = !form.place;
-    },
-    fpin: () => {
-      if (form) form.pin = !form.pin;
-    },
-    dosave: () => {
-      if (!form) return;
-      const nameEl = root.querySelector<HTMLInputElement>('#hud-nm');
-      if (nameEl) form.name = nameEl.value;
-      const d = clone(view(cur));
-      const id = newId();
-      Object.assign(d, { id, name: form.name.trim() || 'Neue Karte', icon: form.icon, color: form.color, savedAt: Date.now() });
-      delete d.std;
-      if (form.place) d.view = d.view ?? captureView();
-      else delete d.view;
-      const wantPin = form.pin && st.pinned.length < MAX_PINNED;
-      st.own.push(d);
-      if (wantPin) st.pinned.push(id);
-      delete st.drafts[cur];
-      cur = id;
-      ui.save = false;
-      ui.open = null;
-      fresh = new Set();
-      form = null;
-      persist();
-      host.apply(view(cur));
-      toast(`„${d.name}“ gespeichert${wantPin ? ' und angeheftet' : ''}`);
-    },
-    pin: (id) => {
-      if (st.pinned.includes(id)) {
-        if (st.pinned.length <= 1) return;
-        st.pinned = st.pinned.filter((x) => x !== id);
-      } else if (st.pinned.length >= MAX_PINNED) {
-        toast('Höchstens 5 Karten in der Leiste. Erst eine lösen.');
-        return;
-      } else st.pinned.push(id);
-      persist();
-    },
-    del: (id) => {
-      const k = st.own.find((x) => x.id === id);
-      if (!k || !window.confirm(`Karte „${k.name}“ löschen?`)) return;
-      st.own = st.own.filter((x) => x.id !== id);
-      st.pinned = st.pinned.filter((x) => x !== id);
-      if (!st.pinned.length) st.pinned = [...DEFAULT_PINNED];
-      delete st.drafts[id];
-      if (cur === id) {
-        persist();
-        go('wetter');
-        return;
-      }
-      persist();
-    },
-    blank: () => {
-      const k = blankKarte();
-      st.own.push(k);
-      ui.edit = true;
-      ui.add = true;
-      ui.q = '';
-      go(k.id);
-      ui.edit = true;
-      ui.add = true;
-    },
-    evh: (_, v) => {
-      ui.evHours = Number(v);
-    },
-    share: () => {
-      const code = encodeKarte(view(cur));
-      const url = `${location.origin}${location.pathname}#/karte?k=${code}`;
-      navigator.clipboard?.writeText(url).then(
-        () => toast('Link zur Karte kopiert'),
-        () => toast('Link konnte nicht kopiert werden.', 'error'),
-      );
-    },
-    search: () => setSearch(!ui.search),
-    sheettoggle: () => {
-      if (ui.edit) {
-        ui.edit = false;
-        ui.add = false;
-        ui.open = null;
-        ui.pick = false;
-      } else ui.edit = true;
-    },
-    sheetdone: () => closeOverlay(),
-    rename: () => {
-      ui.rename = true;
-      queueMicrotask(() => {
-        const i = root.querySelector<HTMLInputElement>('#hud-rn');
-        i?.focus();
-        i?.select();
-      });
-    },
-    menu: () => {
-      ui.menu = !ui.menu;
-    },
-    menuunfold: () => {
-      ui.folded = false;
-    },
-    menuclose: () => {
-      ui.menu = false;
-    },
-    settings: () => host.openSettings(),
+    view,
+    edit,
+    dirty,
+    persist,
+    afterEdit,
+    go,
+    setSearch,
+    closeOverlay,
+    captureView,
+    layerOf,
+    mainFam,
+    nameEl,
+    suggestName,
+    tmodeOf,
+    encodeKarte,
   };
+  const ACT = buildActions(core);
 
   root.addEventListener('click', (e) => {
-    if (suppressClick) {
+    if (sheet.suppressClick()) {
       e.stopPropagation();
       return;
     }
@@ -1550,8 +1113,8 @@ export function createHud(host: HudHost): Hud {
       s.textContent = d != null ? `~${fmt.num(d, 1)} s` : '';
     });
     if (root.querySelector('.evcard')) renderContent();
-    if (layout === 'portrait' && !drag?.moved && !sheetEl?.style.height) syncSheetH();
-    const tk = layout === 'portrait' ? sheetEl?.querySelector('.ticker') : null;
+    if (layout === 'portrait' && !sheet.dragging() && !sheet.el()?.style.height) syncSheetH();
+    const tk = layout === 'portrait' ? sheet.el()?.querySelector('.ticker') : null;
     if (tk) {
       const html = tickerInner();
       if (tk.innerHTML !== html) {
@@ -1569,7 +1132,7 @@ export function createHud(host: HudHost): Hud {
   mqPort.addEventListener('change', relayout);
   window.addEventListener('resize', () => {
     host.layout();
-    if (!drag?.moved && !sheetEl?.style.height) syncSheetH();
+    if (!sheet.dragging() && !sheet.el()?.style.height) syncSheetH();
   });
   render();
 
@@ -1593,7 +1156,7 @@ export function createHud(host: HudHost): Hud {
     },
     placeOpen: () => !!placeNode && layout === 'portrait',
     syncSheet: () => {
-      if (!drag?.moved && !sheetEl?.style.height) syncSheetH();
+      if (!sheet.dragging() && !sheet.el()?.style.height) syncSheetH();
     },
   };
 }

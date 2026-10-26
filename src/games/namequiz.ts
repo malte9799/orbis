@@ -1,4 +1,4 @@
-import { lev, norm } from '../views/games';
+import { lev, norm } from './data';
 import { escapeHtml } from '../util';
 
 // Generic "what is this called?" quiz used by the flag, capital and outline games:

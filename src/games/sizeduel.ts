@@ -1,5 +1,5 @@
 import type { Geometry, Position } from 'geojson';
-import { loadData, SCOPES, scopeOf, type Feat } from '../views/games';
+import { loadData, SCOPES, scopeOf, type Feat } from './data';
 import { escapeHtml } from '../util';
 import { flagUrl, outlineSvg } from './quizitems';
 
