@@ -4,7 +4,6 @@ import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
-import { AC_ALL_PAUSED, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSondes, type AircraftResult } from '../api/tracking';
 import {
   AisStream,
   hasAisLive,
@@ -20,10 +19,10 @@ import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { escapeHtml, fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
+import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { cardHtml } from './popup';
-import { Airport3D } from './airport3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
@@ -106,13 +105,6 @@ type Info = ExtraInfo;
 const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
 
-const ALT_COLOR: ExpressionSpecification = [
-  'case',
-  ['get', 'ground'],
-  '#9aa3b5',
-  ['interpolate', ['linear'], ['get', 'altM'], 0, '#ffd23f', 3000, '#7bd389', 8000, '#4fc3f7', 12000, '#b388ff'],
-];
-
 /** paint properties that control the opacity of a map layer, by layer type */
 const OPACITY_PROPS: Record<string, string[]> = {
   raster: ['raster-opacity'],
@@ -130,22 +122,6 @@ export class ExtraLayers {
   private on = new Set<ExtraId>();
   private info: Partial<Record<ExtraId, Info>> = {};
   private timers: Partial<Record<string, number>> = {};
-  private aircraftSeq = 0;
-  private aircraftBusy = false;
-  private aircraftAgain = false;
-  private aircraftAt = 0;
-  private aircraftDelay: number | undefined;
-  private aircraftErr = '';
-  private airport3d: Airport3D | null = null;
-  private lastAircraft: AircraftResult | null = null;
-  /** latest radiosonde data (SondeHub) – also drives the 3D balloon models */
-  private lastSondes: FeatureCollection<Point> | null = null;
-  /** when the sondes were last fed into the 3D tracker / whether they are in there now */
-  private lastSondesFed = 0;
-  private sondes3D = false;
-  /** helicopters of the 2D icons (their rotor blades are drawn as an own, turning layer) */
-  private heliFeatures: Feature<Point>[] = [];
-  private rotorShown = false;
   private ready = false;
   private baltic: Ship[] = [];
   private segs: Segment[] = [];
@@ -208,13 +184,11 @@ export class ExtraLayers {
     const m = this.map;
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
-      aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
-      sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
     };
-    for (const id of ['ports', 'aircraft', 'aircraft-rotor', 'sondes', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -422,113 +396,6 @@ export class ExtraLayers {
       },
       'marker',
     );
-    add(
-      {
-        id: 'sondes',
-        type: 'symbol',
-        source: 'sondes',
-        layout: { ...hidden, 'icon-image': 'sil-sonde', 'icon-size': 0.8, 'icon-allow-overlap': true },
-        paint: { 'icon-color': '#ff8fab', 'icon-halo-color': 'rgba(0,0,0,0.7)', 'icon-halo-width': 1 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'aircraft',
-        type: 'symbol',
-        source: 'aircraft',
-        filter: ['!=', ['get', 'kind'], 'vehicle'],
-        layout: {
-          ...hidden,
-          'icon-image': ['concat', 'sil-', ['get', 'kind']],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.3],
-          'icon-rotate': ['case', ['==', ['get', 'kind'], 'balloon'], 0, ['get', 'track']],
-          'icon-rotation-alignment': 'map',
-          'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 8, ['get', 'callsign']],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-offset': [0, 1.3],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: {
-          'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
-          'icon-halo-color': 'rgba(0,0,0,0.75)',
-          'icon-halo-width': 1,
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.2,
-        },
-      },
-      'marker',
-    );
-    // the rotor blades of helicopters: an own icon around the same centre, turned by a timer (see below)
-    add(
-      {
-        id: 'aircraft-rotor',
-        type: 'symbol',
-        source: 'aircraft-rotor',
-        layout: {
-          ...hidden,
-          'icon-image': 'sil-rotor',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.3],
-          'icon-rotate': ['get', 'rot'],
-          'icon-rotation-alignment': 'map',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-        paint: {
-          'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
-          'icon-halo-color': 'rgba(0,0,0,0.75)',
-          'icon-halo-width': 1,
-        },
-      },
-      'marker',
-    );
-    // the blades turn: the (few) helicopter positions go into their own source with a changing angle
-    window.setInterval(() => {
-      if (document.hidden || !this.on.has('aircraft')) return;
-      if (!this.heliFeatures.length && !this.rotorShown) return;
-      const rot = (performance.now() * 0.3) % 360;
-      this.rotorShown = this.heliFeatures.length > 0;
-      this.setData('aircraft-rotor', { type: 'FeatureCollection', features: this.heliFeatures.map((f) => ({ ...f, properties: { ...f.properties, rot } })) });
-    }, 90);
-    // vehicles on the airfield (ADS-B category C1/C2): small car icon + callsign, clickable
-    add(
-      {
-        id: 'aircraft-vehicle',
-        type: 'symbol',
-        source: 'aircraft',
-        minzoom: 12,
-        filter: ['==', ['get', 'kind'], 'vehicle'],
-        layout: {
-          ...hidden,
-          'icon-image': 'sil-vehicle',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.55, 16, 0.85, 19, 1.1],
-          'icon-rotate': ['get', 'track'],
-          'icon-rotation-alignment': 'map',
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-          'text-field': ['step', ['zoom'], '', 13, ['get', 'callsign']],
-          'text-font': FONT_BOLD,
-          'text-size': 9,
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-optional': true,
-          'text-allow-overlap': false,
-        },
-        paint: {
-          'icon-color': '#ffd23f',
-          'icon-halo-color': 'rgba(0,0,0,0.7)',
-          'icon-halo-width': 1,
-          'text-color': '#ffd23f',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.2,
-        },
-      },
-      'marker',
-    );
     // low-poly 3D ships from zoom 11 on the flat map; the 2D icons (still clickable) fade out then
     this.ships3d = new ShipsLayer({
       enabled: () => this.on.has('ships'),
@@ -554,8 +421,6 @@ export class ExtraLayers {
       },
     });
     m.addLayer(this.vehicles3d, 'marker');
-    this.airport3d = new Airport3D(m, 'marker', { info: (i) => this.set('airport3d', i), modeChanged: () => this.refreshLiveIcons(), iconsTick: () => this.refreshLiveIcons() });
-    this.airport3d.init();
     this.ready = true;
     this.apply();
   }
@@ -634,6 +499,41 @@ export class ExtraLayers {
     return lightningApi.delay(this.ctx);
   }
 
+  /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
+  flightInfo(hex: string): FlightInfo | null {
+    return airApi.flightInfo(this.ctx, hex);
+  }
+
+  /** Aircraft under a screen point: the model, its trail or the wall below the trail. */
+  pickFlight(x: number, y: number): string | null {
+    return airApi.pickFlight(this.ctx, x, y);
+  }
+
+  /** Highlight the trail of an aircraft (null: none). */
+  selectFlight(hex: string | null) {
+    airApi.selectFlight(this.ctx, hex);
+  }
+
+  /** Zoom the map to the whole trail of an aircraft. */
+  fitFlight(hex: string) {
+    airApi.fitFlight(this.ctx, hex);
+  }
+
+  /** Current data of a radiosonde for the sonde panel (smoothed position if it is tracked in 3D). */
+  sondeInfo(serial: string): SondeInfo | null {
+    return airApi.sondeInfo(this.ctx, serial);
+  }
+
+  /** Highlight the ascent trail of a radiosonde (null: none). */
+  selectSonde(serial: string | null) {
+    airApi.selectSonde(this.ctx, serial);
+  }
+
+  /** Zoom the map to the whole ascent of a radiosonde. */
+  fitSonde(serial: string) {
+    airApi.fitSonde(this.ctx, serial);
+  }
+
   /** The map layers of a layer entry (for the draw order), in their style order. */
   layerIds(id: ExtraId): string[] {
     return LAYERS[id] ?? [];
@@ -656,8 +556,6 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     for (const def of EXTRAS) if (def.onMoveEnd && this.on.has(def.id)) def.onMoveEnd(this.ctx);
-    if (this.wantsAircraft()) this.loadAircraftNow();
-    if (this.on.has('airport3d')) this.airport3d?.onMoveEnd();
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
@@ -698,24 +596,6 @@ export class ExtraLayers {
     // layers that were added lazily pick up the chosen opacity now
     for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
 
-    // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
-    this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
-    this.refreshAircraftIcons();
-    // the radiosondes fly along with the aircraft: feed their positions into the 3D tracker (again
-    // after each toggle and whenever the last feed lies back; the feed itself is fresh every 60 s)
-    const sondesOn = this.on.has('sondes');
-    if (sondesOn !== this.sondes3D) {
-      this.sondes3D = sondesOn;
-      if (sondesOn && this.lastSondes) {
-        this.lastSondesFed = Date.now();
-        this.airport3d?.feedSondes(this.lastSondes);
-      } else if (!sondesOn) this.airport3d?.clearSondes();
-    }
-    if (sondesOn && this.lastSondes && Date.now() - this.lastSondesFed > 20000) {
-      this.lastSondesFed = Date.now();
-      this.airport3d?.feedSondes(this.lastSondes);
-    }
-    this.refreshSondesIcons();
 
     for (const def of EXTRAS) {
       def.apply?.(this.ctx);
@@ -727,26 +607,6 @@ export class ExtraLayers {
       }
       def.enable?.(this.ctx);
       switch (def.id) {
-        case 'aircraft':
-          this.loadAircraftNow();
-          this.every('aircraft', 10000, () => this.loadAircraftNow());
-          break;
-        case 'airport3d':
-          this.loadAircraftNow();
-          this.every('airport3d', 10000, () => this.loadAircraftNow());
-          break;
-        case 'sondes':
-          this.loadOnce('sondes', 60000, async () => {
-            const fc = await loadSondes();
-            this.lastSondes = fc;
-            this.lastSondesFed = Date.now();
-            this.airport3d?.feedSondes(fc);
-            this.setData('sondes', fc);
-            this.refreshSondesIcons();
-            return { count: fc.features.length };
-          });
-          break;
-          break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
           if (hasAisLive()) {
@@ -794,215 +654,6 @@ export class ExtraLayers {
     const at = this.info[id]?.at ?? 0;
     if (Date.now() - at > maxAge || !at) run();
     if (Number.isFinite(maxAge)) this.every(id, maxAge, run);
-  }
-
-  /** Throttled: no overlapping requests and at least 5 s between two (timer + map moves). */
-  /** The aircraft feed also drives the 3D airport layer. */
-  private wantsAircraft() {
-    return this.on.has('aircraft') || this.on.has('airport3d');
-  }
-
-  private loadAircraftNow() {
-    if (!this.wantsAircraft()) return;
-    if (this.aircraftBusy) {
-      this.aircraftAgain = true;
-      return;
-    }
-    const wait = this.aircraftAt + 5000 - Date.now();
-    if (wait > 0) {
-      clearTimeout(this.aircraftDelay);
-      this.aircraftDelay = window.setTimeout(() => this.loadAircraftNow(), wait);
-      return;
-    }
-    this.aircraftBusy = true;
-    this.aircraftAt = Date.now();
-    this.fetchAircraft().finally(() => {
-      this.aircraftBusy = false;
-      if (this.aircraftAgain) {
-        this.aircraftAgain = false;
-        this.loadAircraftNow();
-      }
-    });
-  }
-
-  private selectedBusy = false;
-
-  /** The selected aircraft is followed on its own, so it stays up to date outside the area of the map request. */
-  private fetchSelected() {
-    const hex = this.airport3d?.selectedHex();
-    if (!hex || this.selectedBusy) return;
-    this.selectedBusy = true;
-    loadAircraftByHex(hex)
-      .then((fc) => this.airport3d?.feed(fc))
-      .catch(() => undefined)
-      .finally(() => (this.selectedBusy = false));
-  }
-
-  private fetchAircraft(): Promise<void> {
-    const m = this.map;
-    this.fetchSelected();
-    if (m.getZoom() < 5) {
-      // the 3D airport layer only needs the live feed
-      if (!this.on.has('aircraft')) return Promise.resolve();
-      // zoomed out: coarse worldwide overview (positions refresh every 2 minutes)
-      const seq = ++this.aircraftSeq;
-      return loadGlobalAircraft()
-        .then((fc) => {
-          if (seq !== this.aircraftSeq || !this.on.has('aircraft')) return;
-          this.setData('aircraft', fc);
-          this.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min) – reinzoomen für Live-Details' });
-        })
-        .catch(() => {
-          if (seq !== this.aircraftSeq) return;
-          this.setData('aircraft', empty());
-          this.set('aircraft', { note: 'Weltübersicht gerade nicht verfügbar – zum Anzeigen näher heranzoomen', count: undefined, loading: false });
-        });
-    }
-    const c = m.getCenter();
-    const b = m.getBounds();
-    // radius = distance centre → corner in nautical miles
-    const dLat = ((b.getNorth() - c.lat) * Math.PI) / 180;
-    const dLon = ((b.getEast() - c.lng) * Math.PI) / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos((c.lat * Math.PI) / 180) * Math.cos((b.getNorth() * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-    const km = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const nm = km / 1.852;
-    const seq = ++this.aircraftSeq;
-    if (this.on.has('aircraft') && !this.info.aircraft?.count) this.set('aircraft', { loading: true, note: undefined });
-    return loadAircraft(c.lat, c.lng, nm)
-      .then((fc) => {
-        this.aircraftErr = '';
-        if (seq !== this.aircraftSeq || !this.wantsAircraft()) return;
-        this.lastAircraft = fc;
-        this.airport3d?.feed(fc, { lat: c.lat, lon: c.lng, nm });
-        if (!this.on.has('aircraft')) return;
-        this.refreshAircraftIcons();
-        this.set('aircraft', { loading: false, count: fc.features.length, note: `via ${fc.source}${nm > 250 ? ' · nur Umkreis um die Kartenmitte' : ''}` });
-      })
-      .catch((e) => {
-        // log once per distinct failure, not on every refresh
-        const msg = e instanceof Error ? e.message : String(e);
-        if (msg !== this.aircraftErr && msg !== AC_ALL_PAUSED) console.warn('aircraft', e);
-        this.aircraftErr = msg;
-        if (seq === this.aircraftSeq && this.on.has('aircraft'))
-          this.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
-      });
-  }
-
-  /** 2D aircraft icons: all aircraft, except those drawn as 3D models while the map is tilted. */
-  private refreshAircraftIcons() {
-    if (!this.on.has('aircraft') || !this.lastAircraft) return;
-    const fc = this.lastAircraft;
-    const airport = this.airport3d;
-    // aircraft of the cache that the latest request did not return stay visible (they keep flying on their course)
-    const cached = airport ? airport.cachedFeatures(new Set(fc.features.map((f) => String(f.properties?.hex)))) : [];
-    let features = airport ? [...fc.features, ...cached].filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
-    // on a flat map the icons move like the 3D models: smoothed position and heading
-    if (airport?.mode() === 'flat') {
-      features = features.map((f) => {
-        const live = airport.planeInfo(String(f.properties?.hex));
-        return live ? { ...f, geometry: { type: 'Point', coordinates: [live.lon, live.lat] }, properties: { ...f.properties, track: live.track } } : f;
-      });
-    }
-    this.heliFeatures = features.filter((f) => f.properties?.kind === 'heli') as Feature<Point>[];
-    this.setData('aircraft', { ...fc, features });
-  }
-
-  /** 2D radiosonde symbols: hide the ones that are drawn as 3D balloon models (like the aircraft). */
-  private refreshSondesIcons() {
-    const fc = this.lastSondes;
-    if (!fc || !this.on.has('sondes')) return;
-    const air = this.airport3d;
-    const features = air ? fc.features.filter((f) => !air.ownsSonde(String(f.properties?.serial))) : fc.features;
-    if (features.length !== fc.features.length) this.setData('sondes', { ...fc, features });
-  }
-
-  /** 2D icon refresh for all live 3D traffic (aircraft and radiosondes). */
-  private refreshLiveIcons() {
-    this.refreshAircraftIcons();
-    this.refreshSondesIcons();
-  }
-
-  /** Current data of an aircraft for the flight panel (smoothed position if it is tracked in 3D). */
-  flightInfo(hex: string): FlightInfo | null {
-    const f = this.lastAircraft?.features.find((x) => x.properties?.hex === hex) ?? this.airport3d?.cachedFeatures(new Set())?.find((x) => x.properties?.hex === hex);
-    if (!f) return null;
-    const p = f.properties as Record<string, unknown>;
-    const live = this.airport3d?.planeInfo(hex);
-    const [lon, lat] = f.geometry.coordinates;
-    return {
-      hex,
-      callsign: String(p.callsign ?? ''),
-      reg: String(p.reg ?? ''),
-      type: String(p.type ?? ''),
-      icao: String(p.icao ?? ''),
-      operator: String(p.operator ?? ''),
-      altM: live ? live.altM : Number(p.altM) || 0,
-      speedKmh: p.speedKmh != null ? Number(p.speedKmh) : null,
-      track: live ? live.track : Number(p.track) || 0,
-      ground: !!p.ground,
-      emergency: String(p.emergency ?? ''),
-      squawk: String(p.squawk ?? ''),
-      vsMs: p.vsMs != null ? Number(p.vsMs) : null,
-      lon: live ? live.lon : lon,
-      lat: live ? live.lat : lat,
-      source: this.lastAircraft?.source ?? '',
-      route: this.airport3d?.route(hex),
-      history: live ? { alt: live.hist.map((h) => h[0]), speed: live.hist.map((h) => h[1]), vs: live.hist.map((h) => h[2]), track: live.hist.map((h) => h[3]) } : undefined,
-    };
-  }
-
-  /** Aircraft under a screen point: the model, its trail or the wall below the trail. */
-  pickFlight(x: number, y: number): string | null {
-    return this.airport3d?.pick(x, y) ?? null;
-  }
-
-  /** Highlight the trail of an aircraft (null: none). */
-  selectFlight(hex: string | null) {
-    this.airport3d?.select(hex);
-  }
-
-  /** Zoom the map to the whole trail of an aircraft. */
-  fitFlight(hex: string) {
-    this.airport3d?.fitTrail(hex);
-  }
-
-  /** Current data of a radiosonde for the sonde panel (smoothed position if it is tracked in 3D). */
-  sondeInfo(serial: string): SondeInfo | null {
-    const f = this.lastSondes?.features.find((x) => x.properties?.serial === serial);
-    if (!f) return null;
-    const p = f.properties as Record<string, unknown>;
-    const live = this.airport3d?.planeInfo(`sonde:${serial}`);
-    return {
-      serial,
-      type: String(p.type ?? ''),
-      subtype: String(p.subtype ?? ''),
-      manufacturer: String(p.manufacturer ?? ''),
-      altM: live ? live.altM : Number(p.altM) || 0,
-      vsMs: p.velV != null ? Number(p.velV) : null,
-      speedKmh: p.velH != null ? Math.round(Number(p.velH) * 36) / 10 : null,
-      track: p.heading != null ? Number(p.heading) : null,
-      frequency: p.frequency != null ? Number(p.frequency) : null,
-      frame: p.frame != null ? Number(p.frame) : null,
-      datetime: String(p.date ?? ''),
-      timeReceived: String(p.timeReceived ?? ''),
-      uploader: String(p.uploader ?? ''),
-      antenna: String(p.antenna ?? ''),
-      software: String(p.software ?? ''),
-      url: String(p.url ?? ''),
-      lon: live ? live.lon : f.geometry.coordinates[0],
-      lat: live ? live.lat : f.geometry.coordinates[1],
-      history: live ? { alt: live.hist.map((h) => h[0]), speed: live.hist.map((h) => h[1]), vs: live.hist.map((h) => h[2]), track: live.hist.map((h) => h[3]) } : undefined,
-    };
-  }
-
-  /** Highlight the ascent trail of a radiosonde (null: none). */
-  selectSonde(serial: string | null) {
-    this.airport3d?.select(serial == null ? null : `sonde:${serial}`);
-  }
-
-  /** Zoom the map to the whole ascent of a radiosonde. */
-  fitSonde(serial: string) {
-    this.airport3d?.fitTrail(`sonde:${serial}`);
   }
 
   // -------------------------------------------------------------------------
@@ -1215,12 +866,6 @@ export class ExtraLayers {
     const handler = CLICK_HANDLERS.get(tileCam ? 'alpr' : f.layer.id);
     if (handler) return handler({ ctx: this.ctx, layerId: f.layer.id, p, pt, at, html });
     switch (tileCam ? 'alpr' : f.layer.id) {
-      case 'sondes':
-        return { type: 'sonde', serial: String(p.serial ?? ''), lng: pt[0], lat: pt[1] };
-      case 'aircraft':
-      case 'aircraft-vehicle':
-      case 'ap3d-hit':
-        return { type: 'flight', hex: String(p.hex), lng: pt[0], lat: pt[1] };
       case 'ships':
         return { type: 'ship', mmsi: Number(p.mmsi), lng: pt[0], lat: pt[1] };
       case 'trains':
