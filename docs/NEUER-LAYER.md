@@ -28,6 +28,8 @@ Map-Layer, Laden, Klick) steckt noch in `src/globe/extras.ts`.
 - `addLayers(ctx)`: legt die Map-Layer an (`ctx.add`, `ctx.hidden`)
 - `enable(ctx)`: wird bei jedem `apply()` aufgerufen, solange der Layer an ist (`ctx.loadOnce`, `ctx.setData`)
 - `click(c)`: Popup für einen Klick auf einen der `clickLayers`
+- `onMoveEnd(ctx)`: nach dem Verschieben der Karte, solange der Layer an ist
+- `ctx.state(key, init)`: Zustand pro Karte (nicht modulglobal, es können mehrere Karten laufen); dazu `ctx.viewBounds`, `ctx.set`, `ctx.info`
 
-Beispiele: `tides.ts` (alles), `plates.ts`, `ndvi.ts` (nur Raster). Layer mit viel Zustand
+Beispiele: `tides.ts` (alles), `radio.ts` (mit Zustand), `plates.ts`, `ndvi.ts` (nur Raster). Layer mit viel Zustand
 (Flugzeuge, Schiffe, Blitze …) hängen noch an der Klasse in `extras.ts`.

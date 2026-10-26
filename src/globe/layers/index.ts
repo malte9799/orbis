@@ -1,6 +1,6 @@
 import type { ExtraDef, ExtraId, SectionId } from './types';
 
-export type { CatId, ClickCtx, ExtraCtx, ExtraDef, ExtraId, RasterSpec, SectionId } from './types';
+export type { CatId, ClickCtx, ExtraCtx, ExtraDef, ExtraId, ExtraInfo, RasterSpec, SectionId } from './types';
 
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },

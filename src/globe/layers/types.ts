@@ -22,6 +22,13 @@ export interface RasterSpec {
   bounds?: [number, number, number, number];
 }
 
+export interface ExtraInfo {
+  count?: number;
+  loading?: boolean;
+  note?: string;
+  at?: number;
+}
+
 /** What a layer module can use of the map and of ExtraLayers. */
 export interface ExtraCtx {
   map: MlMap;
@@ -30,6 +37,13 @@ export interface ExtraCtx {
   /** adds the layer unless it exists; with `before` below that layer (when present) */
   add(layer: LayerSpecification, before?: string): void;
   setData(source: string, data: FeatureCollection): void;
+  /** per map and layer: state that must not be shared between maps (created by `init` on first use) */
+  state<T>(key: ExtraId, init: () => T): T;
+  /** view bounds snapped outwards to a grid of 1/`step` degrees */
+  viewBounds(step?: number): { west: number; south: number; east: number; north: number };
+  /** status line of the layer in the list (count, note, loading) */
+  set(id: ExtraId, info: ExtraInfo): void;
+  info(id: ExtraId): ExtraInfo | undefined;
   /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
   loadOnce(id: ExtraId, maxAge: number, fn: () => Promise<{ count?: number; note?: string } | void>): void;
 }
@@ -70,6 +84,8 @@ export interface ExtraDef {
   addLayers?(ctx: ExtraCtx): void;
   /** called whenever the layer is on and the state is applied – start loading/refreshing here */
   enable?(ctx: ExtraCtx): void;
+  /** called after the map stopped moving, while the layer is on */
+  onMoveEnd?(ctx: ExtraCtx): void;
   /** answers a click on one of `clickLayers` */
   click?(c: ClickCtx): ClickResult | null;
   /** map layers switched together with this extra */

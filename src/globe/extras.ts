@@ -27,17 +27,13 @@ import {
 } from '../api/transport';
 import { loadAmtrak, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
-import { loadTransitNetwork } from '../api/networks';
 import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
 import { snapshotJson } from '../api/data';
-import { loadNearbyStations, loadTopStations } from '../api/radio';
 import { isSuperseded } from '../api/overpass';
-import { loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
-import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
-import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId } from './layers';
+import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { JMA_RADAR_TILES } from './layers/shared/tiles';
 import { AIRPORT_FAR } from './layers/defs/airports';
 import { cardHtml } from './popup';
@@ -200,12 +196,7 @@ export interface SondeInfo {
   history?: { alt: number[]; speed: number[]; vs: number[]; track: number[] };
 }
 
-interface Info {
-  count?: number;
-  loading?: boolean;
-  note?: string;
-  at?: number;
-}
+type Info = ExtraInfo;
 
 const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
@@ -291,16 +282,6 @@ export class ExtraLayers {
   private blitzerKey = '';
   private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
-  private busnetKey = '';
-  private radioTop: FeatureCollection | null = null;
-  private radioNear: FeatureCollection = empty();
-  private radioKey = '';
-  private resWd: FeatureCollection = empty();
-  private resMrds: FeatureCollection = empty();
-  private resOsm: FeatureCollection = empty();
-  private resMrdsKey = '';
-  private resOsmKey = '';
-  private pipeKey = '';
   private segs: Segment[] = [];
   private segKey = '';
   private segAt = 0;
@@ -323,6 +304,7 @@ export class ExtraLayers {
   private lightningAudio: AudioContext | null = null;
   private lightningLastTick = 0;
 
+  private layerState = new Map<string, unknown>();
   /** what the layer modules (globe/layers/defs) get to work with */
   private ctx: ExtraCtx;
 
@@ -338,6 +320,13 @@ export class ExtraLayers {
       },
       setData: (source, data) => this.setData(source, data),
       loadOnce: (id, maxAge, fn) => this.loadOnce(id, maxAge, fn),
+      state: (key, init) => {
+        if (!this.layerState.has(key)) this.layerState.set(key, init());
+        return this.layerState.get(key) as ReturnType<typeof init>;
+      },
+      viewBounds: (step) => this.viewBounds(step),
+      set: (id, info) => this.set(id, info),
+      info: (id) => this.info[id],
     };
   }
 
@@ -364,13 +353,9 @@ export class ExtraLayers {
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
-      busnet: 'ÖPNV-Netz: © OpenStreetMap-Mitwirkende',
-      radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
-      resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
-      pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
       ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -486,42 +471,6 @@ export class ExtraLayers {
           '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a>',
       });
     }
-    add(
-      {
-        id: 'pipelines',
-        type: 'line',
-        source: 'pipelines',
-        layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.5, 14, 4], 'line-opacity': 0.9 },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'resources',
-        type: 'circle',
-        source: 'resources',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'lvl'] },
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['match', ['get', 'lvl'], 0, 2.4, 1.6], 8, ['match', ['get', 'lvl'], 0, 6, 4], 13, 7],
-          'circle-stroke-color': ['case', ['==', ['get', 'cat'], 'oil'], '#ffb300', 'rgba(255,255,255,0.85)'],
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1, 0.5, 8, 1.2],
-        },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'resources-label',
-        type: 'symbol',
-        source: 'resources',
-        minzoom: 9,
-        layout: { ...hidden, 'text-field': ['get', 'title'], 'text-font': FONT_REGULAR, 'text-size': 10, 'text-offset': [0, 1.0], 'text-anchor': 'top', 'text-optional': true },
-        paint: { 'text-color': '#efebe9', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.2 },
-      },
-      'marker',
-    );
     // transport networks
     const rasterOverlay = (id: string, tiles: string[], attribution: string, maxzoom = 19, opacity = 0.9) => {
       if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution });
@@ -576,51 +525,6 @@ export class ExtraLayers {
           'text-halo-color': ['match', ['get', 'class'], 'motorway', '#1565c0', 'trunk', '#c62828', '#ef6c00'],
           'text-halo-width': 3,
         },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'busnet-line',
-        type: 'line',
-        source: 'busnet',
-        layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round', 'line-sort-key': ['get', 'order'] },
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 11, ['match', ['get', 'mode'], 'bus', 1.2, 2], 16, ['match', ['get', 'mode'], 'bus', 3, 5]],
-          'line-opacity': 0.85,
-        },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'busnet-stop',
-        type: 'circle',
-        source: 'busnet-stops',
-        minzoom: 13,
-        layout: hidden,
-        paint: { 'circle-color': '#ffffff', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2, 17, 5], 'circle-stroke-color': '#7e57c2', 'circle-stroke-width': 1.5 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'busnet-label',
-        type: 'symbol',
-        source: 'busnet',
-        minzoom: 12,
-        filter: ['!=', ['get', 'ref'], ''],
-        layout: {
-          ...hidden,
-          'symbol-placement': 'line',
-          'symbol-spacing': 300,
-          'text-field': ['get', 'ref'],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-rotation-alignment': 'viewport',
-        },
-        paint: { 'text-color': '#ffffff', 'text-halo-color': ['get', 'color'], 'text-halo-width': 2.5 },
       },
       'marker',
     );
@@ -956,33 +860,6 @@ export class ExtraLayers {
           'text-optional': true,
         },
         paint: { 'text-color': '#ff8a65', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'radio',
-        type: 'circle',
-        source: 'radio',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'clicks'] },
-        paint: {
-          'circle-color': ['case', ['get', 'playable'], '#ff4081', '#b0789a'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['interpolate', ['linear'], ['get', 'clicks'], 0, 1.5, 5000, 4], 8, ['interpolate', ['linear'], ['get', 'clicks'], 0, 4, 5000, 8]],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1, 0.3, 8, 1.2],
-          'circle-opacity': 0.9,
-        },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'radio-label',
-        type: 'symbol',
-        source: 'radio',
-        minzoom: 8,
-        layout: { ...hidden, 'text-field': ['get', 'name'], 'text-font': FONT_REGULAR, 'text-size': 10, 'text-offset': [0, 1.0], 'text-anchor': 'top', 'text-optional': true, 'symbol-sort-key': ['-', 0, ['get', 'clicks']] },
-        paint: { 'text-color': '#ffd1e3', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.2 },
       },
       'marker',
     );
@@ -1495,12 +1372,9 @@ export class ExtraLayers {
 
   /** Called after the map stopped moving. */
   onMoveEnd() {
+    for (const def of EXTRAS) if (def.onMoveEnd && this.on.has(def.id)) def.onMoveEnd(this.ctx);
     if (this.wantsAircraft()) this.loadAircraftNow();
     if (this.on.has('airport3d')) this.airport3d?.onMoveEnd();
-    if (this.on.has('busnet')) this.loadBusnetNow();
-    if (this.on.has('radio')) this.loadRadioNow();
-    if (this.on.has('resources')) this.loadResourcesNow();
-    if (this.on.has('pipelines')) this.loadPipelinesNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
@@ -1748,23 +1622,6 @@ export class ExtraLayers {
           break;
         case 'trains':
           this.loadOnce('trains', 30000, () => this.loadGpsTrains());
-          break;
-        case 'busnet':
-          this.loadBusnetNow();
-          break;
-        case 'radio':
-          this.loadRadioNow();
-          break;
-        case 'resources':
-          this.loadOnce('resources', Infinity, async () => {
-            this.resWd = await loadWikidataResources();
-            this.mergeResources();
-            return {};
-          });
-          this.loadResourcesNow();
-          break;
-        case 'pipelines':
-          this.loadPipelinesNow();
           break;
       }
     }
@@ -2163,164 +2020,6 @@ export class ExtraLayers {
 
   // -------------------------------------------------------------------------
   // Trains & public transport
-
-  /** Resources: Wikidata worldwide; USGS MRDS from zoom 7; OpenStreetMap from zoom 10. */
-  private loadResourcesNow() {
-    const z = this.map.getZoom();
-    if (z >= 7) {
-      const b = this.viewBounds(4);
-      const key = Object.values(b).join(',');
-      if (key !== this.resMrdsKey) {
-        this.resMrdsKey = key;
-        loadMrds(b)
-          .then((fc) => {
-            if (this.resMrdsKey !== key) return;
-            this.resMrds = fc;
-            this.mergeResources();
-          })
-          .catch((e) => {
-            console.warn('USGS MRDS', e);
-            this.resMrdsKey = '';
-          });
-      }
-    } else if (this.resMrds.features.length) {
-      this.resMrds = empty();
-      this.resMrdsKey = '';
-    }
-    if (z >= 10) {
-      const b = this.viewBounds(20);
-      const key = Object.values(b).join(',');
-      if (key !== this.resOsmKey) {
-        this.resOsmKey = key;
-        loadOsmResources(b)
-          .then((fc) => {
-            if (this.resOsmKey !== key) return;
-            this.resOsm = fc;
-            this.mergeResources();
-          })
-          .catch((e) => {
-            if (isSuperseded(e) || this.resOsmKey !== key) return;
-            console.warn('Overpass resources', e);
-            this.resOsmKey = '';
-          });
-      }
-    } else if (this.resOsm.features.length) {
-      this.resOsm = empty();
-      this.resOsmKey = '';
-    }
-    this.mergeResources();
-  }
-
-  private mergeResources() {
-    const features = [...this.resWd.features, ...this.resMrds.features, ...this.resOsm.features];
-    this.setData('resources', { type: 'FeatureCollection', features });
-    const z = this.map.getZoom();
-    const level = z < 7 ? 'Weltübersicht (Wikidata) – reinzoomen für USGS/BGR (ab 7) und OSM (ab 10)' : z < 10 ? 'Regional: Wikidata, USGS MRDS, BGR (DE) – ab Zoom 10 OpenStreetMap' : 'Lokal: alle Quellen inkl. OpenStreetMap';
-    if (features.length || !this.info.resources?.loading) this.set('resources', { count: features.length, note: level });
-  }
-
-  private loadPipelinesNow() {
-    const z = this.map.getZoom();
-    if (z < 8) {
-      this.set('pipelines', { note: 'ab Zoomstufe 8 sichtbar' });
-      return;
-    }
-    const b = this.viewBounds(10);
-    const key = Object.values(b).join(',');
-    if (key === this.pipeKey) return;
-    this.pipeKey = key;
-    this.set('pipelines', { loading: true, note: undefined });
-    loadPipelines(b)
-      .then((fc) => {
-        if (this.pipeKey !== key) return;
-        this.setData('pipelines', fc);
-        this.set('pipelines', { loading: false, count: fc.features.length, note: 'blau Gas · orange Öl · lila Wasserstoff' });
-      })
-      .catch((e) => {
-        if (isSuperseded(e) || this.pipeKey !== key) return;
-        console.warn('Overpass pipelines', e);
-        this.pipeKey = '';
-        this.set('pipelines', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
-      });
-  }
-
-  /** Radio: popular stations worldwide, all stations around the centre from zoom 6. */
-  private loadRadioNow() {
-    if (!this.radioTop && !this.info.radio?.loading) {
-      this.set('radio', { loading: true });
-      loadTopStations()
-        .then((fc) => {
-          this.radioTop = fc;
-          this.mergeRadio();
-        })
-        .catch((e) => {
-          console.warn('Radio Browser', e);
-          this.set('radio', { loading: false, note: 'Radio Browser nicht erreichbar' });
-        });
-    }
-    const z = this.map.getZoom();
-    if (z < 6) {
-      this.set('radio', { note: 'beliebteste Sender weltweit – reinzoomen für alle Sender der Region' });
-      return;
-    }
-    const c = this.map.getCenter();
-    const b = this.map.getBounds();
-    const km = Math.min(600, (Math.abs(b.getNorth() - b.getSouth()) * 111) / 1.4);
-    const key = `${c.lat.toFixed(1)},${c.lng.toFixed(1)},${Math.round(km / 25)}`;
-    if (key === this.radioKey) return;
-    this.radioKey = key;
-    loadNearbyStations(c.lat, c.lng, km)
-      .then((fc) => {
-        if (this.radioKey !== key) return;
-        this.radioNear = fc;
-        this.mergeRadio();
-      })
-      .catch((e) => {
-        console.warn('Radio Browser nearby', e);
-        this.radioKey = '';
-      });
-  }
-
-  private mergeRadio() {
-    const seen = new Set<string>();
-    const features = [...this.radioNear.features, ...(this.radioTop?.features ?? [])].filter((f) => {
-      const id = String(f.properties?.id);
-      if (seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-    this.setData('radio', { type: 'FeatureCollection', features });
-    const playable = features.filter((f) => f.properties?.playable).length;
-    this.set('radio', { loading: false, count: features.length, note: `${playable} direkt abspielbar (pink) · andere öffnen im neuen Tab` });
-  }
-
-  /** OSM public transport lines for the view (from zoom 11 – Overpass results get large). */
-  private loadBusnetNow() {
-    const z = this.map.getZoom();
-    if (z < 11) {
-      this.set('busnet', { note: 'ab Stadtzoom (Zoomstufe 11) – Daten aus OpenStreetMap' });
-      return;
-    }
-    const b = this.viewBounds(z >= 13 ? 50 : 10);
-    const key = Object.values(b).join(',');
-    if (key === this.busnetKey) return;
-    this.busnetKey = key;
-    this.set('busnet', { loading: true, note: undefined });
-    loadTransitNetwork(b)
-      .then((r) => {
-        if (this.busnetKey !== key) return;
-        this.setData('busnet', r.lines);
-        this.setData('busnet-stops', r.stops);
-        const modes = new Set(r.lines.features.map((f) => f.properties?.modeLabel));
-        this.set('busnet', { loading: false, count: r.lines.features.length, note: r.lines.features.length ? `Linien: ${[...modes].join(', ')}` : 'keine Linien im Ausschnitt erfasst' });
-      })
-      .catch((e) => {
-        if (isSuperseded(e) || this.busnetKey !== key) return;
-        console.warn('Overpass ÖPNV', e);
-        this.busnetKey = '';
-        this.set('busnet', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar oder überlastet – bitte erneut verschieben' });
-      });
-  }
 
   private async loadGpsTrains() {
     const [fi, us] = await Promise.allSettled([loadTrains(), loadAmtrak()]);
@@ -3041,42 +2740,6 @@ export class ExtraLayers {
                 after: (node: HTMLElement) => node.querySelector('.pop-track')?.addEventListener('click', () => this.hooks.openLaunch?.(list[0], pt[0], pt[1])),
               }
             : {}),
-        };
-      }
-      case 'resources':
-        return { type: 'html', html: cardHtml({ glyph: 'plant', color: String(p.color), title: p.title, subtitle: [p.catLabel, p.subtitle].filter(Boolean).join(' · '), source: p.source, url: p.url }), lng: pt[0], lat: pt[1] };
-      case 'pipelines':
-        return { type: 'html', html: html('cable', String(p.color)), lng: at.lng, lat: at.lat };
-      case 'radio':
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'radio', color: '#ff4081', title: p.name, source: 'Radio Browser', extra: radioPopupExtra(p) }),
-          lng: pt[0],
-          lat: pt[1],
-          after: (node) =>
-            node.querySelector('.rp-play')?.addEventListener('click', () =>
-              playStation({ id: String(p.id), name: String(p.name), stream: String(p.stream), favicon: String(p.favicon ?? ''), place: String(p.place ?? '') }),
-            ),
-        };
-      case 'busnet-line': {
-        const rows = [
-          ['Verkehrsmittel', p.modeLabel],
-          ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
-          ['Betreiber', p.operator],
-        ].filter(([, v]) => v);
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: 'train',
-            color: String(p.color),
-            title: p.ref ? `${p.modeLabel} ${p.ref}` : p.name || String(p.modeLabel),
-            subtitle: p.ref ? p.name : '',
-            source: 'OpenStreetMap',
-            url: p.url,
-            extra: `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`,
-          }),
-          lng: at.lng,
-          lat: at.lat,
         };
       }
       case 'airports-minor':
