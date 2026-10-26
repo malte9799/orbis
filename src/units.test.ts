@@ -8,7 +8,7 @@ const mem = new Map<string, string>();
   removeItem: (k: string) => void mem.delete(k),
 };
 
-const { tempTxt, windTxt, windDirTxt, pressureTxt, rainTxt, rainVal, distTxt, speedTxt, areaTxt, acresTxt, coordsTxt, hourTxt, clockTxt } = await import('./units');
+const { tempTxt, windTxt, windDirTxt, pressureTxt, rainTxt, rainVal, distTxt, speedTxt, areaTxt, acresTxt, coordsTxt, hourTxt, clockTxt, heightTxt, climbTxt, uTok, resolveUnits, localizeText, heightBoth } = await import('./units');
 
 const set = (o: Record<string, string>) => mem.set('wg.options', JSON.stringify(o));
 beforeEach(() => mem.clear());
@@ -115,5 +115,44 @@ describe('time', () => {
     expect(clockTxt(Date.UTC(2026, 0, 1, 14, 5))).toBe('14:05 UTC');
     set({ tz: 'utc', hour12: '12h' });
     expect(clockTxt(Date.UTC(2026, 0, 1, 14, 5))).toMatch(/^2:05\s?PM UTC$/);
+  });
+});
+
+describe('height / climb', () => {
+  it('m ↔ ft', () => {
+    expect(heightTxt(1000)).toBe('1.000 m');
+    set({ height: 'ft' });
+    expect(heightTxt(1000)).toBe('3.281 ft');
+    expect(heightBoth(1000)).toBe('3.281 ft (1.000 m)');
+    expect(climbTxt(5)).toBe('984 ft/min');
+  });
+});
+
+describe('tokens', () => {
+  it('stay raw until resolved, then follow the setting', () => {
+    const t = `Wind ${uTok('wind', 36)}, ${uTok('height', 2, 1)}`;
+    expect(resolveUnits(t)).toBe('Wind 36 km/h, 2,0 m');
+    set({ wind: 'ms', height: 'ft' });
+    expect(resolveUnits(t)).toBe('Wind 10 m/s, 6,6 ft');
+  });
+  it('leaves plain text alone', () => {
+    expect(resolveUnits('kein Token')).toBe('kein Token');
+  });
+});
+
+describe('localizeText', () => {
+  it('is a no-op with defaults', () => {
+    expect(localizeText('1 392 684 km (109 × Erde), −173 bis +427 °C')).toBe('1 392 684 km (109 × Erde), −173 bis +427 °C');
+  });
+  it('converts km, ranges, products and °C', () => {
+    set({ dist: 'mi', temp: 'f' });
+    expect(localizeText('12 742 km')).toBe('7 918 Meilen');
+    expect(localizeText('34 × 11 × 11 km')).toBe('21,1 × 6,84 × 6,84 Meilen');
+    expect(localizeText('−173 bis +427 °C')).toBe('−279 bis +801 °F');
+  });
+  it('leaves m/s² and unrelated words alone', () => {
+    set({ height: 'ft', dist: 'mi' });
+    expect(localizeText('3,7 m/s²')).toBe('3,7 m/s²');
+    expect(localizeText('2,4 m')).toBe('7,87 ft');
   });
 });

@@ -3,7 +3,7 @@ import type { FeatureCollection } from 'geojson';
 import type { LaunchDetail } from './tracker';
 import { flightPhase, flightEndSec, getReminder, notifSupported, notifyPermission, requestNotifyPermission, setReminder, trackFeatures, tLabel } from './tracker';
 import { escapeHtml, fmt, safeUrl, toast } from '../util';
-import { clockTxt, speedTxt, distTxt } from '../units';
+import { clockTxt, distTxt, heightTxt, speedTxt } from '../units';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
 import { countdown as relCountdown } from '../api/transport';
@@ -309,7 +309,7 @@ export class LaunchPanel {
     };
     if (p.at) {
       tileText('t', `+${tLabel(p.tSec)}`);
-      tileText('alt', p.at.altKm < 1 ? `${Math.round(p.at.altKm * 1000)} m` : distTxt(p.at.altKm, 0));
+      tileText('alt', p.at.altKm < 1 ? heightTxt(p.at.altKm * 1000) : distTxt(p.at.altKm, 0));
       tileText('v', speedTxt(p.at.speedKmh));
       tileText('r', distTxt(p.at.downrangeKm, 0));
     } else {

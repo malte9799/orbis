@@ -172,6 +172,7 @@ type UnitRow = { key: keyof AppOptions; label: string; opts: [string, string][] 
   { key: 'rain', label: 'Niederschlag', opts: [['mm', 'mm/h'], ['in', 'in/h'], ['dbz', 'dBZ']] },
   { key: 'pressure', label: 'Luftdruck', opts: [['hpa', 'hPa'], ['mb', 'mb'], ['mmhg', 'mmHg'], ['inhg', 'inHg']] },
   { key: 'dist', label: 'Distanz', opts: [['km', 'km'], ['mi', 'Meilen'], ['nmi', 'Seemeilen']] },
+  { key: 'height', label: 'Höhe, Tiefe & Wellen', opts: [['m', 'Meter'], ['ft', 'Fuß (ft)']] },
   { key: 'area', label: 'Fläche', opts: [['km2', 'km²'], ['mi2', 'mi²'], ['acre', 'Acre'], ['ha', 'Hektar']] },
   { key: 'burned', label: 'Verbrannte Fläche', opts: [['km2', 'km²'], ['mi2', 'mi²'], ['acre', 'Acre'], ['ha', 'Hektar']] },
   { key: 'coords', label: 'Koordinaten', opts: [['dec', 'Dezimalgrade'], ['gms', 'GMS']] },

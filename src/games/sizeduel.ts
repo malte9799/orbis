@@ -1,6 +1,7 @@
 import type { Geometry, Position } from 'geojson';
 import { loadData, SCOPES, scopeOf, type Feat } from '../views/games';
 import { escapeHtml } from '../util';
+import { areaVal, areaUnit } from '../units';
 import { flagUrl, outlineSvg } from './quizitems';
 
 // Size duel: two countries (or regions) are shown, you pick the bigger one – by area or by population.
@@ -61,7 +62,7 @@ const ratioF = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
 
 export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () => void): SizeDuel {
   const val = (i: SizeItem) => (o.metric === 'area' ? i.area : i.pop!);
-  const fmt = (i: SizeItem) => (o.metric === 'area' ? `${nf.format(Math.round(i.area))} km²` : `${cf.format(i.pop!)} Einwohner`);
+  const fmt = (i: SizeItem) => (o.metric === 'area' ? `${nf.format(Math.round(areaVal(i.area)))} ${areaUnit()}` : `${cf.format(i.pop!)} Einwohner`);
   const total = o.rounds > 0 ? Math.min(o.rounds, Math.floor(o.items.length / 2)) : 0;
   const used = new Set<string>();
 

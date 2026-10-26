@@ -1101,6 +1101,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderLegend();
     renderTimeline();
     hideReadout();
+    popup?.remove(); // an open card still shows the old unit
   });
   function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }, touch = false) {
     const o = state.overlay;

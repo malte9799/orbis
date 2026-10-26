@@ -36,7 +36,8 @@ import { isSuperseded } from '../api/overpass';
 import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
-import { clockTxt, speedTxt, coordsTxt, dateTimeTxt } from '../units';
+import { clockTxt, speedTxt, coordsTxt, dateTimeTxt, heightNum, heightTxt } from '../units';
+import { OPTIONS_EVENT } from '../store';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
@@ -572,6 +573,7 @@ export class ExtraLayers {
   /** Adds runtime sources/layers; call once after the style has loaded. */
   init() {
     const m = this.map;
+    window.addEventListener(OPTIONS_EVENT, this.relabelAll);
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
       'ship-lanes': 'Schiffsrouten: <a href="https://doi.org/10.5281/zenodo.6361763">P. Benden, CC BY 4.0</a>',
@@ -2018,7 +2020,20 @@ export class ExtraLayers {
     this.setData('airports-far', { type: 'FeatureCollection', features });
   }
 
+  /** wave/buoy labels show the wave height as a bare number → redrawn when the height unit changes */
+  private labelled = new Map<string, FeatureCollection>();
+  private relabelAll = () => {
+    for (const [source, fc] of this.labelled) {
+      for (const f of fc.features) {
+        const w = f.properties?.wave;
+        if (typeof w === 'number' && w >= 0) f.properties!.label = heightNum(w);
+      }
+      (this.map.getSource(source) as GeoJSONSource | undefined)?.setData(fc);
+    }
+  };
+
   private setData(source: string, data: FeatureCollection) {
+    if (source === 'waves' || source === 'buoys') this.labelled.set(source, data);
     (this.map.getSource(source) as GeoJSONSource | undefined)?.setData(data);
   }
 
@@ -3545,7 +3560,7 @@ export class ExtraLayers {
           ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
           ['Seit', p.since],
           ['Kennung', p.ref],
-          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
+          ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
         ].filter(([, v]) => v);
         const photo = alprVendorImg(String(p.brand ?? ''));
         const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
@@ -3562,7 +3577,7 @@ export class ExtraLayers {
           ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
           ['Betreiber', p.operator],
           ['Kennung', p.ref],
-          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
+          ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
         ].filter(([, v]) => v);
         const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
           <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
@@ -3592,8 +3607,8 @@ export class ExtraLayers {
               .then((d) => {
                 const t = (iso: string) => dateTimeTxt(new Date(iso), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                 const rows: [string, string][] = [];
-                if (d.level) rows.push(['Wasserstand', `${fmt.num(d.level.v, 2)} m (über MLLW) · ${t(d.level.t)}`]);
-                for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${fmt.num(n.v, 2)} m`]);
+                if (d.level) rows.push(['Wasserstand', `${heightTxt(d.level.v, 2)} (über MLLW) · ${t(d.level.t)}`]);
+                for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${heightTxt(n.v, 2)}`]);
                 const el = node.querySelector('.pop-loading');
                 if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
               })
@@ -3704,7 +3719,7 @@ export class ExtraLayers {
             glyph: 'airport',
             color: '#90caf9',
             title: name,
-            subtitle: [code, p.ele != null ? `${p.ele} m ü. NN` : ''].filter(Boolean).join(' · '),
+            subtitle: [code, p.ele != null ? `${heightTxt(Number(p.ele))} ü. NN` : ''].filter(Boolean).join(' · '),
             source: 'OpenStreetMap, OpenSky Network',
             url: icao ? `https://opensky-network.org/network/explorer?airport=${encodeURIComponent(icao)}` : undefined,
             extra: icao ? '<div class="pop-loading small">Flüge vom Vortag werden geladen …</div>' : '',

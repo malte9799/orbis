@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { fetchJson, rampColor } from '../util';
-import { pressureTxt, speedTxt, tempTxt, windTxt } from '../units';
+import { heightNum, uTok } from '../units';
 import { fetchText } from './data';
 import { omFetch } from './omlimit';
 import { viaProxy } from './proxy';
@@ -57,11 +57,11 @@ export async function loadBuoys(): Promise<FeatureCollection<Point>> {
     const wtmp = num(18);
     if (wspd == null && wvht == null && atmp == null && wtmp == null && pres == null) continue;
     const rows = [
-      wvht != null && `Wellenhöhe ${wvht.toLocaleString('de-DE')} m${dpd != null ? ` (Periode ${dpd} s)` : ''}`,
-      wspd != null && `Wind ${windTxt(wspd * MS_TO_KMH)}${wdir != null ? ` aus ${compass(wdir)}` : ''}${gst != null ? `, Böen ${windTxt(gst * MS_TO_KMH)}` : ''}`,
-      pres != null && `Luftdruck ${pressureTxt(pres)}`,
-      atmp != null && `Luft ${tempTxt(atmp)}`,
-      wtmp != null && `Wasser ${tempTxt(wtmp)}`,
+      wvht != null && `Wellenhöhe ${uTok('height', wvht, 1)}${dpd != null ? ` (Periode ${dpd} s)` : ''}`,
+      wspd != null && `Wind ${uTok('wind', wspd * MS_TO_KMH)}${wdir != null ? ` aus ${compass(wdir)}` : ''}${gst != null ? `, Böen ${uTok('wind', gst * MS_TO_KMH)}` : ''}`,
+      pres != null && `Luftdruck ${uTok('press', pres)}`,
+      atmp != null && `Luft ${uTok('temp', atmp)}`,
+      wtmp != null && `Wasser ${uTok('temp', wtmp)}`,
     ].filter(Boolean);
     const time = new Date(Date.UTC(+c[3], +c[4] - 1, +c[5], +c[6], +c[7]));
     features.push(
@@ -70,7 +70,7 @@ export async function loadBuoys(): Promise<FeatureCollection<Point>> {
         subtitle: rows.join(' · '),
         date: time.toISOString(),
         color: wvht != null ? waveColor(wvht) : '#90a4ae',
-        label: wvht != null ? wvht.toLocaleString('de-DE', { maximumFractionDigits: 1 }) : wspd != null ? String(Math.round(wspd * MS_TO_KN)) : '',
+        label: wvht != null ? heightNum(wvht) : wspd != null ? String(Math.round(wspd * MS_TO_KN)) : '',
         wave: wvht ?? -1,
         source: 'NOAA National Data Buoy Center',
         url: `https://www.ndbc.noaa.gov/station_page.php?station=${encodeURIComponent(stn)}`,
@@ -182,16 +182,16 @@ export async function loadWaves(v: WaveView): Promise<{ fc: FeatureCollection<Po
       point(lons[i], lats[i], {
         title: 'Seegang',
         subtitle: [
-          `Wellenhöhe ${h.toLocaleString('de-DE')} m${dir != null ? ` aus ${compass(dir)}` : ''}`,
+          `Wellenhöhe ${uTok('height', h, 1)}${dir != null ? ` aus ${compass(dir)}` : ''}`,
           per != null && `Periode ${per} s`,
-          swell != null && `Dünung ${swell.toLocaleString('de-DE')} m`,
-          cv != null && `Strömung ${speedTxt(cv, 1)}${cd != null ? ` nach ${compass(cd)}` : ''}`,
+          swell != null && `Dünung ${uTok('height', swell, 1)}`,
+          cv != null && `Strömung ${uTok('speed', cv, 1)}${cd != null ? ` nach ${compass(cd)}` : ''}`,
         ]
           .filter(Boolean)
           .join(' · '),
         date: typeof c?.time === 'string' ? `${c.time}:00Z` : undefined,
         color: waveColor(h),
-        label: h.toLocaleString('de-DE', { maximumFractionDigits: 1 }),
+        label: heightNum(h),
         wave: h,
         source: 'Open-Meteo Marine (CC BY 4.0)',
         url: 'https://open-meteo.com/en/docs/marine-weather-api',

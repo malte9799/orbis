@@ -44,6 +44,8 @@ export interface AppOptions {
   area?: 'km2' | 'mi2' | 'acre' | 'ha';
   /** burned area */
   burned?: 'km2' | 'mi2' | 'acre' | 'ha';
+  /** heights, depths, wave heights (m / ft) */
+  height?: 'm' | 'ft';
   /** coordinates */
   coords?: 'dec' | 'gms';
   /** clock */
@@ -64,6 +66,7 @@ const APP_OPTION_DEFAULTS: AppOptions = {
   windDir: 'compass',
   pressure: 'hpa',
   dist: 'km',
+  height: 'm',
   area: 'km2',
   burned: 'km2',
   coords: 'dec',

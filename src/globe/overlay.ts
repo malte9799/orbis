@@ -2,7 +2,7 @@ import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import type { ModelSampler, ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
-import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum } from '../units';
+import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum, snowUnit, snowVal } from '../units';
 
 // ---------------------------------------------------------------------------
 // Forecast fields rendered as raster tiles through a custom protocol: the grid is
@@ -208,12 +208,12 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   snow: {
     label: 'Schneehöhe',
-    unit: 'cm',
+    get unit() { return snowUnit(); },
     variable: 'snow_depth',
     organic: { warp: 0.3, texture: 0.3 },
     color: ramp(SNOW_STOPS, 210, 0.01),
     legend: { stops: SNOW_STOPS, ticks: [0.01, 0.5, 1, 2, 3] },
-    format: (v) => fmt.num(v * 100, 0),
+    format: (v) => fmt.num(snowVal(v * 100), snowUnit() === 'in' ? 1 : 0),
   },
   precipmix: {
     label: 'Niederschlag',

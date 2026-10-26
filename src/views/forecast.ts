@@ -6,7 +6,7 @@ import { createForecastMap, type ForecastMap } from './fcmap';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { beaufort, escapeHtml, fmt, tempColor, toast } from '../util';
-import { opt, clockTxt, distTxt, precipSumTxt, pressureTxt, windDirTxt, windTxt } from '../units';
+import { hourTxt, is12, clockTxt, distTxt, heightTxt, opt, precipSumTxt, pressureTxt, windDirTxt, windTxt } from '../units';
 import { aqiLabel, describe, pollenLabel, uvLabel, weatherIcon } from '../weather';
 
 const CACHE_KEY = 'wg.fccache';
@@ -168,7 +168,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
           <div>
             <h1 class="place">${escapeHtml(current.name)}</h1>
             <div class="muted">${escapeHtml([current.region, current.country].filter(Boolean).join(', '))}
-              · ${localTime} Uhr Ortszeit · ${Math.round(f.elevation)} m ü. NN</div>
+              · ${is12() ? hourTxt(localTime) : `${localTime} Uhr`} Ortszeit · ${heightTxt(f.elevation)} ü. NN</div>
           </div>
           <div class="hero-actions">
             <button class="btn icon-btn ${isFav ? 'on' : ''}" data-act="fav" aria-pressed="${isFav}" title="${isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">

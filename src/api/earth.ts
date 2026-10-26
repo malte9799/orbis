@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { fetchJson } from '../util';
-import { acresTxt } from '../units';
+import { uTok } from '../units';
 import { fetchText, snapshotJson, snapshotText } from './data';
 
 // Earth & environment layers. All sources are free and keyless.
@@ -95,7 +95,7 @@ export async function loadGvpVolcanoes(): Promise<FeatureCollection<Point>> {
         const vn = p.Volcano_Number ?? p.VolcanoNumber;
         return point(f.geometry.coordinates[0], f.geometry.coordinates[1], {
           title: p.Volcano_Name ?? p.VolcanoName ?? 'Vulkan',
-          subtitle: [p.Primary_Volcano_Type, p.Country, p.Elevation != null ? `${p.Elevation} m` : ''].filter(Boolean).join(' · '),
+          subtitle: [p.Primary_Volcano_Type, p.Country, p.Elevation != null ? uTok('height', Number(p.Elevation)) : ''].filter(Boolean).join(' · '),
           description: Number.isFinite(last) ? `Letzter bekannter Ausbruch: ${last < 0 ? `${-last} v. Chr.` : last}` : 'Kein Ausbruch seit 1500 belegt',
           state: recent ? 'recent' : historic ? 'historic' : 'old',
           color: recent ? '#ff3d00' : historic ? '#ff9800' : '#9e8f80',
@@ -137,7 +137,7 @@ export async function loadFirePerimeters(): Promise<FeatureCollection<Geometry>>
           properties: {
             title: `${String(p.poly_IncidentName ?? 'Waldbrand').trim()} Fire`,
             subtitle: [
-              Number.isFinite(acres) ? acresTxt(acres, true, 0) : '',
+              Number.isFinite(acres) ? uTok('acres', acres, 0) : '',
               contained != null ? `${contained} % eingedämmt` : '',
               String(p.attr_POOState ?? '').replace('US-', ''),
             ]
@@ -246,7 +246,7 @@ async function loadBfs(): Promise<Feature<Point>[]> {
         color: doseColor(v),
         label: v.toFixed(2),
         title: `ODL-Messstelle ${p.name ?? ''}`.trim(),
-        subtitle: `${v.toLocaleString('de-DE', { maximumFractionDigits: 3 })} µSv/h · Stundenmittel${p.height_above_sea != null ? ` · ${p.height_above_sea} m ü. NN` : ''}`,
+        subtitle: `${v.toLocaleString('de-DE', { maximumFractionDigits: 3 })} µSv/h · Stundenmittel${p.height_above_sea != null ? ` · ${uTok('height', Number(p.height_above_sea))} ü. NN` : ''}`,
         date: p.end_measure ?? '',
         url: `https://odlinfo.bfs.de/ODL/DE/themen/wo-stehen-die-sonden/karte/karte_node.html`,
         source: 'Bundesamt für Strahlenschutz (ODL)',

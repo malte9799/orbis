@@ -3,7 +3,7 @@ import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satr
 import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
-import { distTxt, speedTxt } from '../units';
+import { distTxt, speedTxt, uTok } from '../units';
 
 // ---------------------------------------------------------------------------
 // Satellites – orbital elements from CelesTrak, positions computed in the browser (SGP4)
@@ -429,7 +429,7 @@ export async function loadSondes(): Promise<FeatureCollection<Point>> {
         // the label above the 3D model is the serial itself (like a callsign)
         callsign: s.serial,
         title: `Wetterballon ${s.serial}`,
-        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${fmt.num(s.alt, 0)} m · ${rising ? 'steigt' : falling ? 'fällt (Fallschirm)' : 'gelandet'}`,
+        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${uTok('height', s.alt)} · ${rising ? 'steigt' : falling ? 'fällt (Fallschirm)' : 'gelandet'}`,
         date: s.datetime,
         url: `https://sondehub.org/#!mt=Mapnik&f=${encodeURIComponent(s.serial)}&q=${encodeURIComponent(s.serial)}`,
         altM: Math.round(s.alt),

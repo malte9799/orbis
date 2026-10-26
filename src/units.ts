@@ -82,6 +82,20 @@ export const speedUnit = () => (opt('dist') === 'mi' ? 'mph' : opt('dist') === '
 export const speedVal = (kmh: number): number => (opt('dist') === 'mi' ? kmh * 0.621371 : opt('dist') === 'nmi' ? kmh / 1.852 : kmh);
 export const speedTxt = (kmh: number, digits = 0): string => `${num(speedVal(kmh), digits)} ${speedUnit()}`;
 
+// ---- Höhe / Tiefe / Wellenhöhe (m ↔ ft) -----------------------------------------------
+export const heightUnit = () => (opt('height') === 'ft' ? 'ft' : 'm');
+export const heightVal = (m: number): number => (opt('height') === 'ft' ? m * 3.28084 : m);
+export const heightTxt = (m: number, digits = 0): string => `${num(heightVal(m), digits)} ${heightUnit()}`;
+/** Zahl ohne Einheit (Karten-Labels) */
+export const heightNum = (m: number, digits = 1): string => num(heightVal(m), opt('height') === 'ft' ? Math.max(0, digits - 1) : digits);
+/** Steig-/Sinkrate [m/s] → m/s bzw. ft/min (Luftfahrt) */
+export const climbUnit = () => (opt('height') === 'ft' ? 'ft/min' : 'm/s');
+export const climbVal = (ms: number): number => (opt('height') === 'ft' ? ms * 196.8504 : ms);
+export const climbTxt = (ms: number, digits = 1): string => `${num(climbVal(ms), opt('height') === 'ft' ? 0 : digits)} ${climbUnit()}`;
+/** Schneehöhe [cm] → cm bzw. in */
+export const snowUnit = () => (opt('height') === 'ft' ? 'in' : 'cm');
+export const snowVal = (cm: number): number => (opt('height') === 'ft' ? cm / 2.54 : cm);
+
 // ---- Fläche -------------------------------------------------------------------------
 export type AreaOpt = NonNullable<AppOptions['area']>;
 const AREA_UNIT: Record<AreaOpt, string> = { km2: 'km²', mi2: 'mi²', acre: 'Acre', ha: 'Hektar' };
@@ -139,3 +153,61 @@ export function hourTxt(hhmm: string): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
+
+// ---- Einheiten-Tokens in vorgefertigten Texten ---------------------------------------
+// Texte, die beim Laden einer Ebene entstehen (Popup-Untertitel), tragen den Rohwert als Token
+// und werden erst beim Anzeigen aufgelöst – so folgen sie der Einstellung ohne Neuladen.
+type TokKind = 'level' | 'temp' | 'wind' | 'speed' | 'press' | 'dist' | 'height' | 'climb' | 'rain' | 'area' | 'acres';
+const TOK: Record<TokKind, (v: number, d?: number) => string> = {
+  temp: (v, d) => tempTxt(v, d),
+  wind: (v, d) => windTxt(v, d),
+  speed: (v, d) => speedTxt(v, d),
+  press: (v, d) => pressureTxt(v, d),
+  dist: (v, d) => distTxt(v, d),
+  height: (v, d) => heightTxt(v, d),
+  climb: (v, d) => climbTxt(v, d),
+  rain: (v, d) => rainTxt(v, d),
+  area: (v, d) => areaTxt(v, false, d),
+  acres: (v, d) => acresTxt(v, true, d),
+  level: (v) => (opt('height') === 'ft' ? `${num(v / 30.48, 1)} ft` : `${num(v, 0)} cm`),
+};
+/** `uTok('wind', 54)` → Platzhalter, den `resolveUnits` beim Anzeigen ersetzt */
+export const uTok = (kind: TokKind, value: number, digits?: number): string => `[[u:${kind}:${value}${digits == null ? '' : `:${digits}`}]]`;
+export const resolveUnits = (text: string): string =>
+  text.includes('[[u:')
+    ? text.replace(/\[\[u:(\w+):(-?[\d.eE+-]+)(?::(\d))?\]\]/g, (m, k: TokKind, v: string, d?: string) => (TOK[k] ? TOK[k](Number(v), d == null ? undefined : Number(d)) : m))
+    : text;
+
+// ---- Freitext mit festen Einheiten (Weltraum-Steckbriefe u. ä.) -----------------------------
+const NUM = '[−+-]?\\d{1,3}(?:[  ]\\d{3})+(?:,\\d+)?|[−+-]?\\d+(?:,\\d+)?';
+const TEXT_UNIT_RE = new RegExp(`((?:${NUM})(?:\\s*(?:×|bis|–)\\s*(?:${NUM}))*)\\s?(km²|km/h|km|°C|m)(?![\\w/²])`, 'g');
+const parseDe = (s: string) => Number(s.replace(/[  ]/g, '').replace(',', '.').replace('−', '-'));
+const fmtDe = (v: number): string => {
+  const a = Math.abs(v);
+  const digits = a >= 100 ? 0 : a >= 10 ? 1 : 2;
+  return v.toLocaleString(de, { maximumFractionDigits: digits }).replace(/\./g, ' ').replace('-', '−');
+};
+/** wandelt "12 742 km", "−173 bis +427 °C", "34 × 11 × 11 km" nach Einstellung um (Standard: unverändert) */
+export function localizeText(text: string): string {
+  return text.replace(TEXT_UNIT_RE, (all, nums: string, unit: string) => {
+    let f: (v: number) => number;
+    let u: string;
+    switch (unit) {
+      case 'km': f = distVal; u = distUnit(); break;
+      case 'km/h': f = speedVal; u = speedUnit(); break;
+      case 'km²': f = (v) => areaVal(v); u = areaUnit(); break;
+      case '°C': f = tempVal; u = tempUnit(); break;
+      default: f = heightVal; u = heightUnit();
+    }
+    if (u === unit) return all;
+    const out = nums.replace(new RegExp(NUM, 'g'), (n) => {
+      const sign = /^\+/.test(n) ? '+' : '';
+      return sign + fmtDe(f(parseDe(n)));
+    });
+    return `${out} ${u}`;
+  });
+}
+
+/** "1.200 m (3.937 ft)" – gewählte Einheit zuerst, die andere in Klammern */
+export const heightBoth = (m: number): string =>
+  opt('height') === 'ft' ? `${num(m * 3.28084, 0)} ft (${num(m, 0)} m)` : `${num(m, 0)} m (${num(m * 3.28084, 0)} ft)`;
