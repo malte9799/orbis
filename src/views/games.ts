@@ -203,7 +203,7 @@ function previewHtml(id: string): string {
   return `<div class="gm-pv"><img alt="" loading="lazy" src="${DATA}previews/${id}.svg" /></div>`;
 }
 
-/** little picture per menu option (viewBox 160×100): see .gm-opt-pv in style.css for the colour classes */
+/** little picture per menu option (viewBox 160×100): see .gm-opt-pv in styles/110-games.css for the colour classes */
 const BLOB_A = 'M14 62L30 36L58 28L84 40L78 64L46 74Z';
 const BLOB_B = 'M92 30L128 24L146 44L130 70L100 62Z';
 const PIN = 'M0 12C-10-2-10-16 0-16S10-2 0 12Z';
