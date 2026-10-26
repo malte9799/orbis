@@ -53,6 +53,8 @@ export interface ExtraCtx {
   every(key: string, ms: number, fn: () => void): void;
   clear(key: string): void;
   toast(msg: string): void;
+  /** the style is loaded and the layers exist */
+  readonly ready: boolean;
   /** opens the launch panel (set by the page that hosts the map) */
   readonly openLaunch?: (l: Launch, lng: number, lat: number) => void;
   /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
