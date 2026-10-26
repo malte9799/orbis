@@ -241,6 +241,7 @@ export class FlightPanel {
       ['Mode-S (Hex)', escapeHtml(i.hex.toUpperCase())],
     ];
     if (spec?.mfr) planeRows.splice(1, 0, ['Hersteller', escapeHtml(spec.mfr)]);
+    if (i.mil) planeRows.unshift(['Einordnung', '<b>Militär</b>']);
 
     // Technische Daten & Spezifikationen (für Flugzeug-Enthusiasten)
     let techCat = '';
@@ -271,6 +272,7 @@ export class FlightPanel {
       ['Längengrad', fmt.num(i.lon, 3)],
       ['Höhe (baro)', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m (${fmt.num(Math.round(i.altM / 0.3048))} ft)`],
       ['Squawk', escapeHtml(i.squawk || '–')],
+      ['Navigation (NIC / NACp)', i.nic == null && i.nacp == null ? '–' : `${i.nic ?? '–'} / ${i.nacp ?? '–'}${(i.nacp != null && i.nacp < 8) || (i.nic != null && i.nic < 7 && !(i.nic === 0 && i.nacp != null && i.nacp >= 10)) ? ' <span class="warn">ungenau</span>' : ''}`],
       ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner'],
     ];
     const posCat = category('position', 'Position und Signal', posRows, this.open_);

@@ -110,7 +110,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
-| [adsb.lol](https://adsb.lol) | Flugzeuge live (ab Zoom 5), 1. Wahl | 🟢 🌐 |
+| [adsb.lol](https://adsb.lol) | Flugzeuge live (ab Zoom 5), 1. Wahl; Militärflugzeuge weltweit (`/v2/mil`, auch in der Weltübersicht, Filter „Nur Militär“); GPS-Störungen aus der gemeldeten Navigationsgenauigkeit (NIC/NACp, `gpsOkBefore`) – Zellen-Methode nach [gpsjam.org](https://gpsjam.org), Schwellen nach God's Eye View | 🟢 ODbL, 🌐 |
 | [adsb.fi](https://adsb.fi) · [OpenData](https://opendata.adsb.fi) | Flugzeuge live, Rückfall | 🟢 🌐 |
 | [OpenSky Network](https://opensky-network.org) | Flugzeuge (Weltübersicht alle 2 min), Flughafen-Abflüge/-Ankünfte vom Vortag | 🟢 🌐 |
 | [adsbdb](https://www.adsbdb.com) | Route (Start-/Zielflughafen) des gewählten Flugzeugs nach Callsign: gestrichelte Prognoselinie und Seitenleiste; Community-Daten, kein Flugplan | 🟢 🌐 |
