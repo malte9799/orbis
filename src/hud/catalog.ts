@@ -1,7 +1,6 @@
 import { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU, type TrafficCat, type WxFamily, type WxMenuItem } from './menus';
-import type { ExtraId } from '../globe/extras';
 import { EXTRAS, type CatId } from '../globe/layers';
-import type { EventKind } from '../api/events';
+import { GROUPS, LINKED_EXTRA_IDS } from '../globe/events';
 import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
 
 export { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU };
@@ -9,25 +8,6 @@ export type { TrafficCat, WxFamily, WxMenuItem };
 
 // What can be put on a Karte: weather main layers, overlay layers (extras + event groups) in flat
 // categories, and the base maps. Pure data – no map access.
-
-export type GroupId = 'fires' | 'hotspots' | 'storms' | 'tornado' | 'quakes' | 'volcanoes' | 'floods' | 'ice';
-export type FeedId = 'eonet' | 'gdacs' | 'usgs' | 'emsc' | 'nws' | 'spc' | 'firms';
-
-export const GROUPS: { id: GroupId; label: string; hint: string; icon: EventKind; feeds: FeedId[] }[] = [
-  { id: 'fires', label: 'Waldbrände', hint: 'NASA EONET, GDACS', icon: 'fire', feeds: ['eonet', 'gdacs'] },
-  { id: 'hotspots', label: 'Feuer-Hotspots', hint: 'NASA FIRMS Satellit (VIIRS)', icon: 'heat', feeds: [] },
-  { id: 'storms', label: 'Stürme & Zyklone', hint: 'mit Zugbahnen – EONET, GDACS', icon: 'storm', feeds: ['eonet', 'gdacs'] },
-  { id: 'tornado', label: 'Tornados & Unwetter (USA)', hint: 'NWS-Warnungen, SPC-Meldungen', icon: 'tornado', feeds: ['nws', 'spc'] },
-  { id: 'quakes', label: 'Erdbeben', hint: '7 Tage – Europa ab M1.5 (EMSC), weltweit ab M2.5 (USGS)', icon: 'quake', feeds: ['usgs', 'emsc'] },
-  { id: 'volcanoes', label: 'Vulkane', hint: 'aktive Ausbrüche (EONET, GDACS) und alle ~1.300 Vulkane (Smithsonian GVP)', icon: 'volcano', feeds: ['eonet', 'gdacs'] },
-  { id: 'floods', label: 'Fluten, Dürren & Erdrutsche', hint: 'GDACS, EONET', icon: 'flood', feeds: ['eonet', 'gdacs'] },
-  { id: 'ice', label: 'Eis, Schnee, Staub & Hitze', hint: 'Eisberge, Sandstürme – EONET', icon: 'ice', feeds: ['eonet'] },
-];
-
-/** event groups that also switch an extra layer (one entry in the UI instead of two) */
-export const LINKED_EXTRA: Partial<Record<GroupId, ExtraId>> = { fires: 'fireareas', volcanoes: 'gvp' };
-/** groups that are switched together with another one */
-export const LINKED_GROUP: Partial<Record<GroupId, GroupId>> = { fires: 'hotspots' };
 
 // ---------------------------------------------------------------------------
 // Weather main layers (at most one per Karte)
@@ -79,33 +59,14 @@ export interface CatalogEntry {
   region?: string;
 }
 
-/** category of the event groups (the extras carry their own `cat` in globe/layers/defs) */
-const GROUP_CAT: Record<GroupId, CatId> = {
-  fires: 'gefahr', hotspots: 'gefahr', storms: 'gefahr', tornado: 'gefahr', quakes: 'gefahr', volcanoes: 'gefahr', floods: 'gefahr', ice: 'gefahr',
-};
-const GROUP_ICON: Record<string, string> = {
-  fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
-};
-const GROUP_COLOR: Record<string, string> = { fires: '#ff5722', storms: '#7c8cff', tornado: '#b07cff', quakes: '#ffb547', volcanoes: '#ff7043', floods: '#3d9ad1', ice: '#9ec5e8' };
-const GROUP_LABEL: Record<string, [string, string]> = {
-  fires: ['Feuer', 'Waldbrände, Satelliten-Hotspots und Brandflächen USA'],
-  storms: ['Stürme & Zyklone', 'mit Zugbahnen – EONET, GDACS'],
-  tornado: ['Tornados & Unwetter', 'NWS-Warnungen, SPC-Meldungen'],
-  quakes: ['Erdbeben', '7 Tage – Europa ab M1.5, weltweit ab M2.5'],
-  volcanoes: ['Vulkane', 'aktive Ausbrüche und alle ~1.300 Vulkane'],
-  floods: ['Fluten & Dürren', 'GDACS, EONET'],
-  ice: ['Eis, Staub & Hitze', 'Eisberge, Sandstürme – EONET'],
-};
-const GROUP_REGION: Record<string, string> = { tornado: 'USA' };
-
-const HIDDEN_EXTRAS = new Set<string>(Object.values(LINKED_EXTRA));
+const HIDDEN_EXTRAS = LINKED_EXTRA_IDS;
 
 export const CATALOG: CatalogEntry[] = [
   ...EXTRAS.filter((d) => !HIDDEN_EXTRAS.has(d.id)).map<CatalogEntry>((d) => ({
     id: d.id, kind: 'extra', label: d.label, hint: d.hint, cat: d.cat, icon: d.icon, color: d.color, region: d.region,
   })),
-  ...GROUPS.filter((g) => g.id !== 'hotspots').map<CatalogEntry>((g) => ({
-    id: g.id, kind: 'group', label: GROUP_LABEL[g.id][0], hint: GROUP_LABEL[g.id][1], cat: GROUP_CAT[g.id], icon: GROUP_ICON[g.id], color: GROUP_COLOR[g.id], region: GROUP_REGION[g.id],
+  ...GROUPS.filter((g) => g.catalog).map<CatalogEntry>((g) => ({
+    id: g.id, kind: 'group', label: g.catalog!.label, hint: g.catalog!.hint, cat: g.catalog!.cat, icon: g.catalog!.icon, color: g.catalog!.color, region: g.catalog!.region,
   })),
 ];
 export const catalogOf = (id: string) => CATALOG.find((c) => c.id === id);
