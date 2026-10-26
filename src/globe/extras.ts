@@ -310,6 +310,8 @@ export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'g
 const CAM_DETAIL_ZOOM = 9;
 /** camera dots appear from this zoom on; below it the heatmap shows the distribution */
 const CAM_DOT_ZOOM = 6;
+/** the overview dots/halo (not clickable) end here – above it only the live camera dots are drawn, otherwise every camera shows twice */
+const CAM_OVERVIEW_MAXZOOM = 14;
 const CAM_COLOR = '#00bfa5';
 const CAM_ZOOM_RED = '#e53935';
 const ALPR_RED = '#ef4444';
@@ -3258,6 +3260,7 @@ export class ExtraLayers {
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
+        maxzoom: CAM_OVERVIEW_MAXZOOM,
         paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 8, CAM_DETAIL_ZOOM, 9, 14, 7], 'circle-blur': 1, 'circle-opacity': 0.25 },
       },
       before,
@@ -3285,6 +3288,7 @@ export class ExtraLayers {
         type: 'circle',
         source: 'webcams-world',
         minzoom: CAM_DOT_ZOOM,
+        maxzoom: CAM_OVERVIEW_MAXZOOM,
         paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
       },
       before,
