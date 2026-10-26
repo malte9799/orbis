@@ -1,0 +1,151 @@
+/* ---------- Buttons & inputs ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.btn:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn.small {
+  height: 32px;
+  font-size: 0.85rem;
+  padding: 0 10px;
+}
+
+.btn.wide {
+  width: 100%;
+}
+
+.btn svg,
+.ctl-ic {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn.icon-btn {
+  width: 40px;
+  padding: 0;
+  flex: none;
+}
+
+.btn.icon-btn.on svg {
+  fill: #ffc533;
+  stroke: #ffc533;
+}
+
+.search {
+  position: relative;
+  flex: 1;
+}
+
+.search input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px 0 40px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(16, 22, 44, 0.85);
+  color: var(--text);
+  font: inherit;
+  backdrop-filter: blur(10px);
+}
+
+.search input::placeholder {
+  color: var(--muted);
+}
+
+.search-icon {
+  position: absolute;
+  left: 13px;
+  top: 12px;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.suggestions {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: 48px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.suggestions li {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.suggestions li.active,
+.suggestions li:hover {
+  background: rgba(91, 157, 255, 0.18);
+}
+
+.suggestions li.empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+.s-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.chip {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chip.on {
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(91, 157, 255, 0.16);
+}

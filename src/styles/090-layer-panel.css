@@ -1,0 +1,137 @@
+/* ---------- Layer panel v2: tabs + tiles ---------- */
+.globe-view .panel {
+  bottom: 118px;
+  padding-top: 8px;
+}
+
+.ptabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 10px 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ptab {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: flex-grow 0.18s ease, background 0.15s;
+}
+
+.ptab svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ptab:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ptab.on {
+  flex-grow: 2.6;
+  background: var(--accent);
+  color: #fff;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.tile-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ltile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 62px;
+  padding: 8px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ltile:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.ltile.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.18);
+  color: var(--text);
+}
+
+.ltile .swatch {
+  width: 26px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.seg-chip {
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.seg-chip.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.22);
+  color: var(--text);
+}
+
+.seg-chip.toggle::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  vertical-align: 0;
+}
+
+.seg-chip.toggle.on::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
