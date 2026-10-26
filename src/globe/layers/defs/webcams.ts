@@ -201,7 +201,7 @@ export default defineExtra({
   section: 'cams',
   cat: 'medien',
   label: 'Live-Webcams',
-  hint: 'Livestreams (weiß umrandet): Kalifornien, Delaware, Norwegen · London, New York, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks',
+  hint: 'Livestreams (weiß umrandet): Kalifornien, Delaware, Norwegen · London, New York, Austin, Washington State, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks',
   glyph: 'webcam',
   icon: 'cam',
   color: '#00bfa5',

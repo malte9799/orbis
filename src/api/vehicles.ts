@@ -305,6 +305,31 @@ export const FEEDS: VehicleFeed[] = [
     },
   },
   {
+    // Metro Transit (Metropolitan Council), Minneapolis–St Paul: buses, light rail on routes 901/902
+    id: 'metrotransit',
+    label: 'Metro Transit (Minneapolis–St Paul)',
+    bbox: [-93.8, 44.6, -92.8, 45.3],
+    every: 30,
+    async load() {
+      const list = await gtfsRt('https://svc.metrotransit.org/mtgtfs/vehiclepositions.pb', 'BUS');
+      return list.map((v) => (/^90[12]\b/.test(v.name) ? { ...v, mode: 'TRAM' } : v));
+    },
+  },
+  {
+    // CapMetro, Austin TX (open data on data.texas.gov): buses, MetroRail on route 550
+    id: 'capmetro',
+    label: 'CapMetro (Austin)',
+    bbox: [-98.1, 30.0, -97.4, 30.7],
+    every: 30,
+    async load() {
+      // the download URL redirects without CORS headers to a file id that changes with every update;
+      // the dataset metadata (with CORS) names the current file
+      const view = await fetchJson<{ blobId: string }>('https://data.texas.gov/api/views/eiei-9rpf.json', undefined, 15000);
+      const list = await gtfsRt(`https://data.texas.gov/api/views/eiei-9rpf/files/${encodeURIComponent(view.blobId)}?filename=vehiclepositions.pb`, 'BUS');
+      return list.map((v) => (/^550\b/.test(v.name) ? { ...v, mode: 'REGIONAL_RAIL' } : v));
+    },
+  },
+  {
     id: 'victoria',
     label: 'Transport Victoria (Melbourne)',
     bbox: [140.9, -39.2, 150.0, -33.9],

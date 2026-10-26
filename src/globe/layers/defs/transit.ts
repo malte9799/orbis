@@ -7,7 +7,7 @@ export default defineExtra({
   section: 'infra',
   cat: 'verkehr',
   label: 'Busse, Trams & U-Bahn',
-  hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden',
+  hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Minneapolis, Austin, Malaysia, optional Melbourne, Chicago, Schweden',
   glyph: 'train',
   icon: 'bus',
   color: '#ab47bc',

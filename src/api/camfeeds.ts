@@ -198,6 +198,68 @@ export const CAM_FEEDS: CamFeed[] = [
     },
   },
   {
+    // City of Austin traffic cameras (Socrata): only cameras that are switched on
+    id: 'austin',
+    label: 'City of Austin (Texas)',
+    bbox: [-98.1, 30.0, -97.5, 30.6],
+    async load() {
+      const list = await fetchJson<{ camera_id: string; location_name?: string; screenshot_address?: string; location?: { coordinates: number[] } }[]>(
+        'https://data.austintexas.gov/resource/b4k4-adkb.json?camera_status=TURNED_ON&$limit=5000&$select=camera_id,location_name,screenshot_address,location',
+        undefined,
+        30000,
+      );
+      return list.flatMap((c) => {
+        const [lon, lat] = c.location?.coordinates ?? [];
+        const image = https(c.screenshot_address);
+        if (!ok(lon, lat) || !image) return [];
+        return [cam(lon, lat, { id: `austin-${c.camera_id}`, title: (c.location_name ?? '').trim() || `Kamera ${c.camera_id}`, subtitle: 'Verkehrskamera Austin', image, url: image, source: 'City of Austin Open Data' })];
+      });
+    },
+  },
+  {
+    // WSDOT: all highway cameras of Washington State (plus a few of neighbouring operators); Esri JSON in Web Mercator
+    id: 'wsdot',
+    label: 'WSDOT (Washington State)',
+    bbox: [-124.9, 45.5, -116.9, 49.1],
+    async load() {
+      const j = await fetchJson<{ features: { attributes: { CameraID: number; CompassDirection?: string; CameraTitle?: string; ImageURL?: string }; geometry?: { x: number; y: number } }[] }>(
+        'https://data.wsdot.wa.gov/travelcenter/Cameras.json',
+        undefined,
+        30000,
+      );
+      const R = 6378137;
+      return j.features.flatMap(({ attributes: a, geometry: g }) => {
+        if (!g) return [];
+        const lon = (g.x / R) * (180 / Math.PI);
+        const lat = (2 * Math.atan(Math.exp(g.y / R)) - Math.PI / 2) * (180 / Math.PI);
+        const image = https(a.ImageURL);
+        if (!ok(lon, lat) || !image) return [];
+        // B: both directions, O: other – no single viewing direction
+        return [cam(lon, lat, { id: `wsdot-${a.CameraID}`, title: a.CameraTitle ?? `Kamera ${a.CameraID}`, subtitle: 'Verkehrskamera WSDOT', image, url: image, dir: directionToHeading(a.CompassDirection, true), source: 'Washington State DOT' })];
+      });
+    },
+  },
+  {
+    // King County Road Services (unincorporated King County, WA); image URLs come as http – the host serves https too
+    id: 'kingcounty',
+    label: 'King County (Washington)',
+    bbox: [-122.6, 47.0, -121.0, 47.8],
+    async load() {
+      const fc = await fetchJson<{ features: { geometry?: { coordinates: number[] } | null; properties: { AssetID: number; Location?: string; ImageURL?: string; CurrentStatus?: string } }[] }>(
+        'https://services.arcgis.com/Ej0PsM5Aw677QF1W/arcgis/rest/services/TRAFFICCAMERA_POINT_2029/FeatureServer/0/query?where=1%3D1&outFields=AssetID,Location,ImageURL,CurrentStatus&f=geojson',
+        undefined,
+        30000,
+      );
+      return fc.features.flatMap((f) => {
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        const p = f.properties;
+        const image = https((p.ImageURL ?? '').trim().replace(/^http:\/\//, 'https://'));
+        if (!ok(lon, lat) || !image || (p.CurrentStatus && p.CurrentStatus !== 'Active')) return [];
+        return [cam(lon, lat, { id: `kc-${p.AssetID}`, title: p.Location ?? `Kamera ${p.AssetID}`, subtitle: 'Verkehrskamera King County', image, url: image, source: 'King County Road Services' })];
+      });
+    },
+  },
+  {
     id: 'nyc',
     label: 'NYC DOT (New York)',
     bbox: [-74.3, 40.48, -73.68, 40.93],
@@ -437,7 +499,7 @@ export const CAM_FEEDS: CamFeed[] = [
 ];
 
 /** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML); images always live. */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen']);
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen', 'austin', 'wsdot', 'kingcounty']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();

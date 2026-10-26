@@ -37,6 +37,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | Luftqualität & Pollen (Copernicus CAMS) | 🟢 Pflichtsatz „Generated using Copernicus Atmosphere Monitoring Service information“ |
 | [Copernicus Atmosphere Monitoring Service](https://atmosphere.copernicus.eu) | Datengrundlage für Luftqualität & Pollen | 🟢 |
 | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | Ortssuche | 🟢 |
+| [Photon](https://photon.komoot.io) (komoot, OpenStreetMap) | Suche nach Adressen, Straßen und Sehenswürdigkeiten, ergänzend zur Ortssuche | 🟢 ODbL, Fair Use |
 | [BigDataCloud](https://www.bigdatacloud.com/free-api/free-reverse-geocode-to-city-api) | Ortsname zum **eigenen** Standort (Reverse-Geocoding) – laut Fair-Use-Regel nur für den Gerätestandort erlaubt | 🟢 |
 | [Nominatim](https://nominatim.org) (OpenStreetMap) | Ortsname zu einem Kartenklick | 🟢 ODbL, max. 1 Anfrage/s |
 | [Bright Sky](https://brightsky.dev) (Deutscher Wetterdienst) | Amtliche Unwetterwarnungen Deutschland | 🟢 |
@@ -136,6 +137,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Entur](https://developer.entur.org) | Nahverkehr & Bahn Norwegen | 🟢 NLOD |
 | [MBTA](https://api-v3.mbta.com) | Boston | 🟢 |
 | [SEPTA](https://www3.septa.org) | Philadelphia | 🟢 |
+| [Metro Transit](https://svc.metrotransit.org) (GTFS-RT) | Minneapolis–St Paul, Busse und Stadtbahn | 🟢 |
+| [CapMetro](https://data.texas.gov/d/eiei-9rpf) (GTFS-RT, data.texas.gov) | Austin, Busse und MetroRail | 🟢 |
 | [TTC via umoiq](https://retro.umoiq.com) | Toronto | 🟢 |
 | [data.gov.my – GTFS-Realtime](https://api.data.gov.my) | Malaysia | 🟢 |
 | [Transport Victoria](https://opendata.transport.vic.gov.au) | Melbourne/Victoria | 🔑 |
@@ -163,6 +166,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Windy Webcams](https://api.windy.com/webcams) | Weltweite Webcams | 🔑 |
 | [TfL](https://api.tfl.gov.uk) | London (inkl. Videoclips) | 🟢 |
 | [NYC DOT](https://webcams.nyctmc.org) | New York | 🟢 |
+| [City of Austin](https://data.austintexas.gov/d/b4k4-adkb) | Austin, ~820 Verkehrskameras | 🟢 |
+| [WSDOT](https://data.wsdot.wa.gov) | Washington State, ~1.700 Autobahnkameras (mit Blickrichtung) | 🟢 |
+| [King County Road Services](https://kingcounty.gov/roads) | Straßenkameras King County (WA) | 🟢 |
 | [DDOT / DC GIS](https://maps2.dcgis.dc.gov) | Washington D.C. | 🟢 |
 | [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien – rund 2.200 Kameras mit Livestream (HLS) im Popup | 🟢 |
 

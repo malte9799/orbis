@@ -43,10 +43,10 @@ Alle keylos, alle als Feed in `cams.ts`. Kamerabilder ohne CORS laufen ohnehin a
 
 | Quelle | Gebiet | Katalog | Hinweis |
 |---|---|---|---|
-| WSDOT `data.wsdot.wa.gov` | Washington | D | |
-| King County (ArcGIS) | King County WA | B | |
+| ✅ WSDOT `data.wsdot.wa.gov` | Washington | D | |
+| ✅ King County (ArcGIS) | King County WA | B | |
 | TxDOT ITS | Texas | P | Bild kommt als Base64 in JSON → im Worker oder Client dekodieren |
-| City of Austin Open Data | Austin | B (Socrata) | |
+| ✅ City of Austin Open Data | Austin | B (Socrata) | |
 | ✅ Statens vegvesen | Norwegen | B | Standbilder + HLS; NLOD |
 | Servei Català de Trànsit `cameres.xml` | Katalonien | D | GML parsen |
 | Tarktee (DATEX2) + Tallinn ristmikud | Estland | D | Bild-URLs rotieren → alle 15 min erneuern |
@@ -70,7 +70,7 @@ die CC0-Kameramodell-Daten (`cctv-database.com`) können ins Kamera-Popup.
 | Mapillary | Straßenfotos als Ebene (Abdeckungslinien + Viewer) | B, 🔑 Token schon vorhanden | Vektorkacheln + MapillaryJS im Seitenpanel; Code aus `streetguess.ts` wiederverwenden |
 | Panoramax · KartaView | freie Straßenfotos | B/P | gleiches Panel wie Mapillary; Panoramax hat Vektorkacheln + STAC |
 | OSRM (FOSSGIS) | Routen zwischen zwei Kartenpunkten | B | Nutzungsregeln beachten (max. 1 Anfrage/s, kein Massenabruf) |
-| Photon (komoot) | Adress-/POI-Suche ergänzend zur Open-Meteo-Ortssuche | B | in `search.ts` als zweite Stufe |
+| ✅ Photon (komoot) | Adress-/POI-Suche ergänzend zur Open-Meteo-Ortssuche | B | in `search.ts` als zweite Stufe |
 | TomTom Traffic Flow | Live-Verkehrsfluss weltweit | B, 🔑 BYOK | neuer Schlüssel unter `src/settings/keys/tomtom.ts`, Raster-/Vektorkacheln |
 | GDELT DOC 2.0 | Nachrichten zum Ort im Klick-Panel | B/P | Google News RSS **nicht** übernehmen (Nutzungsbedingungen) |
 | NOAA GFS / ECMWF Open Data | Windmodell-Alternative | D | GRIB2 dekodieren → im `data`-Branch als PNG-Vektorfeld ablegen; nur sinnvoll, wenn Open-Meteos 10 000/Tag-Limit drückt |
