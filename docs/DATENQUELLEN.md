@@ -44,6 +44,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NWS – api.weather.gov](https://www.weather.gov/documentation/services-web-api) | Unwetterwarnungen USA, Tornado-/Unwetterwarnungen auf der Karte | 🟢 gemeinfrei |
 | [NOAA Storm Prediction Center](https://www.spc.noaa.gov/climo/reports/) | Tornado-Meldungen USA | 🟢 gemeinfrei |
 | [OpenWeatherMap](https://openweathermap.org) | Zusätzliche hochauflösende Wetterkarten | 🔑 |
+| [ECCC MSC GeoMet – OGC API](https://api.weather.gc.ca) (`aqhi-observations-realtime`) | Luftqualität Kanada: Air Quality Health Index von ~120 Messstationen, stündlich | 🟢 Open Government Licence – Canada |
 
 ## 2. Radar & Satellit
 
@@ -59,6 +60,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [DWD WMS](https://maps.dwd.de) | Radar-Nowcast Deutschland (WN-Produkt, 2 h) | 🟢 CC BY 4.0 |
 | [DWD Open Data – RV-Komposit](https://opendata.dwd.de/weather/radar/composite/rv/) | Rohraster 1 km, 5 min, Analyse + 120 min Nowcast (HDF5); geprüfte Quellen siehe [RADAR-QUELLEN.md](RADAR-QUELLEN.md) | 🟢 CC BY 4.0 |
 | [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot (Wolken) und Konvektions-RGB (Gewitter) – WMS; **expliziter `TIME`-Parameter nötig**, sonst rendert der Server je Tile einen anderen Scan und die Zoomstufen passen nicht zusammen (IR-Komposit: 3-stündlich, ~2 h Verarbeitungslatenz; Konvektions-RGB: 15 min, ~20 min) | 🟢 |
+| [NOAA nowCOAST](https://nowcoast.noaa.gov) – Satellit (`goes_longwave_imagery`) | Wolken Amerika: GOES-19/18-Infrarot, alle 5 min, ~2 km | 🟢 gemeinfrei |
+| [NOAA nowCOAST](https://nowcoast.noaa.gov) – Blitze (`ldn_lightning_strike_density`) | Blitzdichte der letzten 15 min, ~8 km, Amerika und Pazifik (aus Vaisala NLDN/GLD360, als NOAA-Produkt weitergebbar) | 🟢 |
 | [NASA GPM IMERG](https://gpm.nasa.gov/data/imerg) (über GIBS) | Niederschlag aus Satellitendaten | 🟢 |
 | [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs) | Tagesbild (VIIRS), Nachtlichter (Black Marble), Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole, Chlorophyll, Meerestemperatur (GHRSST MUR), Meereis (AMSR2) | 🟢 |
 
@@ -70,6 +73,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NASA EONET](https://eonet.gsfc.nasa.gov) | Naturereignisse: Waldbrände, Stürme, Vulkane, Fluten, Dürren, Eis | 🟢 |
 | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) | Feuer-Hotspots (Raster bzw. anklickbare Punkte) | 🔑 `FIRMS_MAP_KEY`, 📦 |
 | [GDACS](https://www.gdacs.org) | Weltweite Katastrophenwarnungen (Zyklone, Fluten …) | 🟢 |
+| [NOAA NHC / CPHC](https://www.nhc.noaa.gov) ([Tropical Weather Summary MapServer](https://mapservices.weather.noaa.gov/tropical/rest/services/tropical/NHC_tropical_weather_summary/MapServer)) | Hurrikane im Atlantik und Nordpazifik: Prognosepunkte, -pfad und Unsicherheitskegel des letzten Berichts, bisheriger Zugweg | 🟢 gemeinfrei |
 | [USGS Earthquake Hazards](https://earthquake.usgs.gov/earthquakes/feed/) | Erdbeben weltweit ab M 2,5 | 🟢 gemeinfrei |
 | [EMSC / SeismicPortal](https://www.seismicportal.eu) · [EMSC](https://www.emsc-csem.org) | Erdbeben Europa ab M 1,5 | 🟢 |
 | [NOAA Tsunami Warning Centers](https://www.tsunami.gov) | Tsunami-Meldungen (7 Tage) | 🟢 📦 |

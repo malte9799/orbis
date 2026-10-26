@@ -33,7 +33,7 @@ NYC DOT, Caltrans, Ontario 511, Hong Kong, MBTA, TTC, Entur.
 | ✅ adsb.lol `/v2/mil` | Militärflugzeuge weltweit | P | Filter/Hervorhebung in `aircraft.ts` + `shared/air.ts`; Flag `military` im Flugzeug-Panel |
 | ✅ adsb.lol `/v2/point` (NIC/NACp) | **GNSS-Störungen** (GPS-Jamming): Flugzeuge mit schlechter Positionsintegrität, aggregiert auf Hex-Raster | P | neue Ebene `gnss.ts`; Raster clientseitig aus den ohnehin geladenen Flugzeugen bilden – kein zusätzlicher Abruf nötig, wenn `nic`/`nac_p` schon mitkommen |
 | adsbdb `/v0/aircraft/{hex}` | Typ, Modell, Kennzeichen | P | in `route.ts` neben `callsign`; Drosselung wie GEV (max. 4 parallel, je Hex 1× pro Sitzung) |
-| NOAA NHC `CurrentStorms.json` + Tropical-MapServer | Hurrikan-Positionen, Prognosepfade, Unsicherheitskegel (Atlantik/Pazifik) | B/P | Event-Feed `src/globe/events/feeds/nhc.ts` + Ebene `cyclones.ts` (Kegel als Fläche); ergänzt GDACS |
+| ✅ NOAA NHC Tropical-MapServer (ohne `CurrentStorms.json`) | Hurrikan-Positionen, Prognosepfade, Unsicherheitskegel (Atlantik/Pazifik) | B/P | Event-Feed `src/globe/events/feeds/nhc.ts` + Ebene `cyclones.ts` (Kegel als Fläche); ergänzt GDACS |
 | GBFS (Lyft, BCycle, PBSC/Bicing/BiciMAD/Bike Itaú, nextbike, Urban Sharing, JCDecaux, Entur) | **Leihrad-Stationen** mit Verfügbarkeit | B (meist CORS) / P | neue Ebene `bikeshare.ts` ab Stadtzoom; Feed-Liste als Daten (`gbfs.json`: Name, `gbfs.json`-URL, bbox); nur Feeds im Ausschnitt laden; Header `Client-Identifier` / `ET-Client-Name` wo verlangt → dann P |
 | GTFS-RT: HSL, OVapi (NL), TransLink SEQ, Metro Transit, CapMetro | weitere Live-Fahrzeuge | B/P | Einträge in `vehicles.ts` (GTFS-RT-Dekoder existiert schon für Malaysia) |
 
@@ -64,8 +64,8 @@ die CC0-Kameramodell-Daten (`cctv-database.com`) können ins Kamera-Popup.
 
 | Quelle | Was | Weg | Aufwand / Anmerkung |
 |---|---|---|---|
-| NOAA nowCOAST WMS | Lightning-Density (Amerika/Pazifik, 15 min), MRMS-Radar, GOES-Wolken | B (WMS-Raster) | rein deklarative `rasters`; **amtliche Blitzquelle als Ersatz, solange die Blitzortung-Erlaubnis aussteht** |
-| ECCC MSC GeoMet `aqhi-*` | Luftqualität-Messstationen Kanada | B | Punkte in `aq.ts` neben dem CAMS-Modell |
+| ✅ NOAA nowCOAST WMS (Blitzdichte, GOES-Wolken; Radar nicht nötig) | Lightning-Density (Amerika/Pazifik, 15 min), MRMS-Radar, GOES-Wolken | B (WMS-Raster) | rein deklarative `rasters`; **amtliche Blitzquelle als Ersatz, solange die Blitzortung-Erlaubnis aussteht** |
+| ✅ ECCC MSC GeoMet `aqhi-*` (eigene Ebene) | Luftqualität-Messstationen Kanada | B | Punkte in `aq.ts` neben dem CAMS-Modell |
 | NASA CMR + GIBS HLS S30/L30 | **aktuelle Sentinel-2/Landsat-Bilder** pro Tag | B | Ebene `recentimagery.ts` mit Datumswahl; CMR liefert, an welchen Tagen Kacheln existieren |
 | Mapillary | Straßenfotos als Ebene (Abdeckungslinien + Viewer) | B, 🔑 Token schon vorhanden | Vektorkacheln + MapillaryJS im Seitenpanel; Code aus `streetguess.ts` wiederverwenden |
 | Panoramax · KartaView | freie Straßenfotos | B/P | gleiches Panel wie Mapillary; Panoramax hat Vektorkacheln + STAC |
