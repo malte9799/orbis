@@ -116,23 +116,28 @@ export function cellCenterRadec(nside: number, ipix: number): { ra: number; dec:
   return { ra: phi / D2R % 360, dec: 90 - Math.acos(z) / D2R };
 }
 
-// Vier Eck-Richtungen der Zelle: über feine Unter-Auflösung F
-// (Pixelzentren dicht an der Ecke,ynom Ergebnis identisch mit HEALPix-Grenzen)
-// Reihenfolge: c[0]=(0,0)=/(ix,iy), c[1]=(1,0)=/(ix+1,iy),
-//              c[2]=(0,1)=/(ix,iy+1), c[3]=(1,1)=/(ix+1,iy+1)
-export function cellCornersRadec(nside: number, ipix: number): Array<{ ra: number; dec: number }> {
+// Punkt innerhalb einer Zelle (s längs ix, t längs iy, je 0..1) als Szenen-Richtung.
+// Kontinuierliche Fassung von pix2ang (Zellränder exakt, Nachbarn teilen identische Kanten).
+export function cellPointDir(nside: number, ipix: number, s: number, t: number): [number, number, number] {
   const { ix, iy, face } = nest2xyf(nside, ipix);
-  const F = 32;
-  const nsideF = nside * F;
-  const out: Array<{ ra: number; dec: number }> = [];
-  for (let c = 0; c < 4; c++) {
-    const ixf = ix * F + (c & 1 ? F - 1 : 0);
-    const iyf = iy * F + (c >> 1 ? F - 1 : 0);
-    const pixF = face * nsideF * nsideF + spreadBits(ixf) + (spreadBits(iyf) << 1);
-    const { z, phi } = pix2angNestZPhi(nsideF, pixF);
-    out.push({ ra: (((phi / D2R) % 360) + 360) % 360, dec: 90 - Math.acos(z) / D2R });
+  const x = ix + s;
+  const y = iy + t;
+  const jr = JRLL[face] * nside - x - y;
+  const fact2 = 4 / (12 * nside * nside);
+  let nr: number, z: number;
+  if (jr < nside) {
+    nr = Math.max(0, jr);
+    z = 1 - nr * nr * fact2;
+  } else if (jr > 3 * nside) {
+    nr = Math.max(0, 4 * nside - jr);
+    z = nr * nr * fact2 - 1;
+  } else {
+    nr = nside;
+    z = (2 * nside - jr) * (2 * nside * fact2);
   }
-  return out;
+  const phi = nr > 0 ? (Math.PI / 4) * (JPLL[face] * nr + x - y) / nr : 0;
+  const r = Math.sqrt(Math.max(0, 1 - z * z));
+  return [r * Math.cos(phi), z, -r * Math.sin(phi)];
 }
 
 // Richtung [x,y,z] in Szenen-Konvention aus RA/dec (Grad)

@@ -226,7 +226,11 @@ function route() {
       const ra = parseFloat(params.get('ra') ?? '');
       const dec = parseFloat(params.get('dec') ?? '');
       const f = parseFloat(params.get('fov') ?? '');
+      const ansicht = params.get('ansicht');
+      const quelle = params.get('quelle');
       v.activate({
+        survey: quelle ?? undefined,
+        mode: ansicht === 'kugel' || ansicht === 'karte' || ansicht === 'allsky' || ansicht === 'himmel' ? ansicht : undefined,
         ra: Number.isFinite(ra) ? ra : undefined,
         dec: Number.isFinite(dec) ? dec : undefined,
         fov: Number.isFinite(f) ? f : undefined,

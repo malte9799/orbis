@@ -4566,6 +4566,51 @@ svg.hourly {
   height: 100%;
   display: block;
 }
+.stars-panel {
+  position: absolute;
+  left: 12px;
+  top: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+}
+.stars-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 4px;
+  background: rgba(10, 14, 26, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(6px);
+}
+.stars-modes button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-2, #9fb4d8);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.stars-modes button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.stars-modes button.on {
+  background: rgba(110, 150, 255, 0.28);
+  color: #fff;
+}
+.stars-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 0 2px;
+}
 .stars-hint {
   position: absolute;
   left: 50%;
