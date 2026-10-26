@@ -1,5 +1,5 @@
 import type { Geometry, Position } from 'geojson';
-import { bboxOf, loadData, SCOPES, scopeOf, type Feat } from '../views/games';
+import { bboxOf, loadData, SCOPES, scopeOf, type Feat } from './data';
 import type { QuizItem } from './namequiz';
 
 // Question sets for the name quiz: flags, capitals and outlines.

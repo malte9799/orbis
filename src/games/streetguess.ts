@@ -2,7 +2,7 @@ import { Map as MlMap, Marker, type GeoJSONSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
 import { Viewer, type KeyboardComponent } from 'mapillary-js';
 import 'mapillary-js/dist/mapillary.css';
-import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from '../views/games';
+import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from './data';
 import { escapeHtml } from '../util';
 import { snapshotJson } from '../api/data';
 
