@@ -10,7 +10,6 @@ import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
 import { LightningStream, LIGHTNING_LINES_MS, LIGHTNING_THUNDER_MS } from '../api/lightning';
-import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
 import { loadPorts } from '../api/ports';
 import { loadRivers, loadWaves } from '../api/ocean';
 import {
@@ -26,7 +25,7 @@ import {
   type Launch,
   type Ship,
 } from '../api/transport';
-import { loadAmtrak, loadAutobahn, loadNina, loadNinaDetails, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
+import { loadAmtrak, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
 import { loadTransitNetwork } from '../api/networks';
 import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
@@ -359,27 +358,19 @@ export class ExtraLayers {
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
       blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung',
-      aurora: 'Polarlicht: <a href="https://www.swpc.noaa.gov/products/aurora-30-minute-forecast">NOAA SWPC</a>',
-      gvp: 'Vulkane: <a href="https://volcano.si.edu/">Smithsonian GVP</a>',
-      fireareas: 'Brandflächen: <a href="https://data-nifc.opendata.arcgis.com/">NIFC</a>',
-      tsunami: 'Tsunami: <a href="https://www.tsunami.gov/">NOAA</a>',
       lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
       'lightning-thunder': 'Donner: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
-      radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://remap.jrc.ec.europa.eu/">EURDEP</a>, <a href="https://safecast.org/">Safecast</a> (CC0)',
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
-      autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
-      'autobahn-line': '',
-      nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
       busnet: 'ÖPNV-Netz: © OpenStreetMap-Mitwirkende',
       radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
       resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
       ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -634,85 +625,6 @@ export class ExtraLayers {
       'marker',
     );
     // earth & environment
-    add(
-      {
-        id: 'aurora',
-        type: 'heatmap',
-        source: 'aurora',
-        // a large-scale phenomenon on a 1° grid – fades out before the grid becomes visible
-        maxzoom: 8,
-        layout: hidden,
-        paint: {
-          'heatmap-weight': ['interpolate', ['linear'], ['get', 'v'], 3, 0.05, 30, 0.6, 90, 1],
-          'heatmap-radius': ['interpolate', ['exponential', 2], ['zoom'], 0, 6, 3, 30, 6, 170, 8, 480],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.9, 5, 0.6],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 6.5, 0.8, 8, 0],
-          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(0,255,120,0)', 0.15, 'rgba(0,255,120,0.35)', 0.45, 'rgba(60,255,140,0.75)', 0.75, '#d4ff5a', 1, '#ff5ac8'],
-        },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'fireareas-fill',
-        type: 'fill',
-        source: 'fireareas',
-        layout: hidden,
-        paint: { 'fill-color': '#ff3d00', 'fill-opacity': 0.4 },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'fireareas-line',
-        type: 'line',
-        source: 'fireareas',
-        layout: hidden,
-        paint: { 'line-color': '#ffab40', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 10, 2] },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'gvp',
-        type: 'circle',
-        source: 'gvp',
-        layout: { ...hidden, 'circle-sort-key': ['match', ['get', 'state'], 'recent', 3, 'historic', 2, 1] },
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, ['match', ['get', 'state'], 'recent', 4.5, 'historic', 3, 2], 8, ['match', ['get', 'state'], 'recent', 9, 'historic', 7, 5]],
-          'circle-stroke-color': ['match', ['get', 'state'], 'recent', '#ffffff', 'rgba(0,0,0,0.5)'],
-          'circle-stroke-width': 1,
-        },
-      },
-      'gauges',
-    );
-    add(
-      {
-        id: 'radiation',
-        type: 'circle',
-        source: 'radiation',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'v'] },
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 9, 7],
-          'circle-stroke-color': 'rgba(0,0,0,0.55)',
-          'circle-stroke-width': 1,
-        },
-      },
-      'gauges',
-    );
-    add(
-      {
-        id: 'radiation-label',
-        type: 'symbol',
-        source: 'radiation',
-        minzoom: 8,
-        layout: { ...hidden, 'text-field': ['get', 'label'], 'text-font': FONT_BOLD, 'text-size': 10, 'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-optional': true },
-        paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-      },
-      'marker',
-    );
     // layers that live in their own module (globe/layers/defs)
     for (const def of EXTRAS) {
       for (const [id, attribution] of Object.entries(def.sources ?? {})) if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution });
@@ -723,25 +635,6 @@ export class ExtraLayers {
       }
       def.addLayers?.(this.ctx);
     }
-    add(
-      {
-        id: 'tsunami-ring',
-        type: 'circle',
-        source: 'tsunami',
-        layout: hidden,
-        paint: { 'circle-color': 'rgba(0,0,0,0)', 'circle-radius': 16, 'circle-stroke-color': ['get', 'color'], 'circle-stroke-width': 3, 'circle-stroke-opacity': 0.8 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'tsunami',
-        type: 'symbol',
-        source: 'tsunami',
-        layout: { ...hidden, 'icon-image': 'glyph-tsunami', 'icon-size': 0.8, 'icon-allow-overlap': true },
-      },
-      'marker',
-    );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
     // expanding ring of a fresh strike (grows with "k", fades via "o"); detector lines: white,
@@ -902,53 +795,6 @@ export class ExtraLayers {
         attribution: 'Bahnnetz: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)',
       });
     add({ id: 'railmap', type: 'raster', source: 'railmap', layout: hidden, paint: { 'raster-opacity': 0.85 } }, 'lbl-border-country');
-    add(
-      {
-        id: 'nina-fill',
-        type: 'fill',
-        source: 'nina',
-        layout: hidden,
-        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.25 },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'nina-line',
-        type: 'line',
-        source: 'nina',
-        layout: hidden,
-        paint: { 'line-color': ['get', 'color'], 'line-width': 1.4 },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'autobahn-line',
-        type: 'line',
-        source: 'autobahn-line',
-        minzoom: 6,
-        layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 2.5, 12, 6], 'line-opacity': 0.85 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'autobahn',
-        type: 'circle',
-        source: 'autobahn',
-        minzoom: 5,
-        layout: { ...hidden, 'circle-sort-key': ['match', ['get', 'kind'], 'closure', 3, 'jam', 2, 'warning', 1, 0] },
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, ['match', ['get', 'kind'], 'roadworks', 2, 3], 11, ['match', ['get', 'kind'], 'roadworks', 5, 7]],
-          'circle-stroke-color': ['match', ['get', 'kind'], 'closure', '#ffffff', 'rgba(0,0,0,0.6)'],
-          'circle-stroke-width': 1.2,
-        },
-      },
-      'marker',
-    );
     const vehicleLayers = (id: string, label: string, filter: ExpressionSpecification) => {
       add(
         {
@@ -1854,41 +1700,6 @@ export class ExtraLayers {
         case 'blitzer':
           this.loadBlitzerNow();
           break;
-        case 'aurora':
-          this.loadOnce('aurora', 15 * 60000, async () => {
-            const [r, sw] = await Promise.all([loadAurora(), loadSpaceWeather().catch(() => null)]);
-            this.setData('aurora', r.fc);
-            const t = new Date(r.forecastTime);
-            const kp = r.kp != null ? `Kp ${fmt.num(r.kp, 1)}${r.kp >= 5 ? ' – geomagnetischer Sturm!' : ''} · ` : '';
-            const sun = sw
-              ? ` · Sonnenwind ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? ' (günstig)' : ''}` : ''}${sw.xray ? `, Röntgen ${sw.xray}` : ''}`
-              : '';
-            return { count: undefined, note: `${kp}Vorhersage für ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr${sun}` };
-          });
-          break;
-        case 'gvp':
-          this.loadOnce('gvp', Infinity, async () => {
-            const fc = await loadGvpVolcanoes();
-            this.setData('gvp', fc);
-            const recent = fc.features.filter((f) => f.properties?.state === 'recent').length;
-            return { count: fc.features.length, note: `${recent} mit Ausbruch seit letztem Jahr (rot)` };
-          });
-          break;
-        case 'fireareas':
-          this.loadOnce('fireareas', 30 * 60000, async () => {
-            const fc = await loadFirePerimeters();
-            this.setData('fireareas', fc);
-            return { count: fc.features.length, note: fc.features.length ? undefined : 'derzeit keine aktiven Brandflächen' };
-          });
-          break;
-        case 'tsunami':
-          this.loadOnce('tsunami', 10 * 60000, async () => {
-            const fc = await loadTsunami();
-            this.setData('tsunami', fc);
-            const warn = fc.features.filter((f) => f.properties?.level === 'warning').length;
-            return { count: fc.features.length, note: !fc.features.length ? 'keine Meldungen in den letzten 7 Tagen' : warn ? `${warn} aktive Warnung(en)!` : undefined };
-          });
-          break;
         case 'lightning':
           this.lightning ??= new LightningStream(() => this.lightningStatus());
           this.lightning.start();
@@ -1907,13 +1718,6 @@ export class ExtraLayers {
           break;
         case 'jmanowcast':
           this.loadOnce('jmanowcast', 5 * 60000, () => this.loadJmaRadar('jmanowcast'));
-          break;
-        case 'radiation':
-          this.loadOnce('radiation', 60 * 60000, async () => {
-            const r = await loadRadiation();
-            this.setData('radiation', r.fc);
-            return { count: r.fc.features.length, note: r.failed.length ? `${r.failed.join(', ')} nicht erreichbar` : 'natürlicher Normalbereich: 0,04–0,20 µSv/h' };
-          });
           break;
         case 'launches':
           this.loadOnce('launches', 60 * 60000, async () => {
@@ -1945,21 +1749,6 @@ export class ExtraLayers {
         case 'trains':
           this.loadOnce('trains', 30000, () => this.loadGpsTrains());
           break;
-        case 'autobahn':
-          this.loadOnce('autobahn', 10 * 60000, async () => {
-            // Reports surface as their roads finish loading – the first sweep takes a while
-            // (the feed has no spatial query, so every road has to be visited), later
-            // sweeps are revalidated cheaply from the browser cache.
-            const r = await loadAutobahn((p) => {
-              this.setData('autobahn', { type: 'FeatureCollection', features: p.points });
-              this.setData('autobahn-line', { type: 'FeatureCollection', features: p.lines });
-            });
-            this.setData('autobahn', r.points);
-            this.setData('autobahn-line', r.lines);
-            const n = (k: string) => r.points.features.filter((f) => f.properties?.kind === k).length;
-            return { count: r.points.features.length, note: `${n('jam')} Staus · ${n('closure')} Sperrungen · ${n('roadworks')} Baustellen` };
-          });
-          break;
         case 'busnet':
           this.loadBusnetNow();
           break;
@@ -1976,14 +1765,6 @@ export class ExtraLayers {
           break;
         case 'pipelines':
           this.loadPipelinesNow();
-          break;
-        case 'nina':
-          this.loadOnce('nina', 5 * 60000, async () => {
-            const fc = await loadNina();
-            this.setData('nina', fc);
-            const ids = new Set(fc.features.map((f) => f.properties?.id));
-            return { count: ids.size, note: ids.size ? undefined : 'derzeit keine Warnungen' };
-          });
           break;
       }
     }
@@ -3223,14 +3004,6 @@ export class ExtraLayers {
           <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
         return { type: 'html', html: cardHtml({ glyph: 'blitzer', color: p.kind === 'section' ? '#fb8c00' : p.kind === 'signals' ? '#ba68c8' : CAM_ZOOM_RED, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
-      case 'gvp':
-        return { type: 'html', html: html('volcano', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'fireareas-fill':
-        return { type: 'html', html: html('fire', '#ff5722'), lng: at.lng, lat: at.lat };
-      case 'tsunami':
-        return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'radiation':
-        return { type: 'html', html: html('radiation', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'lightning': {
         const at = Number(p.at);
         const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
@@ -3412,25 +3185,6 @@ export class ExtraLayers {
                   ['Verspätung', d.delay != null ? (d.delay > 0 ? `+${d.delay} min` : 'pünktlich') : ''],
                 ].filter(([, v]) => v);
                 el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-              })
-              .catch(() => node.querySelector('.pop-loading')?.remove());
-          },
-        };
-      }
-      case 'autobahn':
-        return { type: 'html', html: html('warn', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'nina-fill': {
-        const id = String(p.id ?? '');
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'warn', color: String(p.color), title: p.title, subtitle: p.subtitle, date: p.date, source: p.source, url: p.url, extra: '<div class="pop-loading small">Text wird geladen …</div>' }),
-          lng: at.lng,
-          lat: at.lat,
-          after: (node) => {
-            loadNinaDetails(id)
-              .then((txt) => {
-                const el = node.querySelector('.pop-loading');
-                if (el) el.outerHTML = txt ? `<p class="pop-desc">${escapeHtml(txt.slice(0, 700))}${txt.length > 700 ? ' …' : ''}</p>` : '';
               })
               .catch(() => node.querySelector('.pop-loading')?.remove());
           },
