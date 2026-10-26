@@ -61,6 +61,19 @@ function loadPlanet(): Promise<PlanetMapView> {
   return planetLoading;
 }
 
+// Sterne-Ansicht: Blick aus der Mitte der Himmelskugel auf die NASA Deep Star Maps – geladen auf Abruf
+type StarsView = import('./views/stars').StarsView;
+let stars: StarsView | null = null;
+let starsLoading: Promise<StarsView> | null = null;
+function loadStars(): Promise<StarsView> {
+  starsLoading ??= import('./views/stars').then(({ createStarsView }) => {
+    stars = createStarsView();
+    app.append(stars.el);
+    return stars;
+  });
+  return starsLoading;
+}
+
 // Games (own map, separate from the layer drawer), loaded on demand
 type GamesView = import('./views/games').GamesView;
 let games: GamesView | null = null;
@@ -75,7 +88,7 @@ function loadGames(): Promise<GamesView> {
 }
 
 let forecastLoaded = false;
-let active: 'forecast' | 'globe' | 'space' | 'planet' | 'games' | null = null;
+let active: 'forecast' | 'globe' | 'space' | 'planet' | 'stars' | 'games' | null = null;
 
 const nav = document.querySelector<HTMLElement>('.tabs')!;
 const knob = nav.querySelector<HTMLAnchorElement>('.space-knob')!;
@@ -143,22 +156,26 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : path.startsWith('/vorhersage') ? 'forecast' : 'globe';
+  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/sterne') ? 'stars' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : path.startsWith('/vorhersage') ? 'forecast' : 'globe';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   if (active === 'space' && next !== 'space') space?.deactivate();
   if (active === 'planet' && next !== 'planet') planet?.deactivate();
+  if (active === 'stars' && next !== 'stars') stars?.deactivate();
   if (active === 'games' && next !== 'games') games?.deactivate();
   forecast.el.hidden = next !== 'forecast';
   globe.el.hidden = next !== 'globe';
   if (space) space.el.hidden = next !== 'space';
+  if (planet) planet.el.hidden = next !== 'planet';
+  if (stars) stars.el.hidden = next !== 'stars';
   if (games) games.el.hidden = next !== 'games';
   document.body.classList.toggle('mode-globe', next !== 'forecast');
   document.body.classList.toggle('mode-map', next === 'globe');
   document.body.classList.toggle('mode-space', next === 'space');
   document.body.classList.toggle('mode-planet', next === 'planet');
+  document.body.classList.toggle('mode-stars', next === 'stars');
   document.querySelectorAll<HTMLAnchorElement>('.tabs a[data-route]').forEach((a) => {
-    const on = a.dataset.route === (next === 'planet' ? 'space' : next);
+    const on = a.dataset.route === (next === 'planet' ? 'space' : next === 'stars' ? 'stars' : next);
     a.classList.toggle('active', on);
     if (on) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -201,6 +218,19 @@ function route() {
       if (active !== 'games') return;
       v.el.hidden = false;
       v.activate();
+    });
+  } else if (next === 'stars') {
+    loadStars().then((v) => {
+      if (active !== 'stars') return;
+      v.el.hidden = false;
+      const ra = parseFloat(params.get('ra') ?? '');
+      const dec = parseFloat(params.get('dec') ?? '');
+      const f = parseFloat(params.get('fov') ?? '');
+      v.activate({
+        ra: Number.isFinite(ra) ? ra : undefined,
+        dec: Number.isFinite(dec) ? dec : undefined,
+        fov: Number.isFinite(f) ? f : undefined,
+      });
     });
   } else if (next === 'space') {
     loadSpace().then((v) => {

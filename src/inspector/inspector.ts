@@ -11,7 +11,7 @@ import { providerOf } from './sources';
 //   top right    every data source the page used
 //   bottom half  the raw response of the selected source (JSON tree / text / image)
 
-const ROUTE_LABEL: Record<string, string> = { forecast: 'Vorhersage', globe: 'Karte', space: 'Weltall', games: 'Spiele' };
+const ROUTE_LABEL: Record<string, string> = { forecast: 'Vorhersage', globe: 'Karte', space: 'Weltall', stars: 'Sterne', games: 'Spiele' };
 const KIND_LABEL: Record<Capture['kind'], string> = { json: 'JSON', xml: 'XML', text: 'TXT', image: 'IMG', model: '3D', binary: 'BIN' };
 const TILE_LABEL: Record<TileGroup['kind'], string> = { raster: 'Rasterkacheln', dem: 'Höhenkacheln', vector: 'Vektorkacheln', custom: 'lokales Raster' };
 const PAGE = 100;
