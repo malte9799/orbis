@@ -1,7 +1,7 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature, RasterTileSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
-import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
+import { loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
@@ -38,254 +38,17 @@ import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
+import { EXTRAS, LAYERS, type ExtraId } from './layers';
+import { AIRPORT_FAR } from './layers/defs/airports';
 import { cardHtml } from './popup';
-import { AIRPORT_ZOOM, Airport3D, AP3D_HIT_LAYER, AP3D_LAYERS } from './airport3d';
+import { AIRPORT_ZOOM, Airport3D } from './airport3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
 // infrastructure. Every source is free and keyless.
 
-export type ExtraId =
-  | 'cities'
-  | 'dwdwarn'
-  | 'gauges'
-  | 'aq'
-  | 'aircraft'
-  | 'sondes'
-  | 'sats'
-  | 'starlink'
-  | 'shipping'
-  | 'cables'
-  | 'ixp'
-  | 'wind'
-  | 'solar'
-  | 'plants'
-  | 'water'
-  | 'nuclear'
-  | 'coal'
-  | 'gas'
-  | 'oil'
-  | 'biomass'
-  | 'webcams'
-  | 'alpr'
-  | 'blitzer'
-  | 'aurora'
-  | 'gvp'
-  | 'fireareas'
-  | 'tsunami'
-  | 'lightning'
-  | 'radiation'
-  | 'launches'
-  | 'airports'
-  | 'airport3d'
-  | 'ships'
-  | 'ports'
-  | 'trains'
-  | 'transit'
-  | 'railmap'
-  | 'autobahn'
-  | 'nina'
-  | 'roadnet'
-  | 'busnet'
-  | 'railspeed'
-  | 'railelec'
-  | 'cyclenet'
-  | 'hikenet'
-  | 'radio'
-  | 'resources'
-  | 'pipelines'
-  | 'geology'
-  | 'plates'
-  | 'ndvi'
-  | 'lst'
-  | 'snowcover'
-  | 'aerosol'
-  | 'landcover'
-  | 'buoys'
-  | 'tides'
-  | 'waves'
-  | 'rivers'
-  | 'bathymetry'
-  | 'chlorophyll'
-  | 'ecradar'
-  | 'nexrad'
-  | 'fmiradar'
-  | 'noaaradar'
-  | 'jmaradar'
-  | 'dwdnowcast'
-  | 'ecsnow'
-  | 'fmirain24'
-  | 'jmanowcast';
-
-export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams';
-
-export interface ExtraDef {
-  id: ExtraId;
-  section: SectionId;
-  label: string;
-  hint: string;
-  glyph: GlyphId;
-  color: string;
-}
-
-export const SECTIONS: { id: SectionId; title: string }[] = [
-  { id: 'europe', title: 'Europa & Messwerte' },
-  { id: 'earth', title: 'Erde & Umwelt' },
-  { id: 'ocean', title: 'Meer & Radar' },
-  { id: 'air', title: 'Luftraum & Weltraum' },
-  { id: 'infra', title: 'Verkehr & Infrastruktur' },
-  { id: 'networks', title: 'Verkehrsnetze' },
-  { id: 'cams', title: 'Kameras & Radio' },
-];
-
-export const EXTRAS: ExtraDef[] = [
-  { id: 'cities', section: 'europe', label: 'Städtewetter', hint: 'aktuelles Wetter in ~200 Städten', glyph: 'city', color: '#5b9dff' },
-  { id: 'dwdwarn', section: 'europe', label: 'Unwetterwarnungen DE', hint: 'Deutscher Wetterdienst, amtlich', glyph: 'warn', color: '#e53935' },
-  { id: 'gauges', section: 'europe', label: 'Pegel & Hochwasser DE', hint: 'PEGELONLINE, Bundeswasserstraßen', glyph: 'gauge', color: '#3d9ad1' },
-  { id: 'nina', section: 'europe', label: 'Bevölkerungswarnungen', hint: 'NINA: MoWaS, KATWARN, BIWAPP, Hochwasser, Polizei', glyph: 'warn', color: '#c2185b' },
-  { id: 'aq', section: 'europe', label: 'Luftqualität & Pollen', hint: 'europäische Städte – Copernicus CAMS', glyph: 'air', color: '#50c878' },
-  { id: 'aurora', section: 'earth', label: 'Polarlicht', hint: 'Vorhersage für die nächste Stunde – NOAA SWPC', glyph: 'aurora', color: '#3ddc84' },
-  { id: 'gvp', section: 'earth', label: 'Alle Vulkane', hint: '~1.300 Vulkane mit letztem Ausbruch – Smithsonian GVP', glyph: 'volcano', color: '#ff7043' },
-  { id: 'fireareas', section: 'earth', label: 'Brandflächen USA', hint: 'aktuelle Waldbrand-Umrisse – NIFC', glyph: 'fire', color: '#ff5722' },
-  { id: 'tsunami', section: 'earth', label: 'Tsunami-Meldungen', hint: 'NOAA-Tsunamiwarnzentren, letzte 7 Tage', glyph: 'tsunami', color: '#1e88e5' },
-  { id: 'lightning', section: 'earth', label: 'Blitze Live', hint: 'Einschläge der letzten 15 Minuten weltweit, mit Ton, Einschlagskreis und Detektoren – Blitzortung.org (Hobby-Netzwerk, nicht amtlich, nur zur privaten Information, nicht für Warnzwecke)', glyph: 'bolt', color: '#ffd600' },
-  { id: 'radiation', section: 'earth', label: 'Radioaktivität', hint: 'Ortsdosisleistung – BfS (DE), EURDEP (40+ Länder, u. a. Frankreich, Türkei, Kanada), Safecast (weltweit)', glyph: 'radiation', color: '#c0ca33' },
-  { id: 'resources', section: 'earth', label: 'Rohstoffvorkommen', hint: 'Öl, Gas, Kohle, Erze, Steine – weltweit (Wikidata), genauer ab Zoom 7 (USGS, BGR) und 10 (OpenStreetMap)', glyph: 'plant', color: '#8d6e63' },
-  { id: 'geology', section: 'earth', label: 'Geologie', hint: 'geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat', glyph: 'landslide', color: '#ab47bc' },
-  { id: 'plates', section: 'earth', label: 'Tektonische Platten', hint: 'Plattengrenzen (PB2002, Bird 2003)', glyph: 'quake', color: '#ef5350' },
-  { id: 'ndvi', section: 'earth', label: 'Vegetation', hint: 'Pflanzenwachstum (NDVI, 8 Tage) – NASA MODIS', glyph: 'wind', color: '#66bb6a' },
-  { id: 'lst', section: 'earth', label: 'Bodentemperatur', hint: 'Landoberflächentemperatur am Tag – NASA MODIS', glyph: 'heat', color: '#ff7043' },
-  { id: 'snowcover', section: 'earth', label: 'Schneedecke (Satellit)', hint: 'Schneebedeckung – NASA MODIS', glyph: 'ice', color: '#e1f5fe' },
-  { id: 'aerosol', section: 'earth', label: 'Aerosole & Staub', hint: 'Dunst, Rauch, Saharastaub (AOD) – NASA MODIS', glyph: 'dust', color: '#bcaaa4' },
-  { id: 'landcover', section: 'earth', label: 'Landbedeckung', hint: 'Wald, Acker, Siedlung, Wasser (10 m) – ESA WorldCover', glyph: 'city', color: '#4caf50' },
-  { id: 'waves', section: 'ocean', label: 'Seegang & Strömung', hint: 'Wellenhöhe, Dünung und Meeresströmung im Kartenausschnitt – Open-Meteo Marine', glyph: 'tsunami', color: '#26c6da' },
-  { id: 'rivers', section: 'ocean', label: 'Flussabfluss & Hochwasser', hint: 'Abfluss in m³/s mit 7-Tage-Trend an Flüssen im Kartenausschnitt – GloFAS via Open-Meteo', glyph: 'flood', color: '#1e88e5' },
-  { id: 'buoys', section: 'ocean', label: 'Messbojen', hint: 'Wellen, Wind, Luftdruck, Wassertemperatur live – NOAA NDBC (~900 Stationen)', glyph: 'gauge', color: '#4fc3f7' },
-  { id: 'tides', section: 'ocean', label: 'Gezeitenpegel USA', hint: 'Wasserstand und nächste Hoch-/Niedrigwasser per Klick – NOAA CO-OPS', glyph: 'gauge', color: '#42a5f5' },
-  { id: 'bathymetry', section: 'ocean', label: 'Meerestiefe', hint: 'Bathymetrie weltweit – GEBCO; Europa genauer – EMODnet', glyph: 'tsunami', color: '#1565c0' },
-  { id: 'chlorophyll', section: 'ocean', label: 'Chlorophyll (Algen)', hint: 'Algenblüte im Meer, Satellit – NASA VIIRS', glyph: 'wind', color: '#2e7d32' },
-  { id: 'nexrad', section: 'ocean', label: 'Radar USA (NEXRAD)', hint: 'Regenradar Mosaik der USA, ~5 min – NOAA via Iowa Environmental Mesonet', glyph: 'storm', color: '#ef5350' },
-  { id: 'ecradar', section: 'ocean', label: 'Radar Kanada', hint: 'Regenradar Kanada, 1 km, ~6 min – Environment Canada', glyph: 'storm', color: '#e53935' },
-  { id: 'fmiradar', section: 'ocean', label: 'Radar Finnland', hint: 'Regenradar Finnland, 1 km, 5 min – Finnish Meteorological Institute (CC BY 4.0)', glyph: 'storm', color: '#1e88e5' },
-  { id: 'noaaradar', section: 'ocean', label: 'Radar Alaska, Hawaii, Karibik, Guam', hint: 'Regenradar Alaska, Hawaii, Puerto Rico und Guam – NOAA MRMS', glyph: 'storm', color: '#d84315' },
-  { id: 'jmaradar', section: 'ocean', label: 'Radar Japan', hint: 'Niederschlagsradar Japan, 5 min – Japan Meteorological Agency', glyph: 'storm', color: '#c62828' },
-  { id: 'dwdnowcast', section: 'ocean', label: 'Radar-Nowcast Deutschland', hint: 'Radar-Vorhersage für die nächsten 2 Stunden, 1 km – Deutscher Wetterdienst (WN-Produkt)', glyph: 'storm', color: '#7b1fa2' },
-  { id: 'ecsnow', section: 'ocean', label: 'Schneeradar Kanada', hint: 'Radar nur für Schneefall, 1 km – Environment Canada', glyph: 'ice', color: '#81d4fa' },
-  { id: 'fmirain24', section: 'ocean', label: 'Regensumme 24 h Finnland', hint: 'Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute', glyph: 'flood', color: '#0277bd' },
-  { id: 'jmanowcast', section: 'ocean', label: 'Radar-Nowcast Japan', hint: 'Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency', glyph: 'storm', color: '#ad1457' },
-  { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, OpenSky', glyph: 'plane', color: '#f2c94c' },
-  { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live (SondeHub) – mit dem Flugverkehr als 3D-Modell und Detaildaten zum Klick', glyph: 'sonde', color: '#ff8fab' },
-  { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts, Countdown, Tracking & Stream – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
-  { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
-  { id: 'airport3d', section: 'air', label: 'Flughafen 3D', hint: 'Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)', glyph: 'airport', color: '#ff6a2b' },
-  { id: 'sats', section: 'air', label: 'Satelliten', hint: 'ISS, Wetter-, GPS-, Galileo-Satelliten', glyph: 'satellite', color: '#b388ff' },
-  { id: 'starlink', section: 'air', label: 'Starlink', hint: 'tausende Satelliten – CelesTrak', glyph: 'satellite', color: '#7e8aa8' },
-  { id: 'ships', section: 'infra', label: 'Schiffe live (AIS)', hint: 'Ostsee frei (Fintraffic), weltweit über den Daten-Proxy oder mit eigenem aisstream-Schlüssel', glyph: 'vessel', color: '#4dd0e1' },
-  { id: 'ports', section: 'infra', label: 'Häfen', hint: '~16.000 Seehäfen mit Größe, Tiefen und Umschlag – NGA World Port Index, UN/LOCODE', glyph: 'vessel', color: '#ffb74d' },
-  { id: 'trains', section: 'infra', label: 'Züge live', hint: 'Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)', glyph: 'train', color: '#ffca28' },
-  { id: 'transit', section: 'infra', label: 'Busse, Trams & U-Bahn', hint: 'Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Malaysia, optional Melbourne, Chicago, Schweden', glyph: 'train', color: '#ab47bc' },
-  { id: 'roadnet', section: 'networks', label: 'Straßennetz', hint: 'Autobahnen bis Kreisstraßen mit Nummern – OpenStreetMap', glyph: 'city', color: '#f57c00' },
-  { id: 'railmap', section: 'networks', label: 'Bahnnetz', hint: 'Gleise, Bahnhöfe, Strecken – OpenRailwayMap', glyph: 'train', color: '#78909c' },
-  { id: 'busnet', section: 'networks', label: 'Bus- & ÖPNV-Netz', hint: 'Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Stadtzoom) – OpenStreetMap', glyph: 'train', color: '#7e57c2' },
-  { id: 'railspeed', section: 'networks', label: 'Bahn: Geschwindigkeit', hint: 'zulässige Streckengeschwindigkeit – OpenRailwayMap', glyph: 'train', color: '#e53935' },
-  { id: 'railelec', section: 'networks', label: 'Bahn: Elektrifizierung', hint: 'Stromsysteme der Strecken – OpenRailwayMap', glyph: 'plant', color: '#fdd835' },
-  { id: 'cyclenet', section: 'networks', label: 'Radnetz', hint: 'Radfernwege & regionale Radrouten – Waymarked Trails', glyph: 'city', color: '#43a047' },
-  { id: 'hikenet', section: 'networks', label: 'Wandernetz', hint: 'Wanderwege – Waymarked Trails', glyph: 'city', color: '#8d6e63' },
-  { id: 'autobahn', section: 'infra', label: 'Autobahn: Staus & Baustellen', hint: 'Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH', glyph: 'warn', color: '#ffa000' },
-  { id: 'pipelines', section: 'infra', label: 'Öl- & Gaspipelines', hint: 'Pipelines für Gas, Öl, Wasserstoff (ab Zoom 8) – OpenStreetMap', glyph: 'cable', color: '#29b6f6' },
-  { id: 'shipping', section: 'infra', label: 'Schiffsrouten & Fähren', hint: 'Hauptschifffahrtswege, Fährlinien (OSM)', glyph: 'ship', color: '#26c6da' },
-  { id: 'cables', section: 'infra', label: 'Seekabel', hint: 'Unterseekabel (unvollständig) – OpenStreetMap', glyph: 'cable', color: '#9c6bff' },
-  { id: 'ixp', section: 'infra', label: 'Internetknoten', hint: 'Internet Exchange Points – PeeringDB', glyph: 'cable', color: '#e040fb' },
-  { id: 'wind', section: 'infra', label: 'Windkraft', hint: 'Windparks, beim Zoomen einzelne Anlagen', glyph: 'wind', color: FUELS.Wind.color },
-  { id: 'solar', section: 'infra', label: 'Solarparks', hint: 'Photovoltaik-Kraftwerke', glyph: 'solar', color: FUELS.Solar.color },
-  { id: 'water', section: 'infra', label: 'Wasserkraft', hint: 'Wasser- und Gezeitenkraftwerke', glyph: 'hydro', color: FUELS.Hydro.color },
-  { id: 'nuclear', section: 'infra', label: 'Kernkraftwerke', hint: 'Kernkraftwerke weltweit (WRI Global Power Plant Database)', glyph: 'radiation', color: FUELS.Nuclear.color },
-  { id: 'coal', section: 'infra', label: 'Kohlekraftwerke', hint: 'Kohle- und Petrolkoks-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Coal.color },
-  { id: 'gas', section: 'infra', label: 'Gaskraftwerke', hint: 'Gaskraftwerke weltweit', glyph: 'plant', color: FUELS.Gas.color },
-  { id: 'oil', section: 'infra', label: 'Ölkraftwerke', hint: 'Öl-Kraftwerke weltweit', glyph: 'plant', color: FUELS.Oil.color },
-  { id: 'biomass', section: 'infra', label: 'Biomasse & Abfall', hint: 'Biomasse- und Müllheizkraftwerke weltweit', glyph: 'plant', color: FUELS.Biomass.color },
-  { id: 'plants', section: 'infra', label: 'Weitere Kraftwerke', hint: 'Geothermie, Speicher, Kraft-Wärme-Kopplung …', glyph: 'plant', color: FUELS.Geothermal.color },
-  { id: 'webcams', section: 'cams', label: 'Live-Webcams', hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks', glyph: 'webcam', color: '#00bfa5' },
-  { id: 'radio', section: 'cams', label: 'Radiosender', hint: 'über 50.000 Sender weltweit – direkt anhören (Radio Browser)', glyph: 'radio', color: '#ff4081' },
-  { id: 'alpr', section: 'cams', label: 'Kennzeichen-Kameras', hint: 'ALPR/Flock-Kameras aus OpenStreetMap – DeFlock-Community', glyph: 'alpr', color: '#ef4444' },
-  { id: 'blitzer', section: 'infra', label: 'Blitzer & Rotlicht', hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap; Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)', glyph: 'blitzer', color: '#e53935' },
-];
-
-/** the big airports of our own list for zoom 5–8 (the tiles have airports from zoom 8): by size, largest first */
-const AIRPORT_FAR = ['airports-far-1', 'airports-far-2', 'airports-far-3'];
-
-const LAYERS: Record<ExtraId, string[]> = {
-  cities: ['cities'],
-  dwdwarn: ['dwd-warn-fill', 'dwd-warn-line'],
-  gauges: ['gauges'],
-  aq: ['aq-circle', 'aq-text'],
-  aircraft: ['aircraft', 'aircraft-rotor', 'aircraft-vehicle'],
-  sondes: ['sondes'],
-  sats: ['sats-icon', 'sats-label', 'sat-track'],
-  starlink: ['sats-dot', 'sat-track'],
-  shipping: ['ship-lanes', 'ferries'],
-  cables: ['cables'],
-  ixp: ['ixp'],
-  wind: ['power', 'osm-power'],
-  solar: ['power', 'osm-power'],
-  plants: ['power', 'osm-power'],
-  water: ['power', 'osm-power'],
-  nuclear: ['power', 'osm-power'],
-  coal: ['power', 'osm-power'],
-  gas: ['power', 'osm-power'],
-  oil: ['power', 'osm-power'],
-  biomass: ['power', 'osm-power'],
-  webcams: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
-  aurora: ['aurora'],
-  gvp: ['gvp'],
-  fireareas: ['fireareas-fill', 'fireareas-line'],
-  tsunami: ['tsunami-ring', 'tsunami'],
-  lightning: ['lightning-thunder', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-glow', 'lightning'],
-  radiation: ['radiation', 'radiation-label'],
-  launches: ['launches'],
-  airports: ['airports', 'airports-minor', ...AIRPORT_FAR],
-  airport3d: AP3D_LAYERS,
-  ships: ['ships'],
-  ports: ['ports', 'ports-label'],
-  trains: ['trains', 'trains-label'],
-  transit: ['transit-veh', 'transit-label'],
-  railmap: ['railmap'],
-  roadnet: ['road-secondary', 'road-primary', 'road-trunk', 'road-motorway', 'road-ref'],
-  busnet: ['busnet-line', 'busnet-label', 'busnet-stop'],
-  railspeed: ['railspeed'],
-  railelec: ['railelec'],
-  cyclenet: ['cyclenet'],
-  hikenet: ['hikenet'],
-  radio: ['radio', 'radio-label'],
-  resources: ['kor250', 'resources', 'resources-label'],
-  pipelines: ['pipelines'],
-  geology: ['geology'],
-  plates: ['plates'],
-  ndvi: ['ndvi'],
-  lst: ['lst'],
-  snowcover: ['snowcover'],
-  aerosol: ['aerosol'],
-  landcover: ['landcover'],
-  waves: ['waves', 'waves-label'],
-  rivers: ['rivers', 'rivers-label'],
-  buoys: ['buoys', 'buoys-label'],
-  tides: ['tides'],
-  bathymetry: ['emodnet', 'gebco'],
-  chlorophyll: ['chlorophyll-pace', 'chlorophyll-n20', 'chlorophyll'],
-  nexrad: ['nexrad'],
-  ecradar: ['ecradar'],
-  fmiradar: ['fmiradar'],
-  noaaradar: ['noaa-ak', 'noaa-hi', 'noaa-pr', 'noaa-gu'],
-  jmaradar: ['jmaradar'],
-  dwdnowcast: ['dwdnowcast'],
-  ecsnow: ['ecsnow'],
-  fmirain24: ['fmirain24'],
-  jmanowcast: ['jmanowcast'],
-  autobahn: ['autobahn-line', 'autobahn'],
-  nina: ['nina-fill', 'nina-line'],
-  alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],
-  blitzer: ['blitzer'],
-};
+export type { ExtraDef, ExtraId, SectionId } from './layers';
+export { EXTRAS, EXTRA_CLICK_LAYERS, SECTIONS } from './layers';
 
 const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
 
@@ -303,8 +66,6 @@ const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
 };
 const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
-/** Interactive layers this module answers clicks for. */
-export const EXTRA_CLICK_LAYERS = [...AIRPORT_FAR, 'cities', 'dwd-warn-fill', 'gauges', 'aq-circle', 'aircraft', 'aircraft-vehicle', 'sondes', 'sats-icon', 'sats-dot', 'cables', 'ixp', 'power', 'osm-power', 'webcams', 'webcams-osm', 'alpr', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca', 'blitzer', 'gvp', 'fireareas-fill', 'tsunami', 'radiation', 'lightning', 'launches', 'airports', 'ships', 'ports', 'trains', 'transit-veh', 'autobahn', 'nina-fill', 'busnet-line', 'airports-minor', AP3D_HIT_LAYER, 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides'];
 
 /** Zoom from which cameras are loaded for the visible area (Overpass). */
 const CAM_DETAIL_ZOOM = 9;

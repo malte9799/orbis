@@ -1,4 +1,5 @@
-import { EXTRAS, type ExtraId } from '../globe/extras';
+import type { ExtraId } from '../globe/extras';
+import { EXTRAS, type CatId } from '../globe/layers';
 import type { EventKind } from '../api/events';
 import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
 
@@ -143,7 +144,7 @@ export const ISOBAR_OPTION_MAINS = ['wind', 'pressure'];
 // ---------------------------------------------------------------------------
 // Overlay layers
 
-export type CatId = 'wetter' | 'gefahr' | 'verkehr' | 'meer' | 'erde' | 'netze' | 'medien';
+export type { CatId };
 export const CATS: { id: CatId; label: string; icon: string }[] = [
   { id: 'wetter', label: 'Wetter', icon: 'cloud' },
   { id: 'gefahr', label: 'Warnungen & Ereignisse', icon: 'warn' },
@@ -166,26 +167,12 @@ export interface CatalogEntry {
   region?: string;
 }
 
-const CAT_OF: Record<CatId, string[]> = {
-  wetter: ['cities', 'aq', 'aurora', 'nexrad', 'ecradar', 'fmiradar', 'noaaradar', 'jmaradar', 'dwdnowcast', 'ecsnow', 'fmirain24', 'jmanowcast', 'lightning'],
-  gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
-  verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'blitzer', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
-  meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
-  erde: ['geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
-  netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'ixp', 'pipelines', 'wind', 'solar', 'water', 'nuclear', 'coal', 'gas', 'oil', 'biomass', 'plants'],
-  medien: ['webcams', 'radio', 'alpr'],
+/** category of the event groups (the extras carry their own `cat` in globe/layers/defs) */
+const GROUP_CAT: Record<GroupId, CatId> = {
+  fires: 'gefahr', hotspots: 'gefahr', storms: 'gefahr', tornado: 'gefahr', quakes: 'gefahr', volcanoes: 'gefahr', floods: 'gefahr', ice: 'gefahr',
 };
-
-const ICON_OF: Record<string, string> = {
-  cities: 'city', dwdwarn: 'warn', gauges: 'gauge', nina: 'warn', aq: 'air', aurora: 'aurora', tsunami: 'tsunami', lightning: 'bolt', radiation: 'radiation',
-  resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
-  rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
-  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar',
-  aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
-  transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain', blitzer: 'blitzer',
-  autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', ixp: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', water: 'drop', nuclear: 'radiation',
-  coal: 'mountain', gas: 'flame', oil: 'barrel', biomass: 'leaf', webcams: 'cam', radio: 'radio',
-  alpr: 'cam', fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
+const GROUP_ICON: Record<string, string> = {
+  fires: 'fire', storms: 'storm', tornado: 'storm', quakes: 'quake', volcanoes: 'volcano', floods: 'flood', ice: 'snow',
 };
 const GROUP_COLOR: Record<string, string> = { fires: '#ff5722', storms: '#7c8cff', tornado: '#b07cff', quakes: '#ffb547', volcanoes: '#ff7043', floods: '#3d9ad1', ice: '#9ec5e8' };
 const GROUP_LABEL: Record<string, [string, string]> = {
@@ -197,20 +184,16 @@ const GROUP_LABEL: Record<string, [string, string]> = {
   floods: ['Fluten & Dürren', 'GDACS, EONET'],
   ice: ['Eis, Staub & Hitze', 'Eisberge, Sandstürme – EONET'],
 };
-const REGION: Record<string, string> = {
-  dwdwarn: 'DE', nina: 'DE', autobahn: 'DE', gauges: 'DE', dwdnowcast: 'DE', tornado: 'USA', tides: 'USA', nexrad: 'USA', noaaradar: 'USA',
-  ecradar: 'CA', ecsnow: 'CA', fmiradar: 'FI', fmirain24: 'FI', jmaradar: 'JP', jmanowcast: 'JP', aq: 'EU',
-};
+const GROUP_REGION: Record<string, string> = { tornado: 'USA' };
 
-const catOf = (id: string): CatId => (Object.keys(CAT_OF) as CatId[]).find((c) => CAT_OF[c].includes(id)) ?? 'erde';
 const HIDDEN_EXTRAS = new Set<string>(Object.values(LINKED_EXTRA));
 
 export const CATALOG: CatalogEntry[] = [
   ...EXTRAS.filter((d) => !HIDDEN_EXTRAS.has(d.id)).map<CatalogEntry>((d) => ({
-    id: d.id, kind: 'extra', label: d.label, hint: d.hint, cat: catOf(d.id), icon: ICON_OF[d.id] ?? 'layers', color: d.color, region: REGION[d.id],
+    id: d.id, kind: 'extra', label: d.label, hint: d.hint, cat: d.cat, icon: d.icon, color: d.color, region: d.region,
   })),
   ...GROUPS.filter((g) => g.id !== 'hotspots').map<CatalogEntry>((g) => ({
-    id: g.id, kind: 'group', label: GROUP_LABEL[g.id][0], hint: GROUP_LABEL[g.id][1], cat: catOf(g.id), icon: ICON_OF[g.id], color: GROUP_COLOR[g.id], region: REGION[g.id],
+    id: g.id, kind: 'group', label: GROUP_LABEL[g.id][0], hint: GROUP_LABEL[g.id][1], cat: GROUP_CAT[g.id], icon: GROUP_ICON[g.id], color: GROUP_COLOR[g.id], region: GROUP_REGION[g.id],
   })),
 ];
 export const catalogOf = (id: string) => CATALOG.find((c) => c.id === id);
