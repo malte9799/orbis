@@ -147,6 +147,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [OpenFreeMap](https://openfreemap.org) / OSM | Straßennetz mit Straßennummern | 🟢 ODbL |
 | [OpenRailwayMap](https://www.openrailwaymap.org) | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | 🟢 |
 | [OpenStreetMap Overpass](https://overpass-api.de) (+ [private.coffee](https://overpass.private.coffee)) | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | 🟢 🌐 |
+| Leihrad-Betreiber über [GBFS](https://gbfs.org) (Liste in `src/api/bikesystems.ts`, übernommen aus God's Eye View) | Leihräder: Stationen mit freien Rädern und Plätzen, live, 61 Systeme mit ~17.000 Stationen – Lyft (Citi Bike, Divvy, Capital Bikeshare, Bay Wheels), Bluebikes, BIKETOWN, BCycle (18 US-Städte), PBSC (u. a. Bike Share Toronto, Bike Itaú/Tembici in Brasilien, Santiago, Bogotá, Bicing, BiciMAD, spanische Städte), Urban Sharing (Oslo, Bergen, Trondheim), Entur (Stavanger, Skien), JCDecaux (Lillestrøm, Valencia, Sevilla), nextbike (AMBici), Social Bicycles (Buffalo) | 🟢 Betreiber-Feeds, Nutzung mit Nennung; Einzelheiten je Betreiber (z. B. AMBici CC0, JCDecaux Licence Ouverte, Lyft-Datenlizenz) |
 | [Waymarked Trails](https://waymarkedtrails.org) ([Rad](https://cycling.waymarkedtrails.org), [Wandern](https://hiking.waymarkedtrails.org)) | Radnetz, Wandernetz | 🟢 |
 
 ## 8. Kameras & Radio
