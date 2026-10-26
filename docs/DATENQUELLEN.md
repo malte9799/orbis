@@ -159,7 +159,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [TfL](https://api.tfl.gov.uk) | London (inkl. Videoclips) | 🟢 |
 | [NYC DOT](https://webcams.nyctmc.org) | New York | 🟢 |
 | [DDOT / DC GIS](https://maps2.dcgis.dc.gov) | Washington D.C. | 🟢 |
-| [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien | 🟢 |
+| [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien – rund 2.200 Kameras mit Livestream (HLS) im Popup | 🟢 |
+| [DelDOT](https://deldot.gov) ([Kameraliste](https://tmc.deldot.gov/json/videocamera.json)) | Delaware – rund 360 Kameras, alle als Livestream (HLS) | 🟢 |
+| [Statens vegvesen](https://www.vegvesen.no) ([OGC-Kameraliste](https://ogckart-sn1.atlas.vegvesen.no/ogc/features/v1/collections/datex_3_1:CctvSimple)) | Norwegen – rund 860 Straßenkameras, davon ~140 als Livestream (HLS) | 🟢 NLOD |
 | [ALERTCalifornia](https://cameras.alertcalifornia.org) (UC San Diego) | Waldbrandkameras Kalifornien | 🟢 |
 | 511 ([Ontario](https://511on.ca/developers/doc), [Alberta](https://511.alberta.ca/developers/doc)) | Kameras Kanada | 🟢 🔑 kostenlos – My511-Konto anlegen, Key auf der Developers-Seite anfordern (10 Aufrufe/min) |
 | [Hong Kong Transport Department](https://data.gov.hk) | Kameras Hongkong | 🟢 |
@@ -262,6 +264,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [MapLibre GL JS 6](https://maplibre.org) | 2D-Karte & Globus |
 | [three.js](https://threejs.org) | 3D-Sonnensystem |
 | [satellite.js](https://github.com/shashwatak/satellite-js) | SGP4-Bahnberechnung |
+| [hls.js](https://github.com/video-dev/hls.js) | Live-Videos der Webcams (HLS) außerhalb von Safari |
 | [GitHub Pages](https://pages.github.com) · [GitHub Actions](https://github.com/features/actions) | Hosting & Deploy |
 | [Cloudflare Workers](https://workers.cloudflare.com) | optionaler Daten-Proxy |
 

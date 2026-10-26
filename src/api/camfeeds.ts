@@ -26,12 +26,15 @@ export interface CamFeed {
 const cam = (
   lon: number,
   lat: number,
-  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; url?: string; source: string; live?: boolean },
+  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; hls?: string; url?: string; source: string; live?: boolean },
 ): Feature<Point> => ({
   type: 'Feature',
   geometry: { type: 'Point', coordinates: [lon, lat] },
   properties: { ...p, kind: p.live === false ? 'signed' : 'road' },
 });
+
+/** only https URLs (an http stream would be blocked as mixed content) */
+const https = (u?: string) => (u && /^https:\/\//.test(u) ? u : undefined);
 
 const ok = (lon: unknown, lat: unknown) => Number.isFinite(Number(lon)) && Number.isFinite(Number(lat)) && !(Number(lon) === 0 && Number(lat) === 0);
 
@@ -119,11 +122,57 @@ export const CAM_FEEDS: CamFeed[] = [
                   title: c.location.locationName,
                   subtitle: [c.location.route, c.location.nearbyPlace].filter(Boolean).join(' · '),
                   image: c.imageData?.static?.currentImageURL,
+                  hls: https(c.imageData?.streamingVideoURL),
                   url: c.imageData?.streamingVideoURL || c.imageData?.static?.currentImageURL,
                   source: 'Caltrans',
                 }),
               ),
       );
+    },
+  },
+  {
+    // all cameras stream live (HLS); the catalog has no still image
+    id: 'deldot',
+    label: 'DelDOT (Delaware)',
+    bbox: [-75.8, 38.4, -75.0, 39.9],
+    async load() {
+      const j = await fetchJson<{ videoCameras: { id: string; title: string; county?: string; lat: number; lon: number; enabled?: boolean; status?: string; urls?: { m3u8s?: string } }[] }>('https://tmc.deldot.gov/json/videocamera.json', undefined, 20000);
+      return j.videoCameras
+        .filter((c) => c.enabled !== false && c.status === 'Active' && ok(c.lon, c.lat) && https(c.urls?.m3u8s))
+        .map((c) => cam(c.lon, c.lat, { id: `deldot-${c.id}`, title: c.title, subtitle: [c.county && `${c.county} County`, 'Livestream'].filter(Boolean).join(' · '), hls: c.urls!.m3u8s, url: `https://deldot.gov/map/index.shtml?tab=TrafficCameras`, source: 'Delaware Department of Transportation (DelDOT)' }));
+    },
+  },
+  {
+    // Statens vegvesen: still images of all road cameras, live video (HLS) for some of them
+    id: 'vegvesen',
+    label: 'Statens vegvesen (Norwegen)',
+    bbox: [4.0, 57.8, 31.5, 71.3],
+    async load() {
+      const fc = await fetchJson<{ features: { geometry?: { coordinates: number[] } | null; properties: Record<string, string | number | undefined> }[] }>(
+        'https://ogckart-sn1.atlas.vegvesen.no/ogc/features/v1/collections/datex_3_1:CctvSimple/items?f=application/geo%2Bjson&limit=5000',
+        undefined,
+        30000,
+      );
+      return fc.features.flatMap((f) => {
+        const p = f.properties;
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        const image = https(String(p.stillImageUrl ?? ''));
+        if (!ok(lon, lat) || !image || p['status.stillImageAvailability'] === 'videoOrImagesUnavailableDueToCameraFault') return [];
+        const hls = p.videoEncodingStandard === 'hls' && Number(p.videoServiceLevel) > 0 ? https(String(p.videoUrl ?? '')) : undefined;
+        const place = String(p.description ?? '').trim() || `Kamera ${p.cameraId}`;
+        const towards = String(p.orientationDescription ?? '').trim();
+        return [
+          cam(lon, lat, {
+            id: `vv-${p.cameraId}`,
+            title: towards && towards !== place ? `${place} → ${towards}` : place,
+            subtitle: [p.roadNumber, hls && 'Livestream'].filter(Boolean).join(' · '),
+            image,
+            hls,
+            url: image,
+            source: 'Statens vegvesen (NLOD)',
+          }),
+        ];
+      });
     },
   },
   {
@@ -364,7 +413,7 @@ export const CAM_FEEDS: CamFeed[] = [
 ];
 
 /** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML); images always live. */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary']);
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();

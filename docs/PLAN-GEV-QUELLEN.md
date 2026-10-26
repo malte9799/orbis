@@ -47,12 +47,12 @@ Alle keylos, alle als Feed in `cams.ts`. Kamerabilder ohne CORS laufen ohnehin a
 | King County (ArcGIS) | King County WA | B | |
 | TxDOT ITS | Texas | P | Bild kommt als Base64 in JSON → im Worker oder Client dekodieren |
 | City of Austin Open Data | Austin | B (Socrata) | |
-| Statens vegvesen | Norwegen | D | Standbilder + HLS; NLOD |
+| ✅ Statens vegvesen | Norwegen | B | Standbilder + HLS; NLOD |
 | Servei Català de Trànsit `cameres.xml` | Katalonien | D | GML parsen |
 | Tarktee (DATEX2) + Tallinn ristmikud | Estland | D | Bild-URLs rotieren → alle 15 min erneuern |
 | Freeway Bureau `CCTV.xml` | Taiwan | D | Open Government Data License |
 | City of Toronto (RESCU) | Toronto | B | |
-| DelDOT `videocamera.json` | Delaware, **Live-HLS** | B/P | braucht HLS-Player (hls.js) – lohnt sich nur, wenn weitere HLS-Quellen folgen (vegvesen) |
+| ✅ DelDOT `videocamera.json` | Delaware, **Live-HLS** | B | HLS-Player (hls.js) eingebaut; Caltrans-Streams laufen jetzt ebenfalls im Popup |
 | Stadt Warendorf | 1 Webcam | B | statische Konfiguration |
 | Eismoinfo | Litauen | – | nicht Teil der offenen Daten → standardmäßig aus, wie bei GEV |
 | FL511 | Florida | – | **nur persönliche Nutzung** → weglassen oder hinter Opt-in |

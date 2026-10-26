@@ -5,6 +5,7 @@ import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE,
 import { LayerSpecification } from 'maplibre-gl';
 import { SNAPSHOT_CAMS, camFeedsInView } from '../../../api/camfeeds';
 import { cardHtml } from '../../popup';
+import { attachHls } from '../../hls';
 import { escapeHtml, safeUrl } from '../../../util';
 import { hasWindyKey, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../../../api/cams';
 import { isSuperseded } from '../../../api/overpass';
@@ -192,11 +193,11 @@ export default defineExtra({
   section: 'cams',
   cat: 'medien',
   label: 'Live-Webcams',
-  hint: 'London, New York, Kalifornien, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks',
+  hint: 'Livestreams (weiß umrandet): Kalifornien, Delaware, Norwegen · London, New York, Kanada, Hongkong, Singapur, Finnland, Island, Neuseeland, Australien (NSW), Autobahn, OpenStreetMap – optional Windy und US-Nationalparks',
   glyph: 'webcam',
   icon: 'cam',
   color: '#00bfa5',
-  sources: { webcams: 'Webcams: <a href="https://www.windy.com/webcams">Windy</a>, <a href="https://www.digitraffic.fi/">Digitraffic</a> (CC BY 4.0), <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://data.calgary.ca">Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (OGL), <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://www.nzta.govt.nz">NZTA</a>', 'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")', 'webcams-osm': 'Webcams: © OpenStreetMap', 'webcams-fov': '' },
+  sources: { webcams: 'Webcams: <a href="https://www.windy.com/webcams">Windy</a>, <a href="https://www.digitraffic.fi/">Digitraffic</a> (CC BY 4.0), <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://data.calgary.ca">Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (OGL), <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://deldot.gov">DelDOT</a>, <a href="https://www.vegvesen.no">Statens vegvesen</a> (NLOD)', 'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")', 'webcams-osm': 'Webcams: © OpenStreetMap', 'webcams-fov': '' },
   addLayers(ctx) {
     const { add, hidden } = ctx;
     const camIcon = (id: string, source: string): LayerSpecification => ({
@@ -205,7 +206,8 @@ export default defineExtra({
       source,
       minzoom: CAM_DOT_ZOOM,
       layout: hidden,
-      paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
+      // cameras with a live video stream get a white ring
+      paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, ['case', ['has', 'hls'], 0.6, 0], 14, ['case', ['has', 'hls'], 1.6, 0]] },
     });
     add(camIcon('webcams', 'webcams'), 'marker');
     add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
@@ -253,14 +255,27 @@ export default defineExtra({
   // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
   const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
   const video = safeUrl(p.video);
+  const hls = safeUrl(p.hls);
   const dir = Number(p.dir);
   const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
-  const extra = video
+  const still = src
+    ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
+    : '<div class="pop-sub">Livestream gerade nicht verfügbar</div>';
+  const extra = hls
+    ? `<video class="pop-cam" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted playsinline controls></video>`
+    : video
     ? `<video class="pop-cam" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
     : src
-    ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
+    ? still
     : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
-  return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
+  const after = hls
+    ? (node: HTMLElement) => {
+        const el = node.querySelector<HTMLVideoElement>('video.pop-cam');
+        // stream not playable (offline, blocked): fall back to the still image
+        if (el) attachHls(el, hls, () => (el.outerHTML = still));
+      }
+    : undefined;
+  return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1], after };
   },
   layers: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
   clickLayers: ['webcams', 'webcams-osm'],

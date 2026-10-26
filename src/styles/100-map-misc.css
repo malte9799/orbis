@@ -349,6 +349,11 @@
   background: rgba(255, 255, 255, 0.05);
   min-height: 120px;
 }
+video.pop-cam {
+  width: 100%;
+  max-height: 220px;
+  background: #000;
+}
 .pop-cam img {
   display: block;
   width: 100%;
