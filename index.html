@@ -23,10 +23,55 @@
         <span class="brand-name">Orbis</span><span class="brand-tag">Wetter · Erde · All</span>
       </a>
       <nav class="tabs" aria-label="Ansicht">
-        <a href="#/" data-route="forecast">Vorhersage</a>
-        <a href="#/karte" data-route="globe">Karte</a>
+        <div class="eyes-group" hidden role="group" aria-label="NASA Eyes">
+          <a href="#/weltall?eyes=earth" data-eyes="earth">Erde</a>
+          <a href="#/weltall?eyes=mrn" data-eyes="mrn">Mars</a>
+          <a href="#/weltall?eyes=solar-system" data-eyes="solar-system">Sonnensystem</a>
+          <a href="#/weltall?eyes=asteroids" data-eyes="asteroids">Asteroiden</a>
+          <a href="#/weltall?eyes=exo" data-eyes="exo">Exoplaneten</a>
+        </div>
+        <div class="trek-group" hidden role="group" aria-label="Planetenkarten">
+          <details class="trek-dd">
+            <summary data-cat="Planeten">Planeten</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planet?body=mercury" data-body="mercury">Merkur</a>
+              <a href="#/planet?body=venus" data-body="venus">Venus</a>
+              <a href="#/planet?body=mars" data-body="mars">Mars</a>
+            </div>
+          </details>
+          <details class="trek-dd">
+            <summary data-cat="Monde">Monde</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planet?body=moon" data-body="moon">Mond</a>
+              <a href="#/planet?body=io" data-body="io">Io</a>
+              <a href="#/planet?body=europa" data-body="europa">Europa</a>
+              <a href="#/planet?body=ganymede" data-body="ganymede">Ganymed</a>
+              <a href="#/planet?body=callisto" data-body="callisto">Callisto</a>
+              <a href="#/planet?body=titan" data-body="titan">Titan</a>
+              <a href="#/planet?body=phobos" data-body="phobos">Phobos</a>
+              <a href="#/planet?body=mimas" data-body="mimas">Mimas</a>
+              <a href="#/planet?body=enceladus" data-body="enceladus">Enceladus</a>
+              <a href="#/planet?body=tethys" data-body="tethys">Tethys</a>
+              <a href="#/planet?body=dione" data-body="dione">Dione</a>
+              <a href="#/planet?body=rhea" data-body="rhea">Rhea</a>
+              <a href="#/planet?body=iapetus" data-body="iapetus">Iapetus</a>
+            </div>
+          </details>
+          <details class="trek-dd">
+            <summary data-cat="Asteroiden">Asteroiden</summary>
+            <div class="trek-dd-items" role="menu">
+              <a href="#/planet?body=vesta" data-body="vesta">Vesta</a>
+              <a href="#/planet?body=ceres" data-body="ceres">Ceres</a>
+              <a href="#/planet?body=ryugu" data-body="ryugu">Ryugu</a>
+            </div>
+          </details>
+        </div>
+        <a href="#/planet" class="world-link" data-world="planet" aria-expanded="false" aria-label="Planeten-Leiste umschalten">Planeten</a>
+        <a href="#/vorhersage" data-route="forecast">Vorhersage</a>
+        <a href="#/" data-route="globe">Karte</a>
         <a href="#/weltall" data-route="space">Weltall</a>
         <a href="#/spiele" data-route="games">Spiele</a>
+        <a href="#/weltall" class="space-knob" aria-expanded="false" aria-label="NASA Eyes umschalten">Weltall</a>
       </nav>
     </header>
     <div id="app"></div>

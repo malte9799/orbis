@@ -171,7 +171,7 @@ const CAT_OF: Record<CatId, string[]> = {
   gefahr: ['dwdwarn', 'nina', 'fires', 'storms', 'tornado', 'quakes', 'volcanoes', 'floods', 'ice', 'tsunami', 'radiation'],
   verkehr: ['aircraft', 'ships', 'trains', 'transit', 'autobahn', 'blitzer', 'sondes', 'launches', 'sats', 'starlink', 'airports', 'airport3d'],
   meer: ['waves', 'buoys', 'tides', 'rivers', 'gauges', 'bathymetry', 'chlorophyll'],
-  erde: ['terrain', 'geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
+  erde: ['geology', 'plates', 'ndvi', 'lst', 'snowcover', 'aerosol', 'landcover', 'resources'],
   netze: ['roadnet', 'railmap', 'busnet', 'railspeed', 'railelec', 'cyclenet', 'hikenet', 'shipping', 'cables', 'ixp', 'pipelines', 'wind', 'solar', 'water', 'nuclear', 'coal', 'gas', 'oil', 'biomass', 'plants'],
   medien: ['webcams', 'radio', 'alpr'],
 };
@@ -180,7 +180,7 @@ const ICON_OF: Record<string, string> = {
   cities: 'city', dwdwarn: 'warn', gauges: 'gauge', nina: 'warn', aq: 'air', aurora: 'aurora', tsunami: 'tsunami', lightning: 'bolt', radiation: 'radiation',
   resources: 'pick', geology: 'mountain', plates: 'quake', ndvi: 'leaf', lst: 'thermo', snowcover: 'snow', aerosol: 'air', landcover: 'map', waves: 'wave',
   rivers: 'flood', buoys: 'ocean', tides: 'wave', bathymetry: 'ocean', chlorophyll: 'leaf', nexrad: 'radar', ecradar: 'radar', fmiradar: 'radar',
-  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar', terrain: 'mountain',
+  noaaradar: 'radar', jmaradar: 'radar', dwdnowcast: 'radar', ecsnow: 'snow', fmirain24: 'drop', jmanowcast: 'radar',
   aircraft: 'plane2', sondes: 'balloon', launches: 'rocket', airports: 'plane2', airport3d: 'plane2', sats: 'orbit', starlink: 'orbit', ships: 'ship', trains: 'train',
   transit: 'bus', roadnet: 'road', railmap: 'rail', busnet: 'bus', railspeed: 'rail', railelec: 'power', cyclenet: 'road', hikenet: 'mountain', blitzer: 'blitzer',
   autobahn: 'car', pipelines: 'pipe', shipping: 'ship', cables: 'cable', ixp: 'cable', wind: 'windmill', solar: 'sun', plants: 'power', water: 'drop', nuclear: 'radiation',

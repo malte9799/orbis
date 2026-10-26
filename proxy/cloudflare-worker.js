@@ -1,6 +1,6 @@
 // Shared data proxy for Orbis (Cloudflare Worker, free plan: 100,000 requests/day).
 //
-// - Live flight data: adsb.lol, adsb.fi, airplanes.live and OpenSky block browser requests
+// - Live flight data: adsb.lol, adsb.fi and OpenSky block browser requests
 //   from other sites (no CORS) – the proxy adds the CORS headers.
 // - NOAA NDBC buoys and CO-OPS tide gauges (no CORS headers).
 // - Overpass (OpenStreetMap): answers are cached, so many visitors looking at the same area
@@ -24,7 +24,6 @@ const HOSTS = {
   // aircraft photos (planespotters.net), cached for 24h
   'api.planespotters.net': 86400,
   'opendata.adsb.fi': 8,
-  'api.airplanes.live': 8,
   'opensky-network.org': 30,
   'overpass-api.de': 900,
   'overpass.private.coffee': 900,

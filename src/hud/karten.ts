@@ -44,6 +44,8 @@ export interface Karte {
    * Hell, off everywhere else – see defaultBuildings3d).
    */
   buildings3d?: boolean;
+  /** 3D-Gelände (echte Höhen): true, wenn die Landschaft plastisch sein soll (Mapterhorn/AWS DEM) */
+  terrain3d?: boolean;
   /**
    * The Karte is steered by a menu under the Karten bar: 'wx' picks the weather layer, 'traffic'
    * and 'infra' switch the categories of their menu. What the menu picks is remembered but never
@@ -63,7 +65,7 @@ export const STANDARD: Karte[] = [
   {
     id: 'wetter', name: 'Wetter', icon: 'cloud', color: '#4f8dff', std: true, menu: 'wx',
     base: 'satellite', labels: true, night: true, main: 'radar', mainVar: 'radar',
-    layers: [{ id: 'cities' }, { id: 'dwdwarn' }],
+    layers: [{ id: 'cities', hidden: true }, { id: 'dwdwarn', hidden: true }],
   },
   {
     id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',
@@ -84,6 +86,9 @@ export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
 /** whether 3D-Gebäude is on without an explicit choice: standard on Dunkel and Hell */
 export const defaultBuildings3d = (base: BaseId): boolean => base === 'dark' || base === 'light';
+
+/** whether 3D-Gelände is on without an explicit choice: standard off – it only engages when the map is tilted */
+export const defaultTerrain3d = (): boolean => false;
 
 export function blankKarte(): Karte {
   return {
@@ -111,7 +116,7 @@ export function signature(k: Karte): string {
 
 /** signature plus everything remembered silently: two equal ones need no draft */
 export const fullSignature = (k: Karte): string =>
-  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.buildings3d === undefined, k.layers.map((l) => [l.id, !!l.hidden])]);
+  JSON.stringify([signature(k), wxState(k), k.labels, k.night, k.tmode ?? '', k.buildings3d === undefined, k.terrain3d === undefined, k.layers.map((l) => [l.id, !!l.hidden])]);
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -171,6 +176,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
   if (r.wind === false) k.wind = false;
   if (r.isobars === true) k.isobars = true;
   if (typeof r.buildings3d === 'boolean') k.buildings3d = r.buildings3d;
+  if (typeof r.terrain3d === 'boolean') k.terrain3d = r.terrain3d;
   const v = r.view as Partial<KView> | undefined;
   if (v && Array.isArray(v.center) && Number.isFinite(v.center[0]) && Number.isFinite(v.center[1]) && Number.isFinite(v.zoom)) {
     k.view = { center: [Number(v.center[0]), Number(v.center[1])], zoom: Number(v.zoom) };

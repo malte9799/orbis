@@ -5,6 +5,7 @@ import { FUELS, loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippin
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
+import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
@@ -104,7 +105,6 @@ export type ExtraId =
   | 'tides'
   | 'waves'
   | 'rivers'
-  | 'terrain'
   | 'bathymetry'
   | 'chlorophyll'
   | 'ecradar'
@@ -131,7 +131,7 @@ export interface ExtraDef {
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
   { id: 'earth', title: 'Erde & Umwelt' },
-  { id: 'ocean', title: 'Meer, Radar & Gelände' },
+  { id: 'ocean', title: 'Meer & Radar' },
   { id: 'air', title: 'Luftraum & Weltraum' },
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
   { id: 'networks', title: 'Verkehrsnetze' },
@@ -173,8 +173,7 @@ export const EXTRAS: ExtraDef[] = [
   { id: 'ecsnow', section: 'ocean', label: 'Schneeradar Kanada', hint: 'Radar nur für Schneefall, 1 km – Environment Canada', glyph: 'ice', color: '#81d4fa' },
   { id: 'fmirain24', section: 'ocean', label: 'Regensumme 24 h Finnland', hint: 'Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute', glyph: 'flood', color: '#0277bd' },
   { id: 'jmanowcast', section: 'ocean', label: 'Radar-Nowcast Japan', hint: 'Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency', glyph: 'storm', color: '#ad1457' },
-  { id: 'terrain', section: 'ocean', label: '3D-Gelände', hint: 'Berge und Täler plastisch, Schummerung – AWS Terrain Tiles (zum Kippen mit Strg + Ziehen)', glyph: 'landslide', color: '#8d6e63' },
-  { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, airplanes.live, OpenSky', glyph: 'plane', color: '#f2c94c' },
+  { id: 'aircraft', section: 'air', label: 'Flugzeuge & Hubschrauber', hint: 'live, ADS-B – adsb.lol, adsb.fi, OpenSky', glyph: 'plane', color: '#f2c94c' },
   { id: 'sondes', section: 'air', label: 'Wetterballons', hint: 'Radiosonden live (SondeHub) – mit dem Flugverkehr als 3D-Modell und Detaildaten zum Klick', glyph: 'sonde', color: '#ff8fab' },
   { id: 'launches', section: 'air', label: 'Raketenstarts', hint: 'nächste Starts, Countdown, Tracking & Stream – The Space Devs', glyph: 'rocket', color: '#ff6e40' },
   { id: 'airports', section: 'air', label: 'Flughäfen', hint: 'mit Abflügen & Ankünften vom Vortag – OpenSky', glyph: 'airport', color: '#90caf9' },
@@ -282,7 +281,6 @@ const LAYERS: Record<ExtraId, string[]> = {
   ecsnow: ['ecsnow'],
   fmirain24: ['fmirain24'],
   jmanowcast: ['jmanowcast'],
-  terrain: ['hillshade'],
   autobahn: ['autobahn-line', 'autobahn'],
   nina: ['nina-fill', 'nina-line'],
   alpr: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],
@@ -454,13 +452,14 @@ const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
  *  zoom range, so a km-based circle stays the same size on the map while zooming. A small
- *  minimum radius keeps fresh and far-zoomed circles visible at all. */
+ *  minimum radius keeps fresh and far-zoomed circles visible at all – it sits inside every
+ *  stop, because the zoom interpolate has to stay top-level for the style spec. */
 const thunderRadius: ExpressionSpecification = (() => {
   const A = 1000 / 156543.03392;
   const cos = ['cos', ['/', ['*', ['get', 'lat'], 3.141592653589793], 180]] as unknown as ExpressionSpecification;
   const stops: unknown[] = [];
-  for (let z = 0; z <= 12; z += 2) stops.push(z, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]);
-  return ['max', 10, ['interpolate', ['exponential', 2], ['zoom'], ...stops]] as unknown as ExpressionSpecification;
+  for (let z = 0; z <= 12; z += 2) stops.push(z, ['max', 10, ['/', ['*', A * 2 ** z, ['get', 'km']], cos]]);
+  return ['interpolate', ['exponential', 2], ['zoom'], ...stops] as ExpressionSpecification;
 })();
 
 const ALT_COLOR: ExpressionSpecification = [
@@ -578,10 +577,10 @@ export class ExtraLayers {
       cables: 'Seekabel: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)',
       ixp: 'Internetknoten: <a href="https://www.peeringdb.com/">PeeringDB</a>',
       power: 'Kraftwerke: <a href="https://datasets.wri.org/dataset/globalpowerplantdatabase">WRI GPPD, CC BY 4.0</a>',
-      aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://airplanes.live/">airplanes.live</a>, <a href="https://opensky-network.org/">OpenSky</a>',
+      aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
-      webcams: 'Webcams: <a href="https://www.digitraffic.fi/">Fintraffic Digitraffic</a> (CC BY 4.0), <a href="https://www.windy.com/webcams">Windy.com</a>, <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://www.nzta.govt.nz">NZTA</a>, <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://data.calgary.ca">City of Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (Open Government Licence – BC)',
+      webcams: 'Webcams: <a href="https://www.windy.com/webcams">Windy</a>, <a href="https://www.digitraffic.fi/">Digitraffic</a> (CC BY 4.0), <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://data.calgary.ca">Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (OGL), <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://www.nzta.govt.nz">NZTA</a>',
       'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")',
       'webcams-osm': 'Webcams: © OpenStreetMap',
       alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
@@ -596,7 +595,7 @@ export class ExtraLayers {
       launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (Contains information licensed under the Open Government Licence – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA (Data provided by Chicago Transit Authority), Trafiklab',
+      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
       autobahn: 'Verkehr: <a href="https://www.autobahn.de/">Autobahn GmbH</a>',
       'autobahn-line': '',
       nina: 'Warnungen: <a href="https://warnung.bund.de/">NINA / BBK</a>',
@@ -751,26 +750,23 @@ export class ExtraLayers {
     overlay('ecsnow', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RSNO&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Schneeradar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.85, { bounds: [-141, 41, -52, 70] });
     overlay('fmirain24', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_rr24h_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Regensumme: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
     overlay('jmanowcast', [JMA_RADAR_TILES('20000101000000')], 'Radar-Nowcast Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
-    // 3D terrain: AWS Terrarium tiles (also used for the hillshade below)
+    // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der
+    // Anpassung der echten Höhen (Gebirge, 3D-Flugzeuge/Sonden/Boote), wird nie als Ebene gezeichnet
+    registerDemTiles();
     if (!m.getSource('terrain-dem')) {
       m.addSource('terrain-dem', {
         type: 'raster-dem',
-        tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        maxzoom: 14,
+        tiles: [DEM_TILES],
+        tileSize: 512,
+        maxzoom: DEM_NATIVE_ZOOM,
         encoding: 'terrarium',
-        // full credit list required by the terrain tiles (tilezen/joerd docs/attribution.md)
+        // Lizenzpflichten der Quellen: die verlinkten Seiten führen die komplette Modell-Liste
+        // (mapterhorn.com/attribution; docs/attribution.md für die AWS/tilezen-Fallbacks)
         attribution:
-          'Gelände: <a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a> (Mapzen) – USGS 3DEP, SRTM, GMTED2010 (U.S. Geological Survey); ETOPO1 (NOAA); ' +
-          'ArcticDEM (DigitalGlobe-Bilder, NSF-gefördert); © Commonwealth of Australia (Geoscience Australia) 2017; © offene Daten Österreichs – DGM Österreich; ' +
-          'Open Government Licence – Canada; EU-DEM: produced using Copernicus data and information funded by the European Union; INEGI, Continental relief, 2016; ' +
-          '© Land Information New Zealand; © Kartverket; © Environment Agency copyright and/or database right 2015',
+          'Gelände: <a href="https://mapterhorn.com/attribution/">Mapterhorn</a>, ' +
+          '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a>',
       });
     }
-    add(
-      { id: 'hillshade', type: 'hillshade', source: 'terrain-dem', layout: hidden, paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#1a1a2e' } },
-      'lbl-border-country',
-    );
     overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
     overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
     add(
@@ -1075,8 +1071,8 @@ export class ExtraLayers {
     );
     // live lightning: newest strikes bright yellow/white, ageing to dark red
     const strikeColor: ExpressionSpecification = ['match', ['get', 'age'], 0, '#ffffff', 1, '#ffe14d', 2, '#ff9100', '#d32f2f'];
-    // expanding ring of a fresh strike (grows with "k", fades via "o"), detector line colours: green = close, blue = medium, red = far
-    const lineColor: ExpressionSpecification = ['match', ['get', 'dc'], 0, '#3ddc84', 1, '#6ea8ff', '#ff5252'];
+    // expanding ring of a fresh strike (grows with "k", fades via "o"); detector lines: white,
+    // only a little thicker when the capturing detector sits close to the strike
     // thunder (Unteroption "Donner"): drew the backmost lightning layer first, so it never
     // washes out the wave, lines or strike dots
     add(
@@ -1103,8 +1099,16 @@ export class ExtraLayers {
         source: 'lightning-line',
         layout: { ...hidden, 'line-join': 'round' },
         paint: {
-          'line-color': lineColor,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.1, 12, 1.6],
+          // weiß in jeder Entfernung; die Dicke kodiert sie: nah (dc 0) etwas dicker, sonst Basis.
+          // Zoom-Ausdruck bleibt top-level im Interpolate (der dc-Faktor sitzt in den Stops, sonst
+          // verwirft MapLibre das Paint und schaltet die Linien komplett aus)
+          'line-color': '#ffffff',
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            1, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 0.6],
+            8, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.1],
+            12, ['*', ['match', ['get', 'dc'], 0, 1.3, 1, 1.1, 1], 1.6],
+          ],
           'line-opacity': ['get', 'o'],
         },
       },
@@ -1166,9 +1170,12 @@ export class ExtraLayers {
         layout: hidden,
         paint: {
           'circle-color': 'rgba(255,50,50,0.28)',
+          // max. Größe erst ab Zoom 3: bei Weltansicht bleiben die Kreise klein (≤ 8 px),
+          // ab Zoom 3 bis 36 px und danach wie bisher weiterwachsen
           'circle-radius': [
             'interpolate', ['linear'], ['zoom'],
-            1, ['+', 5, ['*', 44, ['get', 'k']]],
+            0, ['+', 2, ['*', 6, ['get', 'k']]],
+            3, ['+', 6, ['*', 30, ['get', 'k']]],
             6, ['+', 8, ['*', 96, ['get', 'k']]],
             12, ['+', 10, ['*', 180, ['get', 'k']]],
           ],
@@ -1398,13 +1405,14 @@ export class ExtraLayers {
       'marker',
     );
     // live track of the rocket currently followed in the launch panel (trail + symbol);
-    // always rendered once the panel feeds data, independent of the launches toggle
+    // visible only while the panel feeds data (independent of the launches toggle) –
+    // the layers start hidden: 'visible' with empty data would keep the attribution
     add(
       {
         id: 'launch-live-line',
         type: 'line',
         source: 'launch-live-line',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        layout: { visibility: 'none' as const, 'line-join': 'round', 'line-cap': 'round' },
         paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
       },
       'marker',
@@ -1415,6 +1423,7 @@ export class ExtraLayers {
         type: 'symbol',
         source: 'launch-live',
         layout: {
+          visibility: 'none' as const,
           'icon-image': 'glyph-rocket',
           'icon-size': 1.4,
           'icon-allow-overlap': true,
@@ -1537,7 +1546,7 @@ export class ExtraLayers {
           'circle-color': ['case', ['get', 'flock'], ALPR_RED, '#ff9800'],
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 1.5],
         },
       },
       'marker',
@@ -1754,6 +1763,13 @@ export class ExtraLayers {
     return this.on.has(id);
   }
 
+  /** 3D-Gelände: echtes Höhenmodell an/aus – gezeichnet wird nie etwas davon (keine eigene Ebene) */
+  setTerrain(on: boolean) {
+    const has = !!this.map.getTerrain();
+    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
+    else if (!on && has) this.map.setTerrain(null);
+  }
+
   setEnabled(ids: ExtraId[]) {
     this.on = new Set(ids);
     if (this.ready) this.apply();
@@ -1810,6 +1826,11 @@ export class ExtraLayers {
 
   note(id: ExtraId): string | undefined {
     return this.on.has(id) ? this.info[id]?.note : undefined;
+  }
+
+  /** Stream delay of the live lightning feed in seconds (undefined while unknown). */
+  lightningDelay(): number | undefined {
+    return this.lightning?.delay;
   }
 
   /** The map layers of a layer entry (for the draw order), in their style order. */
@@ -2227,9 +2248,6 @@ export class ExtraLayers {
         case 'jmanowcast':
           this.loadOnce('jmanowcast', 5 * 60000, () => this.loadJmaRadar('jmanowcast'));
           break;
-        case 'terrain':
-          this.setTerrain(true);
-          break;
         case 'radiation':
           this.loadOnce('radiation', 60 * 60000, async () => {
             const r = await loadRadiation();
@@ -2329,7 +2347,6 @@ export class ExtraLayers {
       this.clear('veh-fetch');
       this.clear('veh-feeds');
     }
-    if (!this.on.has('terrain')) this.setTerrain(false);
     if (!this.on.has('waves')) this.waveKey = '';
     if (!this.on.has('rivers')) this.riverKey = '';
     if (!this.on.has('lightning')) {
@@ -2982,6 +2999,10 @@ export class ExtraLayers {
     const none = empty();
     this.setData('launch-live-line', data?.line ?? none);
     this.setData('launch-live', data?.pos ?? none);
+    // layer visibility follows the data: hidden layers drop their source's attribution
+    const has = (fc: FeatureCollection | undefined) => !!fc?.features.length;
+    this.vis('launch-live-line', has(data?.line));
+    this.vis('launch-live', has(data?.pos));
   }
 
   private async loadShips() {
@@ -3040,12 +3061,6 @@ export class ExtraLayers {
         this.riverKey = '';
         this.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Flood nicht erreichbar' });
       });
-  }
-
-  private setTerrain(on: boolean) {
-    const has = !!this.map.getTerrain();
-    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
-    else if (!on && has) this.map.setTerrain(null);
   }
 
   private updateLightning() {

@@ -58,7 +58,7 @@ import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
-import { defaultBuildings3d, type Karte, type KView } from '../hud/karten';
+import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
 import { builtInProxy } from '../api/proxy';
 import { store, type ApiKeys, type AppOptions, type Place } from '../store';
@@ -109,6 +109,8 @@ interface GlobeState {
   isobars: boolean;
   /** 3D-Gebäude as a Grundkarten-Option (defaults on Dunkel and Hell) */
   buildings3d: boolean;
+  /** 3D-Gelände as a Grundkarten-Option: the real elevation model (defaults on) */
+  terrain3d: boolean;
   extras: Partial<Record<ExtraId, boolean>>;
   groups: Partial<Record<GroupId, boolean>>;
   projection: 'globe' | 'mercator';
@@ -125,6 +127,7 @@ const DEFAULT_STATE: GlobeState = {
   wind: false,
   isobars: false,
   buildings3d: false,
+  terrain3d: false,
   extras: {},
   groups: {},
   projection: 'mercator',
@@ -354,7 +357,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyKarte(k: Karte) {
     curKarte = k;
-    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d };
+    const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d, terrain3d: state.terrain3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
     if (fam) overlay = (fam.variants.find(([v]) => v === k.mainVar) ?? fam.variants[0])[0] as OverlayId;
@@ -363,11 +366,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.labels = k.labels;
     state.night = k.night;
     state.overlay = overlay;
-    // wind layers bring their particles along (can be switched off); isobars are an option of wind/pressure
-    state.wind = isField(overlay) && !!FIELDS[overlay].particles && k.wind !== false;
+    // wind layers bring their particles along (can be switched off), and Satellit/Wolken (IR)
+    // shows them as well; isobars are an option of wind/pressure
+    state.wind = ((isField(overlay) && !!FIELDS[overlay].particles) || overlay === 'sat-ir') && k.wind !== false;
     state.isobars = !!k.isobars && !!fam && ISOBAR_OPTION_MAINS.includes(fam.id);
     // 3D-Gebäude: explicit choice, otherwise the default of the base map (on Dunkel and Hell)
     state.buildings3d = k.buildings3d ?? defaultBuildings3d(k.base);
+    // 3D-Gelände: explicit choice, otherwise on (the real elevation model)
+    state.terrain3d = k.terrain3d ?? defaultTerrain3d();
 
     const nextExtras: Partial<Record<ExtraId, boolean>> = {};
     const nextGroups: Partial<Record<GroupId, boolean>> = {};
@@ -394,6 +400,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
     if (prev.base !== state.base || prev.labels !== state.labels) applyBase();
     else if (prev.buildings3d !== state.buildings3d) applyBuildings();
+    else if (prev.terrain3d !== state.terrain3d) applyTerrain();
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
@@ -504,7 +511,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (n != null) parts.push(`${fmt.num(n)} geladen`);
     const note = extras?.note(e);
     if (note) parts.push(note);
-    return { sub: parts.join(' · '), live: live && n != null, count: n ?? null };
+    return { sub: parts.join(' · '), live: live && n != null, count: n ?? null, delay: id === 'lightning' ? extras?.lightningDelay() : undefined };
   }
 
   function eventList(hours: number): HudEvent[] {
@@ -954,6 +961,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
   }
 
+  /** 3D-Gelände: only lifts the real elevation model when the camera is tilted – top-down it stays flat. */
+  function applyTerrain() {
+    const tilted = !!map && map.getPitch() > 10;
+    extras?.setTerrain(state.terrain3d && tilted);
+  }
+
   /** The terminator follows the forecast timeline when one is shown. */
   function updateNight() {
     if (!state.night) return;
@@ -966,6 +979,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const filter = ['in', ['get', 'group'], ['literal', on]] as const;
     map?.setFilter('ev-circle', filter as never);
     map?.setFilter('ev-glyph', filter as never);
+    // groups off = events layers visually AND formally hidden, so the attribution control
+    // drops the events sources (visibility 'none' is what counts, not empty features)
+    const evVisible = on.length > 0;
+    for (const id of ['ev-circle', 'ev-glyph']) vis(id, evVisible);
     vis('quakes', !!state.groups.quakes);
     vis('tracks', !!state.groups.storms);
     vis('nws-fill', !!state.groups.tornado);
@@ -1087,10 +1104,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
   }, 700);
 
-  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile) */
+  /** HD satellite: NOAA-21, or NOAA-20 when NOAA-21 delivers nothing at all (probe of one small tile).
+   *  Runs only while "Satellit HD" is actually shown – no probe fetch on every map load. */
   let hdSat: string = HD_SAT;
+  let hdProbeDay = '';
   async function updateHdSource() {
     const date = gibsDate(1);
+    hdProbeDay = date;
     const works = (sat: string) =>
       fetch(gibsTrueColor(date, sat).replace('{z}/{y}/{x}', '2/1/2'), { signal: AbortSignal.timeout(8000) }).then(
         (r) => r.ok,
@@ -1098,6 +1118,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       );
     hdSat = (await works(HD_SAT)) ? HD_SAT : HD_SAT_BACKUP;
     (map?.getSource('hd') as RasterTileSource | undefined)?.setTiles([gibsTrueColor(date, hdSat)]);
+  }
+  /** the probe (and a later switch to the backup satellite) only when HD is really displayed */
+  function ensureHdSources() {
+    if (state.overlay !== 'sat-hd') return;
+    if (hdProbeDay !== gibsDate(1) || hdSat !== HD_SAT) void updateHdSource();
   }
 
   function setGeo(source: string, data: FeatureCollection) {
@@ -1110,6 +1135,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     stopAnimation();
     vis('field', false);
     vis('hd', o === 'sat-hd');
+    if (o === 'sat-hd') ensureHdSources();
     vis('sat-ir', o === 'sat-ir');
     vis('sat-storm', o === 'sat-storm');
     vis('dwd-radar', o === 'dwd-radar');
@@ -1634,7 +1660,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
-      void updateHdSource();
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
@@ -1654,6 +1679,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       };
       sondePanel.onOpen = () => flightPanel?.close();
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
+      extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
       applyPadding();
       applyBase();
@@ -1720,6 +1746,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
     map.on('rotate', syncRotated);
     map.on('pitch', syncRotated);
+    // 3D-Gelände folgt der Neigung: erst ab geneigter Kamera aktiv, von oben immer flach
+    let terrainTilted = false;
+    const syncTerrainPitch = () => {
+      if (!map) return;
+      const tilted = map.getPitch() > 10;
+      if (tilted !== terrainTilted) {
+        terrainTilted = tilted;
+        applyTerrain();
+      }
+    };
+    map.on('pitch', syncTerrainPitch);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
@@ -1904,7 +1941,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       clearInterval(liveTimer);
       liveTimer = window.setInterval(() => {
         if (!map || document.hidden) return;
-        if (hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
+        if (state.overlay === 'sat-hd' && hdSat !== HD_SAT) void updateHdSource(); // NOAA-21 may be back
         const t = `&_t=${Math.floor(Date.now() / 300000)}`;
         // EUMETSAT layers get their own TIME parameter in the URL (newest published scan);
         // only static-URL sources need the generic cache buster.
