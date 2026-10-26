@@ -21,7 +21,7 @@ export default defineExtra({
   glyph: 'plane',
   icon: 'plane2',
   color: '#f2c94c',
-  sources: { aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>' },
+  sources: { 'aircraft-rotor': '', aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>' },
   addLayers(ctx) {
     const { add, hidden } = ctx;
     add(
