@@ -98,6 +98,8 @@ export interface ExtraDef {
   sources?: Record<string, string>;
   /** adds the map layers (once, after the style has loaded) */
   addLayers?(ctx: ExtraCtx): void;
+  /** called on every apply, on or off, before enable/disable – for logic that spans layers */
+  apply?(ctx: ExtraCtx): void;
   /** called when the layer is off (every apply) – hide what only this layer shows, stop timers */
   disable?(ctx: ExtraCtx): void;
   /** called whenever the layer is on and the state is applied – start loading/refreshing here */

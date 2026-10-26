@@ -1,18 +1,14 @@
-import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature, RasterTileSource } from 'maplibre-gl';
+import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { loadOsmPower, loadPowerPlants, type PowerCat } from '../api/infra';
-import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
-import { loadPorts } from '../api/ports';
-import { loadRivers, loadWaves } from '../api/ocean';
 import {
   AisStream,
   hasAisLive,
-  loadAirportFlights,
   loadDigitrafficShips,
   loadTrainDetails,
   loadTrains,
@@ -28,10 +24,8 @@ import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
-import { JMA_RADAR_TILES } from './layers/shared/tiles';
-import { AIRPORT_FAR } from './layers/defs/airports';
 import { cardHtml } from './popup';
-import { AIRPORT_ZOOM, Airport3D } from './airport3d';
+import { Airport3D } from './airport3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
@@ -246,9 +240,8 @@ export class ExtraLayers {
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
-      ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
     };
-    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'airports-far', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -374,39 +367,6 @@ export class ExtraLayers {
       }
       def.addLayers?.(this.ctx);
     }
-    // transport
-    const airportLayer = (id: string, minzoom: number, classes: string[], textOverlap: boolean): LayerSpecification => ({
-      id,
-      type: 'symbol',
-      source: 'ofm',
-      'source-layer': 'aerodrome_label',
-      minzoom,
-      filter: ['all', ['has', 'iata'], ['in', ['get', 'class'], ['literal', classes]]],
-      layout: {
-        ...hidden,
-        'icon-image': 'glyph-airport',
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 3, 1, 9, 1.3],
-        'text-field': ['step', ['zoom'], '', 4, ['get', 'iata']],
-        'text-font': FONT_BOLD,
-        'text-size': 10,
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
-        'text-optional': true,
-        // icons and names stay visible at medium zoom (~50 km) and are not hidden by place labels of the base map
-        'icon-allow-overlap': true,
-        'icon-ignore-placement': true,
-        'text-allow-overlap': textOverlap,
-      },
-      paint: { 'text-color': '#cfe6ff', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-    });
-    add(airportLayer('airports', 1, ['international'], true), 'marker');
-    // The map tiles only carry airports from zoom 8. The big ones (from our own airport list, by size) show up earlier:
-    // the largest from zoom 5, then 6 and 7.
-    AIRPORT_FAR.forEach((id, i) => {
-      const spec = airportLayer(id, 5 + i, [], true);
-      add({ ...spec, source: 'airports-far', 'source-layer': undefined, maxzoom: 8, filter: ['==', ['get', 'tier'], i + 1], layout: { ...spec.layout, 'text-field': ['get', 'iata'] } } as LayerSpecification, 'marker');
-    });
-    add(airportLayer('airports-minor', 5.5, ['public', 'regional', 'other', 'military', 'private'], false), 'marker');
     if (!m.getSource('railmap'))
       m.addSource('railmap', {
         type: 'raster',
@@ -456,42 +416,6 @@ export class ExtraLayers {
     };
     vehicleLayers('trains', 'trains-label', ['==', ['get', 'rail'], true]);
     vehicleLayers('transit-veh', 'transit-label', ['!=', ['get', 'rail'], true]);
-    // ports: the bigger, the earlier (zoom 2 / 5 / 7 / 9 / 11); a port that is not yet "due" has radius 0
-    const byTier = (...v: number[]): ExpressionSpecification => ['case', ['<=', ['get', 'tier'], 1], v[0], ['<=', ['get', 'tier'], 2], v[1], ['<=', ['get', 'tier'], 3], v[2], ['<=', ['get', 'tier'], 4], v[3], v[4]];
-    const dueAt = (tier: number, r: number): ExpressionSpecification => ['case', ['<=', ['get', 'tier'], tier], r, 0];
-    add(
-      {
-        id: 'ports',
-        type: 'circle',
-        source: 'ports',
-        layout: { ...hidden, 'circle-sort-key': ['-', 0, ['get', 'tier']] },
-        paint: {
-          'circle-color': '#ffb74d',
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, dueAt(1, 3.5), 4.5, dueAt(1, 5), 5, dueAt(2, 4.5), 7, dueAt(3, 4.5), 9, dueAt(4, 5), 11, byTier(7, 6.5, 6, 5.5, 5)],
-          'circle-stroke-color': '#1b1200',
-          'circle-stroke-width': 1,
-        },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'ports-label',
-        type: 'symbol',
-        source: 'ports',
-        layout: {
-          ...hidden,
-          'text-field': ['step', ['zoom'], '', 5, ['case', ['<=', ['get', 'tier'], 1], ['get', 'name'], ''], 7, ['case', ['<=', ['get', 'tier'], 2], ['get', 'name'], ''], 9, ['case', ['<=', ['get', 'tier'], 3], ['get', 'name'], ''], 11, ['get', 'name']],
-          'text-font': FONT_REGULAR,
-          'text-size': 11,
-          'text-offset': [0, 0.9],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: { 'text-color': '#ffe0b2', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
-      },
-      'marker',
-    );
     add(
       {
         id: 'ships',
@@ -860,8 +784,6 @@ export class ExtraLayers {
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
-    if (this.on.has('waves')) this.loadWavesNow();
-    if (this.on.has('rivers')) this.loadRiversNow();
     if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
   }
 
@@ -870,23 +792,6 @@ export class ExtraLayers {
   private set(id: ExtraId, i: Info) {
     this.info[id] = { ...this.info[id], ...i };
     this.hooks.changed();
-  }
-
-  /** Big airports from our own list for the zoom levels 5–8, where the map tiles have none yet. */
-  private async loadFarAirports() {
-    const list = await staticAirports();
-    const area = (b: number[]) => (b[2] - b[0]) * Math.cos((((b[1] + b[3]) / 2) * Math.PI) / 180) * (b[3] - b[1]) * 111.32 ** 2; // km²
-    const features: Feature<Point>[] = list
-      .filter((a) => a.iata)
-      .map((a) => {
-        const km2 = area(a.bbox);
-        return {
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [(a.bbox[0] + a.bbox[2]) / 2, (a.bbox[1] + a.bbox[3]) / 2] },
-          properties: { icao: a.icao, iata: a.iata, name: a.name, tier: km2 >= 45 ? 1 : km2 >= 30 ? 2 : 3 },
-        };
-      });
-    this.setData('airports-far', { type: 'FeatureCollection', features });
   }
 
   private setData(source: string, data: FeatureCollection) {
@@ -939,11 +844,9 @@ export class ExtraLayers {
       this.airport3d?.feedSondes(this.lastSondes);
     }
     this.refreshSondesIcons();
-    // the airport symbols make room for the 3D airport once it is drawn
-    const maxZoom = this.on.has('airport3d') ? AIRPORT_ZOOM : 24;
-    for (const [id, min] of [['airports', 1], ['airports-minor', 5.5]] as const) if (this.map.getLayer(id)) this.map.setLayerZoomRange(id, min, maxZoom);
 
     for (const def of EXTRAS) {
+      def.apply?.(this.ctx);
       const on = this.on.has(def.id);
       if (!on) {
         this.clear(def.id);
@@ -987,29 +890,6 @@ export class ExtraLayers {
         case 'plants':
           this.ensurePower();
           break;
-        case 'waves':
-          this.loadWavesNow();
-          break;
-        case 'rivers':
-          this.loadRiversNow();
-          break;
-        case 'jmaradar':
-          this.loadOnce('jmaradar', 5 * 60000, () => this.loadJmaRadar());
-          break;
-        case 'jmanowcast':
-          this.loadOnce('jmanowcast', 5 * 60000, () => this.loadJmaRadar('jmanowcast'));
-          break;
-        case 'airports':
-          this.set('airports', { note: 'Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag' });
-          void this.loadFarAirports();
-          break;
-        case 'ports':
-          this.loadOnce('ports', Infinity, async () => {
-            const fc = await loadPorts();
-            this.setData('ports', fc);
-            return { count: fc.features.length, note: 'Größere Häfen ab kleinem Zoom, kleinere beim Heranzoomen · Klick zeigt Hafendaten' };
-          });
-          break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
           if (hasAisLive()) {
@@ -1035,8 +915,6 @@ export class ExtraLayers {
       this.clear('veh-fetch');
       this.clear('veh-feeds');
     }
-    if (!this.on.has('waves')) this.waveKey = '';
-    if (!this.on.has('rivers')) this.riverKey = '';
     if (!this.on.has('ships') || !hasAisLive()) {
       this.clear('ais-push');
       this.ais?.stop();
@@ -1060,17 +938,6 @@ export class ExtraLayers {
     const at = this.info[id]?.at ?? 0;
     if (Date.now() - at > maxAge || !at) run();
     if (Number.isFinite(maxAge)) this.every(id, maxAge, run);
-  }
-
-  /** Point a JMA source at its newest scan (observation) or the +60 min forecast frame (nowcast). */
-  private async loadJmaRadar(id: 'jmaradar' | 'jmanowcast' = 'jmaradar') {
-    const nowcast = id === 'jmanowcast';
-    const r = await fetch(`https://www.jma.go.jp/bosai/jmatile/data/nowc/targetTimes_${nowcast ? 'N2' : 'N1'}.json`);
-    if (!r.ok) throw new Error(`JMA ${r.status}`);
-    const times = (await r.json()) as { basetime: string; validtime: string }[];
-    const latest = nowcast ? times.reduce((a, t) => (t.basetime > a.basetime || (t.basetime === a.basetime && t.validtime > a.validtime) ? t : a), times[0]) : (times.find((t) => t.basetime === t.validtime) ?? times[0]);
-    if (!latest) throw new Error('JMA: keine Radarzeit');
-    (this.map.getSource(id) as RasterTileSource | undefined)?.setTiles([JMA_RADAR_TILES(latest.basetime, latest.validtime)]);
   }
 
   /** Throttled: no overlapping requests and at least 5 s between two (timer + map moves). */
@@ -1498,50 +1365,7 @@ export class ExtraLayers {
     return { note: note ?? this.info.ships?.note };
   }
 
-  private waveKey = '';
 
-  private loadWavesNow() {
-    const b = this.map.getBounds();
-    const z = this.map.getZoom();
-    const q = (v: number) => Math.round(v / 2) * 2;
-    const key = [q(b.getWest()), q(b.getSouth()), q(b.getEast()), q(b.getNorth())].join(',');
-    if (key === this.waveKey) return;
-    this.waveKey = key;
-    this.set('waves', { loading: true });
-    loadWaves({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(), zoom: z })
-      .then((r) => {
-        if (this.waveKey !== key) return;
-        this.setData('waves', r.fc);
-        this.set('waves', { loading: false, count: r.fc.features.length, note: `Raster ${r.step}° · Zahl = Wellenhöhe in m – zoomen für feineres Raster` });
-      })
-      .catch((e) => {
-        console.warn('Open-Meteo Marine', e);
-        this.waveKey = '';
-        this.set('waves', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Marine nicht erreichbar' });
-      });
-  }
-
-  private riverKey = '';
-
-  private loadRiversNow() {
-    const b = this.map.getBounds();
-    const q = (v: number) => Math.round(v / 2) * 2;
-    const key = [q(b.getWest()), q(b.getSouth()), q(b.getEast()), q(b.getNorth())].join(',');
-    if (key === this.riverKey) return;
-    this.riverKey = key;
-    this.set('rivers', { loading: true });
-    loadRivers({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth(), zoom: this.map.getZoom() })
-      .then((r) => {
-        if (this.riverKey !== key) return;
-        this.setData('rivers', r.fc);
-        this.set('rivers', { loading: false, count: r.fc.features.length, note: r.fc.features.length ? `Raster ${r.step}° – zoomen für mehr Flüsse · Farbe = Abfluss (blau klein → lila/rot sehr groß)` : 'hier keine Flüsse im Modell – anderen Ausschnitt wählen' });
-      })
-      .catch((e) => {
-        console.warn('Open-Meteo Flood', e);
-        this.riverKey = '';
-        this.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Flood nicht erreichbar' });
-      });
-  }
 
   /** True while the 3D ship models are drawn: the 2D icons are not clickable then (see pickShip). */
   ships3dActive() {
@@ -1639,79 +1463,6 @@ export class ExtraLayers {
         return {
           type: 'html',
           html: cardHtml({ glyph: 'satellite', color: '#b388ff', title: info.title, subtitle: info.subtitle, description: info.details, source: 'CelesTrak', url: info.url }),
-          lng: pt[0],
-          lat: pt[1],
-        };
-      }
-      case 'airports-minor':
-      case 'airports-far-1':
-      case 'airports-far-2':
-      case 'airports-far-3':
-      case 'airports': {
-        const icao = String(p.icao ?? '');
-        const name = String(p['name:de'] ?? p.name ?? 'Flughafen');
-        const code = [p.iata, icao].filter(Boolean).join(' / ');
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: 'airport',
-            color: '#90caf9',
-            title: name,
-            subtitle: [code, p.ele != null ? `${p.ele} m ü. NN` : ''].filter(Boolean).join(' · '),
-            source: 'OpenStreetMap, OpenSky Network',
-            url: icao ? `https://opensky-network.org/network/explorer?airport=${encodeURIComponent(icao)}` : undefined,
-            extra: icao ? '<div class="pop-loading small">Flüge vom Vortag werden geladen …</div>' : '',
-          }),
-          lng: pt[0],
-          lat: pt[1],
-          after: (node) => {
-            if (!icao) return;
-            loadAirportFlights(icao)
-              .then((r) => {
-                const list = (l: { callsign: string; other: string; time: number }[], arrow: string) =>
-                  l
-                    .slice(0, 6)
-                    .map((f) => `<span>${escapeHtml(new Date(f.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span><b>${escapeHtml(f.callsign || '–')} ${arrow} ${escapeHtml(f.other)}</b>`)
-                    .join('');
-                const el = node.querySelector('.pop-loading');
-                if (!el) return;
-                el.outerHTML = r.departures.length + r.arrivals.length
-                  ? `<div class="small muted">Vortag: ${r.departures.length} Abflüge, ${r.arrivals.length} Ankünfte</div>
-                     ${r.departures.length ? `<div class="pop-sub">Letzte Abflüge</div><div class="pop-grid two">${list(r.departures, '→')}</div>` : ''}
-                     ${r.arrivals.length ? `<div class="pop-sub">Letzte Ankünfte</div><div class="pop-grid two">${list(r.arrivals, '←')}</div>` : ''}`
-                  : '<div class="small muted">Keine Flugdaten vom Vortag verfügbar.</div>';
-              })
-              .catch(() => {
-                const el = node.querySelector('.pop-loading');
-                if (el) el.textContent = 'OpenSky gerade nicht erreichbar (Tageskontingent ohne Konto begrenzt).';
-              });
-          },
-        };
-      }
-      case 'ports': {
-        const row = (k: string, v: unknown, unit = '') => (v === '' || v == null ? null : [k, `${v}${unit}`]);
-        const rows = [
-          row('Größe', p.size),
-          row('Hafentyp', p.type),
-          row('Fahrwassertiefe', p.channel, ' m'),
-          row('Pier-Tiefe', p.pier, ' m'),
-          row('Größtes Schiff', p.length, ' m lang'),
-          row('Max. Tiefgang', p.draft, ' m'),
-          row('Lotsen', p.pilot),
-          row('Schutz', p.shelter),
-          row('Umschlag', p.fac),
-        ].filter(Boolean) as string[][];
-        const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : '';
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: 'vessel',
-            color: '#ffb74d',
-            title: p.name,
-            subtitle: [p.code, p.country].filter(Boolean).join(' · '),
-            source: p.wpi ? 'NGA World Port Index' : 'UN/LOCODE (Upply, CC BY 4.0)',
-            extra,
-          }),
           lng: pt[0],
           lat: pt[1],
         };

@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { loadJmaRadar } from '../shared/jma';
 import { JMA_RADAR_TILES } from '../shared/tiles';
 
 export default defineExtra({
@@ -22,5 +23,8 @@ export default defineExtra({
         bounds: [118, 20, 150, 48],
       },
   ],
+  enable(ctx) {
+    ctx.loadOnce('jmaradar', 5 * 60000, () => loadJmaRadar(ctx));
+  },
   layers: ['jmaradar'],
 });
