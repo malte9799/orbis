@@ -1,29 +1,5 @@
-export interface ApiKeys {
-  owm?: string;
-  firms?: string;
-  /** own CORS proxy for the live flight data */
-  adsbProxy?: string;
-  /** own RainViewer-compatible radar server (e.g. self-hosted LibreWXR) */
-  radarHost?: string;
-  /** Windy Webcams API (free tier) */
-  windy?: string;
-  /** aisstream.io live AIS (free) */
-  aisstream?: string;
-  /** Transport Victoria open data (free KeyId) */
-  victoria?: string;
-  /** CTA Train Tracker (free) */
-  cta?: string;
-  /** Trafiklab GTFS Regional realtime (free) */
-  trafiklab?: string;
-  /** US National Park Service API (free) */
-  nps?: string;
-  /** 511 Ontario API (free, Key request after sign-in at 511on.ca/developers) */
-  ontario511?: string;
-  /** 511 Alberta API (free, Key request after sign-in at 511.alberta.ca/developers) */
-  alberta511?: string;
-  /** Mapillary client token (free) – street photos for the street guessing game */
-  mapillary?: string;
-}
+/** API keys of the user (see src/settings/keys: one file per key) */
+export type ApiKeys = Record<string, string | undefined>;
 
 export interface Place {
   name: string;
