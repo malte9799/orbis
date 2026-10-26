@@ -53,6 +53,8 @@ export interface ExtraCtx {
   every(key: string, ms: number, fn: () => void): void;
   clear(key: string): void;
   toast(msg: string): void;
+  /** adds map layers of this layer entry later (lazily created ones) and re-applies the visibility */
+  registerLayers(id: ExtraId, layers: string[]): void;
   /** the style is loaded and the layers exist */
   readonly ready: boolean;
   /** opens the launch panel (set by the page that hosts the map) */

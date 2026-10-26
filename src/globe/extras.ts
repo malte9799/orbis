@@ -7,7 +7,6 @@ import { VehiclesLayer } from './vehicles3d';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
-import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr, loadDigitrafficCams, loadOsmWebcams, loadSpeedcams, loadWindyWebcams } from '../api/cams';
 import { loadPorts } from '../api/ports';
 import { loadRivers, loadWaves } from '../api/ocean';
 import {
@@ -23,11 +22,10 @@ import {
 } from '../api/transport';
 import { loadAmtrak, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
-import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
-import { snapshotJson } from '../api/data';
 import { isSuperseded } from '../api/overpass';
-import { escapeHtml, fmt, safeUrl } from '../util';
+import { escapeHtml, fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
+import { alprTileProps } from './layers/shared/cams';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { JMA_RADAR_TILES } from './layers/shared/tiles';
@@ -57,72 +55,6 @@ const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
 };
 const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
-
-/** Zoom from which cameras are loaded for the visible area (Overpass). */
-const CAM_DETAIL_ZOOM = 9;
-/** camera dots appear from this zoom on; below it the heatmap shows the distribution */
-const CAM_DOT_ZOOM = 6;
-const CAM_COLOR = '#00bfa5';
-const CAM_ZOOM_RED = '#e53935';
-const ALPR_RED = '#ef4444';
-const CARDINAL = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
-const ALPR_ZONE: Record<string, string> = { traffic: 'Verkehr', parking: 'Parkplatz', town: 'Ortschaft', building: 'Gebäude', public: 'Öffentlich', shop: 'Geschäft' };
-const ALPR_MOUNT: Record<string, string> = { pole: 'Mast', wall: 'Wand', street_lamp: 'Laterne', ceiling: 'Decke', bridge: 'Brücke', traffic_signals: 'Ampel', building: 'Gebäude' };
-
-/** Stock photo per vendor (DeFlock CDN, first image of each LPR vendor), matched on the manufacturer tag. */
-const ALPR_VENDOR_IMG: [RegExp, string][] = [
-  [/flock/i, 'flock/flock-1.jpg'],
-  [/motorola|vigilant/i, 'motorola/motorola-1.jpg'],
-  [/genetec/i, 'genetec/genetec-1.webp'],
-  [/leonardo|elsag/i, 'leonardo/elsag-1.jpg'],
-  [/neology/i, 'neology/neology-1.jpg'],
-  [/axon/i, 'axon/axon-1.webp'],
-  [/verkada/i, 'verkada/verkada_bullet_cropped.png'],
-];
-const alprVendorImg = (brand: string) => {
-  const hit = ALPR_VENDOR_IMG.find(([re]) => re.test(brand));
-  return hit ? `https://cdn.deflock.me/vendors/${hit[1]}` : '';
-};
-
-/** Properties of an overview-tile camera in the shape of the live (Overpass) ones. */
-function alprTileProps(t: Record<string, unknown> | null, lon: number, lat: number): Record<string, unknown> {
-  const brand = String(t?.brand ?? '');
-  const flock = /flock/i.test(brand);
-  const dir = Number(t?.direction);
-  return {
-    title: flock ? 'Flock-Kamera (ALPR)' : 'Kennzeichenerfassung (ALPR)',
-    subtitle: [brand, t?.operator].filter(Boolean).join(' · '),
-    flock,
-    dir: t?.direction != null && t.direction !== '' && Number.isFinite(dir) ? dir : -1,
-    mount: t?.mountType ?? '',
-    operator: t?.operator ?? '',
-    brand,
-    zone: t?.surveillanceZone ?? '',
-    since: t?.startDate ?? '',
-    ref: t?.ref ?? '',
-    url: t?.osmId ? `https://www.openstreetmap.org/${t.osmType ?? 'node'}/${t.osmId}` : undefined,
-    deflock: `https://maps.deflock.org/?lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&zoom=17`,
-  };
-}
-const ALPR_FOV_ZOOM = 12; // sectors are drawn from here on
-const ALPR_FOV_RADIUS = 80; // metres
-const ALPR_FOV_ANGLE = 60; // degrees
-const CAM_FOV_RADIUS = 80; // metres
-const CAM_FOV_ANGLE = 60; // degrees
-
-/** Sector polygons on the ground (metres → degrees), one per [lon, lat, heading]. */
-function fovSectors(cams: [number, number, number][], radius: number, angle: number): Feature[] {
-  return cams.map(([lon, lat, dir]) => {
-    const kx = 111320 * Math.cos((lat * Math.PI) / 180);
-    const ring: [number, number][] = [[lon, lat]];
-    for (let i = 0; i <= 12; i++) {
-      const a = ((dir - angle / 2 + (angle * i) / 12) * Math.PI) / 180;
-      ring.push([lon + (Math.sin(a) * radius) / kx, lat + (Math.cos(a) * radius) / 111320]);
-    }
-    ring.push([lon, lat]);
-    return { type: 'Feature' as const, geometry: { type: 'Polygon' as const, coordinates: [ring] }, properties: {} };
-  });
-}
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
@@ -246,24 +178,6 @@ export class ExtraLayers {
   private heliFeatures: Feature<Point>[] = [];
   private rotorShown = false;
   private ready = false;
-  private fiCams: FeatureCollection = empty();
-  private windyCams: FeatureCollection = empty();
-  private camFeeds = new Map<string, { at: number; features: Feature<Point>[] }>();
-  private camFeedLoading = new Set<string>();
-  private camFeedErrors = new Set<string>();
-  private camKey = '';
-  private osmCamCount = 0;
-  private windyKey = '';
-  private alprKey = '';
-  private webcamHeatAdded = false;
-  private webcamHeatLoaded = false;
-  private alprTilesAdded = false;
-  private alprTilesFailed = false;
-  private alprLive: Feature[] = [];
-  private alprFovKey = '';
-  private osmCamFc: FeatureCollection<Point> | null = null;
-  private camFovKey = '';
-  private blitzerKey = '';
   private baltic: Ship[] = [];
   private segs: Segment[] = [];
   private segKey = '';
@@ -307,6 +221,10 @@ export class ExtraLayers {
       every: (key, ms, fn) => this.every(key, ms, fn),
       clear: (key) => this.clear(key),
       toast: (msg) => this.hooks.toast(msg),
+      registerLayers: (id, layers) => {
+        LAYERS[id].push(...layers);
+        this.apply();
+      },
       get ready() {
         return self.ready;
       },
@@ -325,17 +243,12 @@ export class ExtraLayers {
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
       sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
-      webcams: 'Webcams: <a href="https://www.windy.com/webcams">Windy</a>, <a href="https://www.digitraffic.fi/">Digitraffic</a> (CC BY 4.0), <a href="https://www.vegagerdin.is/vegagerdin/gagnasafn/vefthjonustur/vefmyndavelar">Vegagerðin</a>, <a href="https://data.calgary.ca">Calgary</a>, <a href="https://www.drivebc.ca">DriveBC</a> (OGL), <a href="https://opendata.transport.nsw.gov.au">TfNSW</a> (CC BY 4.0), <a href="https://www.nzta.govt.nz">NZTA</a>',
-      'webcams-world': 'Kamera-Positionen (Heatmap): Aggregat der Webcam-Feeds (siehe „Webcams")',
-      'webcams-osm': 'Webcams: © OpenStreetMap',
-      alpr: 'ALPR: © OpenStreetMap-Mitwirkende, <a href="https://deflock.org/">DeFlock</a>',
-      blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
       ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
     };
-    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'airports-far', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'airports-far', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -646,98 +559,6 @@ export class ExtraLayers {
       },
       'marker',
     );
-    // cameras
-    const camIcon = (id: string, source: string): LayerSpecification => ({
-      id,
-      type: 'circle',
-      source,
-      minzoom: CAM_DOT_ZOOM,
-      layout: hidden,
-      paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
-    });
-    add(camIcon('webcams', 'webcams'), 'marker');
-    add(camIcon('webcams-osm', 'webcams-osm'), 'marker');
-    // viewing direction of OpenStreetMap webcams (camera:direction), same sectors as the ALPR cameras
-    add(
-      {
-        id: 'webcams-cone',
-        type: 'fill',
-        source: 'webcams-fov',
-        layout: hidden,
-        paint: { 'fill-color': CAM_COLOR, 'fill-opacity': 0.28 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'webcams-cone-line',
-        type: 'line',
-        source: 'webcams-fov',
-        layout: hidden,
-        paint: { 'line-color': CAM_COLOR, 'line-width': 1.2, 'line-opacity': 0.85 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'blitzer',
-        type: 'circle',
-        source: 'blitzer',
-        layout: hidden,
-        paint: {
-          // red: fixed camera · orange: monitored stretch (average speed) · violet: red-light camera
-          'circle-color': ['match', ['get', 'kind'], 'section', '#fb8c00', 'signals', '#ba68c8', CAM_ZOOM_RED],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
-        },
-      },
-      'marker',
-    );
-    // field of view as real-size sectors (metres on the ground, so they scale with the zoom)
-    add(
-      {
-        id: 'alpr-cone',
-        type: 'fill',
-        source: 'alpr-fov',
-        layout: hidden,
-        paint: { 'fill-color': ALPR_RED, 'fill-opacity': 0.28 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'alpr-cone-line',
-        type: 'line',
-        source: 'alpr-fov',
-        layout: hidden,
-        paint: { 'line-color': ALPR_RED, 'line-width': 1.2, 'line-opacity': 0.85 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'alpr',
-        type: 'circle',
-        source: 'alpr',
-        layout: hidden,
-        paint: {
-          'circle-color': ['case', ['get', 'flock'], ALPR_RED, '#ff9800'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 1.5],
-        },
-      },
-      'marker',
-    );
-    m.on('idle', () => this.updateCamFov());
-    m.on('error', (ev) => {
-      const e = ev as typeof ev & { sourceId?: string };
-      if (e.sourceId !== 'alpr-us' && e.sourceId !== 'alpr-ca') return;
-      if (!this.alprTilesFailed) console.warn('ALPR-Übersicht', e.error);
-      this.alprTilesFailed = true;
-      this.updateAlprNote();
-    });
     // moving objects on top
     add(
       {
@@ -1039,9 +860,6 @@ export class ExtraLayers {
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
-    if (this.on.has('webcams')) this.loadWebcamsNow();
-    if (this.on.has('alpr')) this.loadAlprNow();
-    if (this.on.has('blitzer')) this.loadBlitzerNow();
     if (this.on.has('waves')) this.loadWavesNow();
     if (this.on.has('rivers')) this.loadRiversNow();
     if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
@@ -1168,27 +986,6 @@ export class ExtraLayers {
         case 'biomass':
         case 'plants':
           this.ensurePower();
-          break;
-        case 'webcams':
-          this.loadOnce('webcams', 6 * 60 * 60000, async () => {
-            try {
-              this.fiCams = await loadDigitrafficCams();
-            } catch (e) {
-              console.warn('Digitraffic', e);
-            }
-            this.mergeWebcams();
-            return {};
-          });
-          this.ensureWebcamHeat();
-          void this.loadWorldHeat();
-          this.loadWebcamsNow();
-          break;
-        case 'alpr':
-          this.ensureAlprTiles();
-          this.loadAlprNow();
-          break;
-        case 'blitzer':
-          this.loadBlitzerNow();
           break;
         case 'waves':
           this.loadWavesNow();
@@ -1807,97 +1604,6 @@ export class ExtraLayers {
     };
   }
 
-  private mergeWebcams() {
-    const feedCams = [...this.camFeeds.values()].flatMap((f) => f.features);
-    const all = { type: 'FeatureCollection' as const, features: [...this.fiCams.features, ...this.windyCams.features, ...feedCams] };
-    this.setData('webcams', all);
-    this.set('webcams', { count: all.features.length + this.osmCamCount || undefined });
-    this.updateWebcamNote();
-  }
-
-  private updateWebcamNote() {
-    const notes: string[] = [];
-    if (this.map.getZoom() < CAM_DETAIL_ZOOM) notes.push('Webcams aus OpenStreetMap ab Zoomstufe 9');
-    if (this.camFeedErrors.size) notes.push(`${[...this.camFeedErrors].join(', ')} nicht erreichbar`);
-    if (!hasWindyKey()) notes.push('weltweit viele weitere mit kostenlosem Windy-Schlüssel (Einstellungen)');
-    else if (this.map.getZoom() < 5) notes.push('Windy-Webcams ab Zoomstufe 5');
-    this.set('webcams', { note: notes.join(' · ') || undefined });
-  }
-
-  private loadWebcamsNow() {
-    const m = this.map;
-    const z = m.getZoom();
-    // regional camera feeds (London, California, Hong Kong, …) once their region is in view
-    const vb = m.getBounds();
-    for (const feed of camFeedsInView({ west: vb.getWest(), south: vb.getSouth(), east: vb.getEast(), north: vb.getNorth() })) {
-      const prev = this.camFeeds.get(feed.id);
-      // signed image URLs (Singapore) expire – refresh those more often
-      const maxAge = (feed.id === 'singapore' ? 4 : 10) * 60000;
-      if (this.camFeedLoading.has(feed.id) || (prev && Date.now() - prev.at < maxAge)) continue;
-      this.camFeedLoading.add(feed.id);
-      // camera lists are mirrored daily into the data branch (images still load live)
-      const load = SNAPSHOT_CAMS.has(feed.id) ? () => snapshotJson(`cams/${feed.id}.json`, () => feed.load()) : () => feed.load();
-      load()
-        .then((features) => {
-          this.camFeeds.set(feed.id, { at: Date.now(), features });
-          this.camFeedErrors.delete(feed.label);
-          this.mergeWebcams();
-        })
-        .catch((e) => {
-          console.warn('Webcams', feed.id, e);
-          this.camFeeds.set(feed.id, { at: Date.now(), features: prev?.features ?? [] });
-          this.camFeedErrors.add(feed.label);
-          this.updateWebcamNote();
-        })
-        .finally(() => this.camFeedLoading.delete(feed.id));
-    }
-    // OpenStreetMap webcams for the visible area
-    if (z >= CAM_DETAIL_ZOOM) {
-      const b = this.viewBounds();
-      const key = Object.values(b).join(',');
-      if (key !== this.camKey) {
-        this.camKey = key;
-        loadOsmWebcams(b)
-          .then((fc) => {
-            if (this.camKey !== key) return;
-            this.setData('webcams-osm', fc);
-            this.osmCamFc = fc;
-            this.osmCamCount = fc.features.length;
-            this.updateCamFov();
-            this.mergeWebcams();
-          })
-          .catch((e) => {
-            if (isSuperseded(e) || this.camKey !== key) return;
-            console.warn('Overpass webcams', e);
-            this.camKey = '';
-          });
-      }
-    }
-    // Windy webcams around the map centre
-    if (hasWindyKey() && z >= 5) {
-      const c = m.getCenter();
-      const b = m.getBounds();
-      const km = Math.min(250, (Math.abs(b.getNorth() - b.getSouth()) * 111) / 2);
-      const key = `${c.lat.toFixed(1)},${c.lng.toFixed(1)},${Math.round(km / 10)}`;
-      // image URLs expire after 10 minutes on the free tier – reload at least that often
-      if (key !== this.windyKey || Date.now() - (this.info.webcams?.at ?? 0) > 8 * 60000) {
-        this.windyKey = key;
-        loadWindyWebcams(c.lat, c.lng, km)
-          .then((fc) => {
-            if (this.windyKey !== key) return;
-            this.windyCams = fc;
-            this.mergeWebcams();
-          })
-          .catch((e) => {
-            console.warn('Windy', e);
-            this.windyKey = '';
-            this.set('webcams', { note: 'Windy-Webcams nicht erreichbar – Schlüssel prüfen' });
-          });
-      }
-    }
-    this.updateWebcamNote();
-  }
-
   /**
    * Closeable heatmap over all known camera positions worldwide (`cams/world.json` –
    * aggregate of all snapshot feeds plus Digitraffic, gathered daily by the data action).
@@ -1906,218 +1612,6 @@ export class ExtraLayers {
    * the heat fades out below the detail zoom, the dots stay until the detail feed (images!)
    * takes over. No shader work: MapLibre's built-in heatmap.
    */
-  private ensureWebcamHeat() {
-    if (this.webcamHeatAdded) return;
-    this.webcamHeatAdded = true;
-    const m = this.map;
-    const before = m.getLayer('webcams') ? 'webcams' : undefined;
-    // halo first, so it lies below the heatmap and does not tint its white core
-    m.addLayer(
-      {
-        id: 'webcams-glow',
-        type: 'circle',
-        source: 'webcams-world',
-        minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 8, CAM_DETAIL_ZOOM, 9, 14, 7], 'circle-blur': 1, 'circle-opacity': 0.25 },
-      },
-      before,
-    );
-    m.addLayer(
-      {
-        id: 'webcams-heat',
-        type: 'heatmap',
-        source: 'webcams-world',
-        paint: {
-          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
-          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 12, 0],
-          'heatmap-color': [
-            'interpolate', ['linear'], ['heatmap-density'],
-            0, 'rgba(0,191,165,0)', 0.2, 'rgba(0,191,165,0.45)', 0.45, '#26c6da', 0.65, '#80deea', 0.8, '#ffffff', 1, '#ffffff',
-          ],
-        },
-      },
-      before,
-    );
-    m.addLayer(
-      {
-        id: 'webcams-dots',
-        type: 'circle',
-        source: 'webcams-world',
-        minzoom: CAM_DOT_ZOOM,
-        paint: { 'circle-color': CAM_COLOR, 'circle-radius': ['interpolate', ['linear'], ['zoom'], CAM_DOT_ZOOM, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
-      },
-      before,
-    );
-  }
-
-  private async loadWorldHeat() {
-    if (this.webcamHeatLoaded) return;
-    this.webcamHeatLoaded = true;
-    try {
-      const pts = await snapshotJson<[number, number][]>('cams/world.json');
-      this.setData('webcams-world', {
-        type: 'FeatureCollection',
-        features: pts.map(([lon, lat]) => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lon, lat] }, properties: {} })),
-      });
-    } catch (e) {
-      this.webcamHeatLoaded = false;
-      console.warn('Webcam-Heatmap', e);
-    }
-  }
-
-  private ensureAlprTiles() {
-    if (this.alprTilesAdded) return;
-    this.alprTilesAdded = true;
-    const m = this.map;
-    const attribution = 'ALPR-Übersicht: <a href="https://github.com/flockhopper3/deflock-data">deflock-data</a>, © OpenStreetMap (ODbL)';
-    m.addSource('alpr-us', { type: 'vector', url: ALPR_TILES_US, attribution });
-    m.addSource('alpr-ca', { type: 'vector', url: ALPR_TILES_CA });
-    for (const src of ['alpr-us', 'alpr-ca']) {
-      m.addLayer(
-        {
-          id: `alpr-heat-${src}`,
-          type: 'heatmap',
-          source: src,
-          'source-layer': ALPR_SOURCE_LAYER,
-          paint: {
-            'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14],
-            'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
-            'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, 10, 0.6, 14, 0.6],
-            'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(239,68,68,0)', 0.2, 'rgba(239,68,68,0.45)', 0.5, '#f97316', 0.8, '#fde047', 1, '#ffffff'],
-          },
-        },
-        'alpr-cone',
-      );
-      m.addLayer(
-        {
-          id: `alpr-dots-${src}`,
-          type: 'circle',
-          source: src,
-          'source-layer': ALPR_SOURCE_LAYER,
-          minzoom: 6,
-          // no maxzoom: the tiles carry single cameras up to zoom 14, so the map stays filled when
-          // the live Overpass query fails (the live layer is drawn on top of these dots)
-          paint: { 'circle-color': ALPR_RED, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 1.8, CAM_DETAIL_ZOOM, 3, 14, 6], 'circle-opacity': 0.8 },
-        },
-        'alpr-cone',
-      );
-    }
-    m.on('idle', () => this.updateAlprFov());
-    LAYERS.alpr.push('alpr-heat-alpr-us', 'alpr-heat-alpr-ca', 'alpr-dots-alpr-us', 'alpr-dots-alpr-ca');
-    this.apply();
-  }
-
-  /** Viewing-direction sectors for the cameras in view: live data plus what the overview tiles carry. */
-  private updateAlprFov() {
-    if (!this.on.has('alpr')) return;
-    const m = this.map;
-    const cams = new Map<string, [number, number, number]>();
-    const take = (lon: number, lat: number, dir: unknown) => {
-      const d = Number(dir);
-      if (dir == null || dir === '' || !Number.isFinite(d) || d < 0) return;
-      cams.set(`${lon.toFixed(6)},${lat.toFixed(6)},${d}`, [lon, lat, d]);
-    };
-    if (m.getZoom() >= ALPR_FOV_ZOOM) {
-      for (const f of this.alprLive) take((f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], f.properties?.dir);
-      if (this.alprTilesAdded && !this.alprTilesFailed) {
-        for (const src of ['alpr-us', 'alpr-ca']) {
-          if (!m.getSource(src)) continue;
-          for (const f of m.querySourceFeatures(src, { sourceLayer: ALPR_SOURCE_LAYER, filter: ['has', 'direction'] })) {
-            if (f.geometry.type === 'Point') take(f.geometry.coordinates[0], f.geometry.coordinates[1], f.properties?.direction);
-          }
-        }
-      }
-    }
-    const key = [...cams.keys()].sort().join('|');
-    if (key === this.alprFovKey) return;
-    this.alprFovKey = key;
-    this.setData('alpr-fov', { type: 'FeatureCollection', features: fovSectors([...cams.values()], ALPR_FOV_RADIUS, ALPR_FOV_ANGLE) });
-  }
-
-  /** Viewing-direction sectors for the OpenStreetMap webcams that carry a camera:direction tag. */
-  private updateCamFov() {
-    if (!this.on.has('webcams')) return;
-    const cams: [number, number, number][] = [];
-    if (this.map.getZoom() >= ALPR_FOV_ZOOM && this.osmCamFc) {
-      for (const f of this.osmCamFc.features) {
-        const dir = Number(f.properties?.dir);
-        if (dir >= 0) cams.push([(f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], dir]);
-      }
-    }
-    const key = cams.map((c) => c.join(',')).sort().join('|');
-    if (key === this.camFovKey) return;
-    this.camFovKey = key;
-    this.setData('webcams-fov', { type: 'FeatureCollection', features: fovSectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE) });
-  }
-
-  private updateAlprNote() {
-    const z = this.map.getZoom();
-    if (z >= CAM_DETAIL_ZOOM) return; // keeps the per-view summary
-    const notes: string[] = [];
-    if (z < CAM_DETAIL_ZOOM)
-      notes.push(this.alprTilesFailed ? 'Übersicht nicht erreichbar – ab Zoomstufe 9 live aus OpenStreetMap' : 'Übersicht USA/Kanada · Details ab Zoomstufe 9 (weltweit)');
-    this.set('alpr', { note: notes.join(' · ') || undefined });
-  }
-
-  private loadAlprNow() {
-    this.updateAlprNote();
-    if (this.map.getZoom() < CAM_DETAIL_ZOOM) {
-      this.setData('alpr', empty());
-      this.alprLive = [];
-      this.alprKey = '';
-      return;
-    }
-    const b = this.viewBounds();
-    const key = Object.values(b).join(',');
-    if (key === this.alprKey) return;
-    this.alprKey = key;
-    this.set('alpr', { loading: true });
-    loadAlpr(b)
-      .then((fc) => {
-        if (this.alprKey !== key) return;
-        this.setData('alpr', fc);
-        this.alprLive = fc.features;
-        this.updateAlprFov();
-        const flock = fc.features.filter((f) => f.properties?.flock).length;
-        this.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? `${flock} davon Flock Safety (im Ausschnitt)` : 'keine Kennzeichen-Kameras im Ausschnitt erfasst' });
-      })
-      .catch((e) => {
-        if (isSuperseded(e) || this.alprKey !== key) return;
-        console.warn('Overpass ALPR', e);
-        this.alprKey = '';
-        this.set('alpr', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
-      });
-  }
-
-  private loadBlitzerNow() {
-    if (this.map.getZoom() < CAM_DETAIL_ZOOM) {
-      this.setData('blitzer', empty());
-      this.blitzerKey = '';
-      this.set('blitzer', { note: `Details ab Zoomstufe ${CAM_DETAIL_ZOOM} · messpunktgenau, mobile Blitzer fehlen` });
-      return;
-    }
-    const b = this.viewBounds();
-    const key = Object.values(b).join(',');
-    if (key === this.blitzerKey) return;
-    this.blitzerKey = key;
-    this.set('blitzer', { loading: true, note: undefined });
-    loadSpeedcams(b)
-      .then((fc) => {
-        if (this.blitzerKey !== key) return;
-        this.setData('blitzer', fc);
-        const notes = ['Lageplan – keine Fahrwarnung (in DE verboten während der Fahrt)'];
-        if (!fc.features.length) notes.unshift('keine Anlagen im Ausschnitt erfasst');
-        this.set('blitzer', { loading: false, count: fc.features.length, note: notes.join(' · ') });
-      })
-      .catch((e) => {
-        if (isSuperseded(e) || this.blitzerKey !== key) return;
-        console.warn('Overpass Blitzer', e);
-        this.blitzerKey = '';
-        this.set('blitzer', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
-      });
-  }
-
   // -------------------------------------------------------------------------
   // Clicks
 
@@ -2127,7 +1621,7 @@ export class ExtraLayers {
     const p = (tileCam ? alprTileProps(f.properties, pt[0], pt[1]) : f.properties) as Record<string, unknown>;
     const html = (glyph: GlyphId, color: string, extra?: string) =>
       cardHtml({ glyph, color, title: p.title, subtitle: p.subtitle, date: p.date, description: p.description, source: p.source, url: p.url, extra });
-    const handler = CLICK_HANDLERS.get(f.layer.id);
+    const handler = CLICK_HANDLERS.get(tileCam ? 'alpr' : f.layer.id);
     if (handler) return handler({ ctx: this.ctx, layerId: f.layer.id, p, pt, at, html });
     switch (tileCam ? 'alpr' : f.layer.id) {
       case 'sondes':
@@ -2148,56 +1642,6 @@ export class ExtraLayers {
           lng: pt[0],
           lat: pt[1],
         };
-      }
-      case 'webcams':
-      case 'webcams-osm': {
-        const img = safeUrl(p.image);
-        // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
-        const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
-        const video = safeUrl(p.video);
-        const dir = Number(p.dir);
-        const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
-        const extra = video
-          ? `<video class="pop-cam" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
-          : src
-          ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
-          : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
-        return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1] };
-      }
-      case 'alpr': {
-        const dir = Number(p.dir);
-        const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
-        const rows = [
-          ['Hersteller', p.brand],
-          ['Betreiber', p.operator],
-          ['Bereich', ALPR_ZONE[String(p.zone)] ?? p.zone],
-          ['Montage', ALPR_MOUNT[String(p.mount)] ?? p.mount],
-          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
-          ['Seit', p.since],
-          ['Kennung', p.ref],
-          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
-        ].filter(([, v]) => v);
-        const photo = alprVendorImg(String(p.brand ?? ''));
-        const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
-          <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
-        return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap / DeFlock (Beispielfoto: deflock.org)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
-      }
-      case 'blitzer': {
-        const dir = Number(p.dir);
-        const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
-        const raw = String(p.speed ?? '');
-        const unit = /^\d+(\.\d+)?$/.test(raw) ? ' km/h' : '';
-        const speed = /\d/.test(raw) ? `${raw}${unit}` : '';
-        const rows = [
-          ['Tempo', speed === 'no' || speed === 'none' ? '' : speed ? `${speed} km/h` : ''],
-          ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
-          ['Betreiber', p.operator],
-          ['Kennung', p.ref],
-          ['Position', `${(pt[1] as number).toFixed(5)}, ${(pt[0] as number).toFixed(5)}`],
-        ].filter(([, v]) => v);
-        const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
-          <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
-        return { type: 'html', html: cardHtml({ glyph: 'blitzer', color: p.kind === 'section' ? '#fb8c00' : p.kind === 'signals' ? '#ba68c8' : CAM_ZOOM_RED, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
       }
       case 'airports-minor':
       case 'airports-far-1':
