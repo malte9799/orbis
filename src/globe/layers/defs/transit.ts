@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { addVehicleLayers, moveVehicles, vehicleClick } from '../shared/vehicles';
 
 export default defineExtra({
   id: 'transit',
@@ -10,6 +11,13 @@ export default defineExtra({
   glyph: 'train',
   icon: 'bus',
   color: '#ab47bc',
+  addLayers(ctx) {
+    addVehicleLayers(ctx, 'transit-veh', 'transit-label', ['!=', ['get', 'rail'], true]);
+  },
+  onMoveEnd(ctx) {
+    if (!ctx.isOn('trains')) moveVehicles(ctx);
+  },
+  click: vehicleClick,
   layers: ['transit-veh', 'transit-label'],
   clickLayers: ['transit-veh'],
 });

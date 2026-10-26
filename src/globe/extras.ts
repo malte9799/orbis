@@ -1,29 +1,21 @@
-import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
-import type { Feature, FeatureCollection, Point } from 'geojson';
-import { ShipsLayer } from './ships3d';
-import { VehiclesLayer } from './vehicles3d';
+import type { GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
+import type { FeatureCollection, Point } from 'geojson';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
 import {
-  AisStream,
-  hasAisLive,
-  loadDigitrafficShips,
-  loadTrainDetails,
-  loadTrains,
-  shipFeatures,
   type Launch,
   type Ship,
 } from '../api/transport';
-import { loadAmtrak, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
-import { feedsInView, vehicleFeatures } from '../api/vehicles';
-import { escapeHtml, fmt } from '../util';
+import { fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
+import { shipsApi } from './layers/shared/ships';
+import { vehiclesApi } from './layers/shared/vehicles';
 import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { cardHtml } from './popup';
-import { FONT_BOLD, FONT_REGULAR } from './vector';
+import { FONT_BOLD } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
 // infrastructure. Every source is free and keyless.
@@ -123,19 +115,6 @@ export class ExtraLayers {
   private info: Partial<Record<ExtraId, Info>> = {};
   private timers: Partial<Record<string, number>> = {};
   private ready = false;
-  private baltic: Ship[] = [];
-  private segs: Segment[] = [];
-  private segKey = '';
-  private segAt = 0;
-  private segLoading = false;
-  private gpsTrains: FeatureCollection = empty();
-  private feedVeh = new Map<string, { at: number; features: Feature<Point>[] }>();
-  private feedLoading = new Set<string>();
-  private feedErrors = new Set<string>();
-  private ais: AisStream | null = null;
-  private ships3d?: ShipsLayer;
-  private vehicles3d?: VehiclesLayer;
-  private shipsAll = new Map<number, Ship>();
 
   private layerState = new Map<string, unknown>();
   /** what the layer modules (globe/layers/defs) get to work with */
@@ -185,10 +164,8 @@ export class ExtraLayers {
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
-      ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
-      trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
     };
-    for (const id of ['ports', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'launch-live', 'launch-live-line', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -289,77 +266,6 @@ export class ExtraLayers {
         attribution: 'Bahnnetz: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)',
       });
     add({ id: 'railmap', type: 'raster', source: 'railmap', layout: hidden, paint: { 'raster-opacity': 0.85 } }, 'lbl-border-country');
-    const vehicleLayers = (id: string, label: string, filter: ExpressionSpecification) => {
-      add(
-        {
-          id,
-          type: 'circle',
-          source: 'trains',
-          filter,
-          layout: hidden,
-          paint: {
-            'circle-color': ['get', 'color'],
-            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.6, 10, 5, 14, 7],
-            'circle-stroke-color': ['case', ['==', ['get', 'realTime'], false], 'rgba(255,255,255,0.45)', '#ffffff'],
-            'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 4, 0.8, 10, 1.5],
-          },
-        },
-        'marker',
-      );
-      add(
-        {
-          id: label,
-          type: 'symbol',
-          source: 'trains',
-          filter,
-          minzoom: 9,
-          layout: {
-            ...hidden,
-            'text-field': ['get', 'name'],
-            'text-font': FONT_BOLD,
-            'text-size': 10,
-            'text-offset': [0, 1.0],
-            'text-anchor': 'top',
-            'text-optional': true,
-          },
-          paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
-        },
-        'marker',
-      );
-    };
-    vehicleLayers('trains', 'trains-label', ['==', ['get', 'rail'], true]);
-    vehicleLayers('transit-veh', 'transit-label', ['!=', ['get', 'rail'], true]);
-    add(
-      {
-        id: 'ships',
-        type: 'symbol',
-        source: 'ships',
-        layout: {
-          ...hidden,
-          'icon-image': 'sil-vessel',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 3, 0.45, 8, 0.8, 12, 1.15],
-          'icon-rotate': ['get', 'rot'],
-          'icon-rotation-alignment': 'map',
-          'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 10, ['get', 'name']],
-          'text-font': FONT_REGULAR,
-          'text-size': 10,
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: {
-          'icon-color': ['get', 'color'],
-          'icon-opacity': ['case', ['get', 'moving'], 1, 0.6],
-          'icon-halo-color': 'rgba(0,0,0,0.7)',
-          'icon-halo-width': 1,
-          'text-color': '#e0f7fa',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.2,
-        },
-      },
-      'marker',
-    );
     // live track of the rocket currently followed in the launch panel (trail + symbol);
     // visible only while the panel feeds data (independent of the launches toggle) –
     // the layers start hidden: 'visible' with empty data would keep the attribution
@@ -396,31 +302,6 @@ export class ExtraLayers {
       },
       'marker',
     );
-    // low-poly 3D ships from zoom 11 on the flat map; the 2D icons (still clickable) fade out then
-    this.ships3d = new ShipsLayer({
-      enabled: () => this.on.has('ships'),
-      modeChanged: (on) => {
-        if (!m.getLayer('ships')) return;
-        m.setPaintProperty('ships', 'icon-opacity', on ? 0 : ['case', ['get', 'moving'], 1, 0.6]);
-        // the names move with the models as plain elements instead
-        m.setPaintProperty('ships', 'text-opacity', on ? 0 : 1);
-      },
-    });
-    m.addLayer(this.ships3d, 'marker');
-    // low-poly 3D trains, subways, trams, buses … from zoom 12 on the flat map and only while
-    // few enough of them are in view (otherwise they lag); the 2D dots step aside
-    this.vehicles3d = new VehiclesLayer({
-      enabled: () => this.on.has('trains') || this.on.has('transit'),
-      modeChanged: (on) => {
-        for (const id of ['trains', 'transit-veh']) {
-          if (!m.getLayer(id)) continue;
-          m.setPaintProperty(id, 'circle-opacity', on ? 0 : 1);
-          m.setPaintProperty(id, 'circle-stroke-opacity', on ? 0 : 1);
-        }
-        for (const id of ['trains-label', 'transit-label']) if (m.getLayer(id)) m.setPaintProperty(id, 'text-opacity', on ? 0 : 1);
-      },
-    });
-    m.addLayer(this.vehicles3d, 'marker');
     this.ready = true;
     this.apply();
   }
@@ -534,6 +415,33 @@ export class ExtraLayers {
     airApi.fitSonde(this.ctx, serial);
   }
 
+  /** True while the 3D ship models are drawn: the 2D icons are not clickable then (see pickShip). */
+  ships3dActive() {
+    return shipsApi.active(this.ctx);
+  }
+
+  /** The 3D ship model under a screen point as a click result (popup), if any. */
+  pickShip(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const feature = shipsApi.pick(this.ctx, x, y);
+    return feature ? this.click(feature, at) : null;
+  }
+
+  /** True while the 3D vehicle models are drawn: the 2D dots are not clickable then (see pickVehicle). */
+  vehicles3dActive() {
+    return vehiclesApi.active(this.ctx);
+  }
+
+  /** The 3D vehicle model under a screen point as a click result (popup), if any. */
+  pickVehicle(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const feature = vehiclesApi.pick(this.ctx, x, y);
+    return feature ? this.click(feature, at) : null;
+  }
+
+  /** Current data of a ship for the ship panel. */
+  shipInfo(mmsi: number): ShipInfo | null {
+    return shipsApi.info(this.ctx, mmsi);
+  }
+
   /** The map layers of a layer entry (for the draw order), in their style order. */
   layerIds(id: ExtraId): string[] {
     return LAYERS[id] ?? [];
@@ -556,9 +464,6 @@ export class ExtraLayers {
   /** Called after the map stopped moving. */
   onMoveEnd() {
     for (const def of EXTRAS) if (def.onMoveEnd && this.on.has(def.id)) def.onMoveEnd(this.ctx);
-    if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
-    if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
-    if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
   }
 
   // -------------------------------------------------------------------------
@@ -607,34 +512,7 @@ export class ExtraLayers {
       }
       def.enable?.(this.ctx);
       switch (def.id) {
-        case 'ships':
-          this.loadOnce('ships', 60000, () => this.loadShips());
-          if (hasAisLive()) {
-            this.ais ??= new AisStream(() => this.mergeShips());
-            this.ais.start(this.viewBounds(4));
-            this.every('ais-push', 3000, () => this.mergeShips());
-          }
-          break;
-        case 'trains':
-          this.loadOnce('trains', 30000, () => this.loadGpsTrains());
-          break;
       }
-    }
-    if (this.on.has('trains') || this.on.has('transit')) {
-      this.loadSegmentsNow();
-      this.every('veh-anim', 2000, () => this.updateVehicles());
-      this.every('veh-fetch', 60000, () => this.loadSegmentsNow(true));
-      this.loadFeedsNow();
-      this.every('veh-feeds', 10000, () => this.loadFeedsNow());
-    } else {
-      this.clear('veh-anim');
-      this.clear('veh-fetch');
-      this.clear('veh-feeds');
-    }
-    if (!this.on.has('ships') || !hasAisLive()) {
-      this.clear('ais-push');
-      this.ais?.stop();
-      if (!hasAisLive()) this.ais = null;
     }
   }
 
@@ -659,103 +537,6 @@ export class ExtraLayers {
   // -------------------------------------------------------------------------
   // Trains & public transport
 
-  private async loadGpsTrains() {
-    const [fi, us] = await Promise.allSettled([loadTrains(), loadAmtrak()]);
-    const features = [...(fi.status === 'fulfilled' ? fi.value.features : []), ...(us.status === 'fulfilled' ? us.value : [])];
-    this.gpsTrains = { type: 'FeatureCollection', features };
-    this.updateVehicles();
-    const failed = [fi.status === 'rejected' ? 'Finnland' : '', us.status === 'rejected' ? 'Amtrak' : ''].filter(Boolean);
-    return { note: this.trainNote(failed) };
-  }
-
-  private trainNote(failed: string[] = []) {
-    const z = this.map.getZoom();
-    return [z < 5 ? 'Deutschland & Europa ab Zoomstufe 5' : '', failed.length ? `${failed.join(', ')} nicht erreichbar` : ''].filter(Boolean).join(' · ') || undefined;
-  }
-
-  /** Fetch Transitous trip segments for the view (rail from zoom 5, local transport from zoom 10). */
-  private loadSegmentsNow(force = false) {
-    const z = this.map.getZoom();
-    const wantRail = this.on.has('trains') && z >= 5;
-    const wantLocal = this.on.has('transit') && z >= 10;
-    const cityNote = 'Fahrplan-Echtzeit (Transitous) ab Zoomstufe 10 – GPS-Regionen schon früher';
-    if (this.on.has('transit')) this.set('transit', { note: z < 10 ? cityNote : this.info.transit?.note === cityNote ? undefined : this.info.transit?.note });
-    if (this.on.has('trains')) this.set('trains', { note: this.trainNote() });
-    if (!wantRail && !wantLocal) {
-      this.segs = [];
-      this.segKey = '';
-      this.updateVehicles();
-      return;
-    }
-    const b = this.viewBounds(z >= 10 ? 20 : 2);
-    const key = `${Object.values(b).join(',')}|${Math.round(z)}`;
-    if (this.segLoading || (!force && key === this.segKey && Date.now() - this.segAt < 60000)) return;
-    this.segLoading = true;
-    const now = Date.now();
-    loadSegments(b, z, now - 30000, now + 3 * 60000)
-      .then((segs) => {
-        this.segs = segs;
-        this.segKey = key;
-        this.segAt = Date.now();
-        this.updateVehicles();
-      })
-      .catch((e) => {
-        console.warn('Transitous', e);
-        if (this.on.has('trains')) this.set('trains', { note: 'Transitous nicht erreichbar – nur GPS-Züge (Finnland, USA)' });
-        if (this.on.has('transit')) this.set('transit', { note: 'Transitous nicht erreichbar' });
-      })
-      .finally(() => {
-        this.segLoading = false;
-      });
-  }
-
-  /** GPS feeds (Norway, Boston, Toronto, …) for the regions in view, each at its own interval. */
-  private loadFeedsNow() {
-    if (this.map.getZoom() < 4) return;
-    const b = this.map.getBounds();
-    const view = { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
-    const active = new Set<string>();
-    for (const feed of feedsInView(view)) {
-      active.add(feed.id);
-      const prev = this.feedVeh.get(feed.id);
-      if (this.feedLoading.has(feed.id) || (prev && Date.now() - prev.at < feed.every * 1000)) continue;
-      this.feedLoading.add(feed.id);
-      // Entur supports a bounding box – pad the view so small pans need no reload
-      const padX = (view.east - view.west) * 0.3;
-      const padY = (view.north - view.south) * 0.3;
-      feed
-        .load({ west: view.west - padX, east: view.east + padX, south: view.south - padY, north: view.north + padY })
-        .then((list) => {
-          this.feedVeh.set(feed.id, { at: Date.now(), features: vehicleFeatures(feed, list) });
-          this.feedErrors.delete(feed.label);
-          this.updateVehicles();
-        })
-        .catch((e) => {
-          console.warn(feed.id, e);
-          this.feedVeh.set(feed.id, { at: Date.now(), features: [] });
-          this.feedErrors.add(feed.label);
-          const note = `${[...this.feedErrors].join(', ')} nicht erreichbar`;
-          if (this.on.has('transit')) this.set('transit', { note });
-        })
-        .finally(() => this.feedLoading.delete(feed.id));
-    }
-    // drop vehicles of regions that left the view
-    for (const id of [...this.feedVeh.keys()]) if (!active.has(id)) this.feedVeh.delete(id);
-  }
-
-  private updateVehicles() {
-    const rail = this.on.has('trains');
-    const local = this.on.has('transit');
-    const live = positionsAt(this.segs, Date.now(), (m) => (RAIL_MODES.has(m) ? rail : local));
-    const gps = [...this.feedVeh.values()].flatMap((f) => f.features).filter((f) => (f.properties?.rail ? rail : local));
-    const features = [...live.features, ...gps, ...(rail ? this.gpsTrains.features : [])];
-    this.setData('trains', { type: 'FeatureCollection', features });
-    this.vehicles3d?.setFeatures(features as Feature<Point>[]);
-    const nRail = features.filter((f) => f.properties?.rail).length;
-    if (rail && this.info.trains?.count !== nRail) this.set('trains', { count: nRail, loading: false });
-    if (local && this.info.transit?.count !== features.length - nRail) this.set('transit', { count: features.length - nRail });
-  }
-
   // -------------------------------------------------------------------------
   // Launches, ships
 
@@ -770,67 +551,7 @@ export class ExtraLayers {
     this.vis('launch-live', has(data?.pos));
   }
 
-  private async loadShips() {
-    let note: string | undefined;
-    try {
-      this.baltic = await loadDigitrafficShips();
-    } catch (e) {
-      console.warn('Digitraffic AIS', e);
-      if (!hasAisLive()) throw e;
-      note = 'Fintraffic nicht erreichbar';
-    }
-    this.mergeShips();
-    return { note: note ?? this.info.ships?.note };
-  }
 
-
-
-  /** True while the 3D ship models are drawn: the 2D icons are not clickable then (see pickShip). */
-  ships3dActive() {
-    return !!this.ships3d?.isActive();
-  }
-
-  /** The 3D ship model under a screen point as a click result (popup), if any. */
-  pickShip(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
-    const ship = this.ships3d?.isActive() ? this.ships3d.pick(x, y) : null;
-    if (!ship) return null;
-    const feature = { ...shipFeatures([ship]).features[0], layer: { id: 'ships' } } as unknown as MapGeoJSONFeature;
-    return this.click(feature, at);
-  }
-
-  /** True while the 3D vehicle models are drawn: the 2D dots are not clickable then (see pickVehicle). */
-  vehicles3dActive() {
-    return !!this.vehicles3d?.isActive();
-  }
-
-  /** The 3D vehicle model under a screen point as a click result (popup), if any. */
-  pickVehicle(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
-    const f = this.vehicles3d?.isActive() ? this.vehicles3d.pick(x, y) : null;
-    if (!f) return null;
-    const feature = { ...f, layer: { id: f.properties?.rail ? 'trains' : 'transit-veh' } } as unknown as MapGeoJSONFeature;
-    return this.click(feature, at);
-  }
-
-  /** Current data of a ship for the ship panel. */
-  shipInfo(mmsi: number): ShipInfo | null {
-    const ship = this.shipsAll.get(mmsi);
-    if (!ship) return null;
-    const pos = this.ships3d?.position(mmsi);
-    return { ship, history: this.ships3d?.history(mmsi) ?? { speed: [], track: [] }, lon: pos?.[0] ?? ship.lon, lat: pos?.[1] ?? ship.lat };
-  }
-
-  private mergeShips() {
-    const all = new Map<number, Ship>();
-    for (const s of this.baltic) all.set(s.mmsi, s);
-    if (this.ais) for (const s of this.ais.ships.values()) all.set(s.mmsi, s);
-    this.shipsAll = all;
-    this.setData('ships', shipFeatures(all.values()));
-    this.ships3d?.setShips(all.values());
-    const notes = [this.ais?.error, !hasAisLive() ? 'außerhalb der Ostsee mit Daten-Proxy oder kostenlosem aisstream.io-Schlüssel (Einstellungen)' : 'weltweit live im Kartenausschnitt (aisstream.io)'].filter(Boolean);
-    const prev = this.info.ships;
-    const note = notes.join(' · ');
-    if (prev?.count !== all.size || prev?.note !== note) this.set('ships', { count: all.size, note });
-  }
 
   // -------------------------------------------------------------------------
   // Cameras
@@ -866,85 +587,8 @@ export class ExtraLayers {
     const handler = CLICK_HANDLERS.get(tileCam ? 'alpr' : f.layer.id);
     if (handler) return handler({ ctx: this.ctx, layerId: f.layer.id, p, pt, at, html });
     switch (tileCam ? 'alpr' : f.layer.id) {
-      case 'ships':
-        return { type: 'ship', mmsi: Number(p.mmsi), lng: pt[0], lat: pt[1] };
-      case 'trains':
-      case 'transit-veh': {
-        if (p.src === 'transitous' || p.src === 'amtrak' || p.src === 'gps') return this.vehicleCard(p, pt);
-        const num = Number(p.num);
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: 'train',
-            color: '#ffca28',
-            title: `Zug ${num}`,
-            subtitle: `${fmt.num(Number(p.speed))} km/h`,
-            source: 'Fintraffic Digitraffic',
-            url: `https://www.junat.net/en/train/${num}`,
-            extra: '<div class="pop-loading small">Details werden geladen …</div>',
-          }),
-          lng: pt[0],
-          lat: pt[1],
-          after: (node) => {
-            loadTrainDetails(num, String(p.date))
-              .then((d) => {
-                const el = node.querySelector('.pop-loading');
-                if (!el || !d) return el?.remove();
-                const head = node.querySelector('.pop-head b');
-                if (head) head.textContent = d.title;
-                const rows = [
-                  ['Art', d.category],
-                  ['Strecke', d.from && d.to ? `${d.from} → ${d.to}` : ''],
-                  ['Zuletzt', d.lastStation],
-                  ['Verspätung', d.delay != null ? (d.delay > 0 ? `+${d.delay} min` : 'pünktlich') : ''],
-                ].filter(([, v]) => v);
-                el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-              })
-              .catch(() => node.querySelector('.pop-loading')?.remove());
-          },
-        };
-      }
     }
     return null;
-  }
-
-  private vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResult {
-    const st = modeStyle(String(p.mode));
-    const t = (ms: unknown) => new Date(Number(ms)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    const delay = Number(p.delay);
-    const rows =
-      p.src === 'amtrak' || p.src === 'gps'
-        ? [
-            ['Art', st.label],
-            ...(p.src === 'gps' ? [['Von', p.from], ['Nach', p.to], ['Verspätung', delay === -999 ? '' : delay > 0 ? `+${delay} min` : 'pünktlich']] : []),
-
-            ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
-            ['Geschwindigkeit', p.speed != null ? `${p.speed} km/h` : ''],
-            ['Status', p.timely],
-          ]
-        : [
-            ['Art', st.label],
-            ['Abschnitt', `${p.from} → ${p.to}`],
-            ['Ankunft', `${t(p.arr)} Uhr`],
-            ['Verspätung', delay === -999 ? 'keine Echtzeitdaten' : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : 'pünktlich'],
-          ];
-    const extra = `<div class="pop-grid two">${rows
-      .filter(([, v]) => v)
-      .map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`)
-      .join('')}</div>${p.src === 'transitous' ? '<div class="small muted">Position aus Echtzeitfahrplan berechnet</div>' : ''}`;
-    return {
-      type: 'html',
-      html: cardHtml({
-        glyph: 'train',
-        color: String(p.color ?? st.color),
-        title: p.name,
-        source: p.src === 'amtrak' ? 'Amtraker (Amtrak-GPS)' : p.src === 'gps' ? `${p.feed} (GPS)` : 'Transitous',
-        url: p.src === 'amtrak' ? 'https://amtraker.com/' : p.src === 'gps' ? undefined : 'https://transitous.org/',
-        extra,
-      }),
-      lng: pt[0],
-      lat: pt[1],
-    };
   }
 
   clearSelection() {
