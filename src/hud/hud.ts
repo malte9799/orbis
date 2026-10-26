@@ -1,6 +1,6 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
-import { BASES, type BaseId } from '../globe/style';
+import { BASES } from '../globe/style';
 import { createSearch } from '../search';
 import type { Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
@@ -24,8 +24,11 @@ import {
   type WxMenuItem,
   type WxFamily,
 } from './catalog';
+import { buildActions } from './actions';
+import { FILTERS } from './filters';
+import type { HudCore, HudUi } from './core';
 import { ico } from './icons';
-import { blankKarte, clone, DEFAULT_PINNED, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { clone, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -96,20 +99,6 @@ export interface Hud {
 
 // ---------------------------------------------------------------------------
 
-const FILTERS: Record<string, { multi?: boolean; options: [string, string][]; none: string }> = {
-  quakes: { options: [['', 'Alle'], ['4', 'ab M 4'], ['5', 'ab M 5'], ['6', 'ab M 6']], none: '' },
-  aircraft: {
-    multi: true,
-    options: [['plane', 'Flugzeuge'], ['heli', 'Hubschrauber'], ['glider', 'Segelflug'], ['drone', 'Drohnen'], ['balloon', 'Ballone']],
-    none: '',
-  },
-  // Unteroptionen von "Blitze Live": Ton bei jedem Einschlag, schrumpfender Kreis, Detektoren, Linien und Donner
-  lightning: {
-    multi: true,
-    options: [['sound', 'Ton'], ['wave', 'Einschlagskreis'], ['detectors', 'Detektoren'], ['lines', 'Detektor-Linien'], ['thunder', 'Donner']],
-    none: '',
-  },
-};
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
@@ -152,7 +141,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui = { edit: false, add: false, gallery: false, save: false, pick: false, open: null as string | null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -966,320 +955,46 @@ export function createHud(host: HudHost): Hud {
     return edit().layers.find((l) => l.id === id);
   }
 
-  const ACT: Record<string, (id: string, v: string, ev: Event) => void> = {
-    go: (id) => go(id),
-    gallery: () => {
-      ui.gallery = !ui.gallery;
-      setSearch(false);
+  const core: HudCore = {
+    host,
+    root,
+    ui,
+    st,
+    get cur() {
+      return cur;
     },
-    edit: () => {
-      ui.edit = true;
-      ui.gallery = false;
+    set cur(v) {
+      cur = v;
     },
-    close: () => {
-      ui.rename = false;
-      ui.edit = false;
-      ui.add = false;
-      ui.open = null;
-      ui.pick = false;
+    get form() {
+      return form;
     },
-    eye: (id) => {
-      const l = layerOf(id);
-      if (!l) return;
-      l.hidden = !l.hidden;
-      if (!l.hidden) delete l.hidden;
-      afterEdit();
+    set form(v) {
+      form = v;
     },
-    open: (id) => {
-      ui.open = ui.open === id ? null : id;
+    get fresh() {
+      return fresh;
     },
-    remove: (id) => {
-      const d = edit();
-      d.layers = d.layers.filter((l) => l.id !== id);
-      ui.open = null;
-      afterEdit();
+    set fresh(v) {
+      fresh = v;
     },
-    filter: (id, v) => {
-      const l = layerOf(id);
-      const f = FILTERS[id];
-      if (!l || !f) return;
-      if (f.multi) {
-        // extra tokens (vol-n from the volume slider) survive every chip toggle
-        const toks = (l.filter ?? '').split(',').filter(Boolean);
-        const names = new Set(f.options.map(([o]) => o));
-        const set = new Set(toks.filter((t) => names.has(t)));
-        if (set.has(v)) set.delete(v);
-        else set.add(v);
-        l.filter = [...toks.filter((t) => !names.has(t)), ...f.options.map(([o]) => o).filter((o) => set.has(o))].join(',') || undefined;
-      } else l.filter = v || undefined;
-      if (!l.filter) delete l.filter;
-      afterEdit();
-    },
-    add: () => {
-      ui.add = !ui.add;
-      ui.q = '';
-    },
-    addlayer: (id) => {
-      const d = edit();
-      if (d.layers.some((l) => l.id === id)) return;
-      // "Blitze Live" kommt mit Ton ab Werk
-      d.layers.unshift(id === 'lightning' ? { id, filter: 'sound' } : { id });
-      fresh.add(id);
-      ui.open = null;
-      afterEdit();
-      toast(`${catalogOf(id)?.label ?? id} hinzugefügt`);
-    },
-    pick: () => {
-      ui.pick = !ui.pick;
-    },
-    main: (id) => {
-      const d = edit();
-      const f = host.families().find((x) => x.id === id);
-      d.main = f ? f.id : null;
-      if (f) d.mainVar = f.variants[0][0];
-      else delete d.mainVar;
-      delete d.wind;
-      delete d.isobars;
-      ui.pick = false;
-      afterEdit();
-    },
-    wxcat: (id) => {
-      const it = WX_MENU.find((x) => x.id === id);
-      const k0 = view(cur);
-      const f = mainFam(k0);
-      const curVar = f ? (k0.mainVar ?? f.variants[0][0]) : '';
-      const stormFam = !!it?.subs.some((x) => f && x.main === f.id && x.mainVar === curVar);
-      const boltOn = k0.layers.some((x) => x.id === 'lightning' && !x.hidden);
-      // the active entry again switches it off (also "Blitze Live" inside Gewitter)
-      if (!it || stormFam || (id === 'storm' && boltOn)) {
-        ACT.main('', '', new Event('click'));
-        if (id === 'storm' && boltOn) edit().layers = edit().layers.filter((x) => x.id !== 'lightning');
-        afterEdit();
-      } else ACT.wxsub(id, '0', new Event('click'));
-    },
-    wxsub: (id, v) => {
-      const it = WX_MENU.find((x) => x.id === id);
-      const sub = it?.subs[Number(v)];
-      if (!sub || !it) return;
-      const d = edit();
-      if (sub.main === 'lightning') {
-        // "Blitze Live": the extra layer takes over, no weather main layer on the Karte
-        d.main = null;
-        delete d.mainVar;
-        delete d.wind;
-        delete d.isobars;
-        const l = d.layers.find((x) => x.id === 'lightning');
-        if (!l) {
-          // neuer Layer: der schrumpfende Einschlagskreis ("Kreis") und der Ton sind ab Werk aktiv
-          d.layers.unshift({ id: 'lightning', filter: 'wave,sound' });
-          fresh.add('lightning');
-        } else delete l.hidden;
-      } else {
-        if (d.main !== sub.main) {
-          delete d.wind;
-          delete d.isobars;
-        }
-        d.main = sub.main;
-        d.mainVar = sub.mainVar;
-        // radio: another Gewitter row replaces "Blitze Live"
-        d.layers = d.layers.filter((x) => x.id !== 'lightning');
-      }
-      afterEdit();
-    },
-    tcat: (id) => {
-      const d = edit();
-      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
-      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
-      const on = tmodeOf(d) === id;
-      d.layers = d.layers.filter((l) => !ids.has(l.id));
-      d.tmode = on ? '' : id;
-      if (!on) d.layers.unshift(...(menu.find((c) => c.id === id)?.defaults ?? []).map((l) => ({ id: l })));
-      afterEdit();
-    },
-    ttog: (id) => {
-      const d = edit();
-      const ids = id.split(',');
-      // all of a row's layers on → switch them off, otherwise switch the missing ones on
-      if (ids.every((x) => d.layers.some((l) => l.id === x))) d.layers = d.layers.filter((l) => !ids.includes(l.id));
-      else for (const x of ids) if (!d.layers.some((l) => l.id === x)) d.layers.unshift({ id: x });
-      afterEdit();
-    },
-    var: (_, v) => {
-      edit().mainVar = v;
-      afterEdit();
-    },
-    wopt: (_, v) => {
-      const d = edit();
-      if (v === 'wind') d.wind = d.wind === false ? true : false;
-      else d.isobars = !d.isobars;
-      if (!d.isobars) delete d.isobars;
-      afterEdit();
-    },
-    base: (id) => {
-      edit().base = id as BaseId;
-      afterEdit();
-    },
-    morebases: () => {
-      ui.moreBases = true;
-    },
-    tog: (_, v) => {
-      const d = edit();
-      if (v === 'labels') d.labels = !d.labels;
-      else if (v === 'night') d.night = !d.night;
-      else if (v === 'buildings3d') {
-        // write the choice explicitly, so the base map no longer decides the default
-        d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));
-      } else if (v === 'terrain3d') {
-        d.terrain3d = !(d.terrain3d ?? defaultTerrain3d());
-      } else if (v === 'wind') {
-        d.wind = d.wind === false ? true : false;
-      }
-      afterEdit();
-    },
-    viewtog: () => {
-      const d = edit();
-      if (d.view) delete d.view;
-      else d.view = captureView();
-      afterEdit();
-    },
-    revert: () => {
-      delete st.drafts[cur];
-      ui.open = null;
-      fresh = new Set();
-      persist();
-      host.apply(view(cur));
-      const k = view(cur);
-      if (k.view) host.goTo(k.view);
-    },
-    overwrite: () => {
-      const d = st.drafts[cur];
-      const i = st.own.findIndex((k) => k.id === cur);
-      if (!d || i < 0) return;
-      st.own[i] = { ...clone(d), savedAt: Date.now() };
-      delete st.drafts[cur];
-      fresh = new Set();
-      persist();
-      toast(`„${d.name}“ gespeichert`);
-    },
-    saveas: () => {
-      const k = view(cur);
-      form = { name: dirty(cur) ? suggestName(k) : `${k.name} (Kopie)`, icon: k.icon, color: k.color, place: !!k.view, pin: true };
-      ui.save = true;
-      ui.add = false;
-    },
-    cancel: () => {
-      ui.save = false;
-      form = null;
-    },
-    ficon: (_, v) => {
-      if (form) form.icon = v;
-    },
-    fcol: (_, v) => {
-      if (form) form.color = v;
-    },
-    fplace: () => {
-      if (form) form.place = !form.place;
-    },
-    fpin: () => {
-      if (form) form.pin = !form.pin;
-    },
-    dosave: () => {
-      if (!form) return;
-      const nameEl = root.querySelector<HTMLInputElement>('#hud-nm');
-      if (nameEl) form.name = nameEl.value;
-      const d = clone(view(cur));
-      const id = newId();
-      Object.assign(d, { id, name: form.name.trim() || 'Neue Karte', icon: form.icon, color: form.color, savedAt: Date.now() });
-      delete d.std;
-      if (form.place) d.view = d.view ?? captureView();
-      else delete d.view;
-      const wantPin = form.pin && st.pinned.length < MAX_PINNED;
-      st.own.push(d);
-      if (wantPin) st.pinned.push(id);
-      delete st.drafts[cur];
-      cur = id;
-      ui.save = false;
-      ui.open = null;
-      fresh = new Set();
-      form = null;
-      persist();
-      host.apply(view(cur));
-      toast(`„${d.name}“ gespeichert${wantPin ? ' und angeheftet' : ''}`);
-    },
-    pin: (id) => {
-      if (st.pinned.includes(id)) {
-        if (st.pinned.length <= 1) return;
-        st.pinned = st.pinned.filter((x) => x !== id);
-      } else if (st.pinned.length >= MAX_PINNED) {
-        toast('Höchstens 5 Karten in der Leiste. Erst eine lösen.');
-        return;
-      } else st.pinned.push(id);
-      persist();
-    },
-    del: (id) => {
-      const k = st.own.find((x) => x.id === id);
-      if (!k || !window.confirm(`Karte „${k.name}“ löschen?`)) return;
-      st.own = st.own.filter((x) => x.id !== id);
-      st.pinned = st.pinned.filter((x) => x !== id);
-      if (!st.pinned.length) st.pinned = [...DEFAULT_PINNED];
-      delete st.drafts[id];
-      if (cur === id) {
-        persist();
-        go('wetter');
-        return;
-      }
-      persist();
-    },
-    blank: () => {
-      const k = blankKarte();
-      st.own.push(k);
-      ui.edit = true;
-      ui.add = true;
-      ui.q = '';
-      go(k.id);
-      ui.edit = true;
-      ui.add = true;
-    },
-    evh: (_, v) => {
-      ui.evHours = Number(v);
-    },
-    share: () => {
-      const code = encodeKarte(view(cur));
-      const url = `${location.origin}${location.pathname}#/karte?k=${code}`;
-      navigator.clipboard?.writeText(url).then(
-        () => toast('Link zur Karte kopiert'),
-        () => toast('Link konnte nicht kopiert werden.', 'error'),
-      );
-    },
-    search: () => setSearch(!ui.search),
-    sheettoggle: () => {
-      if (ui.edit) {
-        ui.edit = false;
-        ui.add = false;
-        ui.open = null;
-        ui.pick = false;
-      } else ui.edit = true;
-    },
-    sheetdone: () => closeOverlay(),
-    rename: () => {
-      ui.rename = true;
-      queueMicrotask(() => {
-        const i = root.querySelector<HTMLInputElement>('#hud-rn');
-        i?.focus();
-        i?.select();
-      });
-    },
-    menu: () => {
-      ui.menu = !ui.menu;
-    },
-    menuunfold: () => {
-      ui.folded = false;
-    },
-    menuclose: () => {
-      ui.menu = false;
-    },
-    settings: () => host.openSettings(),
+    view,
+    edit,
+    dirty,
+    persist,
+    afterEdit,
+    go,
+    setSearch,
+    closeOverlay,
+    captureView,
+    layerOf,
+    mainFam,
+    nameEl,
+    suggestName,
+    tmodeOf,
+    encodeKarte,
   };
+  const ACT = buildActions(core);
 
   root.addEventListener('click', (e) => {
     if (suppressClick) {
