@@ -1,0 +1,469 @@
+/* ---------- Settings: right slide-over panel -------------------------------- */
+.settings-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  /* invisible: only closes the panel on outside click, no dimming */
+  background: none;
+}
+
+.settings-scrim[hidden] {
+  display: none;
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-panel {
+  position: absolute;
+  z-index: 10;
+  top: 60px;
+  right: var(--hud-r, 14px);
+  bottom: var(--hud-b, 16px);
+  width: min(352px, calc(100% - var(--hud-l, 14px) - var(--hud-r, 14px)));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: rgba(13, 18, 38, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45);
+  animation: sp-in 0.18s ease;
+}
+
+@keyframes sp-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 11px 9px 14px;
+}
+
+.sp-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.sp-x {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+}
+
+.sp-x:hover {
+  background: rgba(255, 255, 255, 0.13);
+  color: var(--text);
+}
+
+.sp-x svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.sp-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px 12px;
+}
+
+/* accordion sections */
+.sp-sec {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sp-sec:first-child {
+  border-top: 0;
+}
+
+.sp-sec summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 2px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.sp-sec summary::-webkit-details-marker {
+  display: none;
+}
+
+.sp-sec summary .sub {
+  margin-left: auto;
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.sp-sec summary .chev {
+  margin-left: auto;
+  color: var(--text-2);
+  transition: transform 0.15s;
+}
+
+.sp-sec summary .sub ~ .chev {
+  margin-left: 0;
+}
+
+.sp-sec summary .chev svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sp-sec[open] summary .chev {
+  transform: rotate(180deg);
+}
+
+.sp-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 10px;
+}
+
+/* general options */
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px;
+  font-size: 0.86rem;
+}
+
+.sp-row-t {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-row-t small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.sp-tog {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: transparent;
+  flex: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0;
+}
+
+.sp-tog::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.sp-tog.on {
+  background: var(--accent);
+}
+
+.sp-tog.on::after {
+  transform: translateX(14px);
+}
+
+.sp-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sp-seg button {
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sp-seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* API keys: compact label/input rows, info behind the ⓘ icon */
+.sp-note {
+  margin: 2px 0 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.ksub {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 7px 0 1px;
+}
+
+.krow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.krow .k-l {
+  flex: 0 0 42%;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.83rem;
+}
+
+/** extra fallback note inside the label for a global key we ship with */
+.krow .k-opt {
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+/** hover tooltip for the one-line hint of a key */
+.krow .k-tip {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 5px);
+  left: 0;
+  width: max(210px, 150%);
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #16203f;
+  color: var(--text-2);
+  font-size: 0.77rem;
+  line-height: 1.4;
+  font-weight: 400;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.krow .k-n:hover ~ .k-tip,
+.krow .k-n:focus-visible ~ .k-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* the hint tooltip yields while the guide is open (avoids double popups) */
+.krow:has(.ii[open]) .k-tip {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.krow input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.ii {
+  position: relative;
+  flex: none;
+}
+
+.ii summary {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  font: inherit;
+}
+
+/** larger invisible hover/click radius around the ⓘ so the open tooltip stays
+ *  reachable while crossing the gap to it */
+.ii summary::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+}
+
+.ii summary::-webkit-details-marker {
+  display: none;
+}
+
+.ii summary svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.ii[open] summary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ii .ii-t {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max(230px, 185%);
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #16203f;
+  color: var(--text-2);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-weight: 400;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: grid;
+  gap: 4px;
+}
+
+/** invisible bridge over the gap between ⓘ and tooltip */
+.ii .ii-t::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  height: 8px;
+}
+
+.ii .ii-t ol {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+
+.ii .ii-t a {
+  color: var(--accent);
+}
+
+.ii .ii-t a:hover {
+  text-decoration: underline;
+}
+
+/* sources */
+.sp-src summary {
+  padding: 6px 2px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 0.82rem;
+}
+
+.sp-src summary::-webkit-details-marker {
+  display: none;
+}
+
+.sp-src summary:hover {
+  color: var(--text);
+}
+
+.sp-src p {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.sp-lic {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.sp-lic a,
+.sp-src a {
+  color: var(--accent);
+}
+
+/* phones: the right panel becomes a full-height sheet */
+.globe-view:not([data-layout='desktop']) .settings-panel {
+  inset: 8px 8px calc(8px + var(--safe-bottom, 0px)) auto;
+  width: min(344px, calc(100% - 16px));
+  z-index: 20;
+}
+
+.globe-view:not([data-layout='desktop']) .settings-scrim {
+  z-index: 19;
+}
+
+@media (max-width: 560px) {
+  .globe-view:not([data-layout='desktop']) .settings-panel {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    border-radius: 16px 0 0 16px;
+  }
+}

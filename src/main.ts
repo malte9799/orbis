@@ -1,5 +1,5 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
-import './style.css';
+import './styles';
 import './hud/hud.css';
 import './inspector/inspector.css';
 import { installCapture } from './inspector/capture';
