@@ -1,11 +1,12 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
-import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE, CAM_FOV_RADIUS, CARDINAL, fovSectors } from '../shared/cams';
+import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE, CAM_FOV_RADIUS, CARDINAL, ROAD_CAM_FOV_ANGLE, ROAD_CAM_FOV_RADIUS, fovSectors } from '../shared/cams';
 import { LayerSpecification } from 'maplibre-gl';
 import { SNAPSHOT_CAMS, camFeedsInView } from '../../../api/camfeeds';
 import { cardHtml } from '../../popup';
 import { attachHls } from '../../hls';
+import { CamViewLayer } from '../../camview3d';
 import { escapeHtml, safeUrl } from '../../../util';
 import { hasWindyKey, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../../../api/cams';
 import { isSuperseded } from '../../../api/overpass';
@@ -21,6 +22,7 @@ function merge(ctx: ExtraCtx) {
   ctx.setData('webcams', all);
   ctx.set('webcams', { count: all.features.length + st.osmCount || undefined });
   updateNote(ctx);
+  updateFov(ctx);
 }
 
 function updateNote(ctx: ExtraCtx) {
@@ -173,17 +175,23 @@ async function loadWorldHeat(ctx: ExtraCtx) {
 function updateFov(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (!ctx.isOn('webcams')) return;
-  const cams: [number, number, number][] = [];
-  if (ctx.map.getZoom() >= ALPR_FOV_ZOOM && st.osmFc) {
-    for (const f of st.osmFc.features) {
-      const dir = Number(f.properties?.dir);
-      if (dir >= 0) cams.push([(f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], dir]);
+  const withDir = (features: Feature[] | undefined) => {
+    const out: [number, number, number][] = [];
+    for (const f of features ?? []) {
+      const dir = Number(f.properties?.dir ?? -1);
+      if (dir >= 0) out.push([(f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], dir]);
     }
-  }
-  const key = cams.map((c) => c.join(',')).sort().join('|');
+    return out;
+  };
+  const zoomed = ctx.map.getZoom() >= ALPR_FOV_ZOOM;
+  const cams = zoomed ? withDir(st.osmFc?.features) : [];
+  // road cameras of the feeds: direction from the feed's direction text (estimated, drawn fainter)
+  const road = zoomed ? withDir([...st.feeds.values()].flatMap((f) => f.features)) : [];
+  const key = [...cams, ...road].map((c) => c.join(',')).sort().join('|');
   if (key === st.fovKey) return;
   st.fovKey = key;
-  ctx.setData('webcams-fov', { type: 'FeatureCollection', features: fovSectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE) });
+  const estimated = fovSectors(road, ROAD_CAM_FOV_RADIUS, ROAD_CAM_FOV_ANGLE).map((f) => ({ ...f, properties: { est: true } }));
+  ctx.setData('webcams-fov', { type: 'FeatureCollection', features: [...fovSectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE), ...estimated] });
 }
 
 
@@ -218,7 +226,7 @@ export default defineExtra({
         type: 'fill',
         source: 'webcams-fov',
         layout: hidden,
-        paint: { 'fill-color': CAM_COLOR, 'fill-opacity': 0.28 },
+        paint: { 'fill-color': CAM_COLOR, 'fill-opacity': ['case', ['has', 'est'], 0.16, 0.28] },
       },
       'marker',
     );
@@ -228,7 +236,7 @@ export default defineExtra({
         type: 'line',
         source: 'webcams-fov',
         layout: hidden,
-        paint: { 'line-color': CAM_COLOR, 'line-width': 1.2, 'line-opacity': 0.85 },
+        paint: { 'line-color': CAM_COLOR, 'line-width': 1.2, 'line-opacity': ['case', ['has', 'est'], 0.55, 0.85] },
       },
       'marker',
     );
@@ -250,31 +258,46 @@ export default defineExtra({
     loadNow(ctx);
   },
   onMoveEnd: loadNow,
-  click({ p, pt }) {
+  click({ ctx, p, pt }) {
   const img = safeUrl(p.image);
   // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
   const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
   const video = safeUrl(p.video);
   const hls = safeUrl(p.hls);
   const dir = Number(p.dir);
-  const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
+  // road cameras of the feeds: the direction comes from the feed's direction text (mostly the road's direction of travel)
+  const est = p.kind === 'road';
+  const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${est ? 'ca. ' : ''}${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
   const still = src
     ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
     : '<div class="pop-sub">Livestream gerade nicht verfügbar</div>';
-  const extra = hls
+  // the 3D board uses the playing video as a texture: HLS plays via hls.js from a blob: URL (see hls.ts),
+  // the plain video is loaded with CORS (crossorigin)
+  const media = hls
     ? `<video class="pop-cam" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted playsinline controls></video>`
     : video
-    ? `<video class="pop-cam" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
+    ? `<video class="pop-cam" crossorigin="anonymous" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
     : src
     ? still
     : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
-  const after = hls
-    ? (node: HTMLElement) => {
-        const el = node.querySelector<HTMLVideoElement>('video.pop-cam');
-        // stream not playable (offline, blocked): fall back to the still image
-        if (el) attachHls(el, hls, () => (el.outerHTML = still));
-      }
-    : undefined;
+  const extra = dir >= 0 ? `${media}<button type="button" class="btn small pop-cam-3d">In 3D ansehen</button>` : media;
+  const after = (node: HTMLElement) => {
+    const el = node.querySelector<HTMLVideoElement>('video.pop-cam');
+    // stream not playable (offline, blocked): fall back to the still image
+    if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));
+    if (!(dir >= 0)) return;
+    // the camera's picture on an upright board in its viewing direction, while the popup is open
+    const view = ctx.state('webcams-3d', () => new CamViewLayer());
+    view.show(ctx.map, { lon: pt[0], lat: pt[1], dir, video: el ?? undefined, image: img ?? undefined, anchor: node });
+    // seen from above the board is only a line: tilt the map and look along the camera
+    node.querySelector('.pop-cam-3d')?.addEventListener('click', (e) => {
+      // the popup would cover the board: dock it in the corner while the 3D view is shown
+      node.closest('.maplibregl-popup')?.classList.add('cam-docked');
+      (e.currentTarget as HTMLElement).remove();
+      // the camera sits in the lower part of the view, the board above it
+      ctx.map.easeTo({ center: [pt[0], pt[1]], bearing: dir, pitch: 62, zoom: Math.max(ctx.map.getZoom(), 16), offset: [0, Math.round(ctx.map.getContainer().clientHeight * 0.22)], duration: 1200 });
+    });
+  };
   return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1], after };
   },
   layers: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],

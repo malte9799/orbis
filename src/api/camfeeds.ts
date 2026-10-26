@@ -26,12 +26,33 @@ export interface CamFeed {
 const cam = (
   lon: number,
   lat: number,
-  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; hls?: string; url?: string; source: string; live?: boolean },
-): Feature<Point> => ({
-  type: 'Feature',
-  geometry: { type: 'Point', coordinates: [lon, lat] },
-  properties: { ...p, kind: p.live === false ? 'signed' : 'road' },
-});
+  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; hls?: string; url?: string; source: string; live?: boolean; dir?: number },
+): Feature<Point> => {
+  const { dir, ...rest } = p;
+  // viewing direction only when known (the webcam layer draws a cone for dir >= 0)
+  return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { ...rest, kind: p.live === false ? 'signed' : 'road', ...(dir != null && Number.isFinite(dir) ? { dir } : {}) } };
+};
+
+/**
+ * Compass heading from a direction text, or undefined. Dedicated direction fields ("North", "N-E",
+ * "SW") may use bare words (`bare`); in free names only travel forms count ("NB", "Westbound"),
+ * since street names like "West Ave" contain cardinal words too. Mostly the direction of travel of
+ * the road the camera watches – an approximation of where it looks. Ambiguous text: undefined.
+ */
+export function directionToHeading(value: string | undefined, bare = false): number | undefined {
+  const text = String(value ?? '').trim().toUpperCase().replace(/(\b[NS])-([EW]\b)/g, '$1$2');
+  if (!text) return undefined;
+  const tiers: [RegExp, number][][] = [
+    [[/\bNORTHBOUND\b|\bNB\b/, 0], [/\bSOUTHBOUND\b|\bSB\b/, 180], [/\bEASTBOUND\b|\bEB\b/, 90], [/\bWESTBOUND\b|\bWB\b/, 270]],
+    [[/\bNORTHEAST\b|\bNE\b/, 45], [/\bNORTHWEST\b|\bNW\b/, 315], [/\bSOUTHEAST\b|\bSE\b/, 135], [/\bSOUTHWEST\b|\bSW\b/, 225]],
+  ];
+  if (bare) tiers.push([[/\bNORTH\b|^N$/, 0], [/\bSOUTH\b|^S$/, 180], [/\bEAST\b|^E$/, 90], [/\bWEST\b|^W$/, 270]]);
+  for (const forms of tiers) {
+    const hits = new Set(forms.filter(([re]) => re.test(text)).map(([, h]) => h));
+    if (hits.size) return hits.size === 1 ? [...hits][0] : undefined;
+  }
+  return undefined;
+}
 
 /** only https URLs (an http stream would be blocked as mixed content) */
 const https = (u?: string) => (u && /^https:\/\//.test(u) ? u : undefined);
@@ -102,7 +123,7 @@ export const CAM_FEEDS: CamFeed[] = [
     async load() {
       const parts = await Promise.allSettled(
         Array.from({ length: 12 }, (_, i) => i + 1).map((d) =>
-          fetchJson<{ data: { cctv: { index: string; inService?: string; location: { locationName: string; nearbyPlace?: string; route?: string; latitude: string; longitude: string }; imageData?: { static?: { currentImageURL?: string }; streamingVideoURL?: string } } }[] }>(
+          fetchJson<{ data: { cctv: { index: string; inService?: string; location: { locationName: string; nearbyPlace?: string; route?: string; direction?: string; latitude: string; longitude: string }; imageData?: { static?: { currentImageURL?: string }; streamingVideoURL?: string } } }[] }>(
             `https://cwwp2.dot.ca.gov/data/d${d}/cctv/cctvStatusD${String(d).padStart(2, '0')}.json`,
             undefined,
             30000,
@@ -123,6 +144,7 @@ export const CAM_FEEDS: CamFeed[] = [
                   subtitle: [c.location.route, c.location.nearbyPlace].filter(Boolean).join(' · '),
                   image: c.imageData?.static?.currentImageURL,
                   hls: https(c.imageData?.streamingVideoURL),
+                  dir: directionToHeading(c.location.direction, true),
                   url: c.imageData?.streamingVideoURL || c.imageData?.static?.currentImageURL,
                   source: 'Caltrans',
                 }),
@@ -139,7 +161,7 @@ export const CAM_FEEDS: CamFeed[] = [
       const j = await fetchJson<{ videoCameras: { id: string; title: string; county?: string; lat: number; lon: number; enabled?: boolean; status?: string; urls?: { m3u8s?: string } }[] }>('https://tmc.deldot.gov/json/videocamera.json', undefined, 20000);
       return j.videoCameras
         .filter((c) => c.enabled !== false && c.status === 'Active' && ok(c.lon, c.lat) && https(c.urls?.m3u8s))
-        .map((c) => cam(c.lon, c.lat, { id: `deldot-${c.id}`, title: c.title, subtitle: [c.county && `${c.county} County`, 'Livestream'].filter(Boolean).join(' · '), hls: c.urls!.m3u8s, url: `https://deldot.gov/map/index.shtml?tab=TrafficCameras`, source: 'Delaware Department of Transportation (DelDOT)' }));
+        .map((c) => cam(c.lon, c.lat, { id: `deldot-${c.id}`, title: c.title, subtitle: [c.county && `${c.county} County`, 'Livestream'].filter(Boolean).join(' · '), hls: c.urls!.m3u8s, dir: directionToHeading(c.title), url: `https://deldot.gov/map/index.shtml?tab=TrafficCameras`, source: 'Delaware Department of Transportation (DelDOT)' }));
     },
   },
   {
@@ -276,7 +298,7 @@ export const CAM_FEEDS: CamFeed[] = [
     label: 'DriveBC (British Columbia)',
     bbox: [-139.2, 48.1, -113.9, 60.1],
     async load() {
-      const list = await fetchJson<{ id: number; name?: string; caption?: string; credit?: string; highway_display?: string; is_on?: boolean; location?: { coordinates: number[] } }[]>(
+      const list = await fetchJson<{ id: number; name?: string; caption?: string; credit?: string; highway_display?: string; orientation?: string; is_on?: boolean; location?: { coordinates: number[] } }[]>(
         'https://www.drivebc.ca/api/webcams/',
         undefined,
         40000,
@@ -290,6 +312,7 @@ export const CAM_FEEDS: CamFeed[] = [
             subtitle: [c.caption, c.highway_display ? `Highway ${c.highway_display}` : '', c.credit].filter(Boolean).join(' · '),
             image: `https://www.drivebc.ca/images/${c.id}.jpg`,
             url: `https://www.drivebc.ca/images/${c.id}.jpg`,
+            dir: directionToHeading(c.orientation, true),
             source: 'DriveBC (Open Government Licence – British Columbia)',
           }),
         );
@@ -300,7 +323,7 @@ export const CAM_FEEDS: CamFeed[] = [
     label: 'TfNSW Live Traffic (NSW, Australien)',
     bbox: [140.9, -38.1, 153.8, -28.2],
     async load() {
-      const fc = await fetchJson<{ features: { id: string; geometry: { coordinates: number[] }; properties?: { title?: string; view?: string; href?: string } }[] }>(
+      const fc = await fetchJson<{ features: { id: string; geometry: { coordinates: number[] }; properties?: { title?: string; view?: string; href?: string; direction?: string } }[] }>(
         'https://data.livetraffic.com/cameras/traffic-cam.json',
         undefined,
         30000,
@@ -316,6 +339,7 @@ export const CAM_FEEDS: CamFeed[] = [
             subtitle: f.properties?.view,
             image: href,
             url: href,
+            dir: directionToHeading(f.properties?.direction, true),
             source: 'Transport for NSW (CC BY 4.0)',
           }),
         ];
