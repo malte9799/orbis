@@ -3,6 +3,7 @@ import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satr
 import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
+import { distTxt, speedTxt } from '../units';
 
 // ---------------------------------------------------------------------------
 // Satellites – orbital elements from CelesTrak, positions computed in the browser (SGP4)
@@ -129,7 +130,7 @@ export function satPopupInfo(s: Sat, date = new Date()) {
     title: s.name,
     subtitle: `${SAT_GROUPS[s.group] ?? s.group} · NORAD ${s.id}`,
     details: p
-      ? `Höhe ${fmt.num(p.heightKm, 0)} km · ${fmt.num(p.speedKmS * 3600, 0)} km/h · Umlaufzeit ${fmt.num(periodMin, 0)} min`
+      ? `Höhe ${distTxt(p.heightKm, 0)} · ${speedTxt(p.speedKmS * 3600)} · Umlaufzeit ${fmt.num(periodMin, 0)} min`
       : '',
     url: `https://celestrak.org/satcat/table-satcat.php?CATNR=${s.id}`,
   };

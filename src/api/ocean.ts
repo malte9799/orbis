@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { fetchJson, rampColor } from '../util';
-import { windTxt, pressureTxt, tempTxt } from '../units';
+import { pressureTxt, speedTxt, tempTxt, windTxt } from '../units';
 import { fetchText } from './data';
 import { omFetch } from './omlimit';
 import { viaProxy } from './proxy';
@@ -185,7 +185,7 @@ export async function loadWaves(v: WaveView): Promise<{ fc: FeatureCollection<Po
           `Wellenhöhe ${h.toLocaleString('de-DE')} m${dir != null ? ` aus ${compass(dir)}` : ''}`,
           per != null && `Periode ${per} s`,
           swell != null && `Dünung ${swell.toLocaleString('de-DE')} m`,
-          cv != null && `Strömung ${cv.toLocaleString('de-DE')} km/h${cd != null ? ` nach ${compass(cd)}` : ''}`,
+          cv != null && `Strömung ${speedTxt(cv, 1)}${cd != null ? ` nach ${compass(cd)}` : ''}`,
         ]
           .filter(Boolean)
           .join(' · '),

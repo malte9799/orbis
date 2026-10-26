@@ -1,6 +1,6 @@
 import type { Forecast } from './api/openmeteo';
 import { escapeHtml, fmt } from './util';
-import { windTxt, precipSumTxt } from './units';
+import { precipSumTxt, rainNum, rainUnit, windTxt } from './units';
 import { describe, weatherIcon } from './weather';
 
 /**
@@ -90,7 +90,7 @@ export function renderHourlyChart(container: HTMLElement, f: Forecast, hours = 4
         ${grid}
         <path d="${area}" fill="url(#tfill)"/>
         <path d="${line}" class="tline"/>
-        <text class="panel-title" x="${padL}" y="${pTop - 8}">Niederschlag (mm/h, max. ${fmt.num(pMax, 1)})</text>
+        <text class="panel-title" x="${padL}" y="${pTop - 8}">Niederschlag (${rainUnit()}, max. ${rainNum(pMax)})</text>
         <line class="baseline" x1="${padL}" x2="${W - padR}" y1="${pTop + pH}" y2="${pTop + pH}"/>
         ${bars}
         ${axis}

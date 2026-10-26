@@ -60,10 +60,10 @@ import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } f
 import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
 import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
-import { builtInProxy } from '../api/proxy';
-import { store, type ApiKeys, type AppOptions, type Place } from '../store';
+import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
-import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, windUnit, rainUnit, pressureUnit } from '../units';
+import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
+import { createSettingsPanel } from './settings';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -551,353 +551,20 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
-  // ----- settings: right slide-over panel (Accordions statt Modal) ---------
-  const panel = el.querySelector<HTMLElement>('.settings-panel')!;
-  const scrim = el.querySelector<HTMLElement>('.settings-scrim')!;
-
-  const X_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-  const CHEV_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-  const INFO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>';
-
-  type KeyStep = { t: string; u?: string };
-  /** `opt` = we deliver a global fallback ourselves (public source, built-in proxy or shared snapshot) */
-  type KeyDef = { key: keyof ApiKeys; label: string; hint: string; ph?: string; url?: boolean; opt?: boolean; steps: KeyStep[] };
-  const KEY_GROUPS: { sub: string; defs: KeyDef[] }[] = [
-    {
-      sub: 'Wetter, Feuer & Radar',
-      defs: [
-        {
-          key: 'owm',
-          label: 'OpenWeatherMap',
-          ph: 'appid',
-          hint: 'Zusätzliche hochauflösende Wetterkarten.',
-          steps: [
-            { t: '1. Account erstellen (kostenlos)', u: 'https://home.openweathermap.org/users/sign_up' },
-            { t: '2. API-Key kopieren', u: 'https://home.openweathermap.org/api_keys' },
-            { t: '3. Hier einfügen – der Key kann bis zu 1 Std. inaktiv bleiben' },
-          ],
-        },
-        {
-          key: 'radarHost',
-          label: 'Radar-Server',
-          ph: 'https://radar.example.org',
-          url: true,
-          opt: true, // public RainViewer source as fallback
-          hint: 'Eigener RainViewer-kompatibler Server statt der begrenzten RainViewer-Quelle.',
-          steps: [
-            { t: '1. LibreWXR selbst hosten (open source, RainViewer- Ersatz)', u: 'https://librewxr.net/' },
-            { t: '2. Server-URL (https://…) hier eintragen – kein Schlüssel nötig' },
-          ],
-        },
-      ],
+  // ----- settings: right slide-over panel (see settings.ts) ----------------
+  const settings = createSettingsPanel(el.querySelector<HTMLElement>('.settings-panel')!, el.querySelector<HTMLElement>('.settings-scrim')!, {
+    onKeysSaved() {
+      feedData.firms.at = 0;
+      firmsOk = false;
+      if (hud) applyKarte(hud.current());
+      applyGroups();
+      ensureFeeds();
+      extras?.resume();
+      refreshHud();
     },
-    {
-      sub: 'Webcams & Schiffe',
-      defs: [
-        {
-          key: 'windy',
-          label: 'Windy Webcams',
-          hint: 'Zehntausende Webcams weltweit.',
-          steps: [
-            { t: '1. Windy-Account erstellen (kostenlos)', u: 'https://www.windy.com/register' },
-            { t: '2. „Webcams API“-Key anfordern', u: 'https://api.windy.com/keys' },
-            { t: '3. Key hier einfügen' },
-          ],
-        },
-        {
-          key: 'aisstream',
-          label: 'aisstream.io',
-          hint: 'Schiffe weltweit live.',
-          steps: [
-            { t: '1. Anmelden / registrieren (kostenlos)', u: 'https://aisstream.io' },
-            { t: '2. Im Dashboard „API Keys“ → Create', u: 'https://dashboard.aisstream.io' },
-            { t: '3. Key hier einfügen' },
-          ],
-        },
-      ],
-    },
-    {
-      sub: 'Verkehr & Nahverkehr',
-      defs: [
-        {
-          key: 'ontario511',
-          label: '511 Ontario',
-          hint: 'Verkehrskameras Ontario.',
-          steps: [
-            { t: '1. Kostenlos registrieren / anmelden („My Account“)', u: 'https://511on.ca' },
-            { t: '2. Key nach der Registrierung im Account kopieren', u: 'https://511on.ca/about/faq' },
-            { t: '3. Key hier einfügen' },
-          ],
-        },
-        {
-          key: 'alberta511',
-          label: '511 Alberta',
-          hint: 'Verkehrskameras Alberta.',
-          steps: [
-            { t: '1. Kostenlos registrieren / anmelden', u: 'https://511.alberta.ca' },
-            { t: '2. Key unter „Developers“ nach dem Login kopieren', u: 'https://511.alberta.ca/developers/doc' },
-            { t: '3. Key hier einfügen' },
-          ],
-        },
-        {
-          key: 'victoria',
-          label: 'Transport Victoria',
-          ph: 'KeyId',
-          hint: 'Melbourne: Züge, Trams, Busse.',
-          steps: [
-            { t: '1. kostenlosen Account im Open-Data-Portal erstellen', u: 'https://opendata.transport.vic.gov.au' },
-            { t: '2. Im Profil API-Key (KeyId) erzeugen und hier einfügen' },
-          ],
-        },
-        {
-          key: 'cta',
-          label: 'CTA Train Tracker',
-          hint: 'Chicago „L“: Zug-Positionen & Ankünfte.',
-          steps: [
-            { t: '1. Antragsformular ausfüllen (kostenlos, wird kurz geprüft)', u: 'https://www.transitchicago.com/developers/traintrackerapply/' },
-            { t: '2. Key per E-Mail erhalten und hier einfügen' },
-          ],
-        },
-        {
-          key: 'trafiklab',
-          label: 'Trafiklab',
-          hint: 'Busse & Bahnen in Schweden (GTFS Regional Realtime).',
-          steps: [
-            { t: '1. Kostenloses Konto erstellen', u: 'https://www.trafiklab.se/signup' },
-            { t: '2. Projekt anlegen → API „GTFS Regional Realtime“ hinzufügen → Key', u: 'https://www.trafiklab.se/docs/getting-started/using-trafiklab' },
-            { t: '3. Key hier einfügen' },
-          ],
-        },
-        {
-          key: 'adsbProxy',
-          label: 'Daten-Proxy',
-          opt: !!builtInProxy(), // built-in worker, if deployed
-          ph: 'https://mein-proxy.workers.dev/',
-          url: true,
-          hint: `Cloudflare-Worker für Flugdaten & OpenStreetMap. ${builtInProxy() ? 'Leer lassen = eingebauter Proxy.' : ''}`,
-          steps: [
-            { t: '1. Worker-Vorlage aus dem README deployen', u: 'https://github.com/malte9799/orbis' },
-            { t: '2. Auf workers.cloudflare.com (Free-Tier) anlegen', u: 'https://workers.cloudflare.com' },
-            { t: '3. Worker-URL (https://…workers.dev) hier eintragen' },
-          ],
-        },
-      ],
-    },
-    {
-      sub: 'Schon mit Daten im Repo (Fallback-Snapshot)',
-      defs: [
-        {
-          key: 'firms',
-          label: 'NASA FIRMS',
-          ph: 'MAP_KEY',
-          opt: true, // shared snapshot from the data branch
-          hint: 'Aktuellere Feuer-Hotspots (ohne Key: gemeinsamer Snapshot).',
-          steps: [
-            { t: '1. Formular ausfüllen (Name, E-Mail)', u: 'https://firms.modaps.eosdis.nasa.gov/api/map_key/' },
-            { t: '2. Bestätigungs-Mail anklicken' },
-            { t: '3. MAP_KEY wird angezeigt – hier einfügen' },
-          ],
-        },
-        {
-          key: 'nps',
-          label: 'National Park Service',
-          opt: true, // shared snapshot
-          hint: 'Webcams der US-Nationalparks (ohne Key: gemeinsamer Snapshot).',
-          steps: [
-            { t: '1. Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
-            { t: '2. Key hier einfügen' },
-          ],
-        },
-      ],
-    },
-  ];
-
-  type UnitRow = { key: keyof AppOptions; label: string; opts: [string, string][] };  const UNIT_SETS: UnitRow[] = [
-    { key: 'tz', label: 'Zeitzone', opts: [['auto', 'Ortszeit'], ['utc', 'UTC']] },
-    { key: 'hour12', label: 'Uhrzeit', opts: [['24h', '24 Std.'], ['12h', '12 Std. (AM/PM)']] },
-    { key: 'temp', label: 'Temperatur', opts: [['c', '°C'], ['f', '°F']] },
-    { key: 'wind', label: 'Wind', opts: [['kmh', 'km/h'], ['ms', 'm/s'], ['mph', 'mph'], ['kn', 'Knoten'], ['bft', 'Bft']] },
-    { key: 'windDir', label: 'Windrichtung', opts: [['compass', 'Kompass'], ['deg', 'Grad']] },
-    { key: 'rain', label: 'Niederschlag', opts: [['mm', 'mm/h'], ['in', 'in/h'], ['dbz', 'dBZ']] },
-    { key: 'pressure', label: 'Luftdruck', opts: [['hpa', 'hPa'], ['mb', 'mb'], ['mmhg', 'mmHg'], ['inhg', 'inHg']] },
-    { key: 'dist', label: 'Distanz', opts: [['km', 'km'], ['mi', 'Meilen'], ['nmi', 'Seemeilen']] },
-    { key: 'area', label: 'Fläche', opts: [['km2', 'km²'], ['mi2', 'mi²'], ['acre', 'Acre'], ['ha', 'Hektar']] },
-    { key: 'burned', label: 'Verbrannte Fläche', opts: [['km2', 'km²'], ['mi2', 'mi²'], ['acre', 'Acre'], ['ha', 'Hektar']] },
-    { key: 'coords', label: 'Koordinaten', opts: [['dec', 'Dezimalgrade'], ['gms', 'GMS']] },
-  ];
-
-  /** compact summary of the active unit selection for the accordion badge */
-  const unitBadge = () =>
-    ['Ortszeit', 'UTC'].at((store.getOptions().tz ?? 'auto') === 'utc' ? 1 : 0) +
-    ' · ' +
-    ((store.getOptions().hour12 ?? '24h') === '12h' ? '12 Std.' : '24 Std.') +
-    ' · ' +
-    tempUnit() + ' · ' + windUnit() + ' · ' + rainUnit() + ' · ' + pressureUnit();
-
-  const updateUnitBadge = () => {
-    const el = panel.querySelector<HTMLElement>('[data-unit-badge]');
-    if (el) el.textContent = unitBadge();
-  };
-
-  const buildSettings = () => {
-    const keys = store.getKeys();
-    const opts = store.getOptions();
-    const filled = Object.entries(keys).filter(([, v]) => !!v).length;
-    const keyRow = (d: KeyDef) => `
-      <div class="krow">
-        <span class="k-l"><span class="k-n">${escapeHtml(d.label)}${d.opt ? ' <span class="k-opt">(optional)</span>' : ''}</span><span class="k-tip" role="tooltip">${escapeHtml(d.hint)}</span><details class="ii"><summary aria-label="Kurzanleitung für ${escapeHtml(d.label)}">${INFO_ICON}</summary><span class="ii-t"><ol>${d.steps.map((s) => `<li>${s.u ? `<a href="${s.u}" target="_blank" rel="noopener">${escapeHtml(s.t)}</a>` : escapeHtml(s.t)}</li>`).join('')}</ol></span></details></span>
-        <input type="${d.url ? 'url' : 'password'}" data-key="${d.key}" value="${escapeHtml((keys[d.key] as string) ?? '')}" placeholder="${escapeHtml(d.ph ?? 'API-Key')}" autocomplete="off" ${d.url ? 'spellcheck="false"' : ''}/>
-      </div>`;
-    panel.innerHTML = `
-      <div class="sp-head">
-        <h2>Einstellungen</h2>
-        <button type="button" class="sp-x" aria-label="Einstellungen schließen">${X_ICON}</button>
-      </div>
-      <div class="sp-body">
-        <details class="sp-sec" open>
-          <summary>Allgemein<span class="chev">${CHEV_ICON}</span></summary>
-          <div class="sp-inner">
-            <div class="sp-row"><span class="sp-row-t">Wetter beim Kartenklick<small>Ein freier Klick zeigt das Wetter am geklickten Ort</small></span>
-              <button type="button" class="sp-tog ${opts.clickWx ? 'on' : ''}" role="switch" aria-checked="${opts.clickWx}" aria-label="Wetter beim Kartenklick" data-opt="clickWx"></button></div>
-          </div>
-        </details>
-        <details class="sp-sec">
-          <summary>Einheiten<span class="sub" data-unit-badge>${unitBadge()} </span><span class="chev">${CHEV_ICON}</span></summary>
-          <div class="sp-inner">
-            ${UNIT_SETS.map(
-              (s) => `<div class="sp-row"><span class="sp-row-t">${escapeHtml(s.label)}</span></div>
-              <div class="sp-seg" style="grid-template-columns: repeat(${s.opts.length}, 1fr)">
-                ${s.opts.map(([v, t]) => `<button type="button" data-u="${s.key}" data-v="${v}" class="${String(opts[s.key as keyof AppOptions] ?? '') === v ? 'on' : ''}">${escapeHtml(t)}</button>`).join('')}
-              </div>`,
-            ).join('')}
-          </div>
-        </details>
-        <details class="sp-sec">
-          <summary>API-Schlüssel<span class="sub" data-badge>${filled ? `${filled} aktiv` : 'optional'}</span><span class="chev">${CHEV_ICON}</span></summary>
-          <div class="sp-inner">
-            <p class="sp-note">Grundfunktionen laufen ohne Schlüssel. Kostenlose Schlüssel schalten zusätzliche Quellen frei – sie werden nur lokal in diesem Browser gespeichert.</p>
-            ${KEY_GROUPS.map((g) => `<div class="ksub">${g.sub}</div>${g.defs.map(keyRow).join('')}`).join('')}
-          </div>
-        </details>
-        <details class="sp-sec">
-          <summary>Entwickleroptionen<span class="chev">${CHEV_ICON}</span></summary>
-          <div class="sp-inner">
-            <div data-rdi></div>
-            <details class="sp-src">
-              <summary>Alle Quellen mit Lizenzen</summary>
-              <p class="small">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-              PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, airplanes.live, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
-              The Space Devs, aisstream.io, NGA World Port Index, Upply (UN/LOCODE), NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
-              Overpass API, Blitzortung.org, EURDEP (JRC), Japan Meteorological Agency, Finnish Meteorological Institute, NOAA MRMS, NOAA SPC, Esri World Imagery, NASA Blue/Black Marble,
-              Bright Sky, BigDataCloud (Ortsname zum eigenen Standort), Nominatim/OpenStreetMap (Ortsname zum Kartenklick), Open-Meteo Geocoding/Flood (GloFAS), Global Shipping Lanes (P. Benden), PB2002 (Bird 2003), ALERTCalifornia, NYC DOT, DDOT,
-              511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service, Vegagerðin (Island), NZTA (Neuseeland), Transport for NSW, City of Calgary, DriveBC (British Columbia).
-              Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.</p>
-            </details>
-            <p class="small sp-lic">Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
-            <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>, <a href="./licenses/flag-icons.txt" target="_blank">flag-icons</a>, <a href="./licenses/mapillary-js.txt" target="_blank">mapillary-js</a>.</p>
-          </div>
-        </details>
-      </div>`;
-    mountRawDataLink(panel.querySelector<HTMLElement>('[data-rdi]')!, 'row');
-    updateKeyBadge();
-    wireGuides();
-  };
-
-  /** ⓘ-guided guides open on hover (with a small close delay so the tooltip gap
-   *  can be crossed); on touch devices the click toggle stays as before. */
-  const wireGuides = () => {
-    if (!window.matchMedia('(hover: hover)').matches) return;
-    for (const d of panel.querySelectorAll<HTMLDetailsElement>('details.ii')) {
-      let timer: number | undefined;
-      d.addEventListener('mouseenter', () => {
-        clearTimeout(timer);
-        for (const other of panel.querySelectorAll<HTMLDetailsElement>('details.ii[open]')) if (other !== d) other.open = false;
-        d.open = true;
-      });
-      d.addEventListener('mouseleave', () => {
-        clearTimeout(timer);
-        timer = window.setTimeout(() => { d.open = false; }, 200);
-      });
-    }
-  };
-
-  const updateKeyBadge = () => {
-    const sub = panel.querySelector<HTMLElement>('[data-badge]');
-    if (!sub) return;
-    const n = Object.values(store.getKeys()).filter(Boolean).length;
-    sub.textContent = n ? `${n} aktiv` : 'optional';
-  };
-
-  /** keys/options live anwenden: is only saved, side effects run like on the old modal */
-  const persistSettings = debounce(() => {
-    const get = (k: string) => panel.querySelector<HTMLInputElement>(`input[data-key=${k}]`)?.value.trim() || undefined;
-    const proxy = get('adsbProxy');
-    const radarHost = get('radarHost');
-    store.setKeys({ ...store.getKeys(), owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), ontario511: get('ontario511'), alberta511: get('alberta511'), radarHost: /^https:\/\//.test(radarHost ?? '') ? radarHost : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
-    feedData.firms.at = 0;
-    firmsOk = false;
-    if (hud) applyKarte(hud.current());
-    applyGroups();
-    ensureFeeds();
-    extras?.resume();
-    refreshHud();
-    updateKeyBadge();
-    toast('Einstellungen gespeichert');
-  }, 500);
-
-  const escSettings = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !panel.hidden) closeSettings();
-  };
-
-  const openSettings = () => {
-    buildSettings();
-    panel.hidden = false;
-    scrim.hidden = false;
-    document.addEventListener('keydown', escSettings);
-    panel.querySelector<HTMLElement>('.sp-x')!.focus();
-  };
-
-  function closeSettings() {
-    panel.hidden = true;
-    scrim.hidden = true;
-    document.removeEventListener('keydown', escSettings);
-  }
-
-  scrim.addEventListener('click', closeSettings);
-  // only one info guide open at a time ('toggle' does not bubble → capture)
-  document.addEventListener('toggle', (e) => {
-    const d = e.target as HTMLDetailsElement;
-    if (d.tagName !== 'DETAILS' || !d.open || !d.matches('.ii') || !panel.contains(d)) return;
-    for (const other of panel.querySelectorAll<HTMLDetailsElement>('details.ii[open]')) if (other !== d) other.open = false;
-  }, true);
-  panel.addEventListener('click', (e) => {
-    const t = e.target as HTMLElement;
-    if (t.closest('.sp-x') || t.closest('.sp-x *')) {
-      closeSettings();
-      return;
-    }
-    // unit selectors (one segment per key, persisted immediately)
-    const unit = t.closest<HTMLButtonElement>('button[data-u]');
-    if (unit) {
-      const k = unit.dataset.u as keyof AppOptions;
-      store.setOptions({ ...store.getOptions(), [k]: unit.dataset.v });
-      for (const b of panel.querySelectorAll<HTMLButtonElement>(`button[data-u="${k}"]`)) b.classList.toggle('on', b === unit);
-      updateUnitBadge();
-      return;
-    }
-    const tog = t.closest<HTMLButtonElement>('button[data-opt]');
-    if (tog) {
-      const on = tog.classList.toggle('on');
-      store.setOptions({ ...store.getOptions(), [tog.dataset.opt!]: on });
-      tog.setAttribute('aria-checked', String(on));
-      return;
-    }
   });
-  // keys: save while typing (debounced), everything else reacts like the old modal
-  panel.addEventListener('input', (e) => {
-    if ((e.target as HTMLElement).matches?.('.sp-body input[data-key]')) persistSettings();
-  });
-  buildSettings();
+  const openSettings = settings.open;
+  const closeSettings = settings.close;
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
@@ -1262,7 +929,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.overlay === 'radar' ? (radar?.frames.length ? 'radar' : 'none') : needsModel() && globalModel ? 'model' : 'none';
 
   const timeLabel = (ms: number) =>
-    new Date(ms).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    dateTimeTxt(ms, { weekday: 'short', hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }) + (tzUtc() ? ' UTC' : '');
 
   let timelineKey = '';
   function renderTimeline() {
@@ -1292,7 +959,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
     }</small>`;
     // day ticks under the slider (only rebuilt when the time axis changes)
-    const key = `${mode}:${times[0]}:${times.length}`;
+    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}`;
     if (key !== timelineKey) {
       timelineKey = key;
       let html = '';
@@ -1300,8 +967,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         let lastDay = '';
         times.forEach((tt, i) => {
           const d = new Date(tt);
-          const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
-          if (day !== lastDay && d.getHours() < 3) {
+          const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
+          if (day !== lastDay && (tzUtc() ? d.getUTCHours() : d.getHours()) < 3) {
             html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
           }
           lastDay = day;
@@ -1397,13 +1064,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       case 'sat-storm':
         return t('Satellit Gewitter', 'Meteosat Konvektions-RGB · live, Europa & Afrika', 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, 'ruhig'], [100, 'kräftige Gewitter']]);
       case 'water':
-        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'sst':
-        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'seaice':
         return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
       case 'imerg':
-        return t('Niederschlag Satellit', 'NASA IMERG · mm/h', 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, '0,1'], [50, '5'], [100, '50+']]);
+        return t('Niederschlag Satellit', 'NASA IMERG · ' + rainUnit(), 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, rainNum(0.1)], [50, rainNum(5)], [100, rainNum(50) + '+']]);
       default:
         return null;
     }
@@ -1429,6 +1096,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const hideReadout = () => {
     readout.hidden = true;
   };
+  // units changed in the settings: legend and (stale) readout follow at once
+  window.addEventListener(OPTIONS_EVENT, () => {
+    renderLegend();
+    renderTimeline();
+    hideReadout();
+  });
   function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }, touch = false) {
     const o = state.overlay;
     if (touch && o === 'radar') {

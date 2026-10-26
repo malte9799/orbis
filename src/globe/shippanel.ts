@@ -2,6 +2,7 @@ import type { Map as MlMap } from 'maplibre-gl';
 import type { ShipInfo } from './extras';
 import { SHIP_COLORS, SHIP_LABELS, shipCat, type ShipCat } from '../api/transport';
 import { compass, escapeHtml, fmt } from '../util';
+import { speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
 import { category, graph, routeHero, tile } from './sidepanel';
 import { fetchShipPhoto, type ShipPhoto } from '../api/ships';
@@ -152,13 +153,13 @@ export class ShipPanel {
     const hero = dest
       ? routeHero({ from: { code: moving ? 'Unterwegs' : 'Liegt', sub: `${fmt.num(s.sog, 1)} kn` }, to: { code: dest, sub: 'Ziel laut AIS' }, progress: 0, mark: glyphSvg('vessel', COLOR, 20), color: COLOR, note: moving ? `Kurs ${Math.round(rot)}° ${compass(rot)}` : 'macht gerade keine Fahrt' }).replace('class="sp-route"', 'class="sp-route sp-text"')
       : `<div class="sp-note" style="margin-top:10px">Kein Ziel gemeldet · ${moving ? `Kurs ${Math.round(rot)}° ${compass(rot)}` : 'liegt'}</div>`;
-    const tiles = `<div class="sp-tiles">${tile('Tempo', `${fmt.num(s.sog, 1)} kn`, { metric: 'speed', on: this.metric === 'speed' })}${tile('Kurs', `${Math.round(rot)}° ${compass(rot)}`, { metric: 'track', on: this.metric === 'track' })}${tile('Status', moving ? 'in Fahrt' : 'liegt')}${tile('Letzte Meldung', ago)}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { speed: ['Tempo', 'kn'], track: ['Kurs', '°'] };
+    const tiles = `<div class="sp-tiles">${tile('Tempo', speedTxt(s.sog * 1.852, 1), { metric: 'speed', on: this.metric === 'speed' })}${tile('Kurs', `${Math.round(rot)}° ${compass(rot)}`, { metric: 'track', on: this.metric === 'track' })}${tile('Status', moving ? 'in Fahrt' : 'liegt')}${tile('Letzte Meldung', ago)}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { speed: ['Tempo', speedUnit()], track: ['Kurs', '°'] };
     const m = this.metric;
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history[m as 'speed' | 'track'], GRAPHS[m][1], COLOR) : '';
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? i.history.speed.map((v) => speedVal(v * 1.852)) : i.history[m as 'track']), GRAPHS[m][1], COLOR) : '';
     const cats =
       category('ship', 'Schiff', [['Typ', escapeHtml(SHIP_LABELS[cat])], ['Rufzeichen', escapeHtml(s.callSign || '–')], ['MMSI', String(s.mmsi)], ['Ziel', escapeHtml(dest || '–')]], this.open_) +
-      category('position', 'Position', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Geschwindigkeit', `${fmt.num(s.sog * 1.852, 0)} km/h`]], this.open_);
+      category('position', 'Position', [['Breitengrad', fmt.num(i.lat, 3)], ['Längengrad', fmt.num(i.lon, 3)], ['Geschwindigkeit', speedTxt(s.sog * 1.852)]], this.open_);
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(s.source)} · Fotos: <a href="https://commons.wikimedia.org" target="_blank" rel="noopener noreferrer">Wikimedia Commons</a> · <a href="https://www.marinetraffic.com/de/ais/details/ships/mmsi:${s.mmsi}" target="_blank" rel="noopener noreferrer">Auf MarineTraffic ansehen ↗</a></div></details>`;
     this.contentEl.innerHTML = hero + tiles + chart + cats + src;
   }

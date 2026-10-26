@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { acresTxt } from '../units';
 import { fetchText, snapshotJson, snapshotText } from './data';
 
 // Earth & environment layers. All sources are free and keyless.
@@ -136,7 +137,7 @@ export async function loadFirePerimeters(): Promise<FeatureCollection<Geometry>>
           properties: {
             title: `${String(p.poly_IncidentName ?? 'Waldbrand').trim()} Fire`,
             subtitle: [
-              Number.isFinite(acres) ? `${Math.round(acres * 0.404686).toLocaleString('de-DE')} ha` : '',
+              Number.isFinite(acres) ? acresTxt(acres, true, 0) : '',
               contained != null ? `${contained} % eingedämmt` : '',
               String(p.attr_POOState ?? '').replace('US-', ''),
             ]

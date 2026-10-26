@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson, fetchJsonEtag, pruneEtagCache } from '../util';
+import { speedTxt } from '../units';
 import { viaProxy } from './proxy';
 
 // Public transport and rail – live positions.
@@ -311,7 +312,7 @@ export async function loadAutobahn(onProgress?: (p: AutobahnProgress) => void): 
       const props = {
         kind: jam ? 'jam' : kind,
         title: `${road}: ${(it.title ?? sub).replace(/^\s*A\d+\s*\|\s*/, '')}`,
-        subtitle: [sub, it.subtitle, it.delayTimeValue ? `+${it.delayTimeValue} min` : '', it.averageSpeed ? `Ø ${it.averageSpeed} km/h` : ''].filter(Boolean).join(' · '),
+        subtitle: [sub, it.subtitle, it.delayTimeValue ? `+${it.delayTimeValue} min` : '', it.averageSpeed ? `Ø ${speedTxt(Number(it.averageSpeed))}` : ''].filter(Boolean).join(' · '),
         description: (it.description ?? []).filter(Boolean).join('\n'),
         date: it.startTimestamp ?? '',
         color,

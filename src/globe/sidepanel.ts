@@ -1,4 +1,5 @@
 import { escapeHtml } from '../util';
+import { clockTxt, tzOpts } from '../units';
 
 // Building blocks shared by the flight panel and the ship panel (right-hand side, design B):
 // route hero, profile line, value tiles and collapsible detail categories.
@@ -15,8 +16,8 @@ export function distKm(lon1: number, lat1: number, lon2: number, lat2: number): 
 /** "ca. 14:05", with the date ("24.10.") when it is not today. */
 export function clock(t: number): string {
   const d = new Date(t);
-  const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  const date = d.toDateString() === new Date().toDateString() ? '' : `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}. `;
+  const time = clockTxt(d);
+  const date = d.toDateString() === new Date().toDateString() ? '' : `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', ...tzOpts() })}. `;
   return `ca. ${date}${time}`;
 }
 

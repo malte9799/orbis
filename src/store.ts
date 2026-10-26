@@ -52,6 +52,9 @@ export interface AppOptions {
   tz?: 'auto' | 'utc';
 }
 
+/** fired on `window` after the unit/display options changed */
+export const OPTIONS_EVENT = 'wg:options';
+
 /** defaults for whatever is not stored yet */
 const APP_OPTION_DEFAULTS: AppOptions = {
   clickWx: true,
@@ -121,7 +124,11 @@ export const store = {
   setKeys: (k: ApiKeys) => write('wg.keys', k),
 
   getOptions: (): AppOptions => ({ ...APP_OPTION_DEFAULTS, ...read('wg.options', {}) }),
-  setOptions: (o: AppOptions) => write('wg.options', o),
+  setOptions: (o: AppOptions) => {
+    write('wg.options', o);
+    // visible legends/readouts re-render with the new units
+    window.dispatchEvent(new Event(OPTIONS_EVENT));
+  },
 
   cacheGet<T>(key: string, maxAgeMs: number): T | null {
     const entry = read<{ t: number; v: T } | null>(`wg.cache.${key}`, null);

@@ -1,6 +1,7 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
+import { speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
 import { category, clock, distKm, duration, graph, routeHero, tile } from './sidepanel';
 import { fetchAircraftPhoto, lookupAircraftSpec, seatmapUrl, type AircraftPhoto } from '../api/aircraft';
@@ -228,9 +229,9 @@ export class FlightPanel {
     }
 
     const m = this.metric;
-    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Tempo', num(i.speedKmh, 'km/h'), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', num(i.vsMs, 'm/s', 1), { metric: 'vs', on: m === 'vs' })}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Tempo', 'km/h'], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history?.[m as 'alt' | 'speed' | 'track' | 'vs'] ?? [], GRAPHS[m][1], COLOR) : '';
+    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Tempo', i.speedKmh == null ? '–' : speedTxt(i.speedKmh), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', num(i.vsMs, 'm/s', 1), { metric: 'vs', on: m === 'vs' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Tempo', speedUnit()], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : (i.history?.[m as 'alt' | 'track' | 'vs'] ?? [])), GRAPHS[m][1], COLOR) : '';
 
     // Flugzeug-Identifikation
     const planeRows: [string, string][] = [
@@ -250,7 +251,7 @@ export class FlightPanel {
         ['Passagiere', escapeHtml(spec.seats)],
         ['Reichweite', `${fmt.num(spec.rangeKm)} km`],
         ['Spannweite / Länge', `${spec.spanM} m / ${spec.lengthM} m`],
-        ['Reisetempo', `ca. ${spec.speedKmh} km/h`],
+        ['Reisetempo', `ca. ${speedTxt(spec.speedKmh)}`],
         ['Dienstgipfelhöhe', `${fmt.num(Math.round(spec.ceilingFt * 0.3048))} m (${fmt.num(spec.ceilingFt)} ft)`],
         ['Wirbelschleppe (WTC)', escapeHtml(spec.wtc)],
       ];

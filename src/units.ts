@@ -32,6 +32,10 @@ export const windVal = (kmh: number): number => {
 export const windTxt = (kmh: number, digits = 0): string => `${num(windVal(kmh), digits)} ${windUnit()}`;
 export const windDirTxt = (deg: number): string => (opt('windDir') === 'deg' ? `${Math.round(((deg % 360) + 360) % 360)}°` : compass(deg));
 
+/** Zahl ohne Einheit für Karten-Legenden/Readouts (Einheit separat über *Unit()) */
+export const windNum = (kmh: number): string => num(windVal(kmh), 0);
+export const tempNum = (vC: number): string => num(tempVal(vC), 0);
+
 // ---- Luftdruck ---------------------------------------------------------------
 export type PressureOpt = NonNullable<AppOptions['pressure']>;
 const PRESSURE_UNIT: Record<PressureOpt, string> = { hpa: 'hPa', mb: 'mb', mmhg: 'mmHg', inhg: 'inHg' };
@@ -43,7 +47,9 @@ export const pressureVal = (hPa: number): number => {
     default: return hPa; // mb is identical to hPa (1 hPa = 1 mbar)
   }
 };
-export const pressureTxt = (hPa: number, digits = 0): string => `${num(pressureVal(hPa), digits)} ${pressureUnit()}`;
+const pressureDigits = () => (opt('pressure') === 'inhg' ? 2 : 0);
+export const pressureNum = (hPa: number): string => num(pressureVal(hPa), pressureDigits());
+export const pressureTxt = (hPa: number, digits = pressureDigits()): string => `${num(pressureVal(hPa), digits)} ${pressureUnit()}`;
 
 // ---- Niederschlag --------------------------------------------------------------
 export const rainUnit = () => (opt('rain') ?? 'mm') === 'dbz' ? 'dBZ' : (opt('rain') ?? 'mm') === 'in' ? 'in/h' : 'mm/h';
@@ -56,6 +62,7 @@ export const rainVal = (mmH: number): number => {
     default: return mmH;
   }
 };
+export const rainNum = (mmH: number): string => num(rainVal(mmH), (opt('rain') ?? 'mm') === 'in' ? 2 : (opt('rain') ?? 'mm') === 'dbz' ? 0 : 1);
 export const rainTxt = (mmH: number, digits = 1): string => `${num(rainVal(mmH), digits)} ${rainUnit()}`;
 
 // ---- Niederschlagssumme (mm ↔ in; dBZ fällt auf mm zurück) ---------------------
@@ -69,6 +76,11 @@ const DIST_UNIT: Record<DistOpt, string> = { km: 'km', mi: 'Meilen', nmi: 'Seeme
 export const distUnit = () => DIST_UNIT[opt('dist') ?? 'km'];
 export const distVal = (km: number): number => (opt('dist') === 'mi' ? km * 0.621371 : opt('dist') === 'nmi' ? km / 1.852 : km);
 export const distTxt = (km: number, digits = 1): string => `${num(distVal(km), digits)} ${distUnit()}`;
+
+/** Fahrzeug-/Strömungsgeschwindigkeit [km/h] – folgt der Distanz-Einstellung: km/h · mph · Knoten */
+export const speedUnit = () => (opt('dist') === 'mi' ? 'mph' : opt('dist') === 'nmi' ? 'kn' : 'km/h');
+export const speedVal = (kmh: number): number => (opt('dist') === 'mi' ? kmh * 0.621371 : opt('dist') === 'nmi' ? kmh / 1.852 : kmh);
+export const speedTxt = (kmh: number, digits = 0): string => `${num(speedVal(kmh), digits)} ${speedUnit()}`;
 
 // ---- Fläche -------------------------------------------------------------------------
 export type AreaOpt = NonNullable<AppOptions['area']>;
@@ -86,6 +98,9 @@ export const areaVal = (km2: number, burned = false): number => {
 /** area/burned-area as formatted text ("12 km²") */
 export const areaTxt = (km2: number, burned = false, digits = 1): string => `${num(areaVal(km2, burned), digits)} ${areaUnit(burned)}`;
 
+/** Fläche aus Acre (US-Quellen) */
+export const acresTxt = (acres: number, burned = true, digits = 1): string => areaTxt(acres * 0.00404686, burned, digits);
+
 // ---- Koordinaten -----------------------------------------------------------------------
 export const coordsDec = () => (opt('coords') ?? 'dec') === 'dec';
 /** Dezimalgrade: 51.513° N · GMS: 51° 30′ 46″ N */
@@ -93,12 +108,12 @@ export function coordsTxt(lat: number, lon: number): string {
   const part = (v: number) => {
     const a = Math.abs(v);
     if (coordsDec()) return `${a.toLocaleString(de, { maximumFractionDigits: 3 })}°`;
-    const deg = Math.floor(a);
+    let deg = Math.floor(a);
     const mFull = (a - deg) * 60;
-    const min = Math.floor(mFull);
-    let sec = Math.round((mFull - min) * 60);
-    let m = min;
+    let m = Math.floor(mFull);
+    let sec = Math.round((mFull - m) * 60);
     if (sec === 60) { sec = 0; m += 1; }
+    if (m === 60) { m = 0; deg += 1; }
     return `${deg}° ${m}′ ${sec}″`;
   };
   return `${part(lat)} ${lat >= 0 ? 'N' : 'S'}, ${part(lon)} ${lon >= 0 ? 'O' : 'W'}`;
@@ -107,6 +122,15 @@ export function coordsTxt(lat: number, lon: number): string {
 // ---- Zeit ------------------------------------------------------------------------
 export const is12 = () => (opt('hour12') ?? '24h') === '12h';
 export const tzUtc = () => opt('tz') === 'utc';
+/** Optionen für toLocale*String: 12/24 Std. und Zeitzone (Ortszeit/UTC) */
+export const tzOpts = (): { hourCycle: 'h12' | 'h23'; timeZone?: string } => ({ hourCycle: is12() ? 'h12' : 'h23', timeZone: tzUtc() ? 'UTC' : undefined });
+/** "14:00 Uhr" · "2:00 PM" · "14:00 UTC" – absolute Zeitpunkte nach Einstellung */
+export function clockTxt(d: Date | number, seconds = false): string {
+  const s = new Date(d).toLocaleTimeString(de, { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit', second: seconds ? '2-digit' : undefined, ...tzOpts() });
+  return tzUtc() ? `${s} UTC` : is12() ? s : `${s} Uhr`;
+}
+/** Locale-String mit Zeitzone/12h-Einstellung (für Wochentag+Uhrzeit usw.) */
+export const dateTimeTxt = (d: Date | number, o: Intl.DateTimeFormatOptions): string => new Date(d).toLocaleString(de, { ...o, ...tzOpts() });
 /** "14:00" (Ortszeit des Ortes) → 2:00 PM */
 export function hourTxt(hhmm: string): string {
   if (!is12()) return hhmm;

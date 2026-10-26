@@ -2,6 +2,7 @@ import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import type { ModelSampler, ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
+import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum } from '../units';
 
 // ---------------------------------------------------------------------------
 // Forecast fields rendered as raster tiles through a custom protocol: the grid is
@@ -130,37 +131,37 @@ const num = (d = 0) => (v: number) => fmt.num(v, d);
 export const FIELDS: Record<FieldId, FieldDef> = {
   wind: {
     label: 'Wind',
-    unit: 'km/h',
+    get unit() { return windUnit(); },
     variable: 'wind_speed_10m',
     color: ramp(WIND_STOPS),
     legend: { stops: WIND_STOPS, ticks: [0, 30, 60, 100, 130] },
-    format: num(),
+    format: windNum,
     particles: true,
   },
   gusts: {
     label: 'Windböen',
-    unit: 'km/h',
+    get unit() { return windUnit(); },
     variable: 'wind_gusts_10m',
     color: ramp(WIND_STOPS),
     legend: { stops: WIND_STOPS, ticks: [0, 30, 60, 100, 130] },
-    format: num(),
+    format: windNum,
     particles: true,
   },
   temp: {
     label: 'Temperatur',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'temperature_2m',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   feels: {
     label: 'Gefühlte Temperatur',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'apparent_temperature',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   humidity: {
     label: 'Luftfeuchtigkeit',
@@ -173,20 +174,20 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   dewpoint: {
     label: 'Taupunkt',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'dew_point_2m',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   precip: {
     label: 'Niederschlag',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     color: ramp(PRECIP_STOPS, 210, 0.08),
     legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
-    format: num(1),
+    format: rainNum,
   },
   cloud: {
     label: 'Bewölkung',
@@ -199,11 +200,11 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   pressure: {
     label: 'Luftdruck',
-    unit: 'hPa',
+    get unit() { return pressureUnit(); },
     variable: 'pressure_msl',
     color: ramp(PRESSURE_STOPS, 150),
     legend: { stops: PRESSURE_STOPS, ticks: [970, 990, 1013, 1030, 1045] },
-    format: num(),
+    format: pressureNum,
   },
   snow: {
     label: 'Schneehöhe',
@@ -216,23 +217,23 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   precipmix: {
     label: 'Niederschlag',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     phase: 'mix',
     color: ramp(PRECIP_STOPS, 215, 0.08),
     legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
-    format: num(1),
+    format: rainNum,
   },
   snowfall: {
     label: 'Schneefall',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     phase: 'snow-only',
     color: ramp(SNOWFALL_STOPS, 225, 0.08),
     legend: { stops: SNOWFALL_STOPS, ticks: [0.1, 1.5, 3, 6] },
-    format: num(1),
+    format: rainNum,
   },
   cape: {
     label: 'Gewitterenergie (CAPE)',

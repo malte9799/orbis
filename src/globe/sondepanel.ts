@@ -1,6 +1,7 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { SondeInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
+import { speedTxt, speedUnit, speedVal, coordsTxt } from '../units';
 import { glyphSvg } from './icons';
 import { category, graph, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
@@ -148,13 +149,13 @@ export class SondePanel {
       progress: Math.min(1, altM / 38000),
       mark: glyphSvg('sonde', COLOR, 20),
       color: COLOR,
-      note: [ago && `Letzte Meldung ${ago}`, i.track != null && `Kurs ${Math.round(i.track)}° ${compass(i.track)}`, i.speedKmh != null && `Drift ${fmt.num(i.speedKmh, 0)} km/h`].filter(Boolean).join(' · '),
+      note: [ago && `Letzte Meldung ${ago}`, i.track != null && `Kurs ${Math.round(i.track)}° ${compass(i.track)}`, i.speedKmh != null && `Drift ${speedTxt(i.speedKmh)}`].filter(Boolean).join(' · '),
     });
 
     const m = this.metric;
-    const tiles = `<div class="sp-tiles">${tile('Höhe', `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Steigrate', `${fmt.num(vs, 1)} m/s`, { metric: 'vs', on: m === 'vs' })}${tile('Drift', i.speedKmh != null ? `${fmt.num(i.speedKmh, 0)} km/h` : '–', { metric: 'speed', on: m === 'speed' })}${tile('Kurs', i.track != null ? `${Math.round(i.track)}° ${compass(i.track)}` : '–', { metric: 'track', on: m === 'track' })}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Drift', 'km/h'], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, i.history?.[m as 'alt' | 'speed' | 'track' | 'vs'] ?? [], GRAPHS[m][1], COLOR) : '';
+    const tiles = `<div class="sp-tiles">${tile('Höhe', `${fmt.num(i.altM)} m`, { metric: 'alt', on: m === 'alt' })}${tile('Steigrate', `${fmt.num(vs, 1)} m/s`, { metric: 'vs', on: m === 'vs' })}${tile('Drift', i.speedKmh != null ? speedTxt(i.speedKmh) : '–', { metric: 'speed', on: m === 'speed' })}${tile('Kurs', i.track != null ? `${Math.round(i.track)}° ${compass(i.track)}` : '–', { metric: 'track', on: m === 'track' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', 'm'], speed: ['Drift', speedUnit()], track: ['Kurs', '°'], vs: ['Steigrate', 'm/s'] };
+    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : (i.history?.[m as 'alt' | 'track' | 'vs'] ?? [])), GRAPHS[m][1], COLOR) : '';
 
     // everything SondeHub offers about this sonde
     const sondeRows: [string, string][] = [
@@ -164,18 +165,17 @@ export class SondePanel {
       ['Messrahmen (Frame)', i.frame != null ? String(i.frame) : '–'],
     ];
     const posRows: [string, string][] = [
-      ['Breitengrad', fmt.num(i.lat, 3)],
-      ['Längengrad', fmt.num(i.lon, 3)],
+      ['Position', coordsTxt(i.lat, i.lon)],
       ['Höhe', `${fmt.num(altM)} m (${fmt.num(Math.round(altM / 0.3048))} ft)`],
       ['Vertikal (Telemetrie)', `${fmt.num(i.vsMs ?? 0, 1)} m/s`],
-      ['Horizontal', i.speedKmh != null ? `${fmt.num(i.speedKmh, 1)} km/h` : '–'],
-      ['Position/Uhrzeit', escapeHtml(i.datetime ? new Date(i.datetime).toLocaleString('de-DE') : '–')],
+      ['Horizontal', i.speedKmh != null ? speedTxt(i.speedKmh, 1) : '–'],
+      ['Position/Uhrzeit', escapeHtml(i.datetime ? fmt.dateTime(i.datetime) : '–')],
     ];
     const rxRows: [string, string][] = [
       ['Empfänger', escapeHtml(i.uploader || '–')],
       ['Antenne', escapeHtml(i.antenna || '–')],
       ['Auswertesoftware', escapeHtml(i.software || '–')],
-      ['Letzter Empfang', escapeHtml(i.timeReceived ? new Date(i.timeReceived).toLocaleString('de-DE') : '–')],
+      ['Letzter Empfang', escapeHtml(i.timeReceived ? fmt.dateTime(i.timeReceived) : '–')],
     ];
     const cats =
       category('sonde', 'Radiosonde', sondeRows, this.open_) +

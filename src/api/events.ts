@@ -1,6 +1,7 @@
 import { store } from '../store';
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon, MultiPolygon, Position } from 'geojson';
 import { fetchJson } from '../util';
+import { windTxt } from '../units';
 import { snapshotJson } from './data';
 
 /** Kinds of natural events shown on the globe. */
@@ -145,7 +146,7 @@ export async function loadEonet(): Promise<EonetResult> {
       point(pos, {
         kind,
         title: ev.title,
-        subtitle: [ev.categories[0]?.title, kind === 'storm' && mag ? `${mag} km/h Wind` : magnitude]
+        subtitle: [ev.categories[0]?.title, kind === 'storm' && mag ? `${windTxt(mag)} Wind` : magnitude]
           .filter(Boolean)
           .join(' · '),
         date: last.date,

@@ -6,7 +6,7 @@ import { createForecastMap, type ForecastMap } from './fcmap';
 import { createSearch, locate } from '../search';
 import { store, type Place } from '../store';
 import { beaufort, escapeHtml, fmt, tempColor, toast } from '../util';
-import { windTxt, windDirTxt, pressureTxt, precipSumTxt, distTxt } from '../units';
+import { opt, clockTxt, distTxt, precipSumTxt, pressureTxt, windDirTxt, windTxt } from '../units';
 import { aqiLabel, describe, pollenLabel, uvLabel, weatherIcon } from '../weather';
 
 const CACHE_KEY = 'wg.fccache';
@@ -123,10 +123,10 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
   }
 
   function staleNote(t: number, failed = false) {
-    const at = new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const at = clockTxt(t);
     const text = failed
-      ? `Stand ${at} Uhr – Aktualisierung fehlgeschlagen, es wird weiter versucht …`
-      : `Stand ${at} Uhr – wird aktualisiert …`;
+      ? `Stand ${at} – Aktualisierung fehlgeschlagen, es wird weiter versucht …`
+      : `Stand ${at} – wird aktualisiert …`;
     // a single note that switches to the failed state instead of stacking a second line
     const existing = body.querySelector<HTMLElement>('.stale-note');
     if (existing) {
@@ -192,7 +192,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       </section>
 
       <section class="details">
-        ${tile('Wind', `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${windTxt(c.wind_speed_10m)}`, `aus ${windDirTxt(c.wind_direction_10m)} · Bft ${beaufort(c.wind_speed_10m)}`)}
+        ${tile('Wind', `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${windTxt(c.wind_speed_10m)}`, `aus ${windDirTxt(c.wind_direction_10m)}${opt('wind') === 'bft' ? '' : ` · Bft ${beaufort(c.wind_speed_10m)}`}`)}
         ${tile('Böen', windTxt(c.wind_gusts_10m), `max. heute ${windTxt(d.wind_gusts_10m_max[0])}`)}
         ${tile('Luftfeuchte', `${Math.round(c.relative_humidity_2m)} <small>%</small>`, `Taupunkt ${fmt.temp(dew)}`)}
         ${tile('Luftdruck', pressureTxt(c.pressure_msl), 'auf Meereshöhe')}

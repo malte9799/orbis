@@ -11,6 +11,7 @@ import { ensureWeatherIcons } from '../globe/icons';
 import { tileRecorder } from '../inspector/tiles';
 import { weatherIcon } from '../weather';
 import { fmt, rampColor } from '../util';
+import { rainUnit, rainNum, clockTxt, tzOpts } from '../units';
 
 // Compact regional weather map for the forecast page (radar, rain/snow, temperature, wind, city weather),
 // in the spirit of the maps on classic weather sites. Uses a small regional model grid.
@@ -372,7 +373,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   }
 
   function renderLegend() {
-    const bar = (stops: [number, string][], label: string, ticks: number[], unit: string) => {
+    const bar = (stops: [number, string][], label: string, ticks: number[], unit: string, tickFmt: (v: number) => string = (v) => fmt.num(v, v < 1 ? 1 : 0)) => {
       const min = stops[0][0];
       const max = stops[stops.length - 1][0];
       const grad = Array.from({ length: 12 }, (_, i) => {
@@ -383,16 +384,16 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       return `<div class="fcm-leg">
         <span class="fcm-leg-label">${label} <small>${unit}</small></span>
         <span class="fcm-leg-bar" style="background:linear-gradient(90deg,${grad})"></span>
-        <span class="fcm-leg-ticks">${ticks.map((t) => `<span style="left:${(((t - min) / (max - min)) * 100).toFixed(1)}%">${fmt.num(t, t < 1 ? 1 : 0)}</span>`).join('')}</span>
+        <span class="fcm-leg-ticks">${ticks.map((t) => `<span style="left:${(((t - min) / (max - min)) * 100).toFixed(1)}%">${tickFmt(t)}</span>`).join('')}</span>
       </div>`;
     };
     const def = (id: FieldId) => FIELDS[id];
     legendEl.innerHTML =
       mode === 'precip'
-        ? bar(PRECIP_STOPS, 'Regen', [0.1, 3, 10, 20, 40], 'mm/h') + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], 'mm/h')
+        ? bar(PRECIP_STOPS, 'Regen', [0.1, 3, 10, 20, 40], rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
         : mode === 'radar'
           ? ''
-          : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit);
+          : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);
   }
 
   return {
@@ -410,7 +411,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
 function formatWhen(ms: number) {
   const d = new Date(ms);
-  const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
+  const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
   const today = new Date().toDateString() === d.toDateString();
-  return `${today ? 'Heute' : day}, ${d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr`;
+  return `${today ? 'Heute' : day}, ${clockTxt(d)}`;
 }

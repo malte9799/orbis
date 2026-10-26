@@ -36,6 +36,7 @@ import { isSuperseded } from '../api/overpass';
 import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
 import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
+import { clockTxt, speedTxt, coordsTxt, dateTimeTxt } from '../units';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
 import { cardHtml } from './popup';
@@ -2189,7 +2190,7 @@ export class ExtraLayers {
             const sun = sw
               ? ` · Sonnenwind ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? ' (günstig)' : ''}` : ''}${sw.xray ? `, Röntgen ${sw.xray}` : ''}`
               : '';
-            return { count: undefined, note: `${kp}Vorhersage für ${t.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr${sun}` };
+            return { count: undefined, note: `${kp}Vorhersage für ${clockTxt(t)}${sun}` };
           });
           break;
         case 'gvp':
@@ -3555,10 +3556,9 @@ export class ExtraLayers {
         const dir = Number(p.dir);
         const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
         const raw = String(p.speed ?? '');
-        const unit = /^\d+(\.\d+)?$/.test(raw) ? ' km/h' : '';
-        const speed = /\d/.test(raw) ? `${raw}${unit}` : '';
+        const speed = /^\d+(\.\d+)?$/.test(raw) ? speedTxt(Number(raw)) : /\d/.test(raw) ? raw : '';
         const rows = [
-          ['Tempo', speed === 'no' || speed === 'none' ? '' : speed ? `${speed} km/h` : ''],
+          ['Tempo', speed],
           ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
           ['Betreiber', p.operator],
           ['Kennung', p.ref],
@@ -3590,7 +3590,7 @@ export class ExtraLayers {
           after: (node) => {
             loadTideDetails(id)
               .then((d) => {
-                const t = (iso: string) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+                const t = (iso: string) => dateTimeTxt(new Date(iso), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
                 const rows: [string, string][] = [];
                 if (d.level) rows.push(['Wasserstand', `${fmt.num(d.level.v, 2)} m (über MLLW) · ${t(d.level.t)}`]);
                 for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${fmt.num(n.v, 2)} m`]);
@@ -3612,7 +3612,7 @@ export class ExtraLayers {
         const ago = secs < 90 ? `vor ${secs} s` : `vor ${Math.round(secs / 60)} min`;
         const n = Number(p.n);
         const d = this.lightning?.delay;
-        const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
+        const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${clockTxt(at, true)} (${ago})</b><span>Position</span><b>${coordsTxt(pt[1] as number, pt[0] as number)}</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
         return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
       }
       case 'launches': {
@@ -3718,7 +3718,7 @@ export class ExtraLayers {
                 const list = (l: { callsign: string; other: string; time: number }[], arrow: string) =>
                   l
                     .slice(0, 6)
-                    .map((f) => `<span>${escapeHtml(new Date(f.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }))}</span><b>${escapeHtml(f.callsign || '–')} ${arrow} ${escapeHtml(f.other)}</b>`)
+                    .map((f) => `<span>${escapeHtml(clockTxt(f.time))}</span><b>${escapeHtml(f.callsign || '–')} ${arrow} ${escapeHtml(f.other)}</b>`)
                     .join('');
                 const el = node.querySelector('.pop-loading');
                 if (!el) return;
@@ -3775,7 +3775,7 @@ export class ExtraLayers {
             glyph: 'train',
             color: '#ffca28',
             title: `Zug ${num}`,
-            subtitle: `${fmt.num(Number(p.speed))} km/h`,
+            subtitle: speedTxt(Number(p.speed)),
             source: 'Fintraffic Digitraffic',
             url: `https://www.junat.net/en/train/${num}`,
             extra: '<div class="pop-loading small">Details werden geladen …</div>',
@@ -3831,7 +3831,7 @@ export class ExtraLayers {
 
   private vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResult {
     const st = modeStyle(String(p.mode));
-    const t = (ms: unknown) => new Date(Number(ms)).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const t = (ms: unknown) => clockTxt(Number(ms));
     const delay = Number(p.delay);
     const rows =
       p.src === 'amtrak' || p.src === 'gps'
@@ -3840,13 +3840,13 @@ export class ExtraLayers {
             ...(p.src === 'gps' ? [['Von', p.from], ['Nach', p.to], ['Verspätung', delay === -999 ? '' : delay > 0 ? `+${delay} min` : 'pünktlich']] : []),
 
             ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
-            ['Geschwindigkeit', p.speed != null ? `${p.speed} km/h` : ''],
+            ['Geschwindigkeit', p.speed != null ? speedTxt(Number(p.speed)) : ''],
             ['Status', p.timely],
           ]
         : [
             ['Art', st.label],
             ['Abschnitt', `${p.from} → ${p.to}`],
-            ['Ankunft', `${t(p.arr)} Uhr`],
+            ['Ankunft', t(p.arr)],
             ['Verspätung', delay === -999 ? 'keine Echtzeitdaten' : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : 'pünktlich'],
           ];
     const extra = `<div class="pop-grid two">${rows
