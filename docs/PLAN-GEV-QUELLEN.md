@@ -80,7 +80,7 @@ die CC0-Kameramodell-Daten (`cctv-database.com`) können ins Kamera-Popup.
 
 | Datensatz | Lizenz | Umsetzung |
 |---|---|---|
-| Rechenzentren (OSM, ~4.400) | ODbL | Overpass-Extrakt per Skript, Ebene `datacenters.ts` (Kategorie Infrastruktur) |
+| ✅ Rechenzentren (OSM, ~5.000) | ODbL | eigener wöchentlicher Overpass-Auszug, zusammengeführt mit PeeringDB-Standorten; Ebene `datacenters.ts` |
 | Staudämme (OSM/OpenInfraMap, ~700) | ODbL | Ebene `dams.ts` oder Teil von `water.ts` |
 | Militärgelände (OSM via Overture, ~36.000 Namen) | ODbL | Flächen kommen aus den OpenFreeMap-Kacheln (`landuse=military`), Namen als Beschriftung |
 | Natural Earth Regionen (Gebirge, Wüsten, Meere) | gemeinfrei | Beschriftungs-Ebene für den Globus |

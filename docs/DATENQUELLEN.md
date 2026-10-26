@@ -177,7 +177,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Unterseekabel (Telekommunikation) – weniger vollständig als kommerzielle Karten; frühere Quelle TeleGeography siehe [Archiv](archiv/telegeography-seekabel.md) | 🟢 ODbL, 📦 |
-| [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs) | 🟢 |
+| [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs); Rechenzentren (~5.300 Standorte mit Betreiber und Zahl der angeschlossenen Netze) | 🟢 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass, `telecom`/`building=data_center`) | Rechenzentren, die PeeringDB nicht führt (~3.200 nach Abgleich); wöchentlicher Auszug (`scripts/fetch-data.ts`) | 🟢 ODbL, 📦 |
 | [WRI Global Power Plant Database](https://datasets.wri.org/dataset/globalpowerplantdatabase) | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke | 🟢 CC BY 4.0 |
 | OpenStreetMap (Overpass) | Einzelne Windräder, Öl-/Gaspipelines | 🟢 ODbL |
 

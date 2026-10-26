@@ -133,15 +133,8 @@ await task('firms', 0, async () => {
 rmSync(join(OUT, 'cables'), { recursive: true, force: true });
 delete meta.tasks.cables;
 
-await task('osm-cables', DAY, async () => {
-  const query = `[out:json][timeout:600];(
-    way["telecom"="line"]["location"~"underwater|submarine"];
-    way["communication"="line"]["location"~"underwater|submarine"];
-    way["submarine"="yes"]["telecom"="line"];
-    way["seamark:type"="cable_submarine"]["seamark:cable_submarine:category"~"^(fibre_optic|fiber_optic|optical|telephone|telegraph|telecommunication|communication)$"];
-  );out tags geom;`;
-  type OsmWay = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
-  let elements: OsmWay[] | null = null;
+/** Runs a worldwide Overpass query, trying a second public server when the first one fails. */
+async function overpassAll<T>(query: string): Promise<T[]> {
   const errors: string[] = [];
   for (const server of ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
     try {
@@ -152,13 +145,25 @@ await task('osm-cables', DAY, async () => {
         signal: AbortSignal.timeout(660000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      ({ elements } = (await res.json()) as { elements: OsmWay[] });
-      break;
+      return ((await res.json()) as { elements: T[] }).elements;
     } catch (e) {
       errors.push(`${new URL(server).host}: ${e instanceof Error ? e.message : e}`);
     }
   }
-  if (!elements) throw new Error(`Overpass – ${errors.join(', ')}`);
+  throw new Error(`Overpass – ${errors.join(', ')}`);
+}
+
+const ODBL = 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\n';
+
+await task('osm-cables', DAY, async () => {
+  const query = `[out:json][timeout:600];(
+    way["telecom"="line"]["location"~"underwater|submarine"];
+    way["communication"="line"]["location"~"underwater|submarine"];
+    way["submarine"="yes"]["telecom"="line"];
+    way["seamark:type"="cable_submarine"]["seamark:cable_submarine:category"~"^(fibre_optic|fiber_optic|optical|telephone|telegraph|telecommunication|communication)$"];
+  );out tags geom;`;
+  type OsmWay = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
+  const elements = await overpassAll<OsmWay>(query);
   const PALETTE = ['#9c6bff', '#4fc3f7', '#4db6ac', '#f06292', '#ffb74d', '#aed581', '#7986cb', '#ba68c8'];
   const r = (v: number) => Math.round(v * 1000) / 1000;
   const features = [];
@@ -188,7 +193,29 @@ await task('osm-cables', DAY, async () => {
   }
   if (features.length < 100) throw new Error(`only ${features.length} cables – Overpass answer incomplete?`);
   write('osm-cables/cables.json', { type: 'FeatureCollection', features });
-  write('osm-cables/LICENSE.txt', 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\n');
+  write('osm-cables/LICENSE.txt', ODBL);
+});
+
+// Data centres from OpenStreetMap (ODbL) as points; the app merges them with PeeringDB's facilities.
+// Only name and operator are kept (no contact tags).
+await task('osm-datacenters', 7 * DAY, async () => {
+  type El = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
+  const elements = await overpassAll<El>(`[out:json][timeout:600];(nwr["telecom"="data_center"];nwr["building"="data_center"];);out tags center;`);
+  const r = (v: number) => Math.round(v * 1e5) / 1e5;
+  const features = [];
+  for (const el of elements) {
+    const pos = el.center ?? (el.lat != null && el.lon != null ? { lat: el.lat, lon: el.lon } : null);
+    if (!pos) continue;
+    const t = el.tags ?? {};
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [r(pos.lon), r(pos.lat)] },
+      properties: { osm: `${el.type}/${el.id}`, name: t.name ?? '', operator: t.operator ?? '', city: t['addr:city'] ?? '' },
+    });
+  }
+  if (features.length < 1000) throw new Error(`only ${features.length} data centres – Overpass answer incomplete?`);
+  write('osm-datacenters/datacenters.json', { type: 'FeatureCollection', features });
+  write('osm-datacenters/LICENSE.txt', ODBL);
 });
 
 await task('volcanoes', DAY, async () => {
