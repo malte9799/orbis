@@ -177,11 +177,16 @@ export class HiPSLayer {
   private refresh(k: number, want: number[]) {
     // Zielzellen + deren Elternkette bereitstellen
     for (const ipix of want) this.ensureChain(k, ipix);
-    // Sichtbarkeit: Zielzellen sichtbar, sobald (frei)geladen; alles andere aus
-    for (const [, cell] of this.cells) {
-      const on = cell.order === k && want.includes(cell.ipix) && cell.ready;
-      cell.mesh.visible = this.active && on;
+    // Sichtbarkeit: je Zielzelle die feinste bereits geladene Ahnen-Kachel zeigen
+    // (Eltern bleiben stehen, bis die Kinder da sind – keine Löcher, kein Pop-in)
+    const show = new Set<string>();
+    for (const ipix of want) {
+      for (let lvl = k; lvl >= 0; lvl--) {
+        const key = `${lvl}/${Math.floor(ipix / 4 ** (k - lvl))}`;
+        if (this.cells.get(key)?.ready) { show.add(key); break; }
+      }
     }
+    for (const [key, cell] of this.cells) cell.mesh.visible = this.active && show.has(key);
     this.evictStale(want);
   }
 

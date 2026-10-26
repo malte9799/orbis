@@ -44,6 +44,7 @@ export function createStarsView(): StarsView {
     new THREE.SphereGeometry(RADIUS, 96, 64),
     new THREE.MeshBasicMaterial({ side: THREE.BackSide }),
   );
+  sky.scale.z = -1; // Innenansicht: Osten (steigende RA) links, nicht gespiegelt
   scene.add(sky);
 
   // HiPS-Ebene (DSS2 color, CDS/alasky): hohe Auflösung beim Hineinzoomen.
@@ -83,7 +84,7 @@ export function createStarsView(): StarsView {
   function lookAtRADec(ra: number, dec: number) {
     const r = THREE.MathUtils.degToRad(ra);
     const d = THREE.MathUtils.degToRad(dec);
-    const dir = new THREE.Vector3(Math.cos(d) * Math.cos(r), Math.sin(d), Math.cos(d) * Math.sin(r));
+    const dir = new THREE.Vector3(Math.cos(d) * Math.cos(r), Math.sin(d), -Math.cos(d) * Math.sin(r));
     const up = Math.abs(dir.y) > 0.999 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
     // Kamera-LookAt: +Z-Achse zeigt von „dir“ weg; die Kamera schaut entlang −Z = dir
     const m = new THREE.Matrix4();

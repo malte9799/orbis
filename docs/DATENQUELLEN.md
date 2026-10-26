@@ -209,6 +209,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [CDS HiPS „DSS2 color"](https://alasky.cds.unistra.fr/DSS/DSSColor) | Detailtiefe beim Hineinzoomen (bis 0,229″/px): progressive JPEG-Kacheln aus dem HEALPix-Raster nach dem [IVOA-HiPS-Standard](https://ivoa.net/documents/HiPS/) | HiPS-Paket: [ODbL-1.0](https://opendatacommons.org/licenses/odbl/) (CNRS/Unistra); zugrunde liegende Platten: **© AAO, © UK SERC/PPARC/AATB, © Caltech/Palomar, © AURA** ([STScI-Copyright](https://archive.stsci.edu/dss/copyright.html)) – nicht-kommerzielle Nutzung mit Quellenangabe frei; **kommerziell nur mit Lizenz** (Ersatz: 2MASS/AllWISE, US-Regierung, gemeinfrei) |
 | [HEALPix](http://healpix.sourceforge.net) (chealpix.c) | Referenz für die Kachelaufteilung (nested) | GPL-2+ |
 
+### Texturen
 
 | Quelle | Verwendung | Lizenz |
 |---|---|---|

@@ -1,7 +1,7 @@
 // HEALPix (nested) – Kernrechnen, übertragen aus der Referenz-Implementierung
 // chealpix.c (Górski/Hivon/Reinecke, GPL-2+ / LGPL-3 im HEALPix-Paket).
 // Konvention: phi = Rektaszension (Osten), z = sin(deklination), Nordpol = +Z.
-// Szenen-Koordinaten: +Y = Nordpol, RA-Winkel in x-z-Ebene (x = RA 0°, z = RA 90°).
+// Szenen-Koordinaten: +Y = Nordpol, RA-Winkel in x-z-Ebene (x = RA 0°, −z = RA 90°; Blick von innen, Osten links).
 
 const D2R = Math.PI / 180;
 const TWO_THIRD = 2 / 3;
@@ -139,12 +139,12 @@ export function cellCornersRadec(nside: number, ipix: number): Array<{ ra: numbe
 export function dirFromRadec(ra: number, dec: number): [number, number, number] {
   const dr = ra * D2R;
   const dd = dec * D2R;
-  return [Math.cos(dd) * Math.cos(dr), Math.sin(dd), Math.cos(dd) * Math.sin(dr)];
+  return [Math.cos(dd) * Math.cos(dr), Math.sin(dd), -Math.cos(dd) * Math.sin(dr)];
 }
 
 // RA/dec (Grad) aus Szenen-Richtung
 export function radecFromDir(v: ArrayLike<number>): { ra: number; dec: number } {
   const dec = Math.asin(Math.max(-1, Math.min(1, v[1]))) / D2R;
-  const ra = Math.atan2(v[2], v[0]) / D2R;
+  const ra = Math.atan2(-v[2], v[0]) / D2R;
   return { ra: (ra + 360) % 360, dec };
 }
