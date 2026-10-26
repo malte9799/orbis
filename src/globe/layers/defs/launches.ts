@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { empty } from '../shared/geo';
 import type { FeatureCollection } from 'geojson';
 import { FONT_BOLD } from '../../vector';
 import { Launch, countdown, loadLaunches } from '../../../api/transport';
@@ -15,6 +16,19 @@ function updateLaunchLabels(ctx: ExtraCtx) {
   ctx.setData('launches', st.launchData);
 }
 
+/** Simulated live track of the rocket followed in the launch panel (null: hide it). */
+function setLive(ctx: ExtraCtx, data: { line: FeatureCollection; pos: FeatureCollection } | null) {
+  const none = empty();
+  ctx.setData('launch-live-line', data?.line ?? none);
+  ctx.setData('launch-live', data?.pos ?? none);
+  // layer visibility follows the data: hidden layers drop their source's attribution
+  const has = (fc: FeatureCollection | undefined) => !!fc?.features.length;
+  ctx.vis('launch-live-line', has(data?.line));
+  ctx.vis('launch-live', has(data?.pos));
+}
+
+export const launchesApi = { setLive };
+
 export default defineExtra({
   id: 'launches',
   order: 370,
@@ -25,7 +39,10 @@ export default defineExtra({
   glyph: 'rocket',
   icon: 'rocket',
   color: '#ff6e40',
-  sources: { launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>' },
+  sources: {
+    'launch-live-line': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
+    'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
+    launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>' },
   addLayers({ add, hidden }) {
     add(
       {
@@ -45,6 +62,42 @@ export default defineExtra({
           'text-optional': true,
         },
         paint: { 'text-color': '#ffccbc', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
+      },
+      'marker',
+    );
+    // live track of the rocket currently followed in the launch panel (trail + symbol);
+    // visible only while the panel feeds data (independent of the launches toggle) –
+    // the layers start hidden: 'visible' with empty data would keep the attribution
+    add(
+      {
+        id: 'launch-live-line',
+        type: 'line',
+        source: 'launch-live-line',
+        layout: { visibility: 'none' as const, 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
+      },
+      'marker',
+    );
+    add(
+      {
+        id: 'launch-live',
+        type: 'symbol',
+        source: 'launch-live',
+        layout: {
+          visibility: 'none' as const,
+          'icon-image': 'glyph-rocket',
+          'icon-size': 1.4,
+          'icon-allow-overlap': true,
+          'icon-rotate': ['get', 'rot'],
+          'icon-rotation-alignment': 'map',
+          'text-field': ['get', 'when'],
+          'text-font': FONT_BOLD,
+          'text-size': 10.5,
+          'text-offset': [0, 1.5],
+          'text-anchor': 'top',
+          'text-optional': true,
+        },
+        paint: { 'text-color': '#ff8a65', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
       },
       'marker',
     );

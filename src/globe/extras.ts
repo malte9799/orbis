@@ -11,18 +11,17 @@ import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
 import { shipsApi } from './layers/shared/ships';
 import { vehiclesApi } from './layers/shared/vehicles';
+import { launchesApi } from './layers/defs/launches';
 import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { cardHtml } from './popup';
-import { FONT_BOLD } from './vector';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
 // infrastructure. Every source is free and keyless.
 
 export type { ExtraDef, ExtraId, SectionId } from './layers';
 export { EXTRAS, EXTRA_CLICK_LAYERS, SECTIONS } from './layers';
-
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
@@ -96,7 +95,6 @@ type Info = ExtraInfo;
 
 const empty = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
-
 /** paint properties that control the opacity of a map layer, by layer type */
 const OPACITY_PROPS: Record<string, string[]> = {
   raster: ['raster-opacity'],
@@ -162,11 +160,6 @@ export class ExtraLayers {
   init() {
     const m = this.map;
     registerSilhouettes(m);
-    const ATTR: Record<string, string> = {
-      'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
-    };
-    for (const id of ['ports', 'launch-live', 'launch-live-line', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
-    }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
       if (!m.getLayer(layer.id)) m.addLayer(layer, before && m.getLayer(before) ? before : undefined);
@@ -189,64 +182,6 @@ export class ExtraLayers {
           '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a>',
       });
     }
-    // transport networks
-    const rasterOverlay = (id: string, tiles: string[], attribution: string, maxzoom = 19, opacity = 0.9) => {
-      if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution });
-      add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
-    };
-    const orm = (style: string) => ['a', 'b', 'c'].map((sub) => `https://${sub}.tiles.openrailwaymap.org/${style}/{z}/{x}/{y}.png`);
-    rasterOverlay('railspeed', orm('maxspeed'), 'Streckengeschwindigkeit: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)');
-    rasterOverlay('railelec', orm('electrification'), 'Elektrifizierung: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)');
-    rasterOverlay('cyclenet', ['https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png'], 'Radrouten: <a href="https://cycling.waymarkedtrails.org/">Waymarked Trails</a> (CC BY-SA)', 18, 0.95);
-    rasterOverlay('hikenet', ['https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png'], 'Wanderwege: <a href="https://hiking.waymarkedtrails.org/">Waymarked Trails</a> (CC BY-SA)', 18, 0.95);
-    const road = (id: string, cls: string[], minzoom: number, color: string, w: [number, number, number, number]) =>
-      add(
-        {
-          id,
-          type: 'line',
-          source: 'ofm',
-          'source-layer': 'transportation',
-          minzoom,
-          filter: ['all', ['in', ['get', 'class'], ['literal', cls]], ['!=', ['get', 'ramp'], 1]],
-          layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': color,
-            'line-width': ['interpolate', ['exponential', 1.5], ['zoom'], w[0], w[1], w[2], w[3]],
-            'line-opacity': ['case', ['==', ['get', 'brunnel'], 'tunnel'], 0.45, 0.9],
-          },
-        },
-        'lbl-border-country',
-      );
-    road('road-secondary', ['secondary'], 8, '#ffe082', [8, 0.6, 14, 4]);
-    road('road-primary', ['primary'], 6, '#ffb74d', [6, 0.6, 14, 5]);
-    road('road-trunk', ['trunk'], 4, '#ff8a65', [4, 0.6, 14, 6]);
-    road('road-motorway', ['motorway'], 3, '#e53935', [3, 0.7, 14, 7]);
-    add(
-      {
-        id: 'road-ref',
-        type: 'symbol',
-        source: 'ofm',
-        'source-layer': 'transportation_name',
-        minzoom: 6,
-        filter: ['all', ['has', 'ref'], ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]]],
-        layout: {
-          ...hidden,
-          'symbol-placement': 'line',
-          'symbol-spacing': 400,
-          'text-field': ['get', 'ref'],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-rotation-alignment': 'viewport',
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': ['match', ['get', 'class'], 'motorway', '#1565c0', 'trunk', '#c62828', '#ef6c00'],
-          'text-halo-width': 3,
-        },
-      },
-      'marker',
-    );
-    // earth & environment
     // layers that live in their own module (globe/layers/defs)
     for (const def of EXTRAS) {
       for (const [id, attribution] of Object.entries(def.sources ?? {})) if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution });
@@ -257,51 +192,6 @@ export class ExtraLayers {
       }
       def.addLayers?.(this.ctx);
     }
-    if (!m.getSource('railmap'))
-      m.addSource('railmap', {
-        type: 'raster',
-        tiles: ['a', 'b', 'c'].map((sub) => `https://${sub}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png`),
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: 'Bahnnetz: <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a> (CC BY-SA)',
-      });
-    add({ id: 'railmap', type: 'raster', source: 'railmap', layout: hidden, paint: { 'raster-opacity': 0.85 } }, 'lbl-border-country');
-    // live track of the rocket currently followed in the launch panel (trail + symbol);
-    // visible only while the panel feeds data (independent of the launches toggle) –
-    // the layers start hidden: 'visible' with empty data would keep the attribution
-    add(
-      {
-        id: 'launch-live-line',
-        type: 'line',
-        source: 'launch-live-line',
-        layout: { visibility: 'none' as const, 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#ff6e40', 'line-width': 2.2, 'line-opacity': 0.85 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'launch-live',
-        type: 'symbol',
-        source: 'launch-live',
-        layout: {
-          visibility: 'none' as const,
-          'icon-image': 'glyph-rocket',
-          'icon-size': 1.4,
-          'icon-allow-overlap': true,
-          'icon-rotate': ['get', 'rot'],
-          'icon-rotation-alignment': 'map',
-          'text-field': ['get', 'when'],
-          'text-font': FONT_BOLD,
-          'text-size': 10.5,
-          'text-offset': [0, 1.5],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: { 'text-color': '#ff8a65', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
-      },
-      'marker',
-    );
     this.ready = true;
     this.apply();
   }
@@ -461,6 +351,11 @@ export class ExtraLayers {
     if (this.ready) this.apply();
   }
 
+  /** Simulated live track of the rocket followed in the launch panel (null: hide it). */
+  setLaunchLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
+    launchesApi.setLive(this.ctx, data);
+  }
+
   /** Called after the map stopped moving. */
   onMoveEnd() {
     for (const def of EXTRAS) if (def.onMoveEnd && this.on.has(def.id)) def.onMoveEnd(this.ctx);
@@ -501,7 +396,6 @@ export class ExtraLayers {
     // layers that were added lazily pick up the chosen opacity now
     for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
 
-
     for (const def of EXTRAS) {
       def.apply?.(this.ctx);
       const on = this.on.has(def.id);
@@ -511,8 +405,6 @@ export class ExtraLayers {
         continue;
       }
       def.enable?.(this.ctx);
-      switch (def.id) {
-      }
     }
   }
 
@@ -534,28 +426,6 @@ export class ExtraLayers {
     if (Number.isFinite(maxAge)) this.every(id, maxAge, run);
   }
 
-  // -------------------------------------------------------------------------
-  // Trains & public transport
-
-  // -------------------------------------------------------------------------
-  // Launches, ships
-
-  /** Simulated live track of the rocket followed in the launch panel (null: hide it). */
-  setLaunchLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
-    const none = empty();
-    this.setData('launch-live-line', data?.line ?? none);
-    this.setData('launch-live', data?.pos ?? none);
-    // layer visibility follows the data: hidden layers drop their source's attribution
-    const has = (fc: FeatureCollection | undefined) => !!fc?.features.length;
-    this.vis('launch-live-line', has(data?.line));
-    this.vis('launch-live', has(data?.pos));
-  }
-
-
-
-  // -------------------------------------------------------------------------
-  // Cameras
-
   private viewBounds(step = 20) {
     const b = this.map.getBounds();
     const snap = (v: number, f: (x: number) => number) => f(v * step) / step;
@@ -567,14 +437,6 @@ export class ExtraLayers {
     };
   }
 
-  /**
-   * Closeable heatmap over all known camera positions worldwide (`cams/world.json` –
-   * aggregate of all snapshot feeds plus Digitraffic, gathered daily by the data action).
-   * Fills the gap of the regional detail feeds: at every zoom level the complete camera
-   * distribution is visible. Built like the ALPR heatmap – 'heatmap' + 'circle' dots,
-   * the heat fades out below the detail zoom, the dots stay until the detail feed (images!)
-   * takes over. No shader work: MapLibre's built-in heatmap.
-   */
   // -------------------------------------------------------------------------
   // Clicks
 
@@ -586,8 +448,6 @@ export class ExtraLayers {
       cardHtml({ glyph, color, title: p.title, subtitle: p.subtitle, date: p.date, description: p.description, source: p.source, url: p.url, extra });
     const handler = CLICK_HANDLERS.get(tileCam ? 'alpr' : f.layer.id);
     if (handler) return handler({ ctx: this.ctx, layerId: f.layer.id, p, pt, at, html });
-    switch (tileCam ? 'alpr' : f.layer.id) {
-    }
     return null;
   }
 
