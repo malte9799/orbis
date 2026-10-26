@@ -1,6 +1,7 @@
 import type { FeatureCollection } from 'geojson';
 import type { LayerSpecification, Map as MlMap } from 'maplibre-gl';
 import type { GlyphId } from '../icons';
+import type { Launch } from '../../api/transport';
 import type { ClickResult } from '../extras';
 
 // One file per overlay layer lives in ./defs; ./index.ts collects them. A new layer is a new file
@@ -44,12 +45,23 @@ export interface ExtraCtx {
   /** status line of the layer in the list (count, note, loading) */
   set(id: ExtraId, info: ExtraInfo): void;
   info(id: ExtraId): ExtraInfo | undefined;
+  /** is the layer switched on? */
+  isOn(id: ExtraId): boolean;
+  /** show/hide a map layer */
+  vis(layer: string, on: boolean): void;
+  /** timer that only fires while the page is visible; one per key */
+  every(key: string, ms: number, fn: () => void): void;
+  clear(key: string): void;
+  toast(msg: string): void;
+  /** opens the launch panel (set by the page that hosts the map) */
+  readonly openLaunch?: (l: Launch, lng: number, lat: number) => void;
   /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
   loadOnce(id: ExtraId, maxAge: number, fn: () => Promise<{ count?: number; note?: string } | void>): void;
 }
 
 /** A clicked feature of one of the layer's `clickLayers`. */
 export interface ClickCtx {
+  ctx: ExtraCtx;
   layerId: string;
   /** properties of the feature */
   p: Record<string, unknown>;
@@ -82,6 +94,8 @@ export interface ExtraDef {
   sources?: Record<string, string>;
   /** adds the map layers (once, after the style has loaded) */
   addLayers?(ctx: ExtraCtx): void;
+  /** called when the layer is off (every apply) – hide what only this layer shows, stop timers */
+  disable?(ctx: ExtraCtx): void;
   /** called whenever the layer is on and the state is applied – start loading/refreshing here */
   enable?(ctx: ExtraCtx): void;
   /** called after the map stopped moving, while the layer is on */

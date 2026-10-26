@@ -1,7 +1,6 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature, RasterTileSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
-import { loadCityAirQuality, loadCityWeather, loadDwdWarnings, loadPegel } from '../api/europe';
-import { loadCables, loadIxps, loadOsmPower, loadPowerPlants, loadShippingLanes, type PowerCat } from '../api/infra';
+import { loadOsmPower, loadPowerPlants, type PowerCat } from '../api/infra';
 import { staticAirports } from '../api/airport';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
@@ -14,11 +13,9 @@ import { loadPorts } from '../api/ports';
 import { loadRivers, loadWaves } from '../api/ocean';
 import {
   AisStream,
-  countdown,
   hasAisLive,
   loadAirportFlights,
   loadDigitrafficShips,
-  loadLaunches,
   loadTrainDetails,
   loadTrains,
   shipFeatures,
@@ -31,8 +28,7 @@ import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
 import { snapshotJson } from '../api/data';
 import { isSuperseded } from '../api/overpass';
 import { escapeHtml, fmt, safeUrl } from '../util';
-import { weatherIcon } from '../weather';
-import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
+import { registerSilhouettes, type GlyphId } from './icons';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { JMA_RADAR_TILES } from './layers/shared/tiles';
 import { AIRPORT_FAR } from './layers/defs/airports';
@@ -280,7 +276,6 @@ export class ExtraLayers {
   private osmCamFc: FeatureCollection<Point> | null = null;
   private camFovKey = '';
   private blitzerKey = '';
-  private launchData: FeatureCollection | null = null;
   private baltic: Ship[] = [];
   private segs: Segment[] = [];
   private segKey = '';
@@ -327,6 +322,14 @@ export class ExtraLayers {
       viewBounds: (step) => this.viewBounds(step),
       set: (id, info) => this.set(id, info),
       info: (id) => this.info[id],
+      isOn: (id) => this.on.has(id),
+      vis: (layer, on) => this.vis(layer, on),
+      every: (key, ms, fn) => this.every(key, ms, fn),
+      clear: (key) => this.clear(key),
+      toast: (msg) => this.hooks.toast(msg),
+      get openLaunch() {
+        return hooks.openLaunch;
+      },
     };
   }
 
@@ -335,9 +338,6 @@ export class ExtraLayers {
     const m = this.map;
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
-      'ship-lanes': 'Schiffsrouten: <a href="https://doi.org/10.5281/zenodo.6361763">P. Benden, CC BY 4.0</a>',
-      cables: 'Seekabel: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)',
-      ixp: 'Internetknoten: <a href="https://www.peeringdb.com/">PeeringDB</a>',
       power: 'Kraftwerke: <a href="https://datasets.wri.org/dataset/globalpowerplantdatabase">WRI GPPD, CC BY 4.0</a>',
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
@@ -349,60 +349,17 @@ export class ExtraLayers {
       blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung',
       lightning: 'Blitze: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
       'lightning-thunder': 'Donner: <a href="https://www.blitzortung.org/">Blitzortung.org</a> – nicht amtlich, nur zur privaten Information, nicht für Warnzwecke',
-      launches: 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
       ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
       if (!m.getLayer(layer.id)) m.addLayer(layer, before && m.getLayer(before) ? before : undefined);
     };
-    // lines: above weather, below labels
-    add(
-      {
-        id: 'ship-lanes',
-        type: 'line',
-        source: 'ship-lanes',
-        layout: { ...hidden, 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': 'rgba(110, 210, 255, 0.75)',
-          'line-width': ['match', ['get', 'type'], 'major', 2.2, 'middle', 1.4, 0.8],
-          'line-opacity': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 6, 0.9],
-        },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'ferries',
-        type: 'line',
-        source: 'ofm',
-        'source-layer': 'transportation',
-        minzoom: 4,
-        filter: ['==', ['get', 'class'], 'ferry'],
-        layout: hidden,
-        paint: { 'line-color': 'rgba(150, 240, 255, 0.85)', 'line-width': 1.2, 'line-dasharray': [3, 2] },
-      },
-      'lbl-border-country',
-    );
-    add(
-      {
-        id: 'cables',
-        type: 'line',
-        source: 'cables',
-        layout: { ...hidden, 'line-join': 'round' },
-        paint: {
-          'line-color': ['coalesce', ['get', 'color'], '#9c6bff'],
-          'line-width': ['interpolate', ['linear'], ['zoom'], 1, 1, 6, 2.2],
-          'line-opacity': 0.85,
-        },
-      },
-      'lbl-border-country',
-    );
     // points: below the event icons
     add(
       {
@@ -431,22 +388,6 @@ export class ExtraLayers {
         paint: {
           'circle-color': ['get', 'color'],
           'circle-radius': ['case', ['get', 'turbine'], 3.5, 6],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1,
-        },
-      },
-      'gauges',
-    );
-    add(
-      {
-        id: 'ixp',
-        type: 'circle',
-        source: 'ixp',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'nets'] },
-        paint: {
-          'circle-color': '#e040fb',
-          'circle-radius': ['interpolate', ['linear'], ['get', 'nets'], 0, 3, 100, 6, 1000, 12],
-          'circle-opacity': 0.8,
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1,
         },
@@ -803,27 +744,6 @@ export class ExtraLayers {
           'text-halo-color': 'rgba(0,0,0,0.8)',
           'text-halo-width': 1.2,
         },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'launches',
-        type: 'symbol',
-        source: 'launches',
-        layout: {
-          ...hidden,
-          'icon-image': 'glyph-rocket',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 1, 0.7, 8, 1],
-          'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 2, ['get', 'when']],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-offset': [0, 1.4],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: { 'text-color': '#ffccbc', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
       },
       'marker',
     );
@@ -1441,8 +1361,6 @@ export class ExtraLayers {
     const cats = [...new Set(POWER_EXTRAS.filter((id) => this.on.has(id)).flatMap((id) => POWER_CATS[id]!))];
     this.map.setFilter('power', ['in', ['get', 'cat'], ['literal', cats]]);
     this.map.setFilter('osm-power', ['in', ['get', 'cat'], ['literal', cats]]);
-    if (this.info.dwdwarn?.note && this.on.has('dwdwarn')) this.vis('dwd', true);
-    else if (!this.on.has('dwdwarn')) this.vis('dwd', false);
     // the optional lightning sub layers only show with their Unteroption enabled
     this.updateLightningVis();
 
@@ -1472,31 +1390,11 @@ export class ExtraLayers {
       const on = this.on.has(def.id);
       if (!on) {
         this.clear(def.id);
+        def.disable?.(this.ctx);
         continue;
       }
       def.enable?.(this.ctx);
       switch (def.id) {
-        case 'cities':
-          this.loadOnce('cities', 60 * 60000, () => this.loadCities());
-          break;
-        case 'dwdwarn':
-          this.loadOnce('dwdwarn', 10 * 60000, () => this.loadDwd());
-          break;
-        case 'gauges':
-          this.loadOnce('gauges', 15 * 60000, async () => {
-            const fc = await loadPegel();
-            this.setData('gauges', fc);
-            const high = fc.features.filter((f) => f.properties.state === 'high').length;
-            return { count: fc.features.length, note: high ? `${high} Pegel mit Hochwasser` : undefined };
-          });
-          break;
-        case 'aq':
-          this.loadOnce('aq', 60 * 60000, async () => {
-            const fc = await loadCityAirQuality();
-            this.setData('aq', fc);
-            return { count: fc.features.length };
-          });
-          break;
         case 'aircraft':
           this.loadAircraftNow();
           this.every('aircraft', 10000, () => this.loadAircraftNow());
@@ -1519,27 +1417,6 @@ export class ExtraLayers {
         case 'sats':
         case 'starlink':
           this.startSatellites();
-          break;
-        case 'shipping':
-          this.loadOnce('shipping', Infinity, async () => {
-            const fc = await loadShippingLanes();
-            this.setData('ship-lanes', fc);
-            return { count: fc.features.length };
-          });
-          break;
-        case 'cables':
-          this.loadOnce('cables', Infinity, async () => {
-            const fc = await loadCables();
-            this.setData('cables', fc);
-            return { count: fc.features.length };
-          });
-          break;
-        case 'ixp':
-          this.loadOnce('ixp', Infinity, async () => {
-            const fc = await loadIxps();
-            this.setData('ixp', fc);
-            return { count: fc.features.length };
-          });
           break;
           break;
         case 'wind':
@@ -1593,14 +1470,6 @@ export class ExtraLayers {
         case 'jmanowcast':
           this.loadOnce('jmanowcast', 5 * 60000, () => this.loadJmaRadar('jmanowcast'));
           break;
-        case 'launches':
-          this.loadOnce('launches', 60 * 60000, async () => {
-            this.launchData = await loadLaunches();
-            this.updateLaunchLabels();
-            return { count: this.launchData.features.length };
-          });
-          this.every('launch-labels', 60000, () => this.updateLaunchLabels());
-          break;
         case 'airports':
           this.set('airports', { note: 'Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag' });
           void this.loadFarAirports();
@@ -1626,7 +1495,6 @@ export class ExtraLayers {
       }
     }
     if (!this.on.has('sats') && !this.on.has('starlink')) this.clear('sat-pos');
-    if (!this.on.has('launches')) this.clear('launch-labels');
     if (this.on.has('trains') || this.on.has('transit')) {
       this.loadSegmentsNow();
       this.every('veh-anim', 2000, () => this.updateVehicles());
@@ -1686,38 +1554,6 @@ export class ExtraLayers {
     const latest = nowcast ? times.reduce((a, t) => (t.basetime > a.basetime || (t.basetime === a.basetime && t.validtime > a.validtime) ? t : a), times[0]) : (times.find((t) => t.basetime === t.validtime) ?? times[0]);
     if (!latest) throw new Error('JMA: keine Radarzeit');
     (this.map.getSource(id) as RasterTileSource | undefined)?.setTiles([JMA_RADAR_TILES(latest.basetime, latest.validtime)]);
-  }
-
-  private async loadCities() {
-    const list = await loadCityWeather();
-    await ensureWeatherIcons(
-      this.map,
-      list.map((c) => ({ code: c.code, isDay: c.isDay })),
-      (code, isDay) => weatherIcon(code, isDay, 64),
-    );
-    this.setData('cities', {
-      type: 'FeatureCollection',
-      features: list.map((c) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [c.lon, c.lat] },
-        properties: { name: c.name, temp: `${Math.round(c.temp)}°`, icon: `wx-${c.code}-${c.isDay ? 'd' : 'n'}`, rank: c.rank },
-      })),
-    });
-    return { count: list.length };
-  }
-
-  private async loadDwd() {
-    try {
-      const fc = await loadDwdWarnings();
-      this.setData('dwd-warn', fc);
-      this.vis('dwd', false);
-      return { count: fc.features.length, note: fc.features.length ? undefined : 'derzeit keine Warnungen' };
-    } catch (e) {
-      // WFS unavailable – fall back to the rendered WMS image (not clickable)
-      console.warn('DWD WFS', e);
-      this.vis('dwd', this.on.has('dwdwarn'));
-      return { note: 'nur als Kartenbild verfügbar' };
-    }
   }
 
   /** Throttled: no overlapping requests and at least 5 s between two (timer + map moves). */
@@ -2120,12 +1956,6 @@ export class ExtraLayers {
 
   // -------------------------------------------------------------------------
   // Launches, ships
-
-  private updateLaunchLabels() {
-    if (!this.launchData) return;
-    for (const f of this.launchData.features) f.properties!.when = countdown(String(f.properties!.next));
-    this.setData('launches', this.launchData);
-  }
 
   /** Simulated live track of the rocket followed in the launch panel (null: hide it). */
   setLaunchLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
@@ -2601,16 +2431,8 @@ export class ExtraLayers {
     const html = (glyph: GlyphId, color: string, extra?: string) =>
       cardHtml({ glyph, color, title: p.title, subtitle: p.subtitle, date: p.date, description: p.description, source: p.source, url: p.url, extra });
     const handler = CLICK_HANDLERS.get(f.layer.id);
-    if (handler) return handler({ layerId: f.layer.id, p, pt, at, html });
+    if (handler) return handler({ ctx: this.ctx, layerId: f.layer.id, p, pt, at, html });
     switch (tileCam ? 'alpr' : f.layer.id) {
-      case 'cities':
-        return { type: 'weather', lng: pt[0], lat: pt[1] };
-      case 'dwd-warn-fill':
-        return { type: 'html', html: html('warn', String(p.color)), lng: at.lng, lat: at.lat };
-      case 'gauges':
-        return { type: 'html', html: html('gauge', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'aq-circle':
-        return { type: 'html', html: html('air', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'sondes':
         return { type: 'sonde', serial: String(p.serial ?? ''), lng: pt[0], lat: pt[1] };
       case 'aircraft':
@@ -2630,29 +2452,6 @@ export class ExtraLayers {
           lat: pt[1],
         };
       }
-      case 'cables': {
-        const id = String(p.id ?? '');
-        const rows = [
-          ['Betreiber', p.operator],
-          ['In Betrieb seit', p.since],
-        ].filter(([, v]) => v);
-        return {
-          type: 'html',
-          html: cardHtml({
-            glyph: 'cable',
-            color: String(p.color ?? '#9c6bff'),
-            title: String(p.name || 'Seekabel'),
-            subtitle: 'Unterseekabel (Telekommunikation)',
-            source: 'OpenStreetMap-Mitwirkende (ODbL)',
-            url: id ? `https://www.openstreetmap.org/way/${encodeURIComponent(id)}` : undefined,
-            extra: rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : undefined,
-          }),
-          lng: at.lng,
-          lat: at.lat,
-        };
-      }
-      case 'ixp':
-        return { type: 'html', html: cardHtml({ glyph: 'cable', color: '#e040fb', title: p.title, subtitle: p.subtitle, source: 'PeeringDB', url: p.url }), lng: pt[0], lat: pt[1] };
       case 'webcams':
       case 'webcams-osm': {
         const img = safeUrl(p.image);
@@ -2711,36 +2510,6 @@ export class ExtraLayers {
         const d = this.lightning?.delay;
         const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
         return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
-      }
-      case 'launches': {
-        let list: Launch[] = [];
-        try {
-          list = JSON.parse(String(p.launches));
-        } catch {
-          /* ignore */
-        }
-        const items = list
-          .slice(0, 4)
-          .map(
-            (l) => `<li><b>${escapeHtml(l.name)}</b><br><span class="small">${escapeHtml(fmt.dateTime(l.net))} · ${escapeHtml(countdown(l.net))}${l.status ? ` · ${escapeHtml(l.status)}` : ''}</span>
-              ${l.provider || l.rocket ? `<br><span class="small muted">${escapeHtml([l.provider, l.rocket].filter(Boolean).join(' · '))}</span>` : ''}
-              ${safeUrl(l.video) ? `<br><a class="small" href="${escapeHtml(safeUrl(l.video)!)}" target="_blank" rel="noopener noreferrer">▶ Livestream</a>` : ''}</li>`,
-          )
-          .join('');
-        const trackBtn = this.hooks.openLaunch
-          ? `<button class="btn small wide pop-track" type="button" style="margin:8px 0 2px">Tracking &amp; Stream öffnen</button>`
-          : '';
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'rocket', color: '#ff6e40', title: p.pad || 'Startplatz', subtitle: p.place, source: 'The Space Devs', url: 'https://thespacedevs.com/', extra: `<ol class="pop-list">${items}</ol>${trackBtn}` }),
-          lng: pt[0],
-          lat: pt[1],
-          ...(this.hooks.openLaunch && list[0]
-            ? {
-                after: (node: HTMLElement) => node.querySelector('.pop-track')?.addEventListener('click', () => this.hooks.openLaunch?.(list[0], pt[0], pt[1])),
-              }
-            : {}),
-        };
       }
       case 'airports-minor':
       case 'airports-far-1':
