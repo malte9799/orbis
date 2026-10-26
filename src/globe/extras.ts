@@ -60,6 +60,11 @@ export interface FlightInfo {
   emergency: string;
   squawk: string;
   vsMs: number | null;
+  /** military according to the readsb aircraft database */
+  mil: boolean;
+  /** navigation integrity / position accuracy the aircraft reports (ADS-B NIC, NACp) */
+  nic: number | null;
+  nacp: number | null;
   lon: number;
   lat: number;
   source: string;

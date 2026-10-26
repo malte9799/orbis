@@ -17,7 +17,7 @@ export default defineExtra({
   section: 'air',
   cat: 'verkehr',
   label: 'Flugzeuge & Hubschrauber',
-  hint: 'live, ADS-B – adsb.lol, adsb.fi, OpenSky',
+  hint: 'live, ADS-B – adsb.lol, adsb.fi, OpenSky; Militär grün umrandet',
   glyph: 'plane',
   icon: 'plane2',
   color: '#f2c94c',
@@ -46,9 +46,10 @@ export default defineExtra({
         },
         paint: {
           'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
-          'icon-halo-color': 'rgba(0,0,0,0.75)',
-          'icon-halo-width': 1,
-          'text-color': '#ffffff',
+          // military aircraft: olive outline and label
+          'icon-halo-color': ['case', ['==', ['get', 'mil'], true], '#9ccc65', 'rgba(0,0,0,0.75)'],
+          'icon-halo-width': ['case', ['==', ['get', 'mil'], true], 1.6, 1],
+          'text-color': ['case', ['==', ['get', 'mil'], true], '#c5e1a5', '#ffffff'],
           'text-halo-color': 'rgba(0,0,0,0.8)',
           'text-halo-width': 1.2,
         },

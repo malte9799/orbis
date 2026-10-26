@@ -4,6 +4,7 @@ import type { FlightInfo, SondeInfo } from '../../extras';
 import type { ExtraCtx } from '../types';
 import type { AircraftResult } from '../../../api/tracking';
 import { empty } from './geo';
+import { feedGnss } from './gnss';
 import { AC_ALL_PAUSED, loadAircraft, loadAircraftByHex, loadGlobalAircraft } from '../../../api/tracking';
 
 type St = { aircraftSeq: number; aircraftBusy: boolean; aircraftAgain: boolean; aircraftAt: number; aircraftDelay: number | undefined; aircraftErr: string; airport3d: Airport3D | null; lastAircraft: AircraftResult | null; lastSondes: FeatureCollection<Point> | null; lastSondesFed: number; sondes3D: boolean; heliFeatures: Feature<Point>[]; rotorShown: boolean; selectedBusy: boolean };
@@ -13,9 +14,12 @@ export function wantsAircraft(ctx: ExtraCtx) {
   return ctx.isOn('aircraft') || ctx.isOn('airport3d');
 }
 
+/** the live ADS-B feed is also needed by the GNSS layer (navigation quality of the aircraft) */
+const wantsLive = (ctx: ExtraCtx) => wantsAircraft(ctx) || ctx.isOn('gnss');
+
 export function loadAircraftNow(ctx: ExtraCtx) {
   const st = getState(ctx);
-  if (!wantsAircraft(ctx)) return;
+  if (!wantsLive(ctx)) return;
   if (st.aircraftBusy) {
     st.aircraftAgain = true;
     return;
@@ -82,7 +86,9 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
   return loadAircraft(c.lat, c.lng, nm)
     .then((fc) => {
       st.aircraftErr = '';
-      if (seq !== st.aircraftSeq || !wantsAircraft(ctx)) return;
+      if (seq !== st.aircraftSeq || !wantsLive(ctx)) return;
+      if (ctx.isOn('gnss')) feedGnss(ctx, fc);
+      if (!wantsAircraft(ctx)) return;
       st.lastAircraft = fc;
       st.airport3d?.feed(fc, { lat: c.lat, lon: c.lng, nm });
       if (!ctx.isOn('aircraft')) return;
@@ -154,6 +160,9 @@ export function flightInfo(ctx: ExtraCtx, hex: string): FlightInfo | null {
     emergency: String(p.emergency ?? ''),
     squawk: String(p.squawk ?? ''),
     vsMs: p.vsMs != null ? Number(p.vsMs) : null,
+    mil: !!p.mil,
+    nic: p.nic != null ? Number(p.nic) : null,
+    nacp: p.nacp != null ? Number(p.nacp) : null,
     lon: live ? live.lon : lon,
     lat: live ? live.lat : lat,
     source: st.lastAircraft?.source ?? '',

@@ -317,6 +317,11 @@
   background: rgba(255, 255, 255, 0.05);
   min-height: 120px;
 }
+video.pop-cam {
+  width: 100%;
+  max-height: 220px;
+  background: #000;
+}
 .pop-cam img {
   display: block;
   width: 100%;
@@ -582,4 +587,18 @@
 .globe-bottom .legend-ticks span:only-child {
   transform: none;
   margin-left: 4px;
+}
+.pop-cam-3d {
+  margin: 2px 0 4px;
+}
+/* camera popup docked bottom-left while its 3D board is shown (MapLibre positions popups by transform) */
+.maplibregl-popup.cam-docked {
+  transform: none !important;
+  top: auto !important;
+  left: 12px !important;
+  bottom: 56px;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+}
+.maplibregl-popup.cam-docked .maplibregl-popup-tip {
+  display: none;
 }

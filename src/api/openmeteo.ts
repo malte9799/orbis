@@ -162,10 +162,20 @@ interface GeoResult {
   population?: number;
 }
 
+/**
+ * Place search: towns from Open-Meteo, plus addresses, streets and points of interest from Photon
+ * (komoot's public OpenStreetMap geocoder, keyless, fair use) – which finds "Brandenburger Tor" or
+ * "Hauptstraße 5, Köln" that a town index cannot. Photon hits that are just a town Open-Meteo already
+ * listed are dropped.
+ */
 export async function searchPlaces(name: string): Promise<Place[]> {
   const q = new URLSearchParams({ name, count: '8', language: 'de', format: 'json' });
-  const data = await fetchJson<{ results?: GeoResult[] }>(`https://geocoding-api.open-meteo.com/v1/search?${q}`);
-  return (data.results ?? []).map((r) => ({
+  const [towns, photon] = await Promise.allSettled([
+    fetchJson<{ results?: GeoResult[] }>(`https://geocoding-api.open-meteo.com/v1/search?${q}`),
+    searchPhoton(name),
+  ]);
+  if (towns.status === 'rejected' && photon.status === 'rejected') throw towns.reason;
+  const places: Place[] = (towns.status === 'fulfilled' ? (towns.value.results ?? []) : []).map((r) => ({
     name: r.name,
     lat: r.latitude,
     lon: r.longitude,
@@ -173,6 +183,34 @@ export async function searchPlaces(name: string): Promise<Place[]> {
     country: r.country,
     countryCode: r.country_code,
   }));
+  const near = (a: Place, b: Place) => a.name === b.name && Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lon - b.lon) < 0.05;
+  for (const p of photon.status === 'fulfilled' ? photon.value : []) if (!places.some((t) => near(t, p))) places.push(p);
+  return places.slice(0, 12);
+}
+
+interface PhotonProps {
+  name?: string;
+  street?: string;
+  housenumber?: string;
+  postcode?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  countrycode?: string;
+  osm_key?: string;
+}
+
+async function searchPhoton(text: string): Promise<Place[]> {
+  const q = new URLSearchParams({ q: text, limit: '6', lang: 'de' });
+  const fc = await fetchJson<{ features: { geometry: { coordinates: number[] }; properties: PhotonProps }[] }>(`https://photon.komoot.io/api/?${q}`, undefined, 8000);
+  return fc.features.map(({ geometry, properties: p }) => {
+    const street = [p.street, p.housenumber].filter(Boolean).join(' ');
+    // a named place keeps its name and gets the street as context; a bare address is "street, city"
+    const label = p.name || street || p.city || text;
+    const context = [p.name && street, [p.postcode, p.city ?? p.district].filter(Boolean).join(' '), p.city ? undefined : p.state].filter(Boolean).join(', ');
+    return { name: label, lat: geometry.coordinates[1], lon: geometry.coordinates[0], region: context || p.state, country: p.country, countryCode: p.countrycode?.toUpperCase() };
+  });
 }
 
 /**

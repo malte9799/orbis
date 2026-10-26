@@ -283,8 +283,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
     const minMag = Number(lay('quakes')?.filter) || 0;
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
-    const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
-    if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const acOpts = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
+    const kinds = acOpts.filter((t) => t !== 'mil');
+    const acFilter = [...(kinds.length ? [['in', ['get', 'kind'], ['literal', kinds]]] : []), ...(acOpts.includes('mil') ? [['==', ['get', 'mil'], true]] : [])];
+    if (map.getLayer('aircraft')) map.setFilter('aircraft', (acFilter.length ? ['all', ...acFilter] : null) as never);
     const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
     const volTok = opts.find((t) => t.startsWith('vol-'));
     const vol = volTok ? Number(volTok.slice(4)) : NaN;

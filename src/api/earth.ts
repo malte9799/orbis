@@ -349,3 +349,73 @@ async function loadSafecast(): Promise<Feature<Point>[]> {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Tropical cyclones – NOAA National Hurricane Center / Central Pacific Hurricane Center (Atlantic,
+// eastern and central North Pacific): official forecast points, track and cone of the latest
+// advisory plus the past track, from NOAA's tropical weather summary MapServer (CORS enabled).
+// The cone is the uncertainty of the centre's track, not the storm's size.
+
+const NHC_MAP = 'https://mapservices.weather.noaa.gov/tropical/rest/services/tropical/NHC_tropical_weather_summary/MapServer';
+
+/** Saffir-Simpson class of a hurricane from its sustained wind in knots. */
+export const saffirSimpson = (kt: number) => (kt >= 137 ? 5 : kt >= 113 ? 4 : kt >= 96 ? 3 : kt >= 83 ? 2 : kt >= 64 ? 1 : 0);
+
+export async function loadCyclones(): Promise<FeatureCollection<Geometry>> {
+  // part → MapServer layer: forecast points, forecast track, cone, past points, past track
+  const parts: [string, number][] = [['point', 5], ['fcst', 6], ['cone', 7], ['pastpt', 10], ['past', 11]];
+  const results = await Promise.all(
+    parts.map(([part, layer]) =>
+      fetchJson<FeatureCollection<Geometry, Record<string, unknown>>>(`${NHC_MAP}/${layer}/query?where=1%3D1&outFields=*&f=geojson`, undefined, 30000).then((fc) =>
+        fc.features.filter((f) => f.geometry).map((f): Feature<Geometry, Record<string, unknown>> => ({ ...f, properties: { ...f.properties, part } })),
+      ),
+    ),
+  );
+  const features = results.flat();
+  // the storm's current position (tau 0) is the reference longitude; everything of the same storm is
+  // unwrapped around it, so tracks crossing the date line do not jump across the map
+  const ref = new Map<string, number>();
+  for (const f of features) if (f.properties.part === 'point' && Number(f.properties.tau) === 0 && f.geometry.type === 'Point') ref.set(String(f.properties.binnumber), f.geometry.coordinates[0]);
+  const near = (lon: number, to: number) => lon + 360 * Math.round((to - lon) / 360);
+  const unwrap = (ring: number[][], start: number) => {
+    let prev = start;
+    return ring.map(([x, y]) => {
+      const nx = near(x, prev);
+      prev = nx;
+      return [nx, y];
+    });
+  };
+  for (const f of features) {
+    const r = ref.get(String(f.properties.binnumber));
+    if (r == null) continue;
+    const g = f.geometry;
+    if (g.type === 'Point') g.coordinates = [near(g.coordinates[0], r), g.coordinates[1]];
+    else if (g.type === 'LineString') g.coordinates = unwrap(g.coordinates, r);
+    else if (g.type === 'MultiLineString') g.coordinates = g.coordinates.map((l) => unwrap(l, r));
+    else if (g.type === 'Polygon') g.coordinates = g.coordinates.map((l) => unwrap(l, r));
+    else if (g.type === 'MultiPolygon') g.coordinates = g.coordinates.map((p) => p.map((l) => unwrap(l, r)));
+  }
+  for (const f of features) {
+    const p = f.properties;
+    if (p.part === 'point') p.cat = p.dvlbl === 'H' || p.dvlbl === 'M' ? saffirSimpson(Number(p.maxwind)) : 0;
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+// ---------------------------------------------------------------------------
+// Air quality health index (AQHI) – Environment and Climate Change Canada, MSC GeoMet OGC API:
+// the latest hourly observation of ~120 stations in Canada (Open Government Licence – Canada).
+
+export async function loadAqhi(): Promise<FeatureCollection<Point>> {
+  const fc = await fetchJson<FeatureCollection<Point, { location_name_en?: string; location_name_fr?: string; aqhi?: number; observation_datetime?: string; observation_datetime_text_en?: string }>>(
+    'https://api.weather.gc.ca/collections/aqhi-observations-realtime/items?f=json&latest=true&limit=500',
+    undefined,
+    30000,
+  );
+  return {
+    type: 'FeatureCollection',
+    features: fc.features
+      .filter((f) => f.geometry && Number.isFinite(f.properties.aqhi))
+      .map((f) => point(f.geometry.coordinates[0], f.geometry.coordinates[1], { name: f.properties.location_name_en ?? '', aqhi: Number(f.properties.aqhi), date: f.properties.observation_datetime ?? '' })),
+  };
+}

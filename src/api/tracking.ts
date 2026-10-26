@@ -158,6 +158,20 @@ interface Ac {
   squawk?: string;
   baro_rate?: number;
   emergency?: string;
+  /** bit 0: military (readsb aircraft database) */
+  dbFlags?: number;
+  /** position source (adsb_icao, mlat, tisb_* …) and ADS-B version: navigation quality is only comparable for DO-260A/B */
+  type?: string;
+  version?: number;
+  nic?: number;
+  nac_p?: number;
+  /** fields that were derived from MLAT/TIS-B instead of the aircraft's own report */
+  mlat?: string[];
+  tisb?: string[];
+  /** set by readsb when the aircraft stopped reporting a GPS position; last good position */
+  gpsOkBefore?: number;
+  gpsOkLat?: number;
+  gpsOkLon?: number;
 }
 
 export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
@@ -381,23 +395,42 @@ export async function loadGlobalAircraft(): Promise<AircraftResult> {
   await hydrate();
   if (globalCache && Date.now() - globalCache.at < 120000) return mergeLive(globalCache.fc, globalCache.at);
   const stale = () => (globalCache ? mergeLive(globalCache.fc, globalCache.at) : liveSeen.size ? mergeLive(null, 0) : null);
-  if (Date.now() - globalFailedAt < 300000) {
+  const [osk, mil] = await Promise.allSettled([
+    Date.now() - globalFailedAt < 300000
+      ? Promise.reject(new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)'))
+      : fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000).catch((e) => {
+          globalFailedAt = Date.now();
+          throw e;
+        }),
+    loadMilitaryAircraft(),
+  ]);
+  // OpenSky has no military flag: the worldwide military list of adsb.lol replaces those aircraft
+  const milFc = mil.status === 'fulfilled' ? mil.value : null;
+  if (osk.status === 'rejected') {
+    // older overview (with its military aircraft) first, else at least the military list
     const s = stale();
     if (s) return s;
-    throw new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)');
+    if (milFc) return { ...milFc, source: 'nur Militär (adsb.lol) – OpenSky nicht erreichbar' };
+    throw osk.reason;
   }
-  try {
-    const json = await fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000);
-    const fc = toFeatures(parseOpenSky(json), 'OpenSky Network (Weltübersicht)');
-    globalCache = { at: Date.now(), fc };
-    kvSet('ac-global', globalCache);
-    return mergeLive(fc, globalCache.at);
-  } catch (e) {
-    globalFailedAt = Date.now();
-    const s = stale();
-    if (s) return s;
+  const milHex = new Set(milFc?.features.map((f) => String(f.properties?.hex)) ?? []);
+  const base = toFeatures(parseOpenSky(osk.value), '').features.filter((f) => !milHex.has(String(f.properties?.hex)));
+  const fc: AircraftResult = { type: 'FeatureCollection', features: [...base, ...(milFc?.features ?? [])], source: milFc ? 'OpenSky Network + adsb.lol (Militär)' : 'OpenSky Network (Weltübersicht)' };
+  globalCache = { at: Date.now(), fc };
+  kvSet('ac-global', globalCache);
+  return mergeLive(fc, globalCache.at);
+}
+
+let milFailedAt = 0;
+
+/** All aircraft that the readsb database marks as military, worldwide (adsb.lol, ~70 KB). */
+export async function loadMilitaryAircraft(): Promise<AircraftResult> {
+  if (Date.now() - milFailedAt < 300000) throw new Error('adsb.lol-Militärliste pausiert');
+  const json = await fetchJson<unknown>(viaProxy('https://api.adsb.lol/v2/mil'), undefined, 15000).catch((e) => {
+    milFailedAt = Date.now();
     throw e;
-  }
+  });
+  return toFeatures(readsb(json), 'adsb.lol (Militär)');
 }
 
 /** One aircraft by its Mode-S code, wherever it is (for the selected aircraft when the map is far away from it). */
@@ -469,6 +502,7 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
     // a tower transponder (type TWR without any further description) is a fixed station, not a vehicle
     if ((a.t ?? '').trim().toUpperCase() === 'TWR' && /^(TWR)?$/.test(clean(a.desc).toUpperCase())) continue;
     const onGround = a.alt_baro === 'ground';
+    const nav = navQuality(a, onGround);
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({
       type: 'Feature',
@@ -490,10 +524,35 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
         track: a.track ?? a.true_heading ?? 0,
         ground: onGround,
         emergency: a.emergency && a.emergency !== 'none' ? a.emergency : '',
+        mil: ((a.dbFlags ?? 0) & 1) === 1,
+        nic: a.nic ?? null,
+        nacp: a.nac_p ?? null,
+        ...nav,
       },
     });
   }
   return { type: 'FeatureCollection', features, source };
+}
+
+/**
+ * Navigation quality the aircraft reports about its own position (only airborne DO-260A/B ADS-B,
+ * values not derived from MLAT/TIS-B): `navBad` true when NACp < 8 (≥ 93 m uncertainty), NIC < 7
+ * (containment ≥ 0.2 NM; NIC 0 with NACp ≥ 10 counts as unknown, not bad) or readsb flags a GPS
+ * loss – thresholds after the US ADS-B-Out minima (14 CFR 91.227), as in God's Eye View. Lost GPS:
+ * the last good position (`navLon`/`navLat`) places the aircraft. Without usable values: `{}`.
+ */
+function navQuality(a: Ac, onGround: boolean): { navBad?: boolean; navLon?: number; navLat?: number } {
+  if (onGround || typeof a.alt_baro !== 'number') return {};
+  if (a.type !== 'adsb_icao' && a.type !== 'mlat') return {};
+  if (a.version !== 1 && a.version !== 2) return {};
+  const derived = (f: string) => !!(a.mlat?.includes(f) || a.tisb?.includes(f));
+  const nic = a.nic != null && !derived('nic') ? a.nic : null;
+  const nacp = a.nac_p != null && !derived('nac_p') ? a.nac_p : null;
+  const lost = (a.gpsOkBefore ?? 0) > 0;
+  if (nic == null && nacp == null && !lost) return {};
+  const navBad = lost || (nacp != null && nacp < 8) || (nic != null && nic < 7 && !(nic === 0 && nacp != null && nacp >= 10));
+  const okPos = lost && a.gpsOkLat != null && a.gpsOkLon != null && Math.abs(a.gpsOkLat) <= 90 && Math.abs(a.gpsOkLon) <= 180;
+  return okPos ? { navBad, navLon: a.gpsOkLon, navLat: a.gpsOkLat } : { navBad };
 }
 
 // ---------------------------------------------------------------------------

@@ -81,6 +81,83 @@ export async function loadIxps(): Promise<FeatureCollection<Point>> {
 }
 
 // ---------------------------------------------------------------------------
+// Data centres – PeeringDB facilities (where networks interconnect, with operator and network
+// count) plus OpenStreetMap (ODbL, weekly extract in the data branch) for the others. OSM points
+// within ~300 m of a PeeringDB facility are taken as the same site and dropped.
+
+export async function loadDatacenters(): Promise<FeatureCollection<Point> & { note?: string }> {
+  const [pdb, osm] = await Promise.allSettled([loadPeeringDbFacilities(), snapshotJson<FeatureCollection<Point>>('osm-datacenters/datacenters.json', undefined, 40000)]);
+  if (pdb.status === 'rejected' && osm.status === 'rejected') throw pdb.reason;
+  const facs = pdb.status === 'fulfilled' ? pdb.value : [];
+  // grid of ~0.01° cells for the proximity check
+  const cell = (lon: number, lat: number) => `${Math.round(lon * 100)}:${Math.round(lat * 100)}`;
+  const grid = new Map<string, [number, number][]>();
+  for (const f of facs) {
+    const [lon, lat] = f.geometry.coordinates;
+    const k = cell(lon, lat);
+    grid.set(k, [...(grid.get(k) ?? []), [lon, lat]]);
+  }
+  const near = (lon: number, lat: number) => {
+    const kx = Math.cos((lat * Math.PI) / 180);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (const [x, y] of grid.get(cell(lon + dx / 100, lat + dy / 100)) ?? []) if (Math.hypot((x - lon) * kx, y - lat) * 111320 < 300) return true;
+    return false;
+  };
+  const others: Feature<Point>[] = [];
+  for (const f of osm.status === 'fulfilled' ? osm.value.features : []) {
+    const [lon, lat] = f.geometry.coordinates;
+    if (near(lon, lat)) continue;
+    const p = f.properties ?? {};
+    others.push({
+      type: 'Feature',
+      geometry: f.geometry,
+      properties: {
+        src: 'osm',
+        nets: 0,
+        title: p.name || (p.operator ? `Rechenzentrum ${p.operator}` : 'Rechenzentrum'),
+        subtitle: [p.name && p.operator, p.city].filter(Boolean).join(' · '),
+        source: 'OpenStreetMap (ODbL)',
+        url: `https://www.openstreetmap.org/${p.osm}`,
+      },
+    });
+  }
+  const note = pdb.status === 'rejected' ? 'PeeringDB gerade nicht erreichbar – nur OpenStreetMap' : osm.status === 'rejected' ? 'nur PeeringDB (OpenStreetMap-Auszug fehlt)' : undefined;
+  return { type: 'FeatureCollection', features: [...facs, ...others], note };
+}
+
+async function loadPeeringDbFacilities(): Promise<Feature<Point>[]> {
+  const cached = store.cacheGet<Feature<Point>[]>('datacenters.pdb', 24 * 3600 * 1000);
+  if (cached) return cached;
+  const fac = await fetchJson<{ data: { id: number; name: string; org_name?: string; city?: string; country?: string; latitude: number | null; longitude: number | null; net_count?: number; ix_count?: number; carrier_count?: number }[] }>(
+    'https://www.peeringdb.com/api/fac?status=ok&fields=id,name,org_name,city,country,latitude,longitude,net_count,ix_count,carrier_count',
+    undefined,
+    40000,
+  );
+  const features: Feature<Point>[] = [];
+  for (const f of fac.data) {
+    if (f.latitude == null || f.longitude == null || (f.latitude === 0 && f.longitude === 0)) continue;
+    const nets = f.net_count ?? 0;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [+f.longitude.toFixed(5), +f.latitude.toFixed(5)] },
+      properties: {
+        src: 'pdb',
+        nets,
+        title: f.name,
+        subtitle: [f.org_name !== f.name ? f.org_name : '', [f.city, f.country].filter(Boolean).join(', '), `${fmt.num(nets)} Netze`, f.ix_count ? `${f.ix_count} Internetknoten` : '', f.carrier_count ? `${f.carrier_count} Carrier` : '']
+          .filter(Boolean)
+          .join(' · '),
+        source: 'PeeringDB',
+        url: `https://www.peeringdb.com/fac/${f.id}`,
+      },
+    });
+  }
+  store.cacheSet('datacenters.pdb', features);
+  return features;
+}
+
+// ---------------------------------------------------------------------------
 // Power plants – WRI Global Power Plant Database (CC BY 4.0, ~35 000 plants worldwide)
 
 export type PowerCat = 'wind' | 'solar' | 'hydro' | 'nuclear' | 'coal' | 'gas' | 'oil' | 'biomass' | 'other';

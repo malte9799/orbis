@@ -26,12 +26,36 @@ export interface CamFeed {
 const cam = (
   lon: number,
   lat: number,
-  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; url?: string; source: string; live?: boolean },
-): Feature<Point> => ({
-  type: 'Feature',
-  geometry: { type: 'Point', coordinates: [lon, lat] },
-  properties: { ...p, kind: p.live === false ? 'signed' : 'road' },
-});
+  p: { id: string; title: string; subtitle?: string; image?: string; video?: string; hls?: string; url?: string; source: string; live?: boolean; dir?: number },
+): Feature<Point> => {
+  const { dir, ...rest } = p;
+  // viewing direction only when known (the webcam layer draws a cone for dir >= 0)
+  return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { ...rest, kind: p.live === false ? 'signed' : 'road', ...(dir != null && Number.isFinite(dir) ? { dir } : {}) } };
+};
+
+/**
+ * Compass heading from a direction text, or undefined. Dedicated direction fields ("North", "N-E",
+ * "SW") may use bare words (`bare`); in free names only travel forms count ("NB", "Westbound"),
+ * since street names like "West Ave" contain cardinal words too. Mostly the direction of travel of
+ * the road the camera watches – an approximation of where it looks. Ambiguous text: undefined.
+ */
+export function directionToHeading(value: string | undefined, bare = false): number | undefined {
+  const text = String(value ?? '').trim().toUpperCase().replace(/(\b[NS])-([EW]\b)/g, '$1$2');
+  if (!text) return undefined;
+  const tiers: [RegExp, number][][] = [
+    [[/\bNORTHBOUND\b|\bNB\b/, 0], [/\bSOUTHBOUND\b|\bSB\b/, 180], [/\bEASTBOUND\b|\bEB\b/, 90], [/\bWESTBOUND\b|\bWB\b/, 270]],
+    [[/\bNORTHEAST\b|\bNE\b/, 45], [/\bNORTHWEST\b|\bNW\b/, 315], [/\bSOUTHEAST\b|\bSE\b/, 135], [/\bSOUTHWEST\b|\bSW\b/, 225]],
+  ];
+  if (bare) tiers.push([[/\bNORTH\b|^N$/, 0], [/\bSOUTH\b|^S$/, 180], [/\bEAST\b|^E$/, 90], [/\bWEST\b|^W$/, 270]]);
+  for (const forms of tiers) {
+    const hits = new Set(forms.filter(([re]) => re.test(text)).map(([, h]) => h));
+    if (hits.size) return hits.size === 1 ? [...hits][0] : undefined;
+  }
+  return undefined;
+}
+
+/** only https URLs (an http stream would be blocked as mixed content) */
+const https = (u?: string) => (u && /^https:\/\//.test(u) ? u : undefined);
 
 const ok = (lon: unknown, lat: unknown) => Number.isFinite(Number(lon)) && Number.isFinite(Number(lat)) && !(Number(lon) === 0 && Number(lat) === 0);
 
@@ -99,7 +123,7 @@ export const CAM_FEEDS: CamFeed[] = [
     async load() {
       const parts = await Promise.allSettled(
         Array.from({ length: 12 }, (_, i) => i + 1).map((d) =>
-          fetchJson<{ data: { cctv: { index: string; inService?: string; location: { locationName: string; nearbyPlace?: string; route?: string; latitude: string; longitude: string }; imageData?: { static?: { currentImageURL?: string }; streamingVideoURL?: string } } }[] }>(
+          fetchJson<{ data: { cctv: { index: string; inService?: string; location: { locationName: string; nearbyPlace?: string; route?: string; direction?: string; latitude: string; longitude: string }; imageData?: { static?: { currentImageURL?: string }; streamingVideoURL?: string } } }[] }>(
             `https://cwwp2.dot.ca.gov/data/d${d}/cctv/cctvStatusD${String(d).padStart(2, '0')}.json`,
             undefined,
             30000,
@@ -119,11 +143,120 @@ export const CAM_FEEDS: CamFeed[] = [
                   title: c.location.locationName,
                   subtitle: [c.location.route, c.location.nearbyPlace].filter(Boolean).join(' · '),
                   image: c.imageData?.static?.currentImageURL,
+                  hls: https(c.imageData?.streamingVideoURL),
+                  dir: directionToHeading(c.location.direction, true),
                   url: c.imageData?.streamingVideoURL || c.imageData?.static?.currentImageURL,
                   source: 'Caltrans',
                 }),
               ),
       );
+    },
+  },
+  {
+    // all cameras stream live (HLS); the catalog has no still image
+    id: 'deldot',
+    label: 'DelDOT (Delaware)',
+    bbox: [-75.8, 38.4, -75.0, 39.9],
+    async load() {
+      const j = await fetchJson<{ videoCameras: { id: string; title: string; county?: string; lat: number; lon: number; enabled?: boolean; status?: string; urls?: { m3u8s?: string } }[] }>('https://tmc.deldot.gov/json/videocamera.json', undefined, 20000);
+      return j.videoCameras
+        .filter((c) => c.enabled !== false && c.status === 'Active' && ok(c.lon, c.lat) && https(c.urls?.m3u8s))
+        .map((c) => cam(c.lon, c.lat, { id: `deldot-${c.id}`, title: c.title, subtitle: [c.county && `${c.county} County`, 'Livestream'].filter(Boolean).join(' · '), hls: c.urls!.m3u8s, dir: directionToHeading(c.title), url: `https://deldot.gov/map/index.shtml?tab=TrafficCameras`, source: 'Delaware Department of Transportation (DelDOT)' }));
+    },
+  },
+  {
+    // Statens vegvesen: still images of all road cameras, live video (HLS) for some of them
+    id: 'vegvesen',
+    label: 'Statens vegvesen (Norwegen)',
+    bbox: [4.0, 57.8, 31.5, 71.3],
+    async load() {
+      const fc = await fetchJson<{ features: { geometry?: { coordinates: number[] } | null; properties: Record<string, string | number | undefined> }[] }>(
+        'https://ogckart-sn1.atlas.vegvesen.no/ogc/features/v1/collections/datex_3_1:CctvSimple/items?f=application/geo%2Bjson&limit=5000',
+        undefined,
+        30000,
+      );
+      return fc.features.flatMap((f) => {
+        const p = f.properties;
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        const image = https(String(p.stillImageUrl ?? ''));
+        if (!ok(lon, lat) || !image || p['status.stillImageAvailability'] === 'videoOrImagesUnavailableDueToCameraFault') return [];
+        const hls = p.videoEncodingStandard === 'hls' && Number(p.videoServiceLevel) > 0 ? https(String(p.videoUrl ?? '')) : undefined;
+        const place = String(p.description ?? '').trim() || `Kamera ${p.cameraId}`;
+        const towards = String(p.orientationDescription ?? '').trim();
+        return [
+          cam(lon, lat, {
+            id: `vv-${p.cameraId}`,
+            title: towards && towards !== place ? `${place} → ${towards}` : place,
+            subtitle: [p.roadNumber, hls && 'Livestream'].filter(Boolean).join(' · '),
+            image,
+            hls,
+            url: image,
+            source: 'Statens vegvesen (NLOD)',
+          }),
+        ];
+      });
+    },
+  },
+  {
+    // City of Austin traffic cameras (Socrata): only cameras that are switched on
+    id: 'austin',
+    label: 'City of Austin (Texas)',
+    bbox: [-98.1, 30.0, -97.5, 30.6],
+    async load() {
+      const list = await fetchJson<{ camera_id: string; location_name?: string; screenshot_address?: string; location?: { coordinates: number[] } }[]>(
+        'https://data.austintexas.gov/resource/b4k4-adkb.json?camera_status=TURNED_ON&$limit=5000&$select=camera_id,location_name,screenshot_address,location',
+        undefined,
+        30000,
+      );
+      return list.flatMap((c) => {
+        const [lon, lat] = c.location?.coordinates ?? [];
+        const image = https(c.screenshot_address);
+        if (!ok(lon, lat) || !image) return [];
+        return [cam(lon, lat, { id: `austin-${c.camera_id}`, title: (c.location_name ?? '').trim() || `Kamera ${c.camera_id}`, subtitle: 'Verkehrskamera Austin', image, url: image, source: 'City of Austin Open Data' })];
+      });
+    },
+  },
+  {
+    // WSDOT: all highway cameras of Washington State (plus a few of neighbouring operators); Esri JSON in Web Mercator
+    id: 'wsdot',
+    label: 'WSDOT (Washington State)',
+    bbox: [-124.9, 45.5, -116.9, 49.1],
+    async load() {
+      const j = await fetchJson<{ features: { attributes: { CameraID: number; CompassDirection?: string; CameraTitle?: string; ImageURL?: string }; geometry?: { x: number; y: number } }[] }>(
+        'https://data.wsdot.wa.gov/travelcenter/Cameras.json',
+        undefined,
+        30000,
+      );
+      const R = 6378137;
+      return j.features.flatMap(({ attributes: a, geometry: g }) => {
+        if (!g) return [];
+        const lon = (g.x / R) * (180 / Math.PI);
+        const lat = (2 * Math.atan(Math.exp(g.y / R)) - Math.PI / 2) * (180 / Math.PI);
+        const image = https(a.ImageURL);
+        if (!ok(lon, lat) || !image) return [];
+        // B: both directions, O: other – no single viewing direction
+        return [cam(lon, lat, { id: `wsdot-${a.CameraID}`, title: a.CameraTitle ?? `Kamera ${a.CameraID}`, subtitle: 'Verkehrskamera WSDOT', image, url: image, dir: directionToHeading(a.CompassDirection, true), source: 'Washington State DOT' })];
+      });
+    },
+  },
+  {
+    // King County Road Services (unincorporated King County, WA); image URLs come as http – the host serves https too
+    id: 'kingcounty',
+    label: 'King County (Washington)',
+    bbox: [-122.6, 47.0, -121.0, 47.8],
+    async load() {
+      const fc = await fetchJson<{ features: { geometry?: { coordinates: number[] } | null; properties: { AssetID: number; Location?: string; ImageURL?: string; CurrentStatus?: string } }[] }>(
+        'https://services.arcgis.com/Ej0PsM5Aw677QF1W/arcgis/rest/services/TRAFFICCAMERA_POINT_2029/FeatureServer/0/query?where=1%3D1&outFields=AssetID,Location,ImageURL,CurrentStatus&f=geojson',
+        undefined,
+        30000,
+      );
+      return fc.features.flatMap((f) => {
+        const [lon, lat] = f.geometry?.coordinates ?? [];
+        const p = f.properties;
+        const image = https((p.ImageURL ?? '').trim().replace(/^http:\/\//, 'https://'));
+        if (!ok(lon, lat) || !image || (p.CurrentStatus && p.CurrentStatus !== 'Active')) return [];
+        return [cam(lon, lat, { id: `kc-${p.AssetID}`, title: p.Location ?? `Kamera ${p.AssetID}`, subtitle: 'Verkehrskamera King County', image, url: image, source: 'King County Road Services' })];
+      });
     },
   },
   {
@@ -227,7 +360,7 @@ export const CAM_FEEDS: CamFeed[] = [
     label: 'DriveBC (British Columbia)',
     bbox: [-139.2, 48.1, -113.9, 60.1],
     async load() {
-      const list = await fetchJson<{ id: number; name?: string; caption?: string; credit?: string; highway_display?: string; is_on?: boolean; location?: { coordinates: number[] } }[]>(
+      const list = await fetchJson<{ id: number; name?: string; caption?: string; credit?: string; highway_display?: string; orientation?: string; is_on?: boolean; location?: { coordinates: number[] } }[]>(
         'https://www.drivebc.ca/api/webcams/',
         undefined,
         40000,
@@ -241,6 +374,7 @@ export const CAM_FEEDS: CamFeed[] = [
             subtitle: [c.caption, c.highway_display ? `Highway ${c.highway_display}` : '', c.credit].filter(Boolean).join(' · '),
             image: `https://www.drivebc.ca/images/${c.id}.jpg`,
             url: `https://www.drivebc.ca/images/${c.id}.jpg`,
+            dir: directionToHeading(c.orientation, true),
             source: 'DriveBC (Open Government Licence – British Columbia)',
           }),
         );
@@ -251,7 +385,7 @@ export const CAM_FEEDS: CamFeed[] = [
     label: 'TfNSW Live Traffic (NSW, Australien)',
     bbox: [140.9, -38.1, 153.8, -28.2],
     async load() {
-      const fc = await fetchJson<{ features: { id: string; geometry: { coordinates: number[] }; properties?: { title?: string; view?: string; href?: string } }[] }>(
+      const fc = await fetchJson<{ features: { id: string; geometry: { coordinates: number[] }; properties?: { title?: string; view?: string; href?: string; direction?: string } }[] }>(
         'https://data.livetraffic.com/cameras/traffic-cam.json',
         undefined,
         30000,
@@ -267,6 +401,7 @@ export const CAM_FEEDS: CamFeed[] = [
             subtitle: f.properties?.view,
             image: href,
             url: href,
+            dir: directionToHeading(f.properties?.direction, true),
             source: 'Transport for NSW (CC BY 4.0)',
           }),
         ];
@@ -364,7 +499,7 @@ export const CAM_FEEDS: CamFeed[] = [
 ];
 
 /** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML); images always live. */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary']);
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen', 'austin', 'wsdot', 'kingcounty']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();

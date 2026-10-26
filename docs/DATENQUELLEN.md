@@ -37,6 +37,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | Luftqualität & Pollen (Copernicus CAMS) | 🟢 Pflichtsatz „Generated using Copernicus Atmosphere Monitoring Service information“ |
 | [Copernicus Atmosphere Monitoring Service](https://atmosphere.copernicus.eu) | Datengrundlage für Luftqualität & Pollen | 🟢 |
 | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | Ortssuche | 🟢 |
+| [Photon](https://photon.komoot.io) (komoot, OpenStreetMap) | Suche nach Adressen, Straßen und Sehenswürdigkeiten, ergänzend zur Ortssuche | 🟢 ODbL, Fair Use |
 | [BigDataCloud](https://www.bigdatacloud.com/free-api/free-reverse-geocode-to-city-api) | Ortsname zum **eigenen** Standort (Reverse-Geocoding) – laut Fair-Use-Regel nur für den Gerätestandort erlaubt | 🟢 |
 | [Nominatim](https://nominatim.org) (OpenStreetMap) | Ortsname zu einem Kartenklick | 🟢 ODbL, max. 1 Anfrage/s |
 | [Bright Sky](https://brightsky.dev) (Deutscher Wetterdienst) | Amtliche Unwetterwarnungen Deutschland | 🟢 |
@@ -44,6 +45,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NWS – api.weather.gov](https://www.weather.gov/documentation/services-web-api) | Unwetterwarnungen USA, Tornado-/Unwetterwarnungen auf der Karte | 🟢 gemeinfrei |
 | [NOAA Storm Prediction Center](https://www.spc.noaa.gov/climo/reports/) | Tornado-Meldungen USA | 🟢 gemeinfrei |
 | [OpenWeatherMap](https://openweathermap.org) | Zusätzliche hochauflösende Wetterkarten | 🔑 |
+| [ECCC MSC GeoMet – OGC API](https://api.weather.gc.ca) (`aqhi-observations-realtime`) | Luftqualität Kanada: Air Quality Health Index von ~120 Messstationen, stündlich | 🟢 Open Government Licence – Canada |
 
 ## 2. Radar & Satellit
 
@@ -59,6 +61,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [DWD WMS](https://maps.dwd.de) | Radar-Nowcast Deutschland (WN-Produkt, 2 h) | 🟢 CC BY 4.0 |
 | [DWD Open Data – RV-Komposit](https://opendata.dwd.de/weather/radar/composite/rv/) | Rohraster 1 km, 5 min, Analyse + 120 min Nowcast (HDF5); geprüfte Quellen siehe [RADAR-QUELLEN.md](RADAR-QUELLEN.md) | 🟢 CC BY 4.0 |
 | [EUMETSAT View](https://view.eumetsat.int) | Satellitenbild Infrarot (Wolken) und Konvektions-RGB (Gewitter) – WMS; **expliziter `TIME`-Parameter nötig**, sonst rendert der Server je Tile einen anderen Scan und die Zoomstufen passen nicht zusammen (IR-Komposit: 3-stündlich, ~2 h Verarbeitungslatenz; Konvektions-RGB: 15 min, ~20 min) | 🟢 |
+| [NOAA nowCOAST](https://nowcoast.noaa.gov) – Satellit (`goes_longwave_imagery`) | Wolken Amerika: GOES-19/18-Infrarot, alle 5 min, ~2 km | 🟢 gemeinfrei |
+| [NOAA nowCOAST](https://nowcoast.noaa.gov) – Blitze (`ldn_lightning_strike_density`) | Blitzdichte der letzten 15 min, ~8 km, Amerika und Pazifik (aus Vaisala NLDN/GLD360, als NOAA-Produkt weitergebbar) | 🟢 |
 | [NASA GPM IMERG](https://gpm.nasa.gov/data/imerg) (über GIBS) | Niederschlag aus Satellitendaten | 🟢 |
 | [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs) | Tagesbild (VIIRS), Nachtlichter (Black Marble), Vegetation (NDVI), Bodentemperatur, Schneedecke, Aerosole, Chlorophyll, Meerestemperatur (GHRSST MUR), Meereis (AMSR2) | 🟢 |
 
@@ -70,6 +74,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NASA EONET](https://eonet.gsfc.nasa.gov) | Naturereignisse: Waldbrände, Stürme, Vulkane, Fluten, Dürren, Eis | 🟢 |
 | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) | Feuer-Hotspots (Raster bzw. anklickbare Punkte) | 🔑 `FIRMS_MAP_KEY`, 📦 |
 | [GDACS](https://www.gdacs.org) | Weltweite Katastrophenwarnungen (Zyklone, Fluten …) | 🟢 |
+| [NOAA NHC / CPHC](https://www.nhc.noaa.gov) ([Tropical Weather Summary MapServer](https://mapservices.weather.noaa.gov/tropical/rest/services/tropical/NHC_tropical_weather_summary/MapServer)) | Hurrikane im Atlantik und Nordpazifik: Prognosepunkte, -pfad und Unsicherheitskegel des letzten Berichts, bisheriger Zugweg | 🟢 gemeinfrei |
 | [USGS Earthquake Hazards](https://earthquake.usgs.gov/earthquakes/feed/) | Erdbeben weltweit ab M 2,5 | 🟢 gemeinfrei |
 | [EMSC / SeismicPortal](https://www.seismicportal.eu) · [EMSC](https://www.emsc-csem.org) | Erdbeben Europa ab M 1,5 | 🟢 |
 | [NOAA Tsunami Warning Centers](https://www.tsunami.gov) | Tsunami-Meldungen (7 Tage) | 🟢 📦 |
@@ -110,7 +115,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
-| [adsb.lol](https://adsb.lol) | Flugzeuge live (ab Zoom 5), 1. Wahl | 🟢 🌐 |
+| [adsb.lol](https://adsb.lol) | Flugzeuge live (ab Zoom 5), 1. Wahl; Militärflugzeuge weltweit (`/v2/mil`, auch in der Weltübersicht, Filter „Nur Militär“); GPS-Störungen aus der gemeldeten Navigationsgenauigkeit (NIC/NACp, `gpsOkBefore`) – Zellen-Methode nach [gpsjam.org](https://gpsjam.org), Schwellen nach God's Eye View | 🟢 ODbL, 🌐 |
 | [adsb.fi](https://adsb.fi) · [OpenData](https://opendata.adsb.fi) | Flugzeuge live, Rückfall | 🟢 🌐 |
 | [OpenSky Network](https://opensky-network.org) | Flugzeuge (Weltübersicht alle 2 min, im Browser gecacht; zuvor herangezoomte Flugzeuge zeigen ihre neuere Position), Flughafen-Abflüge/-Ankünfte vom Vortag | 🟢 🌐 |
 | [adsbdb](https://www.adsbdb.com) | Route (Start-/Zielflughafen) des gewählten Flugzeugs nach Callsign: gestrichelte Prognoselinie und Seitenleiste; Community-Daten, kein Flugplan | 🟢 🌐 |
@@ -132,6 +137,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Entur](https://developer.entur.org) | Nahverkehr & Bahn Norwegen | 🟢 NLOD |
 | [MBTA](https://api-v3.mbta.com) | Boston | 🟢 |
 | [SEPTA](https://www3.septa.org) | Philadelphia | 🟢 |
+| [Metro Transit](https://svc.metrotransit.org) (GTFS-RT) | Minneapolis–St Paul, Busse und Stadtbahn | 🟢 |
+| [CapMetro](https://data.texas.gov/d/eiei-9rpf) (GTFS-RT, data.texas.gov) | Austin, Busse und MetroRail | 🟢 |
 | [TTC via umoiq](https://retro.umoiq.com) | Toronto | 🟢 |
 | [data.gov.my – GTFS-Realtime](https://api.data.gov.my) | Malaysia | 🟢 |
 | [Transport Victoria](https://opendata.transport.vic.gov.au) | Melbourne/Victoria | 🔑 |
@@ -143,6 +150,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [OpenFreeMap](https://openfreemap.org) / OSM | Straßennetz mit Straßennummern | 🟢 ODbL |
 | [OpenRailwayMap](https://www.openrailwaymap.org) | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | 🟢 |
 | [OpenStreetMap Overpass](https://overpass-api.de) (+ [private.coffee](https://overpass.private.coffee)) | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | 🟢 🌐 |
+| Leihrad-Betreiber über [GBFS](https://gbfs.org) (Liste in `src/api/bikesystems.ts`, übernommen aus God's Eye View) | Leihräder: Stationen mit freien Rädern und Plätzen, live, 61 Systeme mit ~17.000 Stationen – Lyft (Citi Bike, Divvy, Capital Bikeshare, Bay Wheels), Bluebikes, BIKETOWN, BCycle (18 US-Städte), PBSC (u. a. Bike Share Toronto, Bike Itaú/Tembici in Brasilien, Santiago, Bogotá, Bicing, BiciMAD, spanische Städte), Urban Sharing (Oslo, Bergen, Trondheim), Entur (Stavanger, Skien), JCDecaux (Lillestrøm, Valencia, Sevilla), nextbike (AMBici), Social Bicycles (Buffalo) | 🟢 Betreiber-Feeds, Nutzung mit Nennung; Einzelheiten je Betreiber (z. B. AMBici CC0, JCDecaux Licence Ouverte, Lyft-Datenlizenz) |
 | [Waymarked Trails](https://waymarkedtrails.org) ([Rad](https://cycling.waymarkedtrails.org), [Wandern](https://hiking.waymarkedtrails.org)) | Radnetz, Wandernetz | 🟢 |
 
 ## 8. Kameras & Radio
@@ -158,8 +166,15 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Windy Webcams](https://api.windy.com/webcams) | Weltweite Webcams | 🔑 |
 | [TfL](https://api.tfl.gov.uk) | London (inkl. Videoclips) | 🟢 |
 | [NYC DOT](https://webcams.nyctmc.org) | New York | 🟢 |
+| [City of Austin](https://data.austintexas.gov/d/b4k4-adkb) | Austin, ~820 Verkehrskameras | 🟢 |
+| [WSDOT](https://data.wsdot.wa.gov) | Washington State, ~1.700 Autobahnkameras (mit Blickrichtung) | 🟢 |
+| [King County Road Services](https://kingcounty.gov/roads) | Straßenkameras King County (WA) | 🟢 |
 | [DDOT / DC GIS](https://maps2.dcgis.dc.gov) | Washington D.C. | 🟢 |
-| [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien | 🟢 |
+| [Caltrans](https://cwwp2.dot.ca.gov) | Kalifornien – rund 2.200 Kameras mit Livestream (HLS) im Popup | 🟢 |
+
+> **Blickrichtung und 3D-Tafel:** Caltrans, DriveBC, Live Traffic NSW und DelDOT nennen eine Richtung (Feld oder „NB/SB“ im Namen) – meist die Fahrtrichtung der Straße, also eine Näherung. Daraus zeichnet Orbis einen Sichtkegel (56°, 210 m – typische Werte wie bei God's Eye View, keine Messung) und für die gewählte Kamera eine 3D-Bildtafel mit Live-Video. Kameras ohne Richtungsangabe bekommen keinen Kegel.
+| [DelDOT](https://deldot.gov) ([Kameraliste](https://tmc.deldot.gov/json/videocamera.json)) | Delaware – rund 360 Kameras, alle als Livestream (HLS) | 🟢 |
+| [Statens vegvesen](https://www.vegvesen.no) ([OGC-Kameraliste](https://ogckart-sn1.atlas.vegvesen.no/ogc/features/v1/collections/datex_3_1:CctvSimple)) | Norwegen – rund 860 Straßenkameras, davon ~140 als Livestream (HLS) | 🟢 NLOD |
 | [ALERTCalifornia](https://cameras.alertcalifornia.org) (UC San Diego) | Waldbrandkameras Kalifornien | 🟢 |
 | 511 ([Ontario](https://511on.ca/developers/doc), [Alberta](https://511.alberta.ca/developers/doc)) | Kameras Kanada | 🟢 🔑 kostenlos – My511-Konto anlegen, Key auf der Developers-Seite anfordern (10 Aufrufe/min) |
 | [Hong Kong Transport Department](https://data.gov.hk) | Kameras Hongkong | 🟢 |
@@ -173,7 +188,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Unterseekabel (Telekommunikation) – weniger vollständig als kommerzielle Karten; frühere Quelle TeleGeography siehe [Archiv](archiv/telegeography-seekabel.md) | 🟢 ODbL, 📦 |
-| [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs) | 🟢 |
+| [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs); Rechenzentren (~5.300 Standorte mit Betreiber und Zahl der angeschlossenen Netze) | 🟢 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass, `telecom`/`building=data_center`) | Rechenzentren, die PeeringDB nicht führt (~3.200 nach Abgleich); wöchentlicher Auszug (`scripts/fetch-data.ts`) | 🟢 ODbL, 📦 |
 | [WRI Global Power Plant Database](https://datasets.wri.org/dataset/globalpowerplantdatabase) | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke | 🟢 CC BY 4.0 |
 | OpenStreetMap (Overpass) | Einzelne Windräder, Öl-/Gaspipelines | 🟢 ODbL |
 
@@ -262,6 +278,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [MapLibre GL JS 6](https://maplibre.org) | 2D-Karte & Globus |
 | [three.js](https://threejs.org) | 3D-Sonnensystem |
 | [satellite.js](https://github.com/shashwatak/satellite-js) | SGP4-Bahnberechnung |
+| [hls.js](https://github.com/video-dev/hls.js) | Live-Videos der Webcams (HLS); auch als Textur der 3D-Kameratafel |
 | [GitHub Pages](https://pages.github.com) · [GitHub Actions](https://github.com/features/actions) | Hosting & Deploy |
 | [Cloudflare Workers](https://workers.cloudflare.com) | optionaler Daten-Proxy |
 
