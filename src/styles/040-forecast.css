@@ -1,0 +1,443 @@
+/* ---------- Forecast view ---------- */
+.forecast-view {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+}
+
+.fc-top {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.fc-top .btn.icon-btn {
+  height: 44px;
+  width: 44px;
+}
+
+.favs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 0 2px;
+  scrollbar-width: none;
+}
+
+.fc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px 260px at 15% 100%, color-mix(in srgb, var(--tc) 30%, transparent), transparent 70%);
+  pointer-events: none;
+}
+
+.hero > * {
+  position: relative;
+}
+
+.hero-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.place {
+  font-size: 1.7rem;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-ic {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.hero-main {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-temp {
+  font-size: 5.2rem;
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.hero-desc .desc {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.hero-desc {
+  color: var(--text-2);
+}
+
+.hl span {
+  margin-right: 10px;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.tile {
+  padding: 14px 16px;
+  min-height: 108px;
+}
+
+.tile.wide {
+  grid-column: span 2;
+}
+
+.tile-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.tile-value {
+  font-size: 1.55rem;
+  font-weight: 600;
+  margin: 4px 0 2px;
+}
+
+.tile-value small {
+  font-size: 0.85rem;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.tile-sub {
+  color: var(--text-2);
+  font-size: 0.84rem;
+}
+
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+
+.wind-arrow {
+  display: inline-block;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* alerts */
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alert {
+  border-radius: 14px;
+  border: 1px solid;
+  padding: 12px 14px;
+  background: rgba(255, 200, 0, 0.08);
+  border-color: rgba(255, 200, 0, 0.4);
+}
+
+.alert.sev-moderate {
+  background: rgba(255, 140, 26, 0.1);
+  border-color: rgba(255, 140, 26, 0.5);
+}
+
+.alert.sev-severe {
+  background: rgba(232, 56, 79, 0.13);
+  border-color: rgba(232, 56, 79, 0.6);
+}
+
+.alert.sev-extreme {
+  background: rgba(176, 58, 214, 0.16);
+  border-color: rgba(176, 58, 214, 0.7);
+}
+
+.alert summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.alert-badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.alert-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.alert-time {
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.alert p {
+  margin: 10px 0 0;
+  white-space: pre-line;
+  color: var(--text-2);
+}
+
+.alert .instruction {
+  color: var(--text);
+}
+
+/* hourly chart */
+.hourly-wrap {
+  position: relative;
+}
+
+.chart-scroll {
+  overflow-x: auto;
+}
+
+svg.hourly {
+  display: block;
+  width: 100%;
+  min-width: 720px;
+  height: auto;
+  touch-action: pan-x;
+}
+
+.hourly .grid {
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.hourly .baseline {
+  stroke: rgba(255, 255, 255, 0.2);
+}
+
+.hourly .daysep {
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-dasharray: 3 4;
+}
+
+.hourly .axis {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.hourly .axis.day {
+  fill: var(--text-2);
+  font-weight: 600;
+}
+
+.hourly .panel-title {
+  fill: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.hourly .tlabel {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.hourly .tline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.hourly .pbar {
+  fill: #4aa8ff;
+}
+
+.hourly .crossline {
+  stroke: rgba(255, 255, 255, 0.45);
+  stroke-width: 1;
+}
+
+.hourly .crossdot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.chart-tip {
+  position: absolute;
+  top: 40px;
+  min-width: 200px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.tip-head {
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+}
+
+.tip-row b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* daily list */
+.daily {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.daily li {
+  border-top: 1px solid var(--border);
+}
+
+.d-row {
+  display: grid;
+  grid-template-columns: 110px 40px 70px 44px 1fr 44px 92px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.d-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.d-hours {
+  padding: 4px 0 10px;
+  overflow-x: auto;
+}
+
+.hours-strip {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+}
+
+.h-col {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 10px 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.95rem;
+  scroll-snap-align: start;
+}
+
+.h-col small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.h-col.now {
+  border-color: #6fb6ff;
+  background: rgba(111, 182, 255, 0.12);
+}
+
+.h-col.now b {
+  color: #6fb6ff;
+}
+
+.h-temp {
+  font-weight: 650;
+}
+
+.h-rain.wet {
+  color: #6fb6ff;
+  font-weight: 600;
+}
+
+.skeleton {
+  min-height: 120px;
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0.04) 30%, rgba(255, 255, 255, 0.09) 50%, rgba(255, 255, 255, 0.04) 70%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+
+.skeleton.hero {
+  min-height: 220px;
+}
+
+.skeleton.tall {
+  min-height: 280px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.error-card p {
+  color: var(--text-2);
+}

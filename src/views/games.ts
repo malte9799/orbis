@@ -1,11 +1,13 @@
-import { Map as MlMap, NavigationControl, type GeoJSONSource, type StyleSpecification } from 'maplibre-gl';
-import type { Feature, FeatureCollection, Geometry, Point, Position } from 'geojson';
+import { Map as MlMap, NavigationControl, type GeoJSONSource } from 'maplibre-gl';
+import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { escapeHtml, toast } from '../util';
 import { store } from '../store';
 import type { StreetGame } from '../games/streetguess';
 import type { NameQuiz } from '../games/namequiz';
 import type { SizeDuel } from '../games/sizeduel';
 import type { SizeScale } from '../games/sizescale';
+import { type Props, type Feat, type BBox, DATA, SCOPES, scopeOf, STYLE, norm, lev, bboxOf, anchor, anchorView, span, loadData, regionHistory, saveRegionHistory, countryAreas, loadRegionIndex } from '../games/data';
+import { GAME_CARDS, previewHtml, optIcon, slug } from '../games/menu-art';
 
 // Games – deliberately separate from the layer drawer of the main map: own tab, own (label-free) map.
 // Country / region quiz: a name pops up and you click it ("Anklicken"), or you type all names ("Eintippen").
@@ -16,43 +18,9 @@ export interface GamesView {
   deactivate(): void;
 }
 
-export type Props = { id: string; name: string; en: string; cont?: string; sub?: string; pop?: number; sov?: number; flag?: string; cap?: string[]; capEn?: string[] };
-export type Feat = Feature<Geometry, Props>;
 type Mode = 'click' | 'type';
 type Status = 'found' | 'missed' | 'wrong' | 'target' | 'hint';
 
-export interface Scope {
-  id: string;
-  label: string;
-  filter?: (p: Props) => boolean;
-  /** fixed map view [w, s, e, n] – the bounding box of e.g. Russia or France (Guyana) is useless */
-  view?: BBox;
-}
-
-const DATA = `${import.meta.env.BASE_URL}data/games/`;
-export type BBox = [number, number, number, number];
-export const SCOPES: Scope[] = [
-  { id: 'world', label: 'Welt', view: [-168, -56, 180, 80] },
-  { id: 'Europe', view: [-25, 34, 45, 72], label: 'Europa', filter: (p) => p.cont === 'Europe' },
-  { id: 'Asia', view: [25, -11, 150, 55], label: 'Asien', filter: (p) => p.cont === 'Asia' },
-  { id: 'Africa', view: [-20, -36, 53, 38], label: 'Afrika', filter: (p) => p.cont === 'Africa' },
-  { id: 'North America', view: [-170, 7, -50, 72], label: 'Nordamerika', filter: (p) => p.cont === 'North America' },
-  { id: 'South America', view: [-83, -56, -34, 13], label: 'Südamerika', filter: (p) => p.cont === 'South America' },
-  { id: 'Oceania', view: [110, -48, 180, 0], label: 'Ozeanien', filter: (p) => p.cont === 'Oceania' },
-];
-/** a SCOPES id, or `conts:Europe,Asia` for several continents at once */
-export function scopeOf(id: string): Scope | undefined {
-  if (!id.startsWith('conts:')) return SCOPES.find((s) => s.id === id);
-  const keys = id.slice(6).split(',');
-  const parts = SCOPES.filter((s) => keys.includes(s.id));
-  const views = parts.map((s) => s.view!);
-  return {
-    id,
-    label: parts.map((s) => s.label).join(', '),
-    filter: (p) => keys.includes(p.cont ?? ''),
-    view: [Math.min(...views.map((v) => v[0])), Math.min(...views.map((v) => v[1])), Math.max(...views.map((v) => v[2])), Math.max(...views.map((v) => v[3]))],
-  };
-}
 const MAX_TRIES = 1; // one try on the map, then the solution is shown
 
 /** one thing to find: a country/region (one feature) or a continent (all its countries) */
@@ -78,205 +46,6 @@ interface QuizConfig {
   /** map variant of the flag game: the question is a flag instead of a name */
   flag: boolean;
   mode: Mode;
-}
-
-export const STYLE: StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#0d1530' } }],
-};
-
-/** lower case, no diacritics, ß→ss, only letters/digits */
-export function norm(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/ß/g, 'ss')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-export function lev(a: string, b: string): number {
-  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-  for (let j = 1; j <= b.length; j++) d[0][j] = j;
-  for (let i = 1; i <= a.length; i++)
-    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-  return d[a.length][b.length];
-}
-
-function eachPos(g: Geometry, fn: (p: Position) => void) {
-  const walk = (c: unknown): void => {
-    if (typeof (c as number[])[0] === 'number') fn(c as Position);
-    else (c as unknown[]).forEach(walk);
-  };
-  if (g.type !== 'GeometryCollection') walk(g.coordinates);
-}
-
-export function bboxOf(fs: Feat[]): BBox {
-  const b: BBox = [180, 90, -180, -90];
-  for (const f of fs)
-    eachPos(f.geometry, (p) => {
-      b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]);
-    });
-  return b;
-}
-
-/** bounding box of the feature's biggest part */
-function mainBox(f: Feat): BBox {
-  const g = f.geometry;
-  const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-  let best: BBox = [0, 0, 0, 0];
-  let area = -1;
-  for (const p of parts) {
-    const xs = p[0].map((q) => q[0]);
-    const ys = p[0].map((q) => q[1]);
-    const b: BBox = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-    const a = (b[2] - b[0]) * (b[3] - b[1]);
-    if (a > area) { area = a; best = b; }
-  }
-  return best;
-}
-
-/** a point inside/near the feature: centre of its biggest part's bounding box */
-function anchor(f: Feat): [number, number] {
-  const b = mainBox(f);
-  return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
-}
-
-/** bbox around the biggest part of every feature – unlike the real bbox it ignores far-flung parts (Aleutians crossing the antimeridian) */
-function anchorView(fs: Feat[]): BBox {
-  const boxes = fs.map(mainBox);
-  const pad = 1.5;
-  return [Math.min(...boxes.map((b) => b[0])) - pad, Math.min(...boxes.map((b) => b[1])) - pad, Math.max(...boxes.map((b) => b[2])) + pad, Math.max(...boxes.map((b) => b[3])) + pad];
-}
-
-/** span (degrees) of the biggest single part – an archipelago like Hawaii is as hard to spot as its biggest island */
-function span(f: Feat): number {
-  const g = f.geometry;
-  const parts = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
-  let best = 0;
-  for (const p of parts) {
-    const xs = p[0].map((q) => q[0]);
-    const ys = p[0].map((q) => q[1]);
-    best = Math.max(best, Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-  }
-  return best;
-}
-
-const cache = new Map<string, Promise<FeatureCollection<Geometry, Props>>>();
-export function loadData(file: string) {
-  let p = cache.get(file);
-  if (!p) {
-    p = fetch(DATA + file).then((r) => {
-      if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
-      return r.json();
-    });
-    p.catch(() => cache.delete(file));
-    cache.set(file, p);
-  }
-  return p;
-}
-
-interface GameCard {
-  id: string;
-  label: string;
-  tag: string;
-  blurb: string;
-  chips: string[];
-}
-const GAME_CARDS: GameCard[] = [
-  { id: 'quiz', label: 'Länder-Rater', tag: 'Karte', blurb: 'Ein Name erscheint – klick das Land auf der Weltkarte an. Oder tipp alle Namen aus dem Kopf. Auch Kontinente und Regionen.', chips: ['Anklicken', 'Eintippen', 'Regionen'] },
-  { id: 'flags', label: 'Flaggen-Rater', tag: 'Flaggen', blurb: 'Welche Flagge gehört zu welchem Land?', chips: ['Auswahl', 'Eintippen', 'Karte'] },
-  { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
-  { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
-  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Maßstab', 'Higher Lower'] },
-  { id: 'street', label: 'Straßen-Rater', tag: '360°', blurb: 'Echte 360°-Straßenfotos – schau dich um und tippe auf der Karte, wo du stehst. 5 Runden, bis zu 5000 Punkte.', chips: ['360°', '5 Runden', 'Punkte'] },
-];
-
-/** preview picture of a game: static SVG (scripts/build-game-previews.mjs) or a fan of real flags */
-function previewHtml(id: string): string {
-  if (id === 'flags') {
-    const fl = ['jp', 'br', 'de', 'ca', 'za'];
-    return `<div class="gm-pv gm-pv-flags">${fl.map((f, i) => `<img class="gm-pvflag f${i}" alt="" loading="lazy" src="${DATA}flags/${f}.svg" />`).join('')}</div>`;
-  }
-  return `<div class="gm-pv"><img alt="" loading="lazy" src="${DATA}previews/${id}.svg" /></div>`;
-}
-
-/** little picture per menu option (viewBox 160×100): see .gm-opt-pv in style.css for the colour classes */
-const BLOB_A = 'M14 62L30 36L58 28L84 40L78 64L46 74Z';
-const BLOB_B = 'M92 30L128 24L146 44L130 70L100 62Z';
-const PIN = 'M0 12C-10-2-10-16 0-16S10-2 0 12Z';
-const OPT_ICONS: Record<string, string> = {
-  click: `<path class="m" d="${BLOB_A}"/><path class="a" d="${BLOB_B}"/><path class="w" d="M118 46L118 74L126 67L131 79L137 77L132 65L142 65Z"/>`,
-  type: `<rect class="o" x="14" y="36" width="132" height="30" rx="8"/><text class="t" x="26" y="57">Bras</text><rect class="a" x="62" y="44" width="2.5" height="14"/><g class="m"><rect x="14" y="76" width="34" height="9" rx="4.5"/><rect x="54" y="76" width="44" height="9" rx="4.5"/></g>`,
-  choice: `<g class="m"><rect x="12" y="14" width="64" height="32" rx="7"/><rect x="84" y="14" width="64" height="32" rx="7"/><rect x="12" y="54" width="64" height="32" rx="7"/></g><rect class="a" x="84" y="54" width="64" height="32" rx="7"/><path class="wl" d="M104 70L113 78L130 62"/>`,
-  map: `<rect class="w" x="12" y="14" width="46" height="32" rx="4"/><rect class="a" x="12" y="14" width="46" height="11"/><rect fill="#e5484d" x="12" y="36" width="46" height="10"/><path class="m" d="M70 46L88 30L116 26L140 38L132 66L98 78L74 68Z"/><g transform="translate(112 56)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g>`,
-  cap: `<path class="a" d="M10 62L26 36L52 30L72 42L66 64L36 74Z"/><path class="wl" d="M78 52H100M94 45L101 52L94 59"/><g transform="translate(130 50)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g><rect class="o" x="108" y="68" width="44" height="14" rx="5"/>`,
-  land: `<g transform="translate(30 50)"><path class="p" d="${PIN}"/><circle fill="#fff" cy="-6" r="3.5"/></g><rect class="o" x="8" y="68" width="44" height="14" rx="5"/><path class="wl" d="M62 52H84M78 45L85 52L78 59"/><path class="a" d="M96 62L112 36L138 30L154 42L148 64L120 74Z"/>`,
-  duel: `<path class="a" d="M12 74L18 40L44 26L66 40L62 70L36 80Z"/><path class="r" d="M96 70L102 48L124 34L148 46L146 68L120 78Z"/><circle class="o" cx="80" cy="52" r="13"/><text class="t" x="80" y="57" text-anchor="middle" font-size="13">VS</text>`,
-  scale: `<path class="m" d="M16 70L22 36L50 22L72 36L68 66L42 76Z"/><rect class="dash" x="76" y="20" width="70" height="60" rx="3"/><path class="a" d="M88 64L94 44L112 34L128 44L126 62L106 70Z"/><circle class="w" cx="146" cy="80" r="6"/>`,
-  area: `<rect class="a" x="14" y="22" width="76" height="62" rx="4"/><rect class="r" x="104" y="54" width="42" height="30" rx="4"/><path class="wl" d="M14 14H90M14 11V17M90 11V17"/>`,
-  pop: `<g class="a">${Array.from({ length: 24 }, (_, i) => `<circle cx="${18 + (i % 6) * 11}" cy="${26 + Math.floor(i / 6) * 14}" r="4"/>`).join('')}</g><g class="r">${Array.from({ length: 6 }, (_, i) => `<circle cx="${100 + (i % 3) * 14}" cy="${58 + Math.floor(i / 3) * 14}" r="4.5"/>`).join('')}</g>`,
-  move1: `<path class="road" d="M70 30H90L150 90H10Z"/><path class="wl" d="M80 38V90" stroke-dasharray="6 6"/><path class="w" d="M30 20L20 30L30 40M130 20L140 30L130 40" fill="none" stroke-width="4"/>`,
-  move0: `<path class="road" d="M70 30H90L150 90H10Z"/><path class="wl" d="M80 38V90" stroke-dasharray="6 6"/><g transform="translate(80 40)"><rect class="a" x="-14" y="-4" width="28" height="22" rx="4"/><path class="wl" d="M-8 -4V-12a8 8 0 0116 0V-4"/></g>`,
-};
-const OPT_BASE: Record<string, string> = { mode: 'previews/quiz.svg', fhelp: 'flags/br.svg', cmode: 'previews/capitals.svg', omode: 'previews/outline.svg' };
-const OPT_OVERLAY: Record<string, string> = {
-  click: '<circle class="wl" cx="92" cy="40" r="11" stroke-width="2.5" opacity=".85"/><path class="w" d="M92 40L92 70L100 63L105 76L112 73L107 60L118 60Z"/>',
-  type: '<rect class="bg" x="22" y="62" width="116" height="26" rx="10"/><text class="t" x="36" y="80" font-size="14">Bras</text><rect class="a" x="76" y="69" width="2.5" height="12"/>',
-  choice: '<g class="bg"><rect x="12" y="56" width="68" height="18" rx="7"/><rect x="84" y="56" width="68" height="18" rx="7"/><rect x="12" y="78" width="68" height="18" rx="7"/></g><rect class="a" x="84" y="78" width="68" height="18" rx="7"/>',
-};
-/** picture of a menu option: the game's map/flag image with a little overlay, or a drawing */
-const optIcon = (k: string, v: string): string => {
-  if (k === 'smode' && (v === 'duel' || v === 'scale')) return `<img class="gm-opt-bg" alt="" src="${DATA}previews/${v === 'duel' ? 'higherlower' : 'scale'}.svg" />`;
-  if (OPT_BASE[k] && OPT_OVERLAY[v]) return `<img class="gm-opt-bg${k === 'fmode' ? ' dim' : ''}" alt="" src="${DATA}${OPT_BASE[k]}" /><svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet">${OPT_OVERLAY[v]}</svg>`;
-  const d = OPT_ICONS[k === 'move' ? 'move' + v : v];
-  return d ? `<svg viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet">${d}</svg>` : '';
-};
-const slug = (s: string) => s.toLowerCase().replace(/ /g, '-');
-
-const HIST_KEY = 'orbis-gm-region-history';
-/** countries picked in the "Regional" grid, most recent first */
-function regionHistory(): string[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(HIST_KEY) ?? '[]');
-    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-function saveRegionHistory(id: string) {
-  try {
-    localStorage.setItem(HIST_KEY, JSON.stringify([id, ...regionHistory().filter((x) => x !== id)].slice(0, 8)));
-  } catch {
-    /* private mode */
-  }
-}
-/** km² per ISO code, to sort the countries by size */
-let areasP: Promise<Map<string, number>> | null = null;
-function countryAreas(): Promise<Map<string, number>> {
-  areasP ??= (async () => {
-    const { areaKm2 } = await import('../games/sizeduel');
-    const m = new Map<string, number>();
-    for (const f of (await loadData('countries.json')).features as Feat[]) {
-      const iso = (f.properties as Props & { iso?: string }).iso;
-      if (iso) m.set(iso, (m.get(iso) ?? 0) + areaKm2(f.geometry));
-    }
-    return m;
-  })();
-  areasP.catch(() => (areasP = null));
-  return areasP;
-}
-
-const regionIndexP: { p: Promise<{ id: string; name: string; n: number }[]> | null } = { p: null };
-function loadRegionIndex() {
-  regionIndexP.p ??= fetch(`${DATA}admin1/index.json`).then((r) => {
-    if (!r.ok) throw new Error('Regionsliste konnte nicht geladen werden');
-    return r.json();
-  });
-  regionIndexP.p.catch(() => (regionIndexP.p = null));
-  return regionIndexP.p;
 }
 
 /** token baked in at build time (Actions variable MAPILLARY_TOKEN → VITE_MAPILLARY_TOKEN); a token typed in below overrides it */

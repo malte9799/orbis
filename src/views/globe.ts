@@ -7,18 +7,10 @@ import {
   type MapGeoJSONFeature,
   type RasterTileSource,
 } from 'maplibre-gl';
-import type { Feature, FeatureCollection, LineString, MultiPolygon, Point, Polygon } from 'geojson';
+import type { Feature, FeatureCollection, Point } from 'geojson';
 import {
   kindColor,
-  loadEonet,
-  loadFirms,
-  loadFirmsSnapshot,
-  loadGdacs,
-  loadNwsSevere,
-  loadQuakes,
   loadRadarFrames,
-  loadSpcTornadoReports,
-  type EventFeature,
   type EventKind,
   type RadarFrames,
 } from '../api/events';
@@ -32,7 +24,6 @@ import {
   type ModelGrid,
 } from '../api/model';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
-import { inEurope, loadEmsc } from '../api/europe';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
@@ -56,11 +47,13 @@ import {
 import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
-import { createHud, type Hud, type HudEvent, type LayerInfo, type LegendInfo } from '../hud/hud';
-import { catalogOf, GROUPS, ISOBAR_OPTION_MAINS, LINKED_EXTRA, LINKED_GROUP, OWM_FAMILY, WX_FAMILIES, type FeedId, type GroupId } from '../hud/catalog';
+import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
+import { openSettings } from '../settings';
+import { createEvents } from '../globe/events/engine';
+import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
+import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
 import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
 import { locate } from '../search';
-import { builtInProxy } from '../api/proxy';
 import { store, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
 import { describe, weatherIcon } from '../weather';
@@ -81,21 +74,6 @@ const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'wind_new', label: 'Wind (OWM)' },
   { id: 'pressure_new', label: 'Luftdruck (OWM)' },
 ];
-
-const KIND_GROUP: Record<EventKind, GroupId> = {
-  fire: 'fires',
-  storm: 'storms',
-  tornado: 'tornado',
-  quake: 'quakes',
-  volcano: 'volcanoes',
-  flood: 'floods',
-  drought: 'floods',
-  landslide: 'floods',
-  ice: 'ice',
-  dust: 'ice',
-  heat: 'ice',
-  other: 'ice',
-};
 
 /** The map engine's current settings; derived from the active Karte (see applyKarte). */
 interface GlobeState {
@@ -200,142 +178,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let popup: Popup | null = null;
   let longPressAt = 0;
 
-  // ----- feeds -------------------------------------------------------------
-  const feedData: Record<FeedId, { at: number; loading: Promise<void> | null; error?: string }> = {
-    eonet: { at: 0, loading: null },
-    gdacs: { at: 0, loading: null },
-    usgs: { at: 0, loading: null },
-    emsc: { at: 0, loading: null },
-    nws: { at: 0, loading: null },
-    spc: { at: 0, loading: null },
-    firms: { at: 0, loading: null },
-  };
-  let eonetPoints: EventFeature[] = [];
-  let eonetTracks: Feature<LineString, { kind: EventKind; title: string }>[] = [];
-  let gdacsPoints: EventFeature[] = [];
-  let nwsPoints: EventFeature[] = [];
-  let spcPoints: EventFeature[] = [];
-  let nwsPolys: Feature<Polygon | MultiPolygon, { color: string; event: string }>[] = [];
-  let quakePoints: EventFeature[] = [];
-  let emscPoints: EventFeature[] = [];
+  // ----- event feeds (fires, storms, quakes …): see src/globe/events ----------
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
   let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
-  let firmsCount = 0;
-  let firmsOk = false;
 
-  const FEED_LOADERS: Record<FeedId, () => Promise<void>> = {
-    eonet: async () => {
-      const r = await loadEonet();
-      eonetPoints = r.points;
-      eonetTracks = r.tracks;
-    },
-    gdacs: async () => {
-      gdacsPoints = await loadGdacs();
-    },
-    usgs: async () => {
-      quakePoints = await loadQuakes();
-    },
-    emsc: async () => {
-      emscPoints = await loadEmsc();
-    },
-    nws: async () => {
-      const r = await loadNwsSevere();
-      nwsPoints = r.points;
-      nwsPolys = r.polygons;
-    },
-    spc: async () => {
-      spcPoints = await loadSpcTornadoReports();
-    },
-    firms: async () => {
-      const key = store.getKeys().firms;
-      // own key → live points; otherwise the shared worldwide snapshot from the data branch
-      const fc = key ? await loadFirms(key) : await loadFirmsSnapshot();
-      firmsCount = fc.features.length;
-      firmsOk = fc.features.length > 0;
-      (map?.getSource('firms') as GeoJSONSource | undefined)?.setData(fc);
-      applyGroups();
-    },
-  };
-  const FEED_NAMES: Record<FeedId, string> = {
-    eonet: 'NASA EONET',
-    gdacs: 'GDACS',
-    usgs: 'USGS Erdbeben',
-    emsc: 'EMSC Erdbeben Europa',
-    nws: 'NWS (USA)',
-    spc: 'SPC Tornado-Meldungen',
-    firms: 'NASA FIRMS',
-  };
-
-  function ensureFeeds(force = false) {
-    const needed = new Set<FeedId>();
-    for (const g of GROUPS) if (state.groups[g.id]) g.feeds.forEach((f) => needed.add(f));
-    if (state.groups.hotspots) needed.add('firms');
-    for (const id of needed) {
-      const fd = feedData[id];
-      if (fd.loading || (!force && Date.now() - fd.at < REFRESH_MS)) continue;
-      fd.loading = FEED_LOADERS[id]()
-        .then(() => {
-          fd.error = undefined;
-        })
-        .catch((e) => {
-          console.warn(`${FEED_NAMES[id]} nicht verfügbar`, e);
-          fd.error = String(e?.message ?? e);
-          // The SPC files have no CORS headers on some days – don't bother the user about it.
-          if (id !== 'spc') toast(`${FEED_NAMES[id]} konnte nicht geladen werden.`, 'error');
-        })
-        .finally(() => {
-          fd.at = Date.now();
-          fd.loading = null;
-          if (id === 'firms') applyGroups();
-          syncEventSources();
-          refreshHud();
-        });
-    }
-    refreshHud();
-  }
-
-  function syncEventSources() {
-    if (!map || !ready) return;
-    const tag = (features: EventFeature[], group?: GroupId) =>
-      features.map((f) => ({ ...f, properties: { ...f.properties, group: group ?? KIND_GROUP[f.properties.kind] } }));
-    const all = [...tag(eonetPoints), ...tag(gdacsPoints), ...tag(nwsPoints, 'tornado'), ...tag(spcPoints, 'tornado')];
-    setData('events', all);
-    // In Europe EMSC is more complete (smaller quakes); elsewhere USGS.
-    setData('quakes', emscPoints.length ? [...emscPoints, ...quakePoints.filter((q) => !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1]))] : quakePoints);
-    setData('nws-poly', nwsPolys);
-    setData('tracks', eonetTracks.filter((t) => t.properties.kind === 'storm'));
-  }
+  const ev = createEvents({
+    map: () => map,
+    ready: () => ready,
+    groups: () => state.groups,
+    extrasCount: (id) => extras?.count(id as ExtraId),
+    keys: () => store.getKeys(),
+    toast: (msg, kind) => toast(msg, kind),
+    refresh: () => refreshHud(),
+    refreshMs: REFRESH_MS,
+  });
+  (window as unknown as Record<string, unknown>).__ev = { ev, state, getMap: () => map };
 
   function setData(source: string, features: Feature[]) {
     (map?.getSource(source) as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features } as FeatureCollection);
-  }
-
-  function groupCount(id: GroupId): number | null {
-    const linked = LINKED_EXTRA[id];
-    const linkedCount = linked ? extras?.count(linked) : undefined;
-    const events = () => (feedData.eonet.at || feedData.gdacs.at ? [...eonetPoints, ...gdacsPoints].filter((f) => KIND_GROUP[f.properties.kind] === id).length : null);
-    switch (id) {
-      case 'quakes':
-        return feedData.usgs.at || feedData.emsc.at
-          ? emscPoints.length + quakePoints.filter((q) => !emscPoints.length || !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1])).length
-          : null;
-      case 'tornado':
-        return feedData.nws.at || feedData.spc.at ? nwsPoints.length + spcPoints.length : null;
-      case 'hotspots':
-        return firmsCount || null;
-      case 'volcanoes':
-        // the full GVP catalogue includes the currently erupting ones
-        return linkedCount ?? events();
-      case 'fires': {
-        const ev = events();
-        return ev == null && linkedCount == null ? null : (ev ?? 0) + (linkedCount ?? 0);
-      }
-      default:
-        return events();
-    }
   }
 
   // ----- Karten: applying the active Karte to the map ------------------------
@@ -386,7 +249,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         const lg = LINKED_GROUP[g];
         if (lg) nextGroups[lg] = true;
         const lx = LINKED_EXTRA[g];
-        if (lx) nextExtras[lx] = true;
+        if (lx) nextExtras[lx as ExtraId] = true;
       }
     }
     const extrasChanged = !sameKeys(state.extras, nextExtras);
@@ -404,8 +267,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
     if (extrasChanged) extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
     if (groupsChanged) {
-      applyGroups();
-      ensureFeeds();
+      ev.apply();
+      ev.ensure();
     }
     applyLayerOptions(k);
     applyPadding(true);
@@ -441,23 +304,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   /** map layers behind one entry of a Karte's layer list */
-  const GROUP_LAYERS: Record<GroupId, string[]> = {
-    fires: ['firms', 'hotspots', 'ev-circle', 'ev-glyph'],
-    hotspots: ['firms', 'hotspots'],
-    storms: ['tracks', 'ev-circle', 'ev-glyph'],
-    tornado: ['nws-fill', 'nws-line', 'ev-circle', 'ev-glyph'],
-    quakes: ['quakes'],
-    volcanoes: ['ev-circle', 'ev-glyph'],
-    floods: ['ev-circle', 'ev-glyph'],
-    ice: ['ev-circle', 'ev-glyph'],
-  };
   function mapLayersOf(id: string): string[] {
     const c = catalogOf(id);
     if (!c) return [];
     if (c.kind === 'extra') return extras?.layerIds(id as ExtraId) ?? [];
-    const g = id as GroupId;
-    const linked = LINKED_EXTRA[g];
-    return [...GROUP_LAYERS[g], ...(linked ? (extras?.layerIds(linked) ?? []) : [])];
+    const g = GROUPS.find((x) => x.id === id);
+    if (!g) return [];
+    return [...g.mapLayers, ...(g.linkedExtra ? (extras?.layerIds(g.linkedExtra) ?? []) : [])];
   }
 
   /**
@@ -498,8 +351,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (c.kind === 'group') {
       const g = id as GroupId;
       if (!state.groups[g]) return { sub: '', live: false, count: null };
-      const n = groupCount(g);
-      const loading = GROUPS.find((x) => x.id === g)!.feeds.some((f) => feedData[f].loading);
+      const n = ev.count(g);
+      const loading = ev.loading(g);
       return { sub: loading && n == null ? 'lädt …' : n != null ? `${fmt.num(n)} aktuell` : '', live: live && n != null, count: n };
     }
     const e = id as ExtraId;
@@ -510,25 +363,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const note = extras?.note(e);
     if (note) parts.push(note);
     return { sub: parts.join(' · '), live: live && n != null, count: n ?? null, delay: id === 'lightning' ? extras?.lightningDelay() : undefined };
-  }
-
-  function eventList(hours: number): HudEvent[] {
-    const cutoff = Date.now() - hours * 3600000;
-    const quakes = emscPoints.length ? [...emscPoints, ...quakePoints.filter((q) => !inEurope(q.geometry.coordinates[0], q.geometry.coordinates[1]))] : quakePoints;
-    const items = [...eonetPoints, ...gdacsPoints, ...nwsPoints, ...spcPoints, ...quakes]
-      .filter((f) => state.groups[KIND_GROUP[f.properties.kind]] && f.properties.date && Date.parse(f.properties.date) >= cutoff)
-      .sort((a, b) => Date.parse(b.properties.date!) - Date.parse(a.properties.date!));
-    // a mix of kinds instead of 6 quakes: at most two per kind
-    const perKind: Partial<Record<EventKind, number>> = {};
-    const out: HudEvent[] = [];
-    for (const f of items) {
-      const p = f.properties;
-      if ((perKind[p.kind] ?? 0) >= 2) continue;
-      perKind[p.kind] = (perKind[p.kind] ?? 0) + 1;
-      out.push({ kind: p.kind, color: p.color ?? kindColor(p.kind), title: p.title, sub: p.subtitle ?? p.source, when: fmt.relative(p.date!) });
-      if (out.length >= 6) break;
-    }
-    return out;
   }
 
   let hudTimer = 0;
@@ -551,75 +385,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   // ----- settings dialog (API keys, sources) --------------------------------
   const settings = el.querySelector<HTMLDialogElement>('.settings-dialog')!;
-  const openSettings = () => {
-    const keys = store.getKeys();
-    settings.innerHTML = `
-      <form method="dialog" class="keys-form" autocomplete="off">
-        <h2>Einstellungen</h2>
-        <h3>API-Schlüssel (optional)</h3>
-        <p class="small muted">Alle Grundfunktionen laufen ohne Schlüssel. Mit kostenlosen Schlüsseln werden zusätzliche Quellen
-        freigeschaltet. Schlüssel werden nur lokal in diesem Browser gespeichert.</p>
-        <label class="field-label">OpenWeatherMap <small>(zusätzliche hochauflösende Wetterkarten)</small>
-          <input type="password" data-key="owm" value="${escapeHtml(keys.owm ?? '')}" placeholder="appid" autocomplete="off"/></label>
-        <label class="field-label">NASA FIRMS MAP_KEY <small>(eigener Schlüssel für aktuellere Feuer-Hotspots – sonst wird ein gemeinsamer Snapshot genutzt)</small>
-          <input type="password" data-key="firms" value="${escapeHtml(keys.firms ?? '')}" placeholder="MAP_KEY" autocomplete="off"/></label>
-        <label class="field-label">Windy Webcams <small>(kostenloser Schlüssel von api.windy.com/keys – zehntausende Webcams weltweit)</small>
-          <input type="password" data-key="windy" value="${escapeHtml(keys.windy ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">aisstream.io <small>(kostenloser Schlüssel von aisstream.io – Schiffe weltweit live)</small>
-          <input type="password" data-key="aisstream" value="${escapeHtml(keys.aisstream ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">US National Park Service <small>(kostenloser Schlüssel von nps.gov/subjects/developer – Nationalpark-Webcams)</small>
-          <input type="password" data-key="nps" value="${escapeHtml(keys.nps ?? '')}" placeholder="API-Key (optional – sonst gemeinsamer Snapshot)" autocomplete="off"/></label>
-        <label class="field-label">511 Ontario <small>(kostenlos: auf 511on.ca anmelden, Key auf der Developers-Seite anfordern – Verkehrskameras Ontario)</small>
-          <input type="password" data-key="ontario511" value="${escapeHtml(keys.ontario511 ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">511 Alberta <small>(kostenlos: auf 511.alberta.ca anmelden, Key auf der Developers-Seite anfordern – Verkehrskameras Alberta)</small>
-          <input type="password" data-key="alberta511" value="${escapeHtml(keys.alberta511 ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <h3>Nahverkehr live (optional)</h3>
-        <label class="field-label">Transport Victoria <small>(KeyId von opendata.transport.vic.gov.au – Melbourne: Züge, Trams, Busse)</small>
-          <input type="password" data-key="victoria" value="${escapeHtml(keys.victoria ?? '')}" placeholder="KeyId" autocomplete="off"/></label>
-        <label class="field-label">CTA Train Tracker <small>(Chicago „L“-Bahnen)</small>
-          <input type="password" data-key="cta" value="${escapeHtml(keys.cta ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">Trafiklab <small>(„GTFS Regional Realtime“ – Busse & Bahnen in Schweden)</small>
-          <input type="password" data-key="trafiklab" value="${escapeHtml(keys.trafiklab ?? '')}" placeholder="API-Key" autocomplete="off"/></label>
-        <label class="field-label">Daten-Proxy <small>(Cloudflare Worker für Flugdaten & OpenStreetMap – Anleitung im README${builtInProxy() ? '; leer lassen = eingebauter Proxy' : ''})</small>
-          <input type="url" data-key="adsbProxy" value="${escapeHtml(keys.adsbProxy ?? '')}" placeholder="${escapeHtml(builtInProxy() || 'https://mein-proxy.workers.dev/')}" autocomplete="off"/></label>
-        <label class="field-label">Radar-Server <small>(optional: eigener RainViewer-kompatibler Server, z. B. selbst gehostetes LibreWXR – ersetzt das eingeschränkte kostenlose RainViewer)</small>
-          <input type="url" data-key="radarHost" value="${escapeHtml(keys.radarHost ?? '')}" placeholder="https://radar.example.org" autocomplete="off"/></label>
-        <h3>Datenquellen</h3>
-        <div data-rdi></div>
-        <p class="small muted">Open-Meteo, RainViewer, DWD, EUMETSAT, NASA (GPM, EONET, GIBS, FIRMS), USGS, EMSC, NOAA/NWS, GDACS,
-        PEGELONLINE, Copernicus CAMS, NOAA NDBC/CO-OPS, Open-Meteo Marine, GEBCO, EMODnet, Iowa Environmental Mesonet, Environment Canada, EOX Sentinel-2, OpenTopoMap, AWS Terrain Tiles, adsb.lol, adsb.fi, OpenSky Network, SondeHub, Fintraffic Digitraffic (Straße, Schiene, See), Windy Webcams, DeFlock/deflock-data, NOAA SWPC, Smithsonian GVP, NIFC, NOAA Tsunami, BfS ODL, Safecast,
-        The Space Devs, aisstream.io, NGA World Port Index, Upply (UN/LOCODE), NASA GHRSST/AMSR2, Waymarked Trails, Wikidata, USGS MRDS, BGR, Macrostrat, ESA WorldCover, Radio Browser, TfL, Caltrans, Transitous, Amtraker, Entur, MBTA, SEPTA, TTC, data.gov.my, Transport Victoria, CTA, Trafiklab, OpenRailwayMap, Autobahn GmbH, NINA/BBK, CelesTrak, PeeringDB, WRI, OpenStreetMap/OpenFreeMap,
-        Overpass API, Blitzortung.org, EURDEP (JRC), Japan Meteorological Agency, Finnish Meteorological Institute, NOAA MRMS, NOAA SPC, Esri World Imagery, NASA Blue/Black Marble,
-        Bright Sky, BigDataCloud (Ortsname zum eigenen Standort), Nominatim/OpenStreetMap (Ortsname zum Kartenklick), Open-Meteo Geocoding/Flood (GloFAS), Global Shipping Lanes (P. Benden), PB2002 (Bird 2003), ALERTCalifornia, NYC DOT, DDOT,
-        511 Ontario/Alberta, Transport Department HK, LTA Singapur, US National Park Service, Vegagerðin (Island), NZTA (Neuseeland), Transport for NSW, City of Calgary, DriveBC (British Columbia).
-        Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.
-        <a href="https://github.com/malte9799/orbis/blob/main/docs/DATENQUELLEN.md" target="_blank" rel="noopener">Alle Quellen mit Lizenzen</a> ·
-        Software-Lizenzen: <a href="./licenses/maplibre-gl.txt" target="_blank">MapLibre GL</a>, <a href="./licenses/three.txt" target="_blank">three.js</a>,
-        <a href="./licenses/satellite.js.txt" target="_blank">satellite.js</a>, <a href="./licenses/draco.txt" target="_blank">Draco</a>, <a href="./licenses/flag-icons.txt" target="_blank">flag-icons</a>, <a href="./licenses/mapillary-js.txt" target="_blank">mapillary-js</a>.
-        Ein Klick auf die Karte zeigt das aktuelle Wetter an dieser Stelle.</p>
-        <div class="dialog-actions">
-          <button class="btn small" value="cancel" formnovalidate>Abbrechen</button>
-          <button class="btn small primary" value="save">Speichern</button>
-        </div>
-      </form>`;
-    mountRawDataLink(settings.querySelector<HTMLElement>('[data-rdi]')!, 'row', { beforeOpen: () => settings.close() });
-    settings.showModal();
-    settings.querySelector('form')!.addEventListener('submit', (e) => {
-      const submitter = (e as SubmitEvent).submitter as HTMLButtonElement | null;
-      if (submitter?.value !== 'save') return;
-      const get = (k: string) => settings.querySelector<HTMLInputElement>(`input[data-key=${k}]`)!.value.trim() || undefined;
-      const proxy = get('adsbProxy');
-      store.setKeys({ ...store.getKeys(), owm: get('owm'), firms: get('firms'), windy: get('windy'), aisstream: get('aisstream'), victoria: get('victoria'), cta: get('cta'), trafiklab: get('trafiklab'), nps: get('nps'), ontario511: get('ontario511'), alberta511: get('alberta511'), radarHost: /^https:\/\//.test(get('radarHost') ?? '') ? get('radarHost') : undefined, adsbProxy: proxy && /^https:\/\//.test(proxy) ? proxy : undefined });
-      feedData.firms.at = 0;
-      firmsOk = false;
+  const openSettingsDialog = () =>
+    openSettings(settings, () => {
+      ev.reset('firms');
       if (hud) applyKarte(hud.current());
-      applyGroups();
-      ensureFeeds();
+      ev.apply();
+      ev.ensure();
       extras?.resume();
       refreshHud();
       toast('Einstellungen gespeichert');
     });
-  };
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
@@ -694,25 +469,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!state.night) return;
     const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
     (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon(at));
-  }
-
-  function applyGroups() {
-    const on = GROUPS.filter((g) => state.groups[g.id]).map((g) => g.id);
-    const filter = ['in', ['get', 'group'], ['literal', on]] as const;
-    map?.setFilter('ev-circle', filter as never);
-    map?.setFilter('ev-glyph', filter as never);
-    // groups off = events layers visually AND formally hidden, so the attribution control
-    // drops the events sources (visibility 'none' is what counts, not empty features)
-    const evVisible = on.length > 0;
-    for (const id of ['ev-circle', 'ev-glyph']) vis(id, evVisible);
-    vis('quakes', !!state.groups.quakes);
-    vis('tracks', !!state.groups.storms);
-    vis('nws-fill', !!state.groups.tornado);
-    vis('nws-line', !!state.groups.tornado);
-    // clickable points (own key or shared snapshot) when available, else the raster image
-    vis('firms', !!state.groups.hotspots && firmsOk);
-    // the coarse raster is only a fallback once the point feed has actually failed (avoids a flash of other dots)
-    vis('hotspots', !!state.groups.hotspots && !firmsOk && feedData.firms.at > 0);
   }
 
   // ----- forecast model ----------------------------------------------------
@@ -1406,10 +1162,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       applyPadding();
       applyBase();
       applyNight();
-      applyGroups();
+      ev.apply();
       applyOverlay();
-      syncEventSources();
-      ensureFeeds();
+      ev.sync();
+      ev.ensure();
       if (pendingFocus) {
         focusPlace(pendingFocus.lat, pendingFocus.lon, pendingFocus.zoom, true);
         pendingFocus = null;
@@ -1591,7 +1347,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     apply: applyKarte,
     info: layerInfo,
     legend: legendInfo,
-    events: eventList,
+    events: (hours) => ev.list(hours),
     families,
     view: (): KView => {
       const c = map?.getCenter();
@@ -1614,7 +1370,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       store.setLastPlace(p);
       focusPlace(p.lat, p.lon, 7, true);
     },
-    openSettings,
+    openSettings: openSettingsDialog,
     layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
@@ -1654,7 +1410,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hasPos) focusPlace(focus!.lat!, focus!.lon!, focus!.zoom ?? 6, !focus!.fromSpace);
       clearInterval(refreshTimer);
       refreshTimer = window.setInterval(() => {
-        ensureFeeds(true);
+        ev.ensure(true);
         if (state.overlay === 'radar') ensureRadar();
       }, REFRESH_MS);
       // Live image layers: bust the tile cache so new scans appear (DWD radar: every 5 min)
