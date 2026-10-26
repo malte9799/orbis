@@ -12,7 +12,7 @@ import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, hasWindyKey, loadAlpr,
 import { LightningStream, LIGHTNING_LINES_MS, LIGHTNING_THUNDER_MS } from '../api/lightning';
 import { loadAurora, loadFirePerimeters, loadGvpVolcanoes, loadRadiation, loadSpaceWeather, loadTsunami } from '../api/earth';
 import { loadPorts } from '../api/ports';
-import { loadBuoys, loadRivers, loadTideDetails, loadTideStations, loadWaves } from '../api/ocean';
+import { loadRivers, loadWaves } from '../api/ocean';
 import {
   AisStream,
   countdown,
@@ -33,12 +33,13 @@ import { camFeedsInView, SNAPSHOT_CAMS } from '../api/camfeeds';
 import { snapshotJson } from '../api/data';
 import { loadNearbyStations, loadTopStations } from '../api/radio';
 import { isSuperseded } from '../api/overpass';
-import { BGR_KOR250_TILES, loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
+import { loadMrds, loadOsmResources, loadPipelines, loadWikidataResources } from '../api/resources';
 import { playStation, radioPopupExtra } from './player';
-import { escapeHtml, fetchJson as fetchJsonExt, fmt, safeUrl } from '../util';
+import { escapeHtml, fmt, safeUrl } from '../util';
 import { weatherIcon } from '../weather';
 import { ensureWeatherIcons, registerSilhouettes, type GlyphId } from './icons';
-import { EXTRAS, LAYERS, type ExtraId } from './layers';
+import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId } from './layers';
+import { JMA_RADAR_TILES } from './layers/shared/tiles';
 import { AIRPORT_FAR } from './layers/defs/airports';
 import { cardHtml } from './popup';
 import { AIRPORT_ZOOM, Airport3D } from './airport3d';
@@ -50,7 +51,6 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 export type { ExtraDef, ExtraId, SectionId } from './layers';
 export { EXTRAS, EXTRA_CLICK_LAYERS, SECTIONS } from './layers';
 
-const JMA_RADAR_TILES = (base: string, valid = base) => `https://www.jma.go.jp/bosai/jmatile/data/nowc/${base}/none/${valid}/surf/hrpns/{z}/{x}/{y}.png`;
 
 /** which power-plant categories each extra shows – all extras share the same point layers */
 const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
@@ -324,10 +324,23 @@ export class ExtraLayers {
   private lightningAudio: AudioContext | null = null;
   private lightningLastTick = 0;
 
+  /** what the layer modules (globe/layers/defs) get to work with */
+  private ctx: ExtraCtx;
+
   constructor(
     private map: MlMap,
     private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void },
-  ) {}
+  ) {
+    this.ctx = {
+      map,
+      hidden: { visibility: 'none' },
+      add: (layer, before) => {
+        if (!map.getLayer(layer.id)) map.addLayer(layer, before && map.getLayer(before) ? before : undefined);
+      },
+      setData: (source, data) => this.setData(source, data),
+      loadOnce: (id, maxAge, fn) => this.loadOnce(id, maxAge, fn),
+    };
+  }
 
   /** Adds runtime sources/layers; call once after the style has loaded. */
   init() {
@@ -364,14 +377,9 @@ export class ExtraLayers {
       radio: 'Radiosender: <a href="https://www.radio-browser.info/">Radio Browser</a>',
       resources: 'Rohstoffe: <a href="https://www.wikidata.org/">Wikidata</a>, <a href="https://mrdata.usgs.gov/mrds/">USGS MRDS</a>, © OpenStreetMap',
       pipelines: 'Pipelines: © OpenStreetMap-Mitwirkende',
-      waves: 'Seegang: <a href="https://open-meteo.com/en/docs/marine-weather-api">Open-Meteo Marine</a> (CC BY 4.0)',
-      rivers: 'Flüsse: <a href="https://open-meteo.com/en/docs/flood-api">Open-Meteo Flood</a> / GloFAS (CC BY 4.0)',
       ports: 'Häfen: <a href="https://msi.nga.mil/Publications/WPI">NGA World Port Index</a>, UN/LOCODE von <a href="https://opendata.upply.com/seaports">Upply</a> (CC BY 4.0)',
-      buoys: 'Bojen: <a href="https://www.ndbc.noaa.gov/">NOAA NDBC</a>',
-      tides: 'Pegel: <a href="https://tidesandcurrents.noaa.gov/">NOAA CO-OPS</a>',
-      plates: 'Plattengrenzen: Bird (2003), <a href="https://github.com/fraxen/tectonicplates">fraxen/tectonicplates</a>',
     };
-    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines', 'plates', 'waves', 'rivers', 'buoys', 'tides']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'ship-lanes', 'cables', 'ixp', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'webcams', 'webcams-world', 'webcams-osm', 'webcams-fov', 'alpr', 'alpr-fov', 'blitzer', 'aurora', 'gvp', 'fireareas', 'tsunami', 'lightning', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-thunder', 'airports-far', 'radiation', 'launches', 'launch-live', 'launch-live-line', 'ships', 'trains', 'autobahn', 'autobahn-line', 'nina', 'busnet', 'busnet-stops', 'radio', 'resources', 'pipelines']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
@@ -470,47 +478,6 @@ export class ExtraLayers {
       'gauges',
     );
     // earth observation & geology (raster overlays, below labels)
-    const gibsWms = (layer: string, time?: string) =>
-      `https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${layer}&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256${time ? `&TIME=${time}` : ''}`;
-    const overlay = (id: string, tiles: string[], attribution: string, maxzoom: number, opacity: number, extra: Record<string, unknown> = {}) => {
-      if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution, ...extra });
-      add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
-    };
-    overlay('ndvi', [gibsWms('MODIS_Terra_NDVI_8Day')], 'Vegetation: NASA MODIS NDVI', 9, 0.75);
-    overlay('lst', [gibsWms('MODIS_Terra_Land_Surface_Temp_Day')], 'Bodentemperatur: NASA MODIS', 7, 0.75);
-    overlay('snowcover', [gibsWms('MODIS_Terra_NDSI_Snow_Cover')], 'Schneedecke: NASA MODIS', 8, 0.85);
-    overlay('aerosol', [gibsWms('MODIS_Combined_Value_Added_AOD')], 'Aerosole: NASA MODIS', 6, 0.75);
-    overlay(
-      'landcover',
-      ['https://wmts.terrascope.be/?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=esa-worldcover-map-10m-2021-v2_map&STYLE=default&FORMAT=image/png&TILEMATRIXSET=EPSG:3857&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&TIME=2021-01-01'],
-      'Landbedeckung: © ESA WorldCover 2021 (CC BY 4.0)',
-      // 10 m data: zoom 14 is full resolution; the service has no tiles below zoom 6
-      14,
-      0.75,
-      { minzoom: 6 },
-    );
-    overlay('gebco', ['https://wms.gebco.net/mapserv?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=GEBCO_LATEST&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Meerestiefe: <a href="https://www.gebco.net/">GEBCO</a> (nicht zur Navigation)', 10, 0.8);
-    overlay('emodnet', ['https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png'], 'Europa: <a href="https://emodnet.ec.europa.eu/">EMODnet Bathymetry</a> (CC BY 4.0, nicht zur Navigation)', 11, 0.85, { bounds: [-36, 15, 43, 74] });
-    // daily ocean-colour swaths (and clouds) leave gaps: three satellites stacked cover the oceans
-    const chlDay = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    overlay('chlorophyll-pace', [gibsWms('OCI_PACE_Chlorophyll_a', chlDay)], 'Chlorophyll: NASA PACE / GIBS', 7, 0.8);
-    overlay('chlorophyll-n20', [gibsWms('VIIRS_NOAA20_Chlorophyll_a', chlDay)], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
-    overlay('chlorophyll', [gibsWms('VIIRS_SNPP_L2_Chlorophyll_A', chlDay)], 'Chlorophyll: NASA VIIRS / GIBS', 7, 0.8);
-    overlay('nexrad', ['https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png'], 'Radar USA: NOAA NEXRAD via <a href="https://mesonet.agron.iastate.edu/">Iowa Environmental Mesonet</a>', 9, 0.8, { bounds: [-130, 20, -60, 52] });
-    overlay('ecradar', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RRAI&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.8, { bounds: [-141, 41, -52, 70] });
-    overlay('fmiradar', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_dbz_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar Finnland: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
-    const noaaWms = (region: string) => `https://opengeo.ncep.noaa.gov/geoserver/${region}/ows?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=${region}_bref_qcd&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256`;
-    const noaaCredit = 'Radar: <a href="https://www.nssl.noaa.gov/projects/mrms/">NOAA MRMS</a>';
-    overlay('noaa-ak', [noaaWms('alaska')], noaaCredit, 9, 0.8, { bounds: [-170, 51, -129, 72] });
-    overlay('noaa-hi', [noaaWms('hawaii')], noaaCredit, 9, 0.8, { bounds: [-164, 17, -153, 24] });
-    overlay('noaa-pr', [noaaWms('carib')], noaaCredit, 9, 0.8, { bounds: [-70, 15, -62, 20] });
-    overlay('noaa-gu', [noaaWms('guam')], noaaCredit, 9, 0.8, { bounds: [142, 11, 148, 16] });
-    // JMA tiles are addressed by scan time – the newest one is looked up in loadJmaRadar()
-    overlay('jmaradar', [JMA_RADAR_TILES('20000101000000')], 'Radar Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
-    overlay('dwdnowcast', ['https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Radar_wn-product_1x1km_ger&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Radar-Nowcast: © <a href="https://www.dwd.de/">DWD</a> (CC BY 4.0)', 9, 0.85, { bounds: [1, 44, 20, 56] });
-    overlay('ecsnow', ['https://geo.weather.gc.ca/geomet?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=RADAR_1KM_RSNO&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Schneeradar Kanada: © <a href="https://eccc-msc.github.io/open-data/">Environment Canada</a> (Open Government Licence)', 9, 0.85, { bounds: [-141, 41, -52, 70] });
-    overlay('fmirain24', ['https://openwms.fmi.fi/geoserver/wms?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Radar:suomi_rr24h_eureffin&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256'], 'Regensumme: © <a href="https://en.ilmatieteenlaitos.fi/open-data">Finnish Meteorological Institute</a> (CC BY 4.0)', 9, 0.8, { bounds: [18, 58, 33, 71] });
-    overlay('jmanowcast', [JMA_RADAR_TILES('20000101000000')], 'Radar-Nowcast Japan: © <a href="https://www.jma.go.jp/">Japan Meteorological Agency</a>', 10, 0.8, { bounds: [118, 20, 150, 48] });
     // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der
     // Anpassung der echten Höhen (Gebirge, 3D-Flugzeuge/Sonden/Boote), wird nie als Ebene gezeichnet
     registerDemTiles();
@@ -528,18 +495,6 @@ export class ExtraLayers {
           '<a href="https://registry.opendata.aws/terrain-tiles/">AWS Terrain Tiles</a>',
       });
     }
-    overlay('geology', ['https://tiles.macrostrat.org/carto/{z}/{x}/{y}.png'], 'Geologie: <a href="https://macrostrat.org/">Macrostrat</a> (CC BY 4.0)', 18, 0.65);
-    overlay('kor250', [BGR_KOR250_TILES], 'Rohstoffe DE: © BGR, KOR250', 18, 0.8, { minzoom: 6, bounds: [5.5, 47, 15.5, 55.2] });
-    add(
-      {
-        id: 'plates',
-        type: 'line',
-        source: 'plates',
-        layout: { ...hidden, 'line-join': 'round' },
-        paint: { 'line-color': '#ff5252', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 1.2, 8, 3], 'line-opacity': 0.85 },
-      },
-      'lbl-border-country',
-    );
     add(
       {
         id: 'pipelines',
@@ -758,59 +713,16 @@ export class ExtraLayers {
       },
       'marker',
     );
-    // ocean: wave grid, buoys, tide gauges
-    const waveLabel = (id: string, source: string): LayerSpecification => ({
-      id,
-      type: 'symbol',
-      source,
-      minzoom: 2,
-      layout: { ...hidden, 'text-field': ['get', 'label'], 'text-font': FONT_BOLD, 'text-size': 11, 'text-allow-overlap': false, 'text-optional': true },
-      paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(0,0,0,0.75)', 'text-halo-width': 1.2 },
-    });
-    add(
-      {
-        id: 'waves',
-        type: 'circle',
-        source: 'waves',
-        layout: hidden,
-        paint: { 'circle-color': ['get', 'color'], 'circle-opacity': 0.8, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 7, 8, 16], 'circle-stroke-color': 'rgba(0,0,0,0.4)', 'circle-stroke-width': 1 },
-      },
-      'gauges',
-    );
-    add(waveLabel('waves-label', 'waves'), 'marker');
-    add(
-      {
-        id: 'rivers',
-        type: 'circle',
-        source: 'rivers',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'q'] },
-        paint: { 'circle-color': ['get', 'color'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 4, 9, 11], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
-      },
-      'gauges',
-    );
-    add({ ...waveLabel('rivers-label', 'rivers'), minzoom: 5 }, 'marker');
-    add(
-      {
-        id: 'buoys',
-        type: 'circle',
-        source: 'buoys',
-        layout: { ...hidden, 'circle-sort-key': ['get', 'wave'] },
-        paint: { 'circle-color': ['get', 'color'], 'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 3, 9, 8], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
-      },
-      'gauges',
-    );
-    add({ ...waveLabel('buoys-label', 'buoys'), minzoom: 5 }, 'marker');
-    add(
-      {
-        id: 'tides',
-        type: 'circle',
-        source: 'tides',
-        minzoom: 3,
-        layout: hidden,
-        paint: { 'circle-color': '#42a5f5', 'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 2.5, 9, 6], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 },
-      },
-      'gauges',
-    );
+    // layers that live in their own module (globe/layers/defs)
+    for (const def of EXTRAS) {
+      for (const [id, attribution] of Object.entries(def.sources ?? {})) if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution });
+      for (const r of def.rasters ?? []) {
+        const { id, tiles, attribution, maxzoom, opacity, ...rest } = r;
+        if (!m.getSource(id)) m.addSource(id, { type: 'raster', tiles, tileSize: 256, maxzoom, attribution, ...rest });
+        add({ id, type: 'raster', source: id, layout: hidden, paint: { 'raster-opacity': opacity } }, 'lbl-border-country');
+      }
+      def.addLayers?.(this.ctx);
+    }
     add(
       {
         id: 'tsunami-ring',
@@ -1842,6 +1754,7 @@ export class ExtraLayers {
         this.clear(def.id);
         continue;
       }
+      def.enable?.(this.ctx);
       switch (def.id) {
         case 'cities':
           this.loadOnce('cities', 60 * 60000, () => this.loadCities());
@@ -1983,20 +1896,6 @@ export class ExtraLayers {
           this.every('lightning', 3000, () => this.updateLightning());
           this.updateLightning();
           break;
-        case 'buoys':
-          this.loadOnce('buoys', 10 * 60000, async () => {
-            const fc = await loadBuoys();
-            this.setData('buoys', fc);
-            return { count: fc.features.length, note: 'Farbe = Wellenhöhe, Zahl = Wellenhöhe in m (sonst Wind in kn)' };
-          });
-          break;
-        case 'tides':
-          this.loadOnce('tides', Infinity, async () => {
-            const fc = await loadTideStations();
-            this.setData('tides', fc);
-            return { count: fc.features.length, note: 'Klick auf einen Pegel zeigt Wasserstand & Gezeiten' };
-          });
-          break;
         case 'waves':
           this.loadWavesNow();
           break;
@@ -2077,13 +1976,6 @@ export class ExtraLayers {
           break;
         case 'pipelines':
           this.loadPipelinesNow();
-          break;
-        case 'plates':
-          this.loadOnce('plates', Infinity, async () => {
-            const fc = await fetchJsonExt<FeatureCollection>('https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json');
-            this.setData('plates', fc);
-            return { count: fc.features.length };
-          });
           break;
         case 'nina':
           this.loadOnce('nina', 5 * 60000, async () => {
@@ -3228,6 +3120,8 @@ export class ExtraLayers {
     const p = (tileCam ? alprTileProps(f.properties, pt[0], pt[1]) : f.properties) as Record<string, unknown>;
     const html = (glyph: GlyphId, color: string, extra?: string) =>
       cardHtml({ glyph, color, title: p.title, subtitle: p.subtitle, date: p.date, description: p.description, source: p.source, url: p.url, extra });
+    const handler = CLICK_HANDLERS.get(f.layer.id);
+    if (handler) return handler({ layerId: f.layer.id, p, pt, at, html });
     switch (tileCam ? 'alpr' : f.layer.id) {
       case 'cities':
         return { type: 'weather', lng: pt[0], lat: pt[1] };
@@ -3335,36 +3229,6 @@ export class ExtraLayers {
         return { type: 'html', html: html('fire', '#ff5722'), lng: at.lng, lat: at.lat };
       case 'tsunami':
         return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'buoys':
-        return { type: 'html', html: html('gauge', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'rivers':
-        return { type: 'html', html: html('flood', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'waves':
-        return { type: 'html', html: html('tsunami', String(p.color)), lng: pt[0], lat: pt[1] };
-      case 'tides': {
-        const id = String(p.id);
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'gauge', color: '#42a5f5', title: p.title, subtitle: p.subtitle, source: p.source, url: p.url, extra: '<div class="pop-loading small">Pegeldaten werden geladen …</div>' }),
-          lng: pt[0],
-          lat: pt[1],
-          after: (node) => {
-            loadTideDetails(id)
-              .then((d) => {
-                const t = (iso: string) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-                const rows: [string, string][] = [];
-                if (d.level) rows.push(['Wasserstand', `${fmt.num(d.level.v, 2)} m (über MLLW) · ${t(d.level.t)}`]);
-                for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${fmt.num(n.v, 2)} m`]);
-                const el = node.querySelector('.pop-loading');
-                if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
-              })
-              .catch(() => {
-                const el = node.querySelector('.pop-loading');
-                if (el) el.textContent = 'keine aktuellen Messwerte';
-              });
-          },
-        };
-      }
       case 'radiation':
         return { type: 'html', html: html('radiation', String(p.color)), lng: pt[0], lat: pt[1] };
       case 'lightning': {
@@ -3410,15 +3274,6 @@ export class ExtraLayers {
         return { type: 'html', html: cardHtml({ glyph: 'plant', color: String(p.color), title: p.title, subtitle: [p.catLabel, p.subtitle].filter(Boolean).join(' · '), source: p.source, url: p.url }), lng: pt[0], lat: pt[1] };
       case 'pipelines':
         return { type: 'html', html: html('cable', String(p.color)), lng: at.lng, lat: at.lat };
-      case 'plates': {
-        const t = { SUB: 'Subduktionszone', OSR: 'Ozeanischer Rücken', OTF: 'Transformstörung', CRB: 'Kontinentaler Grabenbruch', CTF: 'Kontinentale Transformstörung', CCB: 'Kontinentale Kollision', OCB: 'Ozeanische Kollision' } as Record<string, string>;
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'quake', color: '#ef5350', title: `Plattengrenze ${String(p.Name ?? '')}`, subtitle: [p.PlateA && p.PlateB ? `${p.PlateA} – ${p.PlateB}` : '', t[String(p.Type)] ?? p.Type].filter(Boolean).join(' · '), source: 'Bird (2003), PB2002' }),
-          lng: at.lng,
-          lat: at.lat,
-        };
-      }
       case 'radio':
         return {
           type: 'html',

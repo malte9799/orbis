@@ -1,4 +1,7 @@
+import type { FeatureCollection } from 'geojson';
+import type { LayerSpecification, Map as MlMap } from 'maplibre-gl';
 import type { GlyphId } from '../icons';
+import type { ClickResult } from '../extras';
 
 // One file per overlay layer lives in ./defs; ./index.ts collects them. A new layer is a new file
 // there – no shared list has to be edited, so parallel features do not collide.
@@ -7,6 +10,41 @@ import type { GlyphId } from '../icons';
 export type ExtraId = string;
 export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams';
 export type CatId = 'wetter' | 'gefahr' | 'verkehr' | 'meer' | 'erde' | 'netze' | 'medien';
+
+/** a raster tile overlay (map layer and source share the id) */
+export interface RasterSpec {
+  id: string;
+  tiles: string[];
+  attribution: string;
+  maxzoom: number;
+  opacity: number;
+  minzoom?: number;
+  bounds?: [number, number, number, number];
+}
+
+/** What a layer module can use of the map and of ExtraLayers. */
+export interface ExtraCtx {
+  map: MlMap;
+  /** layout for layers that start switched off */
+  hidden: { visibility: 'none' };
+  /** adds the layer unless it exists; with `before` below that layer (when present) */
+  add(layer: LayerSpecification, before?: string): void;
+  setData(source: string, data: FeatureCollection): void;
+  /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
+  loadOnce(id: ExtraId, maxAge: number, fn: () => Promise<{ count?: number; note?: string } | void>): void;
+}
+
+/** A clicked feature of one of the layer's `clickLayers`. */
+export interface ClickCtx {
+  layerId: string;
+  /** properties of the feature */
+  p: Record<string, unknown>;
+  /** point of the feature (or the click for lines/areas) */
+  pt: number[];
+  at: { lng: number; lat: number };
+  /** standard popup card from the feature's title/subtitle/… properties */
+  html(glyph: GlyphId, color: string, extra?: string): string;
+}
 
 export interface ExtraDef {
   id: ExtraId;
@@ -24,6 +62,16 @@ export interface ExtraDef {
   color: string;
   /** small tag for region-only layers ("DE", "USA" …) */
   region?: string;
+  /** raster tile overlays of this layer (added below the labels, in this order) */
+  rasters?: RasterSpec[];
+  /** empty GeoJSON sources this layer owns: id → attribution */
+  sources?: Record<string, string>;
+  /** adds the map layers (once, after the style has loaded) */
+  addLayers?(ctx: ExtraCtx): void;
+  /** called whenever the layer is on and the state is applied – start loading/refreshing here */
+  enable?(ctx: ExtraCtx): void;
+  /** answers a click on one of `clickLayers` */
+  click?(c: ClickCtx): ClickResult | null;
   /** map layers switched together with this extra */
   layers: string[];
   /** of those (or other shared ones) the layers that answer clicks */

@@ -18,3 +18,16 @@ export default defineExtra({
 `ExtraId`, `EXTRAS`, `LAYERS`, `EXTRA_CLICK_LAYERS` und der Katalog werden daraus abgeleitet
 (`import.meta.glob`), es muss keine gemeinsame Liste mehr angefasst werden. Die Logik (Quellen,
 Map-Layer, Laden, Klick) steckt noch in `src/globe/extras.ts`.
+
+## Layer mit eigener Logik
+
+`defineExtra` nimmt außerdem optional entgegen (siehe `src/globe/layers/types.ts`):
+
+- `rasters`: Raster-Overlays (Kachel-URL, Attribution, Zoom, Deckkraft, `bounds`) – komplett deklarativ
+- `sources`: leere GeoJSON-Quellen, die der Layer besitzt (`id → Attribution`)
+- `addLayers(ctx)`: legt die Map-Layer an (`ctx.add`, `ctx.hidden`)
+- `enable(ctx)`: wird bei jedem `apply()` aufgerufen, solange der Layer an ist (`ctx.loadOnce`, `ctx.setData`)
+- `click(c)`: Popup für einen Klick auf einen der `clickLayers`
+
+Beispiele: `tides.ts` (alles), `plates.ts`, `ndvi.ts` (nur Raster). Layer mit viel Zustand
+(Flugzeuge, Schiffe, Blitze …) hängen noch an der Klasse in `extras.ts`.

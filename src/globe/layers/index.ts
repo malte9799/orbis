@@ -1,6 +1,6 @@
 import type { ExtraDef, ExtraId, SectionId } from './types';
 
-export type { CatId, ExtraDef, ExtraId, SectionId } from './types';
+export type { CatId, ClickCtx, ExtraCtx, ExtraDef, ExtraId, RasterSpec, SectionId } from './types';
 
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
@@ -29,3 +29,8 @@ export const LAYERS: Record<ExtraId, string[]> = Object.fromEntries(EXTRAS.map((
 
 /** Interactive layers the extras answer clicks for. */
 export const EXTRA_CLICK_LAYERS: string[] = [...new Set(EXTRAS.flatMap((d) => d.clickLayers ?? []))];
+
+/** click handler per clickable map layer */
+export const CLICK_HANDLERS = new Map<string, NonNullable<ExtraDef['click']>>(
+  EXTRAS.flatMap((d) => (d.click ? (d.clickLayers ?? []).map((l) => [l, d.click!] as const) : [])),
+);

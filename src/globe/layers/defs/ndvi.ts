@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { gibsWms } from '../shared/tiles';
 
 export default defineExtra({
   id: 'ndvi',
@@ -10,5 +11,14 @@ export default defineExtra({
   glyph: 'wind',
   icon: 'leaf',
   color: '#66bb6a',
+  rasters: [
+      {
+        id: 'ndvi',
+        tiles: [gibsWms('MODIS_Terra_NDVI_8Day')],
+        attribution: 'Vegetation: NASA MODIS NDVI',
+        maxzoom: 9,
+        opacity: 0.75,
+      },
+  ],
   layers: ['ndvi'],
 });
