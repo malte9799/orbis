@@ -1,11 +1,10 @@
 import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
-import { loadOsmPower, loadPowerPlants, type PowerCat } from '../api/infra';
 import { ShipsLayer } from './ships3d';
 import { VehiclesLayer } from './vehicles3d';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
-import { AC_ALL_PAUSED, groundTrack, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSatellites, loadSatGroup, loadSondes, satelliteFeatures, satPopupInfo, type AircraftResult, type Sat } from '../api/tracking';
+import { AC_ALL_PAUSED, loadAircraft, loadAircraftByHex, loadGlobalAircraft, loadSondes, type AircraftResult } from '../api/tracking';
 import {
   AisStream,
   hasAisLive,
@@ -18,7 +17,6 @@ import {
 } from '../api/transport';
 import { loadAmtrak, loadSegments, modeStyle, positionsAt, RAIL_MODES, type Segment } from '../api/transit';
 import { feedsInView, vehicleFeatures } from '../api/vehicles';
-import { isSuperseded } from '../api/overpass';
 import { escapeHtml, fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
@@ -33,21 +31,6 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 export type { ExtraDef, ExtraId, SectionId } from './layers';
 export { EXTRAS, EXTRA_CLICK_LAYERS, SECTIONS } from './layers';
-
-
-/** which power-plant categories each extra shows – all extras share the same point layers */
-const POWER_CATS: Partial<Record<ExtraId, PowerCat[]>> = {
-  wind: ['wind'],
-  solar: ['solar'],
-  water: ['hydro'],
-  nuclear: ['nuclear'],
-  coal: ['coal'],
-  gas: ['gas'],
-  oil: ['oil'],
-  biomass: ['biomass'],
-  plants: ['other'],
-};
-const POWER_EXTRAS = Object.keys(POWER_CATS) as ExtraId[];
 
 
 export type ClickResult =
@@ -147,14 +130,6 @@ export class ExtraLayers {
   private on = new Set<ExtraId>();
   private info: Partial<Record<ExtraId, Info>> = {};
   private timers: Partial<Record<string, number>> = {};
-  private sats: Sat[] = [];
-  private starlink: Sat[] = [];
-  private satsLoading: Promise<void> | null = null;
-  private starlinkLoading: Promise<void> | null = null;
-  private powerLoaded = false;
-  private powerLoading: Promise<void> | null = null;
-  private powerCounts: Record<PowerCat, number> = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
-  private osmPowerKey = '';
   private aircraftSeq = 0;
   private aircraftBusy = false;
   private aircraftAgain = false;
@@ -233,54 +208,18 @@ export class ExtraLayers {
     const m = this.map;
     registerSilhouettes(m);
     const ATTR: Record<string, string> = {
-      power: 'Kraftwerke: <a href="https://datasets.wri.org/dataset/globalpowerplantdatabase">WRI GPPD, CC BY 4.0</a>',
       aircraft: 'Flugdaten: <a href="https://adsb.lol/">adsb.lol</a> (ODbL), <a href="https://adsb.fi/">adsb.fi</a>, <a href="https://opensky-network.org/">OpenSky</a>',
       sondes: 'Radiosonden: <a href="https://sondehub.org/">SondeHub</a>',
-      sats: 'Bahndaten: <a href="https://celestrak.org/">CelesTrak</a>',
       'launch-live': 'Raketenstarts: <a href="https://thespacedevs.com/">The Space Devs</a>',
       ships: 'AIS: <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://aisstream.io/">aisstream.io</a>',
       trains: 'Züge & ÖPNV: <a href="https://transitous.org/">Transitous</a>, <a href="https://www.digitraffic.fi/">Fintraffic</a> (CC BY 4.0), <a href="https://amtraker.com/">Amtraker</a>, Entur (NLOD), MBTA, SEPTA, TTC (OGL – Toronto), data.gov.my (CC BY 4.0), Transport Victoria (CC BY 4.0), CTA, Trafiklab',
     };
-    for (const id of ['ports', 'power', 'osm-power', 'aircraft', 'aircraft-rotor', 'sondes', 'sats', 'sat-track', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
+    for (const id of ['ports', 'aircraft', 'aircraft-rotor', 'sondes', 'launch-live', 'launch-live-line', 'ships', 'trains', 'busnet-stops']) {      if (!m.getSource(id)) m.addSource(id, { type: 'geojson', data: empty(), attribution: ATTR[id] });
     }
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
       if (!m.getLayer(layer.id)) m.addLayer(layer, before && m.getLayer(before) ? before : undefined);
     };
-    // points: below the event icons
-    add(
-      {
-        id: 'power',
-        type: 'circle',
-        source: 'power',
-        filter: ['in', ['get', 'cat'], ['literal', []]],
-        layout: { 'circle-sort-key': ['get', 'mw'] },
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 2, ['max', 1.5, ['*', 0.09, ['sqrt', ['get', 'mw']]]], 8, ['max', 3, ['*', 0.4, ['sqrt', ['get', 'mw']]]]],
-          'circle-opacity': 0.85,
-          'circle-stroke-color': 'rgba(0,0,0,0.45)',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 3, 0, 7, 0.8],
-        },
-      },
-      'gauges',
-    );
-    add(
-      {
-        id: 'osm-power',
-        type: 'circle',
-        source: 'osm-power',
-        minzoom: 10,
-        filter: ['in', ['get', 'cat'], ['literal', []]],
-        paint: {
-          'circle-color': ['get', 'color'],
-          'circle-radius': ['case', ['get', 'turbine'], 3.5, 6],
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 1,
-        },
-      },
-      'gauges',
-    );
     // earth observation & geology (raster overlays, below labels)
     // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der
     // Anpassung der echten Höhen (Gebirge, 3D-Flugzeuge/Sonden/Boote), wird nie als Ebene gezeichnet
@@ -480,68 +419,6 @@ export class ExtraLayers {
           'text-optional': true,
         },
         paint: { 'text-color': '#ff8a65', 'text-halo-color': 'rgba(0,0,0,0.85)', 'text-halo-width': 1.3 },
-      },
-      'marker',
-    );
-    // moving objects on top
-    add(
-      {
-        id: 'sat-track',
-        type: 'line',
-        source: 'sat-track',
-        layout: hidden,
-        paint: { 'line-color': '#ffd23f', 'line-width': 1.5, 'line-dasharray': [2, 2], 'line-opacity': 0.9 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'sats-dot',
-        type: 'circle',
-        source: 'sats',
-        filter: ['==', ['get', 'group'], 'starlink'],
-        layout: hidden,
-        paint: { 'circle-color': '#c7d0e8', 'circle-radius': 1.6, 'circle-opacity': 0.8 },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'sats-icon',
-        type: 'symbol',
-        source: 'sats',
-        filter: ['!=', ['get', 'group'], 'starlink'],
-        layout: {
-          ...hidden,
-          'icon-image': 'sil-satellite',
-          'icon-size': ['case', ['==', ['get', 'group'], 'stations'], 0.9, 0.55],
-          'icon-allow-overlap': true,
-        },
-        paint: {
-          'icon-color': ['match', ['get', 'group'], 'stations', '#ffd23f', 'weather', '#4fc3f7', 'gps-ops', '#7bd389', 'galileo', '#7bd389', '#d1b3ff'],
-          'icon-halo-color': 'rgba(0,0,0,0.7)',
-          'icon-halo-width': 1,
-        },
-      },
-      'marker',
-    );
-    add(
-      {
-        id: 'sats-label',
-        type: 'symbol',
-        source: 'sats',
-        filter: ['any', ['==', ['get', 'group'], 'stations'], ['==', ['get', 'group'], 'weather']],
-        minzoom: 2,
-        layout: {
-          ...hidden,
-          'text-field': ['get', 'name'],
-          'text-font': FONT_REGULAR,
-          'text-size': 10,
-          'text-offset': [0, 1.1],
-          'text-anchor': 'top',
-          'text-optional': true,
-        },
-        paint: { 'text-color': '#ffe9a8', 'text-halo-color': 'rgba(0,0,0,0.8)', 'text-halo-width': 1.2 },
       },
       'marker',
     );
@@ -784,7 +661,6 @@ export class ExtraLayers {
     if (this.on.has('trains') || this.on.has('transit')) this.loadFeedsNow();
     if (this.on.has('trains') || this.on.has('transit')) this.loadSegmentsNow();
     if (this.on.has('ships') && this.ais) this.ais.start(this.viewBounds(4));
-    if (POWER_EXTRAS.some((id) => this.on.has(id))) this.loadOsmPowerNow();
   }
 
   // -------------------------------------------------------------------------
@@ -821,10 +697,6 @@ export class ExtraLayers {
     for (const l of new Set(Object.values(LAYERS).flat())) this.vis(l, visible.has(l));
     // layers that were added lazily pick up the chosen opacity now
     for (const id of this.on) if ((this.opacity[id] ?? 1) !== 1) this.applyOpacity(id);
-    // power plants share layers – filter by the categories of the enabled extras
-    const cats = [...new Set(POWER_EXTRAS.filter((id) => this.on.has(id)).flatMap((id) => POWER_CATS[id]!))];
-    this.map.setFilter('power', ['in', ['get', 'cat'], ['literal', cats]]);
-    this.map.setFilter('osm-power', ['in', ['get', 'cat'], ['literal', cats]]);
 
     // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
     this.airport3d?.configure({ layout: this.on.has('airport3d'), planes: this.wantsAircraft(), icons: this.on.has('aircraft') });
@@ -874,21 +746,6 @@ export class ExtraLayers {
             return { count: fc.features.length };
           });
           break;
-        case 'sats':
-        case 'starlink':
-          this.startSatellites();
-          break;
-          break;
-        case 'wind':
-        case 'solar':
-        case 'water':
-        case 'nuclear':
-        case 'coal':
-        case 'gas':
-        case 'oil':
-        case 'biomass':
-        case 'plants':
-          this.ensurePower();
           break;
         case 'ships':
           this.loadOnce('ships', 60000, () => this.loadShips());
@@ -903,7 +760,6 @@ export class ExtraLayers {
           break;
       }
     }
-    if (!this.on.has('sats') && !this.on.has('starlink')) this.clear('sat-pos');
     if (this.on.has('trains') || this.on.has('transit')) {
       this.loadSegmentsNow();
       this.every('veh-anim', 2000, () => this.updateVehicles());
@@ -1149,95 +1005,6 @@ export class ExtraLayers {
     this.airport3d?.fitTrail(`sonde:${serial}`);
   }
 
-  private startSatellites() {
-    const wantBase = this.on.has('sats');
-    const wantStarlink = this.on.has('starlink');
-    if (wantBase && !this.sats.length && !this.satsLoading) {
-      this.set('sats', { loading: true });
-      this.satsLoading = loadSatellites()
-        .then((s) => {
-          this.sats = s;
-          this.set('sats', { loading: false, count: s.length });
-        })
-        .catch(() => {
-          this.set('sats', { loading: false, note: 'CelesTrak nicht erreichbar' });
-          this.hooks.toast('Satellitendaten (CelesTrak) konnten nicht geladen werden.');
-        })
-        .finally(() => {
-          this.satsLoading = null;
-          this.updateSatPositions();
-        });
-    }
-    if (wantStarlink && !this.starlink.length && !this.starlinkLoading) {
-      this.set('starlink', { loading: true });
-      this.starlinkLoading = loadSatGroup('starlink')
-        .then((s) => {
-          this.starlink = s;
-          this.set('starlink', { loading: false, count: s.length });
-        })
-        .catch(() => this.set('starlink', { loading: false, note: 'CelesTrak nicht erreichbar' }))
-        .finally(() => {
-          this.starlinkLoading = null;
-          this.updateSatPositions();
-        });
-    }
-    this.updateSatPositions();
-    this.clear('sat-pos');
-    this.every('sat-pos', wantStarlink ? 4000 : 2000, () => this.updateSatPositions());
-  }
-
-  private updateSatPositions() {
-    const list = [...(this.on.has('sats') ? this.sats : []), ...(this.on.has('starlink') ? this.starlink : [])];
-    this.setData('sats', satelliteFeatures(list));
-  }
-
-  private ensurePower() {
-    if (!this.powerLoaded && !this.powerLoading) {
-      for (const id of POWER_EXTRAS) if (this.on.has(id)) this.set(id, { loading: true });
-      this.powerLoading = loadPowerPlants()
-        .then((fc) => {
-          this.powerLoaded = true;
-          this.setData('power', fc);
-          this.powerCounts = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
-          for (const f of fc.features) this.powerCounts[f.properties!.cat as PowerCat]++;
-        })
-        .catch(() => this.hooks.toast('Kraftwerksdatenbank konnte nicht geladen werden.'))
-        .finally(() => {
-          this.powerLoading = null;
-          for (const id of POWER_EXTRAS) {
-            this.set(id, { loading: false, count: this.powerLoaded ? this.powerCounts[POWER_CATS[id]![0]] : undefined });
-          }
-        });
-    }
-    this.loadOsmPowerNow();
-  }
-
-  private loadOsmPowerNow() {
-    const m = this.map;
-    if (m.getZoom() < 10) return;
-    const b = m.getBounds();
-    // snap to a grid so small pans reuse the last result
-    const snap = (v: number, f: (x: number) => number) => f(v * 20) / 20;
-    const bounds = {
-      west: snap(b.getWest(), Math.floor),
-      south: snap(b.getSouth(), Math.floor),
-      east: snap(b.getEast(), Math.ceil),
-      north: snap(b.getNorth(), Math.ceil),
-    };
-    const key = Object.values(bounds).join(',');
-    if (key === this.osmPowerKey) return;
-    this.osmPowerKey = key;
-    loadOsmPower(bounds)
-      .then((fc) => {
-        if (this.osmPowerKey === key) this.setData('osm-power', fc);
-      })
-      .catch((e) => {
-        if (isSuperseded(e) || this.osmPowerKey !== key) return;
-        console.warn('Overpass', e);
-        this.osmPowerKey = '';
-      });
-  }
-
   // -------------------------------------------------------------------------
   // Trains & public transport
 
@@ -1454,19 +1221,6 @@ export class ExtraLayers {
       case 'aircraft-vehicle':
       case 'ap3d-hit':
         return { type: 'flight', hex: String(p.hex), lng: pt[0], lat: pt[1] };
-      case 'sats-icon':
-      case 'sats-dot': {
-        const sat = [...this.sats, ...this.starlink].find((s) => s.id === p.id);
-        if (!sat) return null;
-        const info = satPopupInfo(sat);
-        this.setData('sat-track', groundTrack(sat));
-        return {
-          type: 'html',
-          html: cardHtml({ glyph: 'satellite', color: '#b388ff', title: info.title, subtitle: info.subtitle, description: info.details, source: 'CelesTrak', url: info.url }),
-          lng: pt[0],
-          lat: pt[1],
-        };
-      }
       case 'ships':
         return { type: 'ship', mmsi: Number(p.mmsi), lng: pt[0], lat: pt[1] };
       case 'trains':
@@ -1504,11 +1258,6 @@ export class ExtraLayers {
               .catch(() => node.querySelector('.pop-loading')?.remove());
           },
         };
-      }
-      case 'power':
-      case 'osm-power': {
-        const glyph: GlyphId = p.cat === 'wind' ? 'wind' : p.cat === 'solar' ? 'solar' : p.cat === 'hydro' ? 'hydro' : p.cat === 'nuclear' ? 'radiation' : 'plant';
-        return { type: 'html', html: html(glyph, String(p.color)), lng: pt[0], lat: pt[1] };
       }
     }
     return null;
