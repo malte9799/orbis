@@ -1,7 +1,11 @@
+import { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU, type TrafficCat, type WxFamily, type WxMenuItem } from './menus';
 import type { ExtraId } from '../globe/extras';
 import { EXTRAS, type CatId } from '../globe/layers';
 import type { EventKind } from '../api/events';
 import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
+
+export { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU };
+export type { TrafficCat, WxFamily, WxMenuItem };
 
 // What can be put on a Karte: weather main layers, overlay layers (extras + event groups) in flat
 // categories, and the base maps. Pure data – no map access.
@@ -28,53 +32,6 @@ export const LINKED_GROUP: Partial<Record<GroupId, GroupId>> = { fires: 'hotspot
 // ---------------------------------------------------------------------------
 // Weather main layers (at most one per Karte)
 
-export interface WxFamily {
-  id: string;
-  label: string;
-  hint: string;
-  icon: string;
-  color: string;
-  variants: [string, string][];
-}
-
-export const WX_FAMILIES: WxFamily[] = [
-  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar', icon: 'radar', color: '#4f8dff', variants: [['radar', 'Regen (RainViewer)'], ['dwd-radar', 'Deutschland (DWD)']] },
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Live-Daten', icon: 'sat', color: '#8a94a8', variants: [['sat-hd', 'HD'], ['sat-ir', 'Wolken (IR)'], ['imerg', 'Niederschlag'], ['sat-storm', 'Gewitter live']] },
-  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', variants: [['wind', 'Mittelwind'], ['gusts', 'Böen']] },
-  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund', icon: 'thermo', color: '#ff8a4c', variants: [['temp', 'Luft'], ['feels', 'Gefühlt'], ['dewpoint', 'Taupunkt']] },
-  { id: 'precip', label: 'Niederschlag', hint: 'Vorhersage (Modell)', icon: 'drop', color: '#3db8ff', variants: [['precip', '']] },
-  { id: 'cloud', label: 'Wolken', hint: 'Vorhersage: Bewölkung', icon: 'cloud', color: '#b8c2d6', variants: [['cloud', '']] },
-  { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', icon: 'gauge', color: '#a58bff', variants: [['pressure', '']] },
-  { id: 'humidity', label: 'Feuchte', hint: 'Vorhersage: relative Luftfeuchtigkeit', icon: 'humid', color: '#4fc3c8', variants: [['humidity', '']] },
-  { id: 'snow', label: 'Schnee', hint: 'Vorhersage: Schneehöhe', icon: 'snow', color: '#d8e8ff', variants: [['snow', '']] },
-  { id: 'ocean', label: 'Ozean', hint: 'Satellit (NASA, täglich): Meerestemperatur & Meereis', icon: 'ocean', color: '#2aa8c8', variants: [['water', 'Meer + Eis'], ['sst', 'Meerestemperatur'], ['seaice', 'Meereis']] },
-  { id: 'cape', label: 'Gewitter', hint: 'Vorhersage: Gewitterenergie (CAPE)', icon: 'bolt', color: '#ffcc33', variants: [['cape', '']] },
-];
-
-/**
- * The curated weather menu under the Karten bar. Every entry points at a weather layer of
- * WX_FAMILIES (family + variant), so the menu and the editing stack always show the same choice.
- * A single entry without a label switches directly.
- */
-export interface WxMenuItem {
-  id: string;
-  label: string;
-  hint: string;
-  icon: string;
-  color: string;
-  subs: { label: string; main: string; mainVar: string }[];
-}
-export const WX_MENU: WxMenuItem[] = [
-  { id: 'sat', label: 'Satellit', hint: 'HD-Tagesbild (VIIRS) und Wolken (IR)', icon: 'sat', color: '#8a94a8', subs: [{ label: 'HD', main: 'sat', mainVar: 'sat-hd' }, { label: 'Wolken', main: 'sat', mainVar: 'sat-ir' }] },
-  { id: 'radar', label: 'Radar', hint: 'Live-Niederschlagsradar (RainViewer)', icon: 'radar', color: '#4f8dff', subs: [{ label: '', main: 'radar', mainVar: 'radar' }] },
-  { id: 'precip', label: 'Niederschlag', hint: 'Satellit (NASA IMERG) und Schneehöhe', icon: 'drop', color: '#3db8ff', subs: [{ label: 'Satellit', main: 'sat', mainVar: 'imerg' }, { label: 'Schnee', main: 'snow', mainVar: 'snow' }] },
-  { id: 'storm', label: 'Gewitter', hint: 'Blitze live, CAPE-Vorhersage und Satellit live (Meteosat)', icon: 'bolt', color: '#ffcc33', subs: [{ label: 'Blitze Live', main: 'lightning', mainVar: 'lightning' }, { label: 'Vorhersage', main: 'cape', mainVar: 'cape' }, { label: 'Live', main: 'sat', mainVar: 'sat-storm' }] },
-  { id: 'wind', label: 'Wind', hint: 'Vorhersage, mit Windpartikeln', icon: 'wind', color: '#36c2a8', subs: [{ label: 'Stärke', main: 'wind', mainVar: 'wind' }, { label: 'Böen', main: 'wind', mainVar: 'gusts' }] },
-  { id: 'temp', label: 'Temperatur', hint: 'Vorhersage, 2 m über Grund; Wasser: Satellit (NASA)', icon: 'thermo', color: '#ff8a4c', subs: [{ label: 'Luft', main: 'temp', mainVar: 'temp' }, { label: 'Gefühlt', main: 'temp', mainVar: 'feels' }, { label: 'Wasser', main: 'ocean', mainVar: 'water' }] },
-  { id: 'humid', label: 'Feuchtigkeit', hint: 'Vorhersage', icon: 'humid', color: '#4fc3c8', subs: [{ label: 'Relativ', main: 'humidity', mainVar: 'humidity' }, { label: 'Taupunkt', main: 'temp', mainVar: 'dewpoint' }] },
-  { id: 'pressure', label: 'Luftdruck', hint: 'Vorhersage', icon: 'gauge', color: '#a58bff', subs: [{ label: '', main: 'pressure', mainVar: 'pressure' }] },
-];
-
 export const OWM_FAMILY: WxFamily = {
   id: 'owm',
   label: 'OWM',
@@ -84,55 +41,10 @@ export const OWM_FAMILY: WxFamily = {
   variants: [['owm-temp_new', 'Temperatur'], ['owm-precipitation_new', 'Niederschlag'], ['owm-clouds_new', 'Wolken'], ['owm-wind_new', 'Wind'], ['owm-pressure_new', 'Luftdruck']],
 };
 
-/**
- * The Karten menus under the bar: one category at a time (radio). `defaults` are switched on with
- * the category and always stay on; every row inside switches one more layer (toggle).
- */
-export interface TrafficCat {
-  id: string;
-  label: string;
-  icon: string;
-  /** switched on when the category is selected ('' for menu purely of toggle rows) */
-  defaults?: string[];
-  /** a row switches one or more layers together */
-  rows: { label: string; layers: string[] }[];
-}
-export const TRAFFIC_MENU: TrafficCat[] = [
-  { id: 'auto', label: 'Auto', icon: 'car', defaults: ['roadnet'], rows: [{ label: 'Straßen', layers: ['roadnet'] }, { label: 'Staus & Baustellen', layers: ['autobahn'] }, { label: 'Blitzer & Rotlicht', layers: ['blitzer'] }] },
-  {
-    id: 'oepnv', label: 'ÖPNV', icon: 'bus', defaults: ['trains'],
-    rows: [{ label: 'Busse live', layers: ['transit'] }, { label: 'Busnetz', layers: ['busnet'] }, { label: 'Züge live', layers: ['trains'] }, { label: 'Zugnetz', layers: ['railspeed'] }],
-  },
-  // aircraft always on, the weather balloons fly along ("Flughäfen" = the airport symbols plus the
-  // airports in 3D when zoomed in close); the eye switch of each layer turns them off separately
-  { id: 'air', label: 'Flugzeug', icon: 'plane2', defaults: ['aircraft', 'sondes'], rows: [{ label: 'Flughäfen', layers: ['airports', 'airport3d'] }] },
-  { id: 'ship', label: 'Schiff', icon: 'ship', defaults: ['ships'], rows: [{ label: 'Schiffsrouten', layers: ['shipping'] }] },
-];
 /** every layer the Verkehr menu manages */
 export const TRAFFIC_LAYER_IDS = new Set(TRAFFIC_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
 export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
-/** the Infrastruktur menu – same pattern: category on, rows inside toggle layers */
-export const INFRA_MENU: TrafficCat[] = [
-  {
-    id: 'energie', label: 'Energie', icon: 'power',
-    rows: [
-      { label: 'Windkraft', layers: ['wind'] },
-      { label: 'Solarparks', layers: ['solar'] },
-      { label: 'Wasserkraft', layers: ['water'] },
-      { label: 'Kernkraftwerke', layers: ['nuclear'] },
-      { label: 'Kohlekraftwerke', layers: ['coal'] },
-      { label: 'Gaskraftwerke', layers: ['gas'] },
-      { label: 'Ölkraftwerke', layers: ['oil'] },
-      { label: 'Biomasse & Abfall', layers: ['biomass'] },
-      { label: 'Weitere Kraftwerke', layers: ['plants'] },
-    ],
-  },
-  { id: 'rohstoffe', label: 'Rohstoffe', icon: 'pick', defaults: ['resources'], rows: [{ label: 'Vorkommen', layers: ['resources'] }] },
-  { id: 'netze', label: 'Netze', icon: 'cable', rows: [{ label: 'Seekabel', layers: ['cables'] }, { label: 'Internetknoten', layers: ['ixp'] }, { label: 'Öl- & Gaspipelines', layers: ['pipelines'] }] },
-  { id: 'radio', label: 'Radio', icon: 'radio', defaults: ['radio'], rows: [{ label: 'Radiosender', layers: ['radio'] }] },
-  { id: 'ueberwachung', label: 'Überwachung', icon: 'cam', rows: [{ label: 'Live-Kameras', layers: ['webcams'] }, { label: 'Kennzeichen-Kameras', layers: ['alpr'] }] },
-];
 export const INFRA_LAYER_IDS = new Set(INFRA_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
 export const infraCatOf = (layer: string) => INFRA_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 /** the menu type of a Karten menu id ('' = none) */
