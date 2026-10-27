@@ -1,25 +1,49 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import { empty } from '../shared/geo';
-import { CAM_DETAIL_ZOOM, CAM_ZOOM_RED, CARDINAL } from '../shared/cams';
+import { ALPR_FOV_ZOOM, CAM_DETAIL_ZOOM, CAM_ZOOM_RED, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { isSuperseded } from '../../../api/overpass';
 import { loadSpeedcams } from '../../../api/cams';
+import type { FeatureCollection, Point } from 'geojson';
 import { speedTxt, coordsTxt } from '../../../units';
 
-type St = { key: string };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('blitzer', () => ({ key: '' }));
+type St = { key: string; fc: FeatureCollection<Point> | null; fovKey: string };
+const getState = (ctx: ExtraCtx) => ctx.state<St>('blitzer', () => ({ key: '', fc: null, fovKey: '' }));
+
+/** Blickrichtung/Messbereich: typische Werte (Radius, Öffnungswinkel), keine Messung */
+const FOV_RADIUS = 110; // metres
+const FOV_ANGLE = 36; // degrees
+
+/** Kegel für Anlagen mit bekannter Richtung, ab Stadtzoom (wie bei den Kameras) */
+function updateCones(ctx: ExtraCtx) {
+  const st = getState(ctx);
+  const cams: [number, number, number][] = [];
+  if (st.fc && ctx.map.getZoom() >= ALPR_FOV_ZOOM) {
+    for (const f of st.fc.features) {
+      const d = Number(f.properties?.dir);
+      if (Number.isFinite(d) && d >= 0) cams.push([f.geometry.coordinates[0], f.geometry.coordinates[1], d]);
+    }
+  }
+  const key = cams.map((c) => c.join(',')).join('|');
+  if (key === st.fovKey) return;
+  st.fovKey = key;
+  ctx.setData('blitzer-fov', { type: 'FeatureCollection', features: fovSectors(cams, FOV_RADIUS, FOV_ANGLE) });
+}
 
 function loadNow(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (ctx.map.getZoom() < CAM_DETAIL_ZOOM) {
     ctx.setData('blitzer', empty());
     st.key = '';
+    st.fc = null;
+    updateCones(ctx);
     ctx.set('blitzer', { note: `Details ab Zoomstufe ${CAM_DETAIL_ZOOM} · messpunktgenau, mobile Blitzer fehlen` });
     return;
   }
   const b = ctx.viewBounds();
   const key = Object.values(b).join(',');
+  updateCones(ctx);
   if (key === st.key) return;
   st.key = key;
   ctx.set('blitzer', { loading: true, note: undefined });
@@ -27,6 +51,8 @@ function loadNow(ctx: ExtraCtx) {
     .then((fc) => {
       if (st.key !== key) return;
       ctx.setData('blitzer', fc);
+      st.fc = fc;
+      updateCones(ctx);
       const notes = ['Lageplan – keine Fahrwarnung (in DE verboten während der Fahrt)'];
       if (!fc.features.length) notes.unshift('keine Anlagen im Ausschnitt erfasst');
       ctx.set('blitzer', { loading: false, count: fc.features.length, note: notes.join(' · ') });
@@ -49,8 +75,11 @@ export default defineExtra({
   glyph: 'blitzer',
   icon: 'blitzer',
   color: '#e53935',
-  sources: { blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung' },
+  sources: { blitzer: 'Blitzer: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL) – Lageplan, keine Fahrwarnung', 'blitzer-fov': '' },
   addLayers({ add, hidden }) {
+    // Messbereich als Sektor am Boden (Meter, skaliert mit dem Zoom), unter den Punkten
+    add({ id: 'blitzer-cone', type: 'fill', source: 'blitzer-fov', layout: hidden, paint: { 'fill-color': CAM_ZOOM_RED, 'fill-opacity': 0.25 } }, 'marker');
+    add({ id: 'blitzer-cone-line', type: 'line', source: 'blitzer-fov', layout: hidden, paint: { 'line-color': CAM_ZOOM_RED, 'line-width': 1.1, 'line-opacity': 0.8 } }, 'marker');
     add(
       {
         id: 'blitzer',
@@ -88,6 +117,6 @@ export default defineExtra({
       <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
     return { type: 'html', html: cardHtml({ glyph: 'blitzer', color: p.kind === 'section' ? '#fb8c00' : p.kind === 'signals' ? '#ba68c8' : CAM_ZOOM_RED, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
   },
-  layers: ['blitzer'],
+  layers: ['blitzer-cone', 'blitzer-cone-line', 'blitzer'],
   clickLayers: ['blitzer'],
 });
