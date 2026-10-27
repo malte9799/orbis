@@ -2,8 +2,8 @@ import {
   Map as MlMap,
   NavigationControl,
   Popup,
-  ScaleControl,
   type GeoJSONSource,
+  type ImageSource,
   type MapGeoJSONFeature,
   type RasterTileSource,
 } from 'maplibre-gl';
@@ -39,25 +39,24 @@ import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
   isobars,
-  nightPolygon,
+  nightImage,
   registerFieldProtocol,
   setActiveSampler,
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
-import { mountRawDataLink } from '../inspector/inspector';
+import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { createEvents } from '../globe/events/engine';
 import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
 import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
-import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
+import { defaultBuildings3d, defaultTerrain3d, type Karte, type NightMode, type KView } from '../hud/karten';
 import { locate } from '../search';
+import { createScaleBar } from '../scalebar';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
 import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
-import { createSettingsPanel } from './settings';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -81,7 +80,7 @@ const OWM_LAYERS: { id: string; label: string }[] = [
 interface GlobeState {
   base: BaseId;
   labels: boolean;
-  night: boolean;
+  night: NightMode;
   overlay: OverlayId;
   /** wind particle animation */
   wind: boolean;
@@ -101,7 +100,7 @@ interface GlobeState {
 const DEFAULT_STATE: GlobeState = {
   base: 'satellite',
   labels: true,
-  night: true,
+  night: 'auto',
   overlay: 'none',
   wind: false,
   isobars: false,
@@ -123,8 +122,10 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 export interface GlobeView {
   el: HTMLElement;
-  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
+  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean; jump?: boolean }): void;
   deactivate(): void;
+  /** resolves once the map has drawn its current view (used to hand over from the forecast map) */
+  settled(): Promise<void>;
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
@@ -145,8 +146,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   el.className = 'view globe-view';
   el.innerHTML = `
     <div class="map" id="map"></div>
-    <div class="settings-scrim" hidden></div>
-    <aside class="settings-panel" hidden></aside>
     <div class="globe-bottom">
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
@@ -176,6 +175,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let sampler: ModelSampler | null = null;
   let wind: WindParticles | null = null;
   let nightTimer = 0;
+  let nightSeq = 0;
   let refreshTimer = 0;
   let liveTimer = 0;
   let popup: Popup | null = null;
@@ -389,22 +389,29 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
-  // ----- settings: right slide-over panel (see views/settings.ts) ----------
-  const settings = createSettingsPanel(el.querySelector<HTMLElement>('.settings-panel')!, el.querySelector<HTMLElement>('.settings-scrim')!, {
-    onKeysSaved() {
-      ev.reset('firms');
-      if (hud) applyKarte(hud.current());
-      ev.apply();
-      ev.ensure();
-      extras?.resume();
-      refreshHud();
-    },
-  });
-  const openSettings = settings.open;
-  const closeSettings = settings.close;
+  async function locateMe() {
+    try {
+      const { lat, lon } = await locate();
+      store.setLastPlace({ name: '', lat, lon });
+      focusPlace(lat, lon, 8, true);
+    } catch {
+      toast('Standort konnte nicht ermittelt werden.', 'error');
+    }
+  }
+
+  // ----- settings: one global panel (main.ts), opened from the Orbis menu --------
+  const openSettings = () => document.dispatchEvent(new CustomEvent('orbis:settings'));
+  const onKeysSaved = () => {
+    ev.reset('firms');
+    if (hud) applyKarte(hud.current());
+    ev.apply();
+    ev.ensure();
+    extras?.resume();
+    refreshHud();
+  };
+  document.addEventListener('orbis:keys-saved', onKeysSaved);
 
   // ----- apply state to map -----------------------------------------------
-  let renderProj = () => {};
   const vis = (id: string, on: boolean) => {
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   };
@@ -440,8 +447,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyNight() {
     clearInterval(nightTimer);
-    vis('night', state.night);
-    if (!state.night) return;
+    vis('night', state.night === 'auto');
+    vis('night-full', state.night === 'night');
+    if (state.night !== 'auto') return;
     updateNight();
     nightTimer = window.setInterval(updateNight, 60000);
   }
@@ -461,9 +469,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   /** The terminator follows the forecast timeline when one is shown. */
   function updateNight() {
-    if (!state.night) return;
+    if (state.night !== 'auto') return;
     const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
-    (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon(at));
+    const seq = ++nightSeq;
+    nightImage((z, x, y) => BLACK_MARBLE.replace('{z}', String(z)).replace('{y}', String(y)).replace('{x}', String(x)), at).then((url) => {
+      if (seq === nightSeq) (map?.getSource('night') as ImageSource | undefined)?.updateImage({ url });
+    });
   }
 
   // ----- forecast model ----------------------------------------------------
@@ -1044,13 +1055,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // bottom right, stacked from the bottom up: zoom/compass, 2D/3D, locate (later controls sit on top)
     map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
     el.querySelector('.maplibregl-ctrl-zoom-in')?.parentElement?.classList.add('nav-ctl');
-    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
-    // zoom level next to the scale bar
-    const zoomEl = document.createElement('div');
-    zoomEl.className = 'maplibregl-ctrl zoom-ctrl';
-    const showZoom = () => (zoomEl.textContent = `Zoom ${map!.getZoom().toFixed(1)}`);
-    map.addControl({ onAdd: () => { showZoom(); map!.on('zoom', showZoom); return zoomEl; }, onRemove: () => { map?.off('zoom', showZoom); zoomEl.remove(); } }, 'bottom-left');
-
+    createScaleBar(map);
     // phones: the attribution stays collapsed until the "i" button is tapped (MapLibre opens it
     // by itself whenever new sources bring attributions)
     const attrib = el.querySelector<HTMLElement>('.maplibregl-ctrl-attrib');
@@ -1063,25 +1068,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
 
     // Locate button
-    // solar-system button
-    const projCtl = document.createElement('div');
-    projCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group proj-ctl';
-    projCtl.setAttribute('role', 'group');
-    projCtl.setAttribute('aria-label', 'Ansicht');
-    renderProj = () => {
-      projCtl.innerHTML =
-        `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
-    };
-    renderProj();
-    projCtl.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-proj]');
-      if (!btn || !map) return;
-      if (btn.dataset.proj === 'space') {
-        const c = map.getCenter();
-        onOpenSpace(c.lat, c.lng);
-        return;
-      }
-    });
 
     // Zooming further out of the 3D globe leaves Earth and enters the solar system.
     // A gesture (events less than 250 ms apart, incl. trackpad/free-spinning momentum) that reaches the minimum
@@ -1113,20 +1099,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       },
       { passive: true },
     );
-    map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'bottom-right');
 
     const locCtl = document.createElement('div');
     locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group loc-ctl';
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
-    locCtl.querySelector('button')!.addEventListener('click', async () => {
-      try {
-        const { lat, lon } = await locate();
-        store.setLastPlace({ name: '', lat, lon });
-        focusPlace(lat, lon, 8, true);
-      } catch {
-        toast('Standort konnte nicht ermittelt werden.', 'error');
-      }
-    });
+    locCtl.querySelector('button')!.addEventListener('click', () => void locateMe());
     map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
 
     map.on('load', () => {
@@ -1230,6 +1207,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // the compass appears only when the map is rotated or tilted
     const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
     map.on('rotate', syncRotated);
+    map.on('rotate', () => hud?.setBearing(map!.getBearing()));
+    map.on('pitch', () => hud?.syncPitch(map!.getPitch()));
+    hud?.bindMap(map);
     map.on('pitch', syncRotated);
     // 3D-Gelände folgt der Neigung: erst ab geneigter Kamera aktiv, von oben immer flach
     let terrainTilted = false;
@@ -1242,6 +1222,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     };
     map.on('pitch', syncTerrainPitch);
+    // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
+    const levelOut = () => {
+      if (!map) return;
+      const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
+      if (map.getPitch() > limit) map.setPitch(limit);
+    };
+    map.on('zoom', levelOut);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
@@ -1386,12 +1373,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       focusPlace(p.lat, p.lon, 7, true);
     },
     openSettings,
+    zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+    locate: () => void locateMe(),
+    setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+    resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
     layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });
   el.appendChild(hud.el);
-  mountRawDataLink(hud.el.querySelector<HTMLElement>('.hud-tr')!, 'button', { cls: 'hud-ibtn' });
   hud.relayout();
   {
     const k = hud.current();
@@ -1407,6 +1397,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     activate(focus) {
       hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
+        if (focus?.jump && focus.lat != null && focus.lon != null) {
+          state.center = [focus.lon, focus.lat];
+          state.zoom = focus.zoom ?? 6;
+        }
         initMap();
       } else {
         map.resize();
@@ -1414,7 +1408,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         extras?.resume();
       }
       const hasPos = focus?.lat != null && focus?.lon != null;
-      if (hasPos && focus?.fromSpace && map && ready) {
+      if (hasPos && focus?.jump && map && ready) {
+        // seamless hand-over from the forecast map: same view, no flight
+        map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: focus!.zoom ?? 6 });
+      } else if (hasPos && focus?.fromSpace && map && ready) {
         // coming back from the solar system: start far out and dive in
         map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: map.getMinZoom() });
         map.easeTo({ zoom: focus!.zoom ?? 2.2, duration: 1600 });
@@ -1442,6 +1439,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
     },
+    settled() {
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        setTimeout(done, 4000);
+        if (!map) return done();
+        map.resize();
+        map.once('idle', done);
+        map.triggerRepaint();
+      });
+    },
     deactivate() {
       clearInterval(refreshTimer);
       clearInterval(liveTimer);
@@ -1450,7 +1457,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras?.stop();
       hideReadout();
       popup?.remove();
-      closeSettings();
     },
   };
 }

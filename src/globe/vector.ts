@@ -126,7 +126,8 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
 
 const NAME: ExpressionSpecification = ['coalesce', ['get', 'name:de'], ['get', 'name_de'], ['get', 'name:latin'], ['get', 'name']];
 
-/** Borders and place names drawn above the weather layers (ids start with `lbl-`). */
+/** Borders and place names drawn above the weather layers (ids start with `lbl-`).
+ *  Continents and regions come last: later symbol layers are placed first, so they win label collisions. */
 export function labelLayers(): LayerSpecification[] {
   const hidden = { visibility: 'none' as const };
   const text = {
@@ -231,6 +232,43 @@ export function labelLayers(): LayerSpecification[] {
         'symbol-sort-key': ['coalesce', ['get', 'rank'], 99],
       },
       paint: text,
+    },
+    {
+      id: 'lbl-continent',
+      type: 'symbol',
+      source: 'regions',
+      filter: ['==', ['get', 'kind'], 'continent'],
+      maxzoom: 3.5,
+      layout: {
+        ...hidden,
+        'text-field': ['get', 'name'],
+        'text-font': FONT_BOLD,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 3, 20],
+        'text-transform': 'uppercase',
+        'text-letter-spacing': 0.18,
+        'text-max-width': 8,
+        'text-allow-overlap': true,
+        'symbol-sort-key': 0,
+      },
+      paint: { ...text, 'text-opacity': ['interpolate', ['linear'], ['zoom'], 3, 1, 3.5, 0] },
+    },
+    {
+      id: 'lbl-region',
+      type: 'symbol',
+      source: 'regions',
+      filter: ['!=', ['get', 'kind'], 'continent'],
+      minzoom: 1.2,
+      maxzoom: 3.5,
+      layout: {
+        ...hidden,
+        'text-field': ['get', 'name'],
+        'text-font': FONT_ITALIC,
+        'text-size': ['interpolate', ['linear'], ['zoom'], 1.2, 10, 3.5, 13],
+        'text-letter-spacing': 0.08,
+        'text-max-width': 7,
+        'symbol-sort-key': ['get', 'rank'],
+      },
+      paint: { ...text, 'text-opacity': ['interpolate', ['linear'], ['zoom'], 1.2, 0, 1.8, 0.9, 3, 0.9, 3.5, 0] },
     },
   ];
 }
