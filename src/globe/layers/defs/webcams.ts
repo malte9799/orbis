@@ -8,21 +8,32 @@ import { hasWindyKey, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } fr
 import { isSuperseded } from '../../../api/overpass';
 import { snapshotJson } from '../../../api/data';
 import { estimateHeadings, needsEstimate } from '../../../api/camdir';
+import { loadCamDirs, onCamDirsChange, withCloudDir } from '../../../api/camdircloud';
 
 /** the overview dots/halo (not clickable) end here – above it only the live camera dots are drawn, otherwise every camera shows twice */
 const CAM_OVERVIEW_MAXZOOM = 14;
 
-type St = { fi: FeatureCollection; windy: FeatureCollection; feeds: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; key: string; osmCount: number; windyKey: string; heatAdded: boolean; heatLoaded: boolean; osmFc: FeatureCollection<Point> | null; fovKey: string; estimating: boolean };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('webcams', () => ({ fi: empty(), windy: empty(), feeds: new Map(), feedLoading: new Set(), feedErrors: new Set(), key: '', osmCount: 0, windyKey: '', heatAdded: false, heatLoaded: false, osmFc: null, fovKey: '', estimating: false }));
+type St = { fi: FeatureCollection; windy: FeatureCollection; feeds: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; key: string; osmCount: number; windyKey: string; heatAdded: boolean; heatLoaded: boolean; osmFc: FeatureCollection<Point> | null; osmRaw: FeatureCollection<Point> | null; fovKey: string; estimating: boolean; unsub: (() => void) | null };
+const getState = (ctx: ExtraCtx) => ctx.state<St>('webcams', () => ({ fi: empty(), windy: empty(), feeds: new Map(), feedLoading: new Set(), feedErrors: new Set(), key: '', osmCount: 0, windyKey: '', heatAdded: false, heatLoaded: false, osmFc: null, osmRaw: null, fovKey: '', estimating: false, unsub: null }));
 
 function merge(ctx: ExtraCtx) {
   const st = getState(ctx);
   const feedCams = [...st.feeds.values()].flatMap((f) => f.features);
-  const all = { type: 'FeatureCollection' as const, features: [...st.fi.features, ...st.windy.features, ...feedCams] };
+  // corrected viewing directions (own worker, see camdircloud.ts) win over the feeds' and the estimates
+  const all = { type: 'FeatureCollection' as const, features: ([...st.fi.features, ...st.windy.features, ...feedCams] as Feature<Point>[]).map(withCloudDir) };
+  applyOsm(ctx);
   ctx.setData('webcams', all);
   ctx.set('webcams', { count: all.features.length + st.osmCount || undefined });
   updateNote(ctx);
   updateFov(ctx);
+}
+
+/** the OpenStreetMap webcams with the corrected directions */
+function applyOsm(ctx: ExtraCtx) {
+  const st = getState(ctx);
+  if (!st.osmRaw) return;
+  st.osmFc = { ...st.osmRaw, features: st.osmRaw.features.map(withCloudDir) };
+  ctx.setData('webcams-osm', st.osmFc);
 }
 
 function updateNote(ctx: ExtraCtx) {
@@ -72,8 +83,8 @@ function loadNow(ctx: ExtraCtx) {
       loadOsmWebcams(b)
         .then((fc) => {
           if (st.key !== key) return;
-          ctx.setData('webcams-osm', fc);
-          st.osmFc = fc;
+          st.osmRaw = fc;
+          applyOsm(ctx);
           st.osmCount = fc.features.length;
           updateFov(ctx);
           merge(ctx);
@@ -181,7 +192,7 @@ function estimateMissing(ctx: ExtraCtx) {
   const vb = ctx.map.getBounds();
   const c = ctx.map.getCenter();
   const cand = ([...st.fi.features, ...[...st.feeds.values()].flatMap((f) => f.features)] as Feature<Point>[])
-    .filter((f) => f.properties?.kind === 'road' && vb.contains(f.geometry.coordinates as [number, number]) && needsEstimate(f))
+    .filter((f) => f.properties?.kind === 'road' && vb.contains(f.geometry.coordinates as [number, number]) && needsEstimate(f) && !withCloudDir(f).properties?.dirset)
     .sort((a, b) => Math.hypot(a.geometry.coordinates[0] - c.lng, a.geometry.coordinates[1] - c.lat) - Math.hypot(b.geometry.coordinates[0] - c.lng, b.geometry.coordinates[1] - c.lat));
   if (!cand.length) return;
   st.estimating = true;
@@ -212,8 +223,11 @@ function updateFov(ctx: ExtraCtx) {
   };
   const zoomed = ctx.map.getZoom() >= ALPR_FOV_ZOOM;
   const cams = zoomed ? withDir(st.osmFc?.features) : [];
-  // road cameras of the feeds: direction from the feed's direction text (estimated, drawn fainter)
-  const road = zoomed ? withDir([...st.fi.features, ...[...st.feeds.values()].flatMap((f) => f.features)]) : [];
+  // road cameras of the feeds: direction from the feed's direction text (estimated, drawn fainter);
+  // a corrected direction is no estimate any more
+  const roadCams = [...st.fi.features, ...[...st.feeds.values()].flatMap((f) => f.features)].map((f) => withCloudDir(f as Feature<Point>));
+  const road = zoomed ? withDir(roadCams.filter((f) => !f.properties?.dirset)) : [];
+  if (zoomed) cams.push(...withDir(roadCams.filter((f) => f.properties?.dirset)));
   if (zoomed) estimateMissing(ctx);
   const key = [...cams, ...road].map((c) => c.join(',')).sort().join('|');
   if (key === st.fovKey) return;
@@ -272,6 +286,8 @@ export default defineExtra({
   },
   enable(ctx) {
     const st = getState(ctx);
+    if (!st.unsub) st.unsub = onCamDirsChange(() => ctx.isOn('webcams') && merge(ctx));
+    loadCamDirs().catch((e) => console.warn('Kamera-Richtungen', e));
     ctx.loadOnce('webcams', 6 * 60 * 60000, async () => {
       try {
         st.fi = await loadDigitrafficCams();
