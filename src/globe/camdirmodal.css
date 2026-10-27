@@ -1,4 +1,4 @@
-/* editor for the viewing direction of a webcam: picture and satellite map side by side */
+/* editor for the viewing direction of a webcam: picture and map side by side (or stacked in the overlay view) */
 .cdm {
   position: fixed;
   inset: 0;
@@ -9,7 +9,7 @@
   background: rgba(5, 8, 20, 0.66);
 }
 .cdm-box {
-  width: min(1100px, 100%);
+  width: min(1180px, 100%);
   max-height: 100%;
   display: flex;
   flex-direction: column;
@@ -50,7 +50,58 @@
   background: var(--card);
   color: var(--text);
 }
+
+/* mode switch and map style */
+.cdm-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.cdm-seg {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cdm .cdm-seg button {
+  height: 34px;
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+}
+.cdm .cdm-seg button:last-child {
+  border-right: 0;
+}
+.cdm .cdm-seg button.on {
+  background: #fff;
+  color: #0b1020;
+  font-weight: 600;
+}
+.cdm-style {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+.cdm-sel {
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.cdm-sel option {
+  color: #000;
+}
+
+/* picture and map: same size, the shape of the picture (so that the overlay lines up exactly) */
 .cdm-main {
+  --ar: 1.7778;
+  --ph: min(46vh, 420px);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
@@ -58,19 +109,25 @@
 .cdm-pic,
 .cdm-map {
   position: relative;
-  height: min(52vh, 420px);
+  justify-self: center;
+  width: min(100%, calc(var(--ph) * var(--ar)));
+  aspect-ratio: var(--ar);
   border-radius: 12px;
   overflow: hidden;
   background: #000;
 }
 .cdm-pic img,
 .cdm-pic video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: fill;
+  user-select: none;
 }
 .cdm-none {
-  height: 100%;
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
   color: var(--text-2);
@@ -79,16 +136,90 @@
   position: absolute;
   inset: 0;
 }
-.cdm-over {
+.cdm-main.mt .cdm-pic {
+  cursor: crosshair;
+}
+.cdm-pts {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   pointer-events: none;
 }
-.cdm-over[hidden] {
+.cdm .cdm-pt {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.cdm .cdm-pt.wait {
+  background: #f0b23e;
+  color: #0b1020;
+  animation: cdm-pulse 1s ease-in-out infinite;
+}
+.cdm .cdm-pt:hover {
+  background: #ff7b7f;
+}
+@keyframes cdm-pulse {
+  50% {
+    box-shadow: 0 0 0 6px rgba(240, 178, 62, 0.35);
+  }
+}
+
+/* overlay view: the map lies over the picture, same size, same place */
+.cdm-main.ov {
+  grid-template-columns: 1fr;
+  --ph: min(48vh, 460px);
+}
+.cdm-main.ov .cdm-pic,
+.cdm-main.ov .cdm-map {
+  grid-area: 1 / 1;
+}
+.cdm-main.ov .cdm-map {
+  z-index: 1;
+  background: transparent;
+}
+.cdm-main.ov .cdm-pts {
   display: none;
+}
+
+.cdm-hint {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.cdm-hint[hidden],
+.cdm-fit[hidden],
+.cdm-adv[hidden] {
+  display: none;
+}
+.cdm-fit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 13px;
+}
+.cdm-fit-txt {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.cdm-fit-btns {
+  display: flex;
+  gap: 6px;
 }
 .cdm-ctl {
   display: flex;
@@ -100,6 +231,10 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
+}
+.cdm-lbl {
+  color: var(--text-2);
+  width: 56px;
 }
 .cdm-range {
   flex: 1 1 200px;
@@ -147,10 +282,6 @@
 .cdm .cdm-save:hover:not(:disabled) {
   background: #e8ecf8;
 }
-.cdm-hint {
-  color: var(--text-2);
-  font-size: 12.5px;
-}
 .cdm-foot {
   display: flex;
   align-items: center;
@@ -166,43 +297,13 @@
 .cdm-reset[hidden] {
   display: none;
 }
-@media (max-width: 760px) {
-  .cdm-main {
-    grid-template-columns: 1fr;
-  }
-  .cdm-pic,
-  .cdm-map {
-    height: 34vh;
-  }
-}
 
-/* comparison view: camera picture in the back, the map (3D, seen from the camera) in front of it */
-.cdm-main.ov {
-  grid-template-columns: 1fr;
-}
-.cdm-main.ov .cdm-pic {
-  display: none;
-}
-.cdm-main.ov .cdm-map {
-  --ar: 1.7778;
-  height: min(60vh, 560px);
-  width: min(100%, calc(min(60vh, 560px) * var(--ar)));
-  justify-self: center;
-}
-.cdm-main.ov .cdm-over {
-  object-fit: fill;
-}
-.cdm-mapel {
-  z-index: 1;
-}
+/* overlay settings */
 .cdm-adv {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 6px 16px;
   align-items: center;
-}
-.cdm-adv[hidden] {
-  display: none;
 }
 .cdm-sl {
   display: grid;
@@ -230,6 +331,15 @@
   height: 28px;
   padding: 0 9px;
 }
-.cdm-adv .cdm-hint {
-  grid-column: 1 / -1;
+@media (max-width: 760px) {
+  .cdm-main {
+    grid-template-columns: 1fr;
+    --ph: 30vh;
+  }
+  .cdm-main.ov {
+    --ph: 36vh;
+  }
+  .cdm-sl {
+    grid-template-columns: 120px 1fr 52px;
+  }
 }
