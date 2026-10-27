@@ -1242,12 +1242,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     };
     map.on('pitch', syncTerrainPitch);
-    // zoomed out to the whole Earth: turn north up and look straight down again
+    // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
     const levelOut = () => {
-      if (!map || map.getZoom() > 3.5) return;
-      if (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5) map.easeTo({ bearing: 0, pitch: 0, duration: 700 });
+      if (!map) return;
+      const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
+      if (map.getPitch() > limit) map.setPitch(limit);
     };
-    map.on('zoomend', levelOut);
+    map.on('zoom', levelOut);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
