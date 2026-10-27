@@ -74,8 +74,12 @@ export const catalogOf = (id: string) => CATALOG.find((c) => c.id === id);
 // ---------------------------------------------------------------------------
 // Base maps
 
-/** the four big thumbnails; the other base maps sit behind "Weitere" */
-export const MAIN_BASES: BaseId[] = ['satellite', 'dark', 'light', 'topo'];
+/** base maps grouped for the picker (HUD stack and quick picker) */
+export const BASE_GROUPS: { label: string; ids: BaseId[] }[] = [
+  { label: 'Satellit', ids: ['satellite', 'clarity', 'mapbox', 'maptiler', 'sentinel', 'nasa'] },
+  { label: 'Karte', ids: ['dark', 'light', 'topo'] },
+  { label: 'Weitere', ids: ['blue', 'night'] },
+];
 export const BASE_LABEL: Record<BaseId, string> = {
   satellite: 'Satellit', clarity: 'Satellit Clarity', mapbox: 'Mapbox Satellit', maptiler: 'MapTiler Satellit', sentinel: 'Sentinel-2', topo: 'Gelände', nasa: 'NASA Tagesbild', blue: 'Blue Marble', night: 'Nachtlichter', dark: 'Dunkel', light: 'Hell',
 };
@@ -101,19 +105,57 @@ function miniMap(land: string, water: string, road: string, border: string) {
     <path d="M2 40 C14 36 20 42 30 38 S44 24 52 26" stroke="${border}" stroke-width="1" stroke-dasharray="3 2" fill="none"/></svg>`;
 }
 
+/** tile used as thumbnail of a base map (null: drawn or without one) */
+function thumbUrl(id: BaseId): string | null {
+  switch (id) {
+    case 'satellite': return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4';
+    case 'clarity': return ESRI_CLARITY.replace('{z}/{y}/{x}', '3/2/4');
+    case 'sentinel': return EOX_S2.replace('{z}/{y}/{x}', '3/2/4');
+    case 'topo': return OPENTOPO.replace('{z}/{x}/{y}', '3/4/2');
+    case 'nasa': return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg`;
+    case 'blue': return BLUE_MARBLE.replace('{z}/{y}/{x}', '3/2/4');
+    case 'night': return BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4');
+    default: return null; // dark/light are drawn; mapbox/maptiler would need the key in the markup
+  }
+}
+
+// Thumbnails are fetched once and kept as data URLs (memory + localStorage), so reopening the
+// menu or re-rendering the HUD never requests the tiles again. The NASA URL carries the date,
+// so old days drop out by themselves.
+const THUMB_KEY = 'wg.basethumbs';
+const THUMB_MAX = 40_000; // chars per data URL – a 256 px tile is ~15–25 kB
+const thumbs: Record<string, string> = (() => {
+  try { return JSON.parse(localStorage.getItem(THUMB_KEY) || '{}'); } catch { return {}; }
+})();
+const thumbPending = new Set<string>();
+
+function cacheThumb(url: string) {
+  if (thumbs[url] || thumbPending.has(url)) return;
+  thumbPending.add(url);
+  fetch(url)
+    .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+    .then((b) => new Promise<string>((res, rej) => { const f = new FileReader(); f.onload = () => res(String(f.result)); f.onerror = rej; f.readAsDataURL(b); }))
+    .then((d) => {
+      if (d.length > THUMB_MAX) return;
+      thumbs[url] = d;
+      const live = new Set(BASE_GROUPS.flatMap((g) => g.ids.map(thumbUrl)));
+      for (const u of Object.keys(thumbs)) if (!live.has(u)) delete thumbs[u];
+      try { localStorage.setItem(THUMB_KEY, JSON.stringify(thumbs)); } catch { /* storage full/blocked: memory cache is enough */ }
+    })
+    .catch(() => { /* the plain <img src> below still works */ })
+    .finally(() => thumbPending.delete(url));
+}
+
 /** thumbnail markup (tile image or small drawing) for a base map */
 export function baseThumb(id: BaseId): string {
+  const url = thumbUrl(id);
+  if (url) {
+    cacheThumb(url);
+    return `<img alt="" loading="lazy" src="${thumbs[url] ?? url}"/>`;
+  }
   switch (id) {
-    case 'satellite': return `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`;
-    case 'clarity': return `<img alt="" loading="lazy" src="${ESRI_CLARITY.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
-    case 'mapbox':
-    case 'maptiler': return ''; // thumbnail would need the key in the markup – gradient only
-    case 'sentinel': return `<img alt="" loading="lazy" src="${EOX_S2.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
-    case 'topo': return `<img alt="" loading="lazy" src="${OPENTOPO.replace('{z}/{x}/{y}', '3/4/2')}"/>`;
-    case 'nasa': return `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`;
-    case 'blue': return `<img alt="" loading="lazy" src="${BLUE_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
-    case 'night': return `<img alt="" loading="lazy" src="${BLACK_MARBLE.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
     case 'dark': return miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a');
     case 'light': return miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5');
+    default: return '';
   }
 }
