@@ -195,6 +195,8 @@ function route() {
     sum.classList.toggle('active', !!chosen);
   });
   nav.querySelector<HTMLAnchorElement>('a.world-link')?.classList.toggle('active', next === 'planet');
+  // schmale Bildschirme: die Leiste wischt seitlich, der aktive Eintrag soll im Blick bleiben
+  requestAnimationFrame(() => nav.querySelector('.eyes-group a.active, .trek-dd summary.active')?.scrollIntoView({ inline: 'center', block: 'nearest' }));
 
   if (next === 'games') {
     loadGames().then((v) => {

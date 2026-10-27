@@ -736,28 +736,233 @@
   vertical-align: middle;
 }
 
+/* ---------- Handy: Listen, Optionen und Infos als Bottom-Sheets, große Touch-Flächen ---------- */
 @media (max-width: 720px) {
-  .space-info {
-    top: auto;
-    bottom: 120px;
-    left: 8px;
-    right: 8px;
-    width: auto;
-    max-height: 40%;
+  .space-list-toggle,
+  .space-opt-toggle {
+    top: 10px;
+    left: 10px;
+    width: 48px !important;
+    height: 48px;
+    border-radius: 14px;
   }
 
-  .space-time {
-    bottom: 8px;
+  .space-opt-toggle {
+    left: 66px;
+  }
+
+  .space-view .space-list,
+  .space-view .space-opts,
+  .space-view .space-info {
+    position: absolute;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    z-index: 8;
+    border-radius: 22px 22px 0 0;
+    border-width: 1px 0 0;
+    padding-bottom: var(--safe-bottom);
+    box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.5);
   }
 
   .space-view .space-list,
   .space-view .space-opts {
-    width: calc(100% - 24px);
-    bottom: 170px;
+    max-height: min(78%, 620px);
   }
 
-  .space-view .space-opts {
-    left: 12px;
+  .space-view .space-list::before,
+  .space-view .space-opts::before,
+  .space-view .space-info::before {
+    content: '';
+    flex: none;
+    display: block;
+    width: 38px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .space-view .space-info {
+    display: block;
+    bottom: calc(60px + var(--safe-bottom));
+    max-height: 52%;
+    padding: 6px 18px 16px;
+    border-radius: 20px;
+    left: 8px;
+    right: 8px;
+    border-width: 1px;
+  }
+
+  .space-view .space-info[hidden] {
+    display: none;
+  }
+
+  .space-view:has(.space-time:not(.collapsed)) .space-info {
+    bottom: 214px;
+    max-height: calc(100% - 290px);
+  }
+
+  .space-info::before {
+    margin-bottom: 8px;
+  }
+
+  .space-info h2 {
+    font-size: 1.35rem;
+    padding-right: 40px;
+  }
+
+  .sp-close {
+    top: 4px;
+    right: 4px;
+    width: 44px;
+    height: 44px;
+    font-size: 26px;
+    line-height: 1;
+  }
+
+  .sp-actions {
+    gap: 8px;
+  }
+
+  .sp-actions .btn {
+    min-height: 44px;
+    padding: 0 16px;
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .sp-site {
+    min-height: 40px;
+    padding: 6px 14px;
+    font-size: 0.88rem;
+  }
+
+  .sp-list-head {
+    padding: 4px 14px 0;
+  }
+
+  .space-filter {
+    height: 46px;
+    font-size: 16px;
+    margin-top: 8px;
+    border-radius: 14px;
+  }
+
+  .sp-tab {
+    padding: 13px 4px;
+    font-size: 0.88rem;
+  }
+
+  .sp-row {
+    min-height: 60px;
+    padding: 8px 16px;
+  }
+
+  .sp-row.child {
+    padding-left: 36px;
+  }
+
+  .sp-txt b {
+    font-size: 1rem;
+  }
+
+  .space-opts .panel-scroll {
+    padding: 0 14px 16px;
+  }
+
+  .space-opts .row {
+    min-height: 46px;
+    padding: 6px 4px;
+    font-size: 1rem;
+  }
+
+  .space-opts input[type='checkbox'] {
+    width: 22px;
+    height: 22px;
+  }
+
+  .sp-label {
+    padding: 8px;
+    margin: -13px 0 0 -13px;
+  }
+
+  .sp-label.kind-site {
+    padding: 0;
+    margin: -14px 0 0 4px;
+  }
+
+  .sp-loadchip {
+    bottom: calc(70px + var(--safe-bottom));
+    min-width: 0;
+    width: calc(100% - 24px);
+  }
+
+  /* Zeitsteuerung */
+  .space-time {
+    bottom: calc(8px + var(--safe-bottom));
+    width: calc(100% - 16px);
+  }
+
+  .space-time.collapsed .sp-open {
+    padding: 10px 22px;
+    min-height: 44px;
+    flex-direction: row;
+    gap: 8px;
+    border-radius: 999px;
+    background: rgba(13, 18, 38, 0.88);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+  }
+
+  .space-time:not(.collapsed) {
+    padding-top: 4px;
+    border-radius: 20px;
+    background: rgba(13, 18, 38, 0.88);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+  }
+
+  .sp-tc {
+    padding: 12px 14px 8px;
+  }
+
+  .sp-rate {
+    font-size: 1.25rem;
+  }
+
+  .sp-cbtn {
+    width: 46px;
+    height: 46px;
+  }
+
+  .sp-live {
+    min-height: 44px;
+  }
+
+  .sp-overview {
+    letter-spacing: 0.08em;
+    min-height: 44px;
+  }
+
+  .sp-arc {
+    height: 40px;
+    margin: 4px 10px 2px;
+  }
+
+  .sp-knob {
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
+  }
+
+  .sp-close-tc {
+    width: 44px;
+    height: 44px;
+    right: 6px;
+    bottom: 46px;
   }
 }
 

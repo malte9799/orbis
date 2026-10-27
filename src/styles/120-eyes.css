@@ -210,3 +210,129 @@ body.mode-planet .tabs a.space-knob:hover {
 .tabs a.space-knob:hover {
   filter: brightness(1.12);
 }
+
+/* ---------- Handy: Leiste in Weltall-/Planeten-Ansicht ---------- */
+@media (max-width: 720px) {
+  body.mode-space .topbar,
+  body.mode-planet .topbar {
+    gap: 8px;
+    padding-left: max(10px, var(--safe-left));
+    padding-right: max(10px, var(--safe-right));
+  }
+
+  /* die Leiste wischt seitlich, statt über den Rand zu laufen */
+  body.mode-space .tabs,
+  body.mode-planet .tabs {
+    flex: 1;
+    min-width: 0;
+    gap: 4px;
+    padding: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.mode-space .tabs::-webkit-scrollbar,
+  body.mode-planet .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.mode-space .tabs > *,
+  body.mode-planet .tabs > * {
+    flex: none;
+    scroll-snap-align: center;
+  }
+
+  .eyes-group,
+  .trek-group {
+    margin-right: 0;
+    padding: 0;
+    gap: 4px;
+    background: none;
+  }
+
+  .eyes-group a,
+  .trek-dd summary,
+  body.mode-space .tabs a,
+  body.mode-planet .tabs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.9rem;
+  }
+
+  /* Auswahl der Planetenkarten: Fläche unter der Leiste statt kleinem Dropdown am Rand */
+  .trek-dd {
+    position: static;
+  }
+
+  .trek-group .trek-dd .trek-dd-items,
+  .trek-group .trek-dd:last-child .trek-dd-items {
+    position: fixed;
+    top: calc(var(--topbar-total) + 6px);
+    left: 8px;
+    right: 8px;
+    min-width: 0;
+    max-height: min(62vh, 440px);
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 18px;
+    background: rgba(11, 16, 32, 0.97);
+    backdrop-filter: blur(16px);
+    z-index: 60;
+  }
+
+  .trek-dd-items a {
+    display: flex;
+    align-items: center;
+    min-height: 46px;
+    padding: 0 14px;
+    font-size: 1rem;
+    white-space: normal;
+  }
+
+  .nasa-eyes {
+    bottom: var(--safe-bottom);
+  }
+
+  /* Planetenkarte: Infokarte als Sheet am unteren Rand, Ebenen-Chips in einer wischbaren Zeile */
+  .planet-view .pm-info {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: calc(8px + var(--safe-bottom));
+    max-height: 56%;
+    width: auto;
+    z-index: 9;
+  }
+
+  .pm-active {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    pointer-events: auto;
+    scrollbar-width: none;
+    right: 8px;
+  }
+
+  .pm-active::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pm-active .pm-chip {
+    flex: none;
+    min-height: 36px;
+    padding: 4px 14px;
+    font-size: 0.86rem;
+  }
+
+  .planet-view .base-pop {
+    width: calc(100vw - 16px);
+  }
+}

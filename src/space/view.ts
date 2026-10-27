@@ -1365,8 +1365,16 @@ export function createSpaceView(
   optToggle.addEventListener('click', () => {
     optPanel.hidden = !optPanel.hidden;
     optToggle.setAttribute('aria-expanded', String(!optPanel.hidden));
+    // auf dem Handy liegen beide Fenster als Sheet am unteren Rand: immer nur eines
+    if (!optPanel.hidden && window.innerWidth <= 720) listPanel.hidden = true;
   });
-  el.querySelector('.space-list-toggle')!.addEventListener('click', () => (listPanel.hidden = !listPanel.hidden));
+  el.querySelector('.space-list-toggle')!.addEventListener('click', () => {
+    listPanel.hidden = !listPanel.hidden;
+    if (!listPanel.hidden && window.innerWidth <= 720) {
+      optPanel.hidden = true;
+      optToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
   filterEl.addEventListener('input', renderList);
   el.querySelectorAll<HTMLButtonElement>('.sp-tab').forEach((t) =>
     t.addEventListener('click', () => {
