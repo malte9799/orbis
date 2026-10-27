@@ -145,3 +145,20 @@ export function fromVanishing(u: number, v: number, fov: number): { down: number
   const rel = Math.atan2(u, v * Math.sin(down) + f * Math.cos(down));
   return { down: down / RAD, rel: rel / RAD };
 }
+
+/** Where the ray through picture point (u, v) meets the ground, in metres relative to the camera (x right of the heading,
+ * y ahead, z up; the ground is at -alt). Rays that stay above the ground or meet it beyond `maxM` end at the horizontal
+ * distance `maxM` on the ray itself: the picture becomes a floor with a wall behind it, seen from the camera it is exact. */
+export function rayPoint(p: Pick<Pose, 'down' | 'alt' | 'fov'> & { roll?: number }, u: number, v: number, maxM: number): [number, number, number] {
+  const r = (p.roll ?? 0) * RAD;
+  const uu = u * Math.cos(r) + v * Math.sin(r);
+  const vv = -u * Math.sin(r) + v * Math.cos(r);
+  const f = 1 / Math.tan((p.fov * RAD) / 2);
+  const t = p.down * RAD;
+  const dx = uu;
+  const dy = vv * Math.sin(t) + f * Math.cos(t);
+  const dz = vv * Math.cos(t) - f * Math.sin(t);
+  let k = maxM / (Math.hypot(dx, dy) || 1e-9);
+  if (dz < 0) k = Math.min(k, (p.alt - 0.2) / -dz); // a hand's width above the ground, so it does not flicker with the map
+  return [dx * k, dy * k, dz * k];
+}

@@ -4,7 +4,7 @@ import { attachHls } from './hls';
 import { CAM_COLOR, ROAD_CAM_FOV_ANGLE, fovSectors } from './layers/shared/cams';
 import { fitPose, fromVanishing, vanishingPoint } from './layers/shared/camfit';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
-import { previewDir, removeCamDir, saveCamDir } from '../api/camdircloud';
+import { previewDir, removeCamDir, saveCamDir, type CamPose } from '../api/camdircloud';
 import { OFM_SOURCE, baseLayers } from './vector';
 import './camdirmodal.css';
 
@@ -25,12 +25,14 @@ export interface CamDirModalOpts {
   dir: number;
   image?: string;
   hls?: string;
+  /** pose stored with the direction (tilt, height, roll, field of view), if any */
+  pose?: CamPose;
   /** key in the worker (see camdircloud.ts) */
   key: string;
   /** a correction is stored in the worker (can be reset) */
   saved: boolean;
   /** the correction was saved (heading) or removed (null) */
-  onChange(dir: number | null): void;
+  onChange(dir: number | null, pose?: CamPose): void;
 }
 
 const SAT = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -103,7 +105,10 @@ export function openCamDirModal(o: CamDirModalOpts) {
   let roads: Road[] = []; // roads next to the camera
   let groundElev = 0; // terrain height at the camera (overlay view)
   let ar = 16 / 9; // aspect of the picture
-  const v = { alt: 6, down: 12, roll: 0, fov: 36, op: 60 };
+  const v = { alt: o.pose?.alt ?? 6, down: o.pose?.down ?? 12, roll: o.pose?.roll ?? 0, fov: o.pose?.fov ?? 36, op: 60 };
+  // the pose is saved along with the direction once it was worked out or tuned (or when one was stored before)
+  let poseSet = !!o.pose;
+  const pose = (): CamPose | undefined => (poseSet ? { down: v.down, alt: v.alt, roll: v.roll, fov: v.fov } : undefined);
   const off = { e: 0, n: 0 }; // position correction in metres (east, north)
   const mPerLng = 111320 * Math.cos((o.lat * Math.PI) / 180);
   const hasMedia = !!(o.image || o.hls);
@@ -203,7 +208,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
     if (!w || !h) return;
     ar = w / h;
     main.style.setProperty('--ar', String(ar));
-    v.fov = Math.round((2 * Math.atan(Math.tan((DEFAULT_HFOV / 2) * (Math.PI / 180)) / ar)) * (180 / Math.PI));
+    if (!o.pose) v.fov = Math.round((2 * Math.atan(Math.tan((DEFAULT_HFOV / 2) * (Math.PI / 180)) / ar)) * (180 / Math.PI));
     syncAdv();
     map.resize();
   };
@@ -403,6 +408,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
       v.alt = Math.round(r.pose.alt * 2) / 2;
     }
     if (pairs.length >= 2) v.fov = Math.round(r.pose.fov);
+    if (pairs.length >= 2) poseSet = true;
     syncAdv();
     set(r.pose.heading);
     updateFit(r.rms);
@@ -420,6 +426,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
         const away = (x: number) => Math.abs(((((x - dir) % 360) + 540) % 360) - 180);
         if (vpIdx < 0) vpIdx = away(cand[0]) <= away(cand[1]) ? 0 : 1;
         v.down = Math.min(60, Math.max(-10, Math.round(r.down * 2) / 2));
+        poseSet = true;
         syncAdv();
         set(cand[vpIdx]);
       }
@@ -550,6 +557,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
   canvas.addEventListener('pointermove', (e) => {
     if (!overlay || !down) return;
     v.down = Math.min(60, Math.max(-10, v.down + (e.clientY - last.y) * 0.15));
+    poseSet = true;
     const dx = e.clientX - last.x;
     last = { x: e.clientX, y: e.clientY };
     syncAdv();
@@ -567,6 +575,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
       if (!overlay) return;
       e.preventDefault();
       v.fov = Math.min(90, Math.max(15, Math.round(v.fov * (1 + e.deltaY * 0.001))));
+      poseSet = true;
       syncAdv();
       lookFromCamera();
     },
@@ -583,6 +592,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
     const k = (e.target as HTMLInputElement).dataset.k as CamKey | undefined;
     if (!k) return;
     v[k] = Number((e.target as HTMLInputElement).value);
+    if (k !== 'op') poseSet = true;
     syncAdv();
     if (k === 'op') mapEl.style.opacity = String(v.op / 100);
     else lookFromCamera();
@@ -639,7 +649,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
         busy(false);
       });
   };
-  q('.cdm-save').addEventListener('click', () => run(saveCamDir(o.key, dir), () => o.onChange(dir), 'Gespeichert ✓'));
+  q('.cdm-save').addEventListener('click', () => run(saveCamDir(o.key, dir, pose()), () => o.onChange(dir, pose()), 'Gespeichert ✓'));
   q('.cdm-reset').addEventListener('click', () => run(removeCamDir(o.key), () => o.onChange(null), 'Zurückgesetzt ✓'));
   range.value = num.value = String(dir);
   syncAdv();

@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 import { textureSafe } from './hls';
+import { rayPoint } from './layers/shared/camfit';
+import type { CamPose } from '../api/camdircloud';
 
 // 3D view of the selected road camera (like God's Eye View): a view pyramid from the camera up to an
 // upright picture board that shows the live video (or the still image) in the camera's viewing
 // direction. Mount height and view angle are typical values, the direction mostly the road's
 // direction of travel – the board shows roughly where the camera looks, it is not calibrated.
+// With a known pose of the camera (tilt, height, roll, field of view – worked out in the direction editor) the
+// picture is laid onto the ground exactly where the camera sees it: a floor with a wall behind it, built from the
+// rays of the picture, so the road in the picture lies on the road of the map.
 // Built lazily on the first selection; gone again once the popup that opened it is closed.
 
 const MOUNT_M = 10;
@@ -13,6 +18,8 @@ const FOV_DEG = 56;
 /** distance of the board from the camera in metres: fixed size on the map, it shrinks when zooming out like the map itself */
 const DIST_M = 120;
 const COLOR = 0x7cfc9a;
+/** with a known pose: how far the floor reaches before the picture continues upright as a wall (metres) */
+const WALL_M = 90;
 
 export interface CamView {
   lon: number;
@@ -23,6 +30,8 @@ export interface CamView {
   video?: HTMLVideoElement;
   /** still image (needs CORS to be usable as a texture) */
   image?: string;
+  /** pose of the camera: the picture is then projected onto the ground (otherwise it stands upright as a typical-values board) */
+  pose?: CamPose;
   /** the panel element: when it leaves the page or is hidden, the view is removed */
   anchor: HTMLElement;
 }
@@ -36,7 +45,7 @@ export class CamViewLayer implements CustomLayerInterface {
   private scene = new THREE.Scene();
   private camera = new THREE.Camera();
   private group = new THREE.Group();
-  private board: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  private board: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private frame: THREE.LineSegments;
   private view: CamView | null = null;
   private texture: THREE.Texture | null = null;
@@ -60,6 +69,13 @@ export class CamViewLayer implements CustomLayerInterface {
 
   /** board height follows the picture's aspect ratio; the pyramid runs from the camera to its corners */
   private layout() {
+    if (this.view?.pose) return this.layoutPose(this.view.pose);
+    if (!(this.board.geometry instanceof THREE.PlaneGeometry)) {
+      this.board.geometry.dispose();
+      const geo = new THREE.PlaneGeometry(1, 1);
+      geo.rotateX(Math.PI / 2);
+      this.board.geometry = geo;
+    }
     const w = 2 * Math.tan(((FOV_DEG / 2) * Math.PI) / 180);
     const h = w / this.aspect;
     // the board stands a little above the camera's line of sight, so it does not sink into the ground
@@ -78,10 +94,51 @@ export class CamViewLayer implements CustomLayerInterface {
     this.frame.geometry.computeBoundingSphere();
   }
 
+  /** the picture as floor + wall: every grid point sits on its own ray, at the ground or at the maximum distance */
+  private layoutPose(pose: CamPose) {
+    const NX = 32;
+    const NY = 24;
+    const pos: number[] = [];
+    const uv: number[] = [];
+    for (let j = 0; j <= NY; j++)
+      for (let i = 0; i <= NX; i++) {
+        const [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, WALL_M);
+        // unit of the scene is DIST_M metres, the local frame has y north: the heading is applied by the matrix
+        pos.push(x / DIST_M, y / DIST_M, z / DIST_M);
+        uv.push(i / NX, j / NY);
+      }
+    const index: number[] = [];
+    for (let j = 0; j < NY; j++)
+      for (let i = 0; i < NX; i++) {
+        const a = j * (NX + 1) + i;
+        index.push(a, a + 1, a + NX + 1, a + 1, a + NX + 2, a + NX + 1);
+      }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(index);
+    this.board.geometry.dispose();
+    this.board.geometry = geo;
+    this.board.position.set(0, 0, 0);
+    this.board.scale.set(1, 1, 1);
+    // the edge of the picture and the four rays from the camera to its corners
+    const at = (i: number, j: number) => {
+      const k = (j * (NX + 1) + i) * 3;
+      return [pos[k], pos[k + 1], pos[k + 2]];
+    };
+    const edge: number[][] = [];
+    for (let i = 0; i < NX; i++) edge.push(at(i, 0), at(i + 1, 0), at(i, NY), at(i + 1, NY));
+    for (let j = 0; j < NY; j++) edge.push(at(0, j), at(0, j + 1), at(NX, j), at(NX, j + 1));
+    for (const [i, j] of [[0, 0], [NX, 0], [NX, NY], [0, NY]]) edge.push([0, 0, 0], at(i, j));
+    this.frame.geometry.setAttribute('position', new THREE.Float32BufferAttribute(edge.flat(), 3));
+    this.frame.geometry.computeBoundingSphere();
+  }
+
   show(map: MlMap, view: CamView) {
     this.map = map;
     if (!map.getLayer(this.id)) map.addLayer(this);
     this.view = view;
+    this.layout();
     this.setTexture(view.video ?? null, view.image);
     this.group.visible = true;
     clearInterval(this.watch);
@@ -180,7 +237,7 @@ export class CamViewLayer implements CustomLayerInterface {
     const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
     this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
     const elev = map.getTerrain() ? (map.queryTerrainElevation([v.lon, v.lat]) ?? 0) : 0;
-    const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], elev + MOUNT_M);
+    const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], elev + (v.pose ? v.pose.alt : MOUNT_M));
     const s = mc.meterInMercatorCoordinateUnits() * DIST_M;
     // y is flipped between mercator space (south = +y) and the local frame (north = +y)
     this.group.matrix

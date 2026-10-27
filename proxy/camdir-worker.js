@@ -9,8 +9,8 @@
 //      optional variable ALLOWED_ORIGINS (comma separated, e.g. https://malte9799.github.io)
 //
 // Routes
-//   GET    /dirs                  → { dirs: { "<camera key>": { d: 0..359, at: <ms> } } }
-//   PUT    /dirs   {key, dir}     → sets one direction            (Authorization: Bearer <ADMIN_TOKEN>)
+//   GET    /dirs                  → { dirs: { "<camera key>": { d: 0..359, at: <ms>, p?: {down, alt, roll, fov} } } }
+//   PUT    /dirs   {key, dir, pose?: {down, alt, roll, fov}} → sets one direction and optionally the pose (Authorization: Bearer <ADMIN_TOKEN>)
 //   DELETE /dirs?key=<key>        → removes the correction        (Authorization: Bearer <ADMIN_TOKEN>)
 //
 // Prepared for suggestions by every visitor (later): POST /suggest would store into a separate KV key
@@ -85,7 +85,16 @@ export default {
     if (!KEY_RE.test(String(body?.key ?? '')) || !Number.isFinite(dir) || dir < 0 || dir >= 360) return json({ error: 'bad key or dir' }, 400, headers);
     const dirs = await read();
     if (!(body.key in dirs) && Object.keys(dirs).length >= MAX_ENTRIES) return json({ error: 'too many entries' }, 413, headers);
-    dirs[body.key] = { d: Math.round(dir * 10) / 10, at: Date.now() };
+    const entry = { d: Math.round(dir * 10) / 10, at: Date.now() };
+    // optional pose of the camera (tilt below the horizon, height above the ground, roll, vertical field of view): the 3D view needs it
+    const p = body.pose;
+    if (p && typeof p === 'object') {
+      const num = (x, lo, hi) => (Number.isFinite(Number(x)) && Number(x) >= lo && Number(x) <= hi ? Math.round(Number(x) * 10) / 10 : null);
+      const pose = { down: num(p.down, -20, 80), alt: num(p.alt, 0.2, 200), roll: num(p.roll, -45, 45), fov: num(p.fov, 5, 120) };
+      if (Object.values(pose).some((x) => x === null)) return json({ error: 'bad pose' }, 400, headers);
+      entry.p = pose;
+    }
+    dirs[body.key] = entry;
     await env.CAMDIR.put(KEY, JSON.stringify(dirs));
     return json({ ok: true }, 200, headers);
   },

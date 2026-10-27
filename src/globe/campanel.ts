@@ -5,7 +5,7 @@ import { attachHls } from './hls';
 import { CamViewLayer } from './camview3d';
 import { CARDINAL } from './layers/shared/cams';
 import { category, tile } from './sidepanel';
-import { camdirWritable, cloudKey, hasRemoteDir } from '../api/camdircloud';
+import { camdirWritable, cloudKey, hasRemoteDir, poseOf, type CamPose } from '../api/camdircloud';
 import { openCamDirModal } from './camdirmodal';
 import './flightpanel.css';
 
@@ -24,6 +24,9 @@ export interface CamSelection {
 }
 
 const COLOR = '#00bfa5';
+
+// typical camera pose, used until the direction editor has worked one out
+const DEFAULT_POSE: CamPose = { down: 12, alt: 6, roll: 0, fov: 36 };
 
 export class CamPanel {
   private root = document.createElement('aside');
@@ -97,15 +100,23 @@ export class CamPanel {
       dir: this.dir(),
       image: img ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : undefined,
       hls: safeUrl(p.hls) ?? undefined,
+      pose: poseOf(p),
       key: cloudKey(p.id, s.lng, s.lat),
       saved: hasRemoteDir(cloudKey(p.id, s.lng, s.lat)),
       // the layer data carries the new direction after the save – the panel follows
-      onChange: (dir) => {
+      onChange: (dir, pose) => {
         if (this.sel !== s) return;
-        s.p = dir === null ? { ...p, dir: undefined, dirset: undefined } : { ...p, dir, dirset: true };
+        const flat = { pdown: pose?.down, palt: pose?.alt, proll: pose?.roll, pfov: pose?.fov };
+        s.p = dir === null ? { ...p, dir: undefined, dirset: undefined, ...flat } : { ...p, dir, dirset: true, ...flat };
         this.render();
       },
     });
+  }
+
+  /** pose for the 3D view: the stored one, a typical one for a direction set by hand, none for an estimated direction */
+  private pose(): CamPose | undefined {
+    const p = this.sel?.p;
+    return poseOf(p) ?? (p?.dirset ? DEFAULT_POSE : undefined);
   }
 
   private dir(): number {
@@ -148,7 +159,7 @@ export class CamPanel {
         ? `<video class="pop-cam" crossorigin="anonymous" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
         : still;
     const tiles = `<div class="sp-tiles">${tile('Blickrichtung', dir >= 0 ? `${est ? 'ca. ' : ''}${Math.round(dir)}° ${CARDINAL[Math.round(dir / 45) % 8]}` : 'unbekannt')}${tile('Bild', hls || video ? 'Livestream' : 'Standbild')}</div>`;
-    const note = dir >= 0 ? `<div class="sp-note">Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte${est ? ' – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße)' : ''}.</div>` : '<div class="sp-note">Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.</div>';
+    const note = dir >= 0 ? `<div class="sp-note">${this.pose() ? 'Das Bild liegt als 3D-Ansicht auf der Straße: Boden und Horizont sitzen dort, wo die Kamera sie sieht' + (poseOf(p) ? '.' : ' (typische Werte – im Editor „Punkte abgleichen“ oder „Überlagerung“ anpassen).') : `Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte${est ? ' – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße)' : ''}.`}</div>` : '<div class="sp-note">Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.</div>';
     const date = typeof p.updated === 'string' && p.updated ? [['Aktualisiert', `${escapeHtml(fmt.dateTime(p.updated))} (${escapeHtml(fmt.relative(p.updated))})`] as [string, string]] : [];
     const cats = category('cam', 'Kamera', [['Standort', `${fmt.num(s.lat, 4)}, ${fmt.num(s.lng, 4)}`], ...date], this.open_);
     const source = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(String(p.source ?? ''))}${link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>` : ''}</div></details>`;
@@ -162,7 +173,7 @@ export class CamPanel {
     // stream not playable (offline, blocked): fall back to the still image
     if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));
     const map = this.h.map();
-    if (map && dir >= 0) this.view.show(map, { lon: s.lng, lat: s.lat, dir, video: el ?? undefined, image: img ?? undefined, anchor: this.root });
+    if (map && dir >= 0) this.view.show(map, { lon: s.lng, lat: s.lat, dir, pose: this.pose(), video: el ?? undefined, image: img ?? undefined, anchor: this.root });
     else this.view.hide();
   }
 }

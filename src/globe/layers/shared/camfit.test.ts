@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitPose, fromVanishing, project, vanishingPoint, type Pair, type Pose } from './camfit';
+import { fitPose, fromVanishing, project, rayPoint, vanishingPoint, type Pair, type Pose } from './camfit';
 
 const truth: Pose = { heading: 130, down: 14, alt: 7, fov: 38 };
 const spots: [number, number][] = [
@@ -50,5 +50,20 @@ describe('camera pose from point pairs', () => {
     expect(r.down).toBeCloseTo(truth.down, 0);
     expect(r.rel).toBeCloseTo(road - truth.heading, 0);
     expect(vanishingPoint([0, 0, 1, 0], [0, 1, 1, 1])).toBeNull();
+  });
+
+  it('puts the picture on the ground where the camera sees it', () => {
+    const pose = { ...truth, heading: 0, alt: 7 };
+    for (const [u, v] of [[0, -0.8], [0.5, -0.5], [-0.7, -0.9]] as [number, number][]) {
+      const [x, y, z] = rayPoint(pose, u, v, 500);
+      expect(z).toBeCloseTo(-(pose.alt - 0.2), 5);
+      const q = project(pose, x, y)!;
+      // the point lies 0.2 m above the ground: seen from the camera it is the very same pixel
+      expect(q[0]).toBeCloseTo(u, 1);
+    }
+    // the sky ends on a wall at the maximum distance
+    const [x, y, z] = rayPoint(pose, 0, 0.9, 80);
+    expect(Math.hypot(x, y)).toBeCloseTo(80, 5);
+    expect(z).toBeGreaterThan(-pose.alt);
   });
 });
