@@ -32,6 +32,8 @@ export type ClickResult =
   | { type: 'flight'; hex: string; lng: number; lat: number }
   /** a ship was clicked: the ship panel shows it */
   | { type: 'ship'; mmsi: number; lng: number; lat: number }
+  /** a webcam was clicked: the camera panel shows it */
+  | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
   | { type: 'sonde'; serial: string; lng: number; lat: number };
 
