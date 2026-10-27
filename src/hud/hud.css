@@ -74,6 +74,7 @@
 
 /* ---------- top right: search + settings ---------- */
 .hud-tr { position: absolute; right: var(--hud-r); top: 12px; z-index: 8; display: flex; gap: 8px; align-items: center; }
+.hud[data-layout='desktop'] .hud-tr { right: calc(var(--hud-r) + 46px); }
 .hud-ibtn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); cursor: pointer; flex: none; }
 .hud-ibtn svg { width: 19px; height: 19px; }
 .hud-sx { position: relative; height: 38px; width: 38px; border-radius: 11px; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); transition: width .22s ease, border-color .15s; flex: none; max-width: calc(100vw - 2 * var(--hud-r) - 46px); }
@@ -356,7 +357,7 @@
    Landscape: no app bar (Orbis menu), side panel instead of the sheet.
    Switched by the data-layout attribute (hud.ts: desktop | portrait | landscape).
    ====================================================================== */
-.globe-view:not([data-layout='desktop']) .maplibregl-ctrl-scale { display: none; }
+.globe-view:not([data-layout='desktop']):not(.planet-view) .scalebar { display: none; }
 .hud:not([data-layout='desktop']) .hud-ibtn[data-act='settings'] { display: none; }
 
 /* --- Karten pills (both phone layouts) --- */
@@ -390,7 +391,7 @@
 .globe-view.hud-searching[data-layout='portrait'] .maplibregl-ctrl-bottom-right { visibility: hidden; }
 .hud[data-layout='portrait'] .hud-bar { left: 0; right: calc(46px + var(--safe-right, 0px)); top: 12px; max-width: none; padding-left: max(10px, var(--safe-left, 0px)); }
 .hud[data-layout='portrait'] .hud-r { display: contents; }
-body.hud-cover .topbar { z-index: 0; }
+body.hud-cover .orbis-nav { z-index: 0; }
 
 .hud-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; border-radius: 22px 22px 0 0; border-bottom: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0 var(--safe-right, 0px) var(--safe-bottom, 0px) var(--safe-left, 0px); max-height: calc(100% + var(--topbar-total, 0px)); }
 .hud-sheet[data-detent='half'] { height: 55vh; }
@@ -490,7 +491,6 @@ body.hud-cover .topbar { z-index: 0; }
 
 /* --- landscape --- */
 @media (max-height: 499px) and (orientation: landscape) {
-  body.mode-map .topbar { display: none; }
   body.mode-map .globe-view { inset: 0; }
   .tl-now { display: none !important; }
 }
@@ -556,7 +556,11 @@ body.hud-cover .topbar { z-index: 0; }
 }
 
 /* ---------- map controls under the settings button (desktop): Grundkarte + Standort, Zoom, Kompass ---------- */
-.hud-ctl { position: absolute; right: var(--hud-r); top: 60px; z-index: 8; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.mapctl { display: contents; }
+.hud-tilt { max-height: 200px; transition: max-height .3s ease, opacity .25s ease, margin .3s ease, border-width .3s ease; }
+/* zoomed out: the 2D/3D group folds away and the compass below slides up into its place (margin cancels the column gap) */
+.hud-tilt.off { max-height: 0; opacity: 0; margin-bottom: -10px; border-width: 0; pointer-events: none; }
+.hud-ctl { position: absolute; right: var(--hud-r, 14px); top: 60px; z-index: 8; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 .hud-cg { display: flex; flex-direction: column; width: 38px; border-radius: 19px; background: rgba(13,18,38,.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid var(--border); box-shadow: 0 6px 20px rgba(0,0,0,.3); overflow: hidden; }
 .hud-cg button { width: 36px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; }
 .hud-cg button.on { color: var(--accent); }

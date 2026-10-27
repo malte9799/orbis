@@ -1,4 +1,5 @@
 import type { StyleSpecification } from 'maplibre-gl';
+import { regionsGeoJSON } from './regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
 export type BaseId = 'satellite' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
@@ -214,6 +215,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>',
       },
       // Placeholder pixel until the first render; the view swaps in the sun-masked Black Marble.
+      regions: { type: 'geojson', data: regionsGeoJSON() },
       night: {
         type: 'image',
         url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

@@ -1,6 +1,7 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
 import { BASES } from '../globe/style';
+import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
 import type { Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
@@ -103,6 +104,8 @@ export interface Hud {
   setBearing(deg: number): void;
   /** map pitch in degrees: keeps the 2D/3D button and its slider in sync */
   syncPitch(deg: number): void;
+  /** hide the 2D/3D button below zoom 3 and let a tilt rebound there */
+  bindMap(map: import('maplibre-gl').Map): void;
   placeOpen(): boolean;
   /** phone portrait: content inside the sheet changed size (legend / timeline shown or hidden) */
   syncSheet(): void;
@@ -149,13 +152,6 @@ function suggestionsFor(k: Karte): [string, string][] {
 const isStd = (k: Karte) => !!k.std;
 const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.relative(t));
 
-/** compass dial: the tick ring turns against the map bearing, the red marker on it points north, the letter is the heading */
-const compassDial = () => {
-  // 14 slots; the one at north is left out, the red marker sits there and turns with the ring
-  const ticks = Array.from({ length: 13 }, (_, i) => `<line x1="22" y1="4.5" x2="22" y2="8" transform="rotate(${(i + 1) * (360 / 14)} 22 22)" stroke-width="1.3"/>`).join('');
-  return `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21.5" class="disc"/><g class="ring"><g stroke="#fff" stroke-linecap="round" opacity=".8">${ticks}</g><path d="M22 1.5l2.6 4.4h-5.2z" fill="#ff4d3d"/></g><text x="22" y="22" class="hd" text-anchor="middle" dominant-baseline="central">N</text></svg>`;
-};
-
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
@@ -185,23 +181,11 @@ export function createHud(host: HudHost): Hud {
     <div class="hud-tr">
       <div class="hud-sx"><button type="button" class="hud-sxb" data-act="search" title="Suchen ( / )" aria-label="Suchen"></button></div>
       <button type="button" class="hud-scx" data-act="search">Abbrechen</button>
-      <button type="button" class="hud-ibtn" data-act="settings" title="Einstellungen" aria-label="Einstellungen">${ico('gear')}</button>
     </div>
     <div class="hud-ctl">
       <div class="hud-cg">
         <button type="button" data-act="basepick" title="Grundkarte" aria-label="Grundkarte wählen" aria-expanded="false">${ico('earth')}</button>
         <button type="button" data-act="locate" title="Mein Standort" aria-label="Mein Standort">${ico('navarrow')}</button>
-      </div>
-      <div class="hud-cg">
-        <button type="button" data-act="zin" title="Hineinzoomen" aria-label="Hineinzoomen">${ico('plus', 2)}</button>
-        <button type="button" data-act="zout" title="Herauszoomen" aria-label="Herauszoomen">${ico('minus', 2)}</button>
-      </div>
-      <div class="hud-cg hud-tilt">
-        <button type="button" data-act="tilt" class="hud-tbtn" title="Neigung" aria-label="Kamera neigen">3D</button>
-        <div class="hud-tsl"><input type="range" min="0" max="100" step="1" value="75" aria-label="Neigung"/></div>
-      </div>
-      <div class="hud-cg">
-        <button type="button" data-act="north" class="hud-compass" title="Norden ausrichten" aria-label="Norden ausrichten">${compassDial()}</button>
       </div>
       <div class="hud-bp hud-glass" hidden></div>
     </div>
@@ -744,8 +728,8 @@ export function createHud(host: HudHost): Hud {
       r.innerHTML = '';
       return;
     }
-    r.innerHTML = `<button type="button" class="hud-logo" data-act="menu" aria-label="Menü: Vorhersage, Karte, Weltall" aria-expanded="${ui.menu}"><i></i></button>
-      ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/vorhersage">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a></div>` : ''}`;
+    r.innerHTML = `<button type="button" class="hud-logo" data-act="menu" aria-label="Menü: Vorhersage, Karte, Weltall, Spiele" aria-expanded="${ui.menu}"><i></i></button>
+      ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/vorhersage">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a><a role="menuitem" data-act="menuclose" href="#/spiele">Spiele</a></div>` : ''}`;
   }
 
   let lastShift = '';
@@ -790,42 +774,9 @@ export function createHud(host: HudHost): Hud {
     }
   }
 
-  // 2D/3D: the button flips the camera between top-down and 45°; while tilted a slider sets the angle
-  const tiltBtn = root.querySelector<HTMLButtonElement>('.hud-tbtn')!;
-  const tiltSl = root.querySelector<HTMLElement>('.hud-tsl')!;
-  const tiltIn = tiltSl.querySelector('input')!;
-  let tiltOpen = false;
-  let tiltDrag = false;
-  let tiltClick = 0;
-  function showTilt(open: boolean) {
-    tiltOpen = open;
-    tiltSl.classList.toggle('open', open);
-    tiltIn.tabIndex = open ? 0 : -1;
-    tiltBtn.textContent = open ? '2D' : '3D';
-  }
-  // The slider runs 0–100 % of the map's maximum tilt; at 0 it is 2D again.
-  const TILT_MAX = 60;
-  const toPitch = (v: number) => (v / 100) * TILT_MAX;
-  tiltIn.addEventListener('input', () => host.setPitch(toPitch(Number(tiltIn.value)), false));
-  tiltIn.addEventListener('change', () => {
-    if (Number(tiltIn.value) > 0) return;
-    tiltClick = performance.now();
-    showTilt(false);
-    host.setPitch(0, true);
-  });
-  tiltIn.addEventListener('pointerdown', () => (tiltDrag = true));
-  window.addEventListener('pointerup', () => (tiltDrag = false));
-  function syncPitch(p: number) {
-    if (!tiltDrag) tiltIn.value = String(Math.round((p / TILT_MAX) * 100));
-    if (p > 0.5) showTilt(true);
-    else if (!tiltDrag && tiltOpen && performance.now() - tiltClick > 700) showTilt(false);
-  }
-  function toggleTilt() {
-    tiltClick = performance.now();
-    showTilt(!tiltOpen);
-    if (tiltOpen) tiltIn.value = '75';
-    host.setPitch(tiltOpen ? toPitch(75) : 0, true);
-  }
+  // zoom, 2D/3D tilt and compass (shared with the planet maps)
+  const mapctl = createMapCtl(host);
+  root.querySelector('.hud-ctl')!.insertBefore(mapctl.el, root.querySelector('.hud-bp'));
 
   const bp = root.querySelector<HTMLElement>('.hud-bp')!;
   function renderBasePick() {
@@ -925,7 +876,6 @@ export function createHud(host: HudHost): Hud {
     encodeKarte,
   };
   const ACT = buildActions(core);
-  ACT.tilt = toggleTilt;
 
   root.addEventListener('click', (e) => {
     if (sheet.suppressClick()) {
@@ -1239,21 +1189,9 @@ export function createHud(host: HudHost): Hud {
       placeNode = null;
       render();
     },
-    syncPitch,
-    setBearing(deg) {
-      root.style.setProperty('--hud-bearing', `${-deg}deg`);
-      const heading = ['N', 'O', 'S', 'W'][Math.round((((deg % 360) + 360) % 360) / 90) % 4];
-      const t = root.querySelector<SVGTextElement>('.hud-compass .hd');
-      if (t && t.dataset.h !== heading) {
-        // fade the old letter out, swap, fade the new one in
-        t.dataset.h = heading;
-        t.style.opacity = '0';
-        window.setTimeout(() => {
-          t.textContent = t.dataset.h!;
-          t.style.opacity = '1';
-        }, 120);
-      }
-    },
+    syncPitch: mapctl.syncPitch,
+    bindMap: (m) => bindTiltLimit(m, mapctl),
+    setBearing: mapctl.setBearing,
     placeOpen: () => !!placeNode && layout === 'portrait',
     syncSheet: () => {
       if (!sheet.dragging() && !sheet.el()?.style.height) syncSheetH();

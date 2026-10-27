@@ -25,9 +25,6 @@ export default (c: HudCore): Record<string, ActFn> => {
       ui.basepick = !ui.basepick;
     },
     locate: () => host.locate(),
-    zin: () => host.zoomBy(1),
-    zout: () => host.zoomBy(-1),
-    north: () => host.resetNorth(),
     menu: () => {
       ui.menu = !ui.menu;
     },
