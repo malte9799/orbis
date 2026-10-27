@@ -17,12 +17,12 @@
 .stars-panel {
   position: absolute;
   left: 12px;
-  top: 64px;
+  top: 12px; /* die Topbar gibt es nicht mehr; rechts oben sitzt der Orbis-Knopf */
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  max-width: calc(100% - 24px);
+  max-width: calc(100% - 72px);
 }
 .stars-modes {
   display: flex;
