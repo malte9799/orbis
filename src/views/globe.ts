@@ -123,8 +123,10 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 export interface GlobeView {
   el: HTMLElement;
-  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
+  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean; jump?: boolean }): void;
   deactivate(): void;
+  /** resolves once the map has drawn its current view (used to hand over from the forecast map) */
+  settled(): Promise<void>;
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
@@ -1407,6 +1409,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     activate(focus) {
       hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
+        if (focus?.jump && focus.lat != null && focus.lon != null) {
+          state.center = [focus.lon, focus.lat];
+          state.zoom = focus.zoom ?? 6;
+        }
         initMap();
       } else {
         map.resize();
@@ -1414,7 +1420,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         extras?.resume();
       }
       const hasPos = focus?.lat != null && focus?.lon != null;
-      if (hasPos && focus?.fromSpace && map && ready) {
+      if (hasPos && focus?.jump && map && ready) {
+        // seamless hand-over from the forecast map: same view, no flight
+        map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: focus!.zoom ?? 6 });
+      } else if (hasPos && focus?.fromSpace && map && ready) {
         // coming back from the solar system: start far out and dive in
         map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: map.getMinZoom() });
         map.easeTo({ zoom: focus!.zoom ?? 2.2, duration: 1600 });
@@ -1441,6 +1450,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         const url = live[state.overlay];
         if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
+    },
+    settled() {
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        setTimeout(done, 4000);
+        if (!map) return done();
+        map.resize();
+        map.once('idle', done);
+        map.triggerRepaint();
+      });
     },
     deactivate() {
       clearInterval(refreshTimer);
