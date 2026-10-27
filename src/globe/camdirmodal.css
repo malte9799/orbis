@@ -343,3 +343,47 @@
     grid-template-columns: 120px 1fr 52px;
   }
 }
+
+/* vanishing point mode: road edges drawn in the picture */
+.cdm-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cdm-lines line {
+  stroke: #f0b23e;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.cdm .cdm-pt.vp {
+  width: 18px;
+  height: 18px;
+  background: #f0b23e;
+  color: #0b1020;
+  pointer-events: none;
+}
+.cdm-main.ov .cdm-lines {
+  display: none;
+}
+.cdm-roads {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.cdm-roads[hidden],
+.cdm-flip[hidden] {
+  display: none;
+}
+.cdm .cdm-roads button {
+  height: 28px;
+  padding: 0 10px;
+}
+.cdm .cdm-roads button.on {
+  background: #fff;
+  color: #0b1020;
+}

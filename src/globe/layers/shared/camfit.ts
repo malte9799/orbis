@@ -126,3 +126,22 @@ export function fitPose(pairs: Pair[], start: Pose): { pose: Pose; rms: number }
   pose.heading = ((pose.heading % 360) + 360) % 360;
   return { pose, rms: Math.sqrt(cost(pairs, pose, full) / n) };
 }
+
+/** where two lines of the picture (each through two points, u / v units) meet; null when they are nearly parallel */
+export function vanishingPoint(a: [number, number, number, number], b: [number, number, number, number]): [number, number] | null {
+  const [x1, y1, x2, y2] = a;
+  const [x3, y3, x4, y4] = b;
+  const d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(d) < 1e-9) return null;
+  const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+  return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+}
+
+/** From the vanishing point (u, v) of a horizontal direction (a straight road): the tilt of the camera below the horizon
+ * and the angle of that direction to the viewing direction (clockwise, degrees). Needs the vertical field of view. */
+export function fromVanishing(u: number, v: number, fov: number): { down: number; rel: number } {
+  const f = 1 / Math.tan((fov * RAD) / 2);
+  const down = Math.atan2(v, f);
+  const rel = Math.atan2(u, v * Math.sin(down) + f * Math.cos(down));
+  return { down: down / RAD, rel: rel / RAD };
+}

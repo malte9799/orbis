@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitPose, project, type Pair, type Pose } from './camfit';
+import { fitPose, fromVanishing, project, vanishingPoint, type Pair, type Pose } from './camfit';
 
 const truth: Pose = { heading: 130, down: 14, alt: 7, fov: 38 };
 const spots: [number, number][] = [
@@ -37,5 +37,18 @@ describe('camera pose from point pairs', () => {
     expect(diff(r.pose.heading, truth.heading)).toBeLessThan(1.5);
     expect(r.pose.down).toBeCloseTo(truth.down, 0);
     expect(r.rms).toBeLessThan(0.02);
+  });
+
+  it('reads tilt and road direction from the vanishing point of two road edges', () => {
+    const road = 150; // bearing of the road, the camera looks 20° to the left of it
+    const far = (side: number) => project(truth, Math.sin((road * Math.PI) / 180) * 1e6 + side, Math.cos((road * Math.PI) / 180) * 1e6)!;
+    const near = (side: number) => project(truth, Math.sin(((road + 90) * Math.PI) / 180) * side + Math.sin((road * Math.PI) / 180) * 15, Math.cos(((road + 90) * Math.PI) / 180) * side + Math.cos((road * Math.PI) / 180) * 15)!;
+    const a = [...near(-3), ...far(0)] as [number, number, number, number];
+    const b = [...near(3), ...far(0)] as [number, number, number, number];
+    const vp = vanishingPoint(a, b)!;
+    const r = fromVanishing(vp[0], vp[1], truth.fov);
+    expect(r.down).toBeCloseTo(truth.down, 0);
+    expect(r.rel).toBeCloseTo(road - truth.heading, 0);
+    expect(vanishingPoint([0, 0, 1, 0], [0, 1, 1, 1])).toBeNull();
   });
 });
