@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
-const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY, ontario511: process.env.ONTARIO_511_API_KEY, alberta511: process.env.ALBERTA_511_API_KEY };
+const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY, trafikverket: process.env.TRAFIKVERKET_KEY, utah511: process.env.UTAH_511_API_KEY, arizona511: process.env.ARIZONA_511_API_KEY, idaho511: process.env.IDAHO_511_API_KEY, nevada511: process.env.NEVADA_511_API_KEY, alaska511: process.env.ALASKA_511_API_KEY, georgia511: process.env.GEORGIA_511_API_KEY, louisiana511: process.env.LOUISIANA_511_API_KEY, pennsylvania511: process.env.PENNSYLVANIA_511_API_KEY, ohgo: process.env.OHGO_API_KEY, qldtraffic: process.env.QLDTRAFFIC_KEY, ontario511: process.env.ONTARIO_511_API_KEY, alberta511: process.env.ALBERTA_511_API_KEY };
 (globalThis as { localStorage?: unknown }).localStorage = {
   getItem: (k: string) => (k === 'wg.keys' ? JSON.stringify(envKeys) : null),
   setItem() {},

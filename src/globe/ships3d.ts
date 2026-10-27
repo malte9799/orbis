@@ -372,7 +372,7 @@ export class ShipsLayer implements CustomLayerInterface {
   }
 
   private active() {
-    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM && this.map.getProjection()?.type !== 'globe';
+    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM && !(this.map.getProjection()?.type === 'globe' && this.map.getZoom() < 12);
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {

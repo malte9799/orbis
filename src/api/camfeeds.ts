@@ -19,7 +19,8 @@ export interface CamFeed {
   label: string;
   /** west, south, east, north */
   bbox: [number, number, number, number];
-  key?: 'nps';
+  /** id of the settings key (src/settings/keys) this feed needs */
+  key?: string;
   load(): Promise<Feature<Point>[]>;
 }
 
@@ -91,6 +92,163 @@ function genericCams(fc: { features?: { geometry?: { type: string; coordinates: 
   });
   return out;
 }
+
+/** One public ArcGIS point layer with cameras (hosted by the operator itself or its GIS office). */
+interface ArcSpec {
+  id: string;
+  label: string;
+  bbox: [number, number, number, number];
+  /** FeatureServer/MapServer layer URL */
+  layer: string;
+  source: string;
+  /** attributes → popup fields; undefined skips the record */
+  map(p: Record<string, unknown>): { id: string | number; title?: string; subtitle?: string; image?: string; hls?: string; url?: string; dir?: number } | undefined;
+  /** fallback position when the geometry is empty */
+  pos?(p: Record<string, unknown>): [number, number];
+}
+
+const str = (v: unknown) => (typeof v === 'string' && v.trim() && v.trim() !== '<Null>' ? v.trim() : undefined);
+
+/** All features of a layer, paged (ArcGIS caps the answer per request). */
+async function arcgisAll(layer: string): Promise<{ geometry?: { type: string; coordinates: number[] } | null; properties?: Record<string, unknown> | null }[]> {
+  const out: { geometry?: { type: string; coordinates: number[] } | null; properties?: Record<string, unknown> | null }[] = [];
+  for (let offset = 0; offset < 20000; ) {
+    const q = new URLSearchParams({ where: '1=1', outFields: '*', f: 'geojson', outSR: '4326', resultOffset: String(offset), resultRecordCount: '1000' });
+    const j = await fetchJson<{ features?: typeof out; properties?: { exceededTransferLimit?: boolean }; exceededTransferLimit?: boolean; error?: { message?: string } }>(`${layer}/query?${q}`, undefined, 30000);
+    if (j.error) throw new Error(j.error.message ?? 'ArcGIS error');
+    const got = j.features ?? [];
+    out.push(...got);
+    offset += got.length;
+    if (!got.length || !(j.properties?.exceededTransferLimit || j.exceededTransferLimit)) break;
+  }
+  return out;
+}
+
+const arcFeed = (a: ArcSpec): CamFeed => ({
+  id: a.id,
+  label: a.label,
+  bbox: a.bbox,
+  async load() {
+    return (await arcgisAll(a.layer)).flatMap((f) => {
+      const p = f.properties ?? {};
+      const [lon, lat] = f.geometry?.type === 'Point' && f.geometry.coordinates?.length >= 2 ? f.geometry.coordinates : (a.pos?.(p) ?? []);
+      const m = a.map(p);
+      if (!m || !ok(lon, lat) || (!m.image && !m.hls && !m.url)) return [];
+      return [cam(Number(lon), Number(lat), { id: `${a.id}-${m.id}`, title: m.title || 'Kamera', subtitle: m.subtitle, image: m.image, hls: m.hls, url: m.url ?? m.image, source: a.source, dir: m.dir })];
+    });
+  },
+});
+
+const ARC_FEEDS: ArcSpec[] = [
+  {
+    id: 'il',
+    label: 'IDOT / Travel Midwest (Illinois)',
+    bbox: [-91.6, 36.9, -87.0, 42.6],
+    layer: 'https://services2.arcgis.com/aIrBD8yn1TDTEXoz/arcgis/rest/services/TrafficCamerasTM_Public/FeatureServer/0',
+    source: 'Illinois DOT / Travel Midwest',
+    map: (p) => ({ id: String(p.OBJECTID), title: str(p.CameraLocation), subtitle: 'Verkehrskamera Illinois', image: https(str(p.SnapShot)), url: https(str(p.ImgPath)), dir: directionToHeading(str(p.CameraDirection), true) }),
+  },
+  {
+    id: 'or',
+    label: 'TripCheck (Oregon)',
+    bbox: [-124.7, 41.9, -116.4, 46.4],
+    layer: 'https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/TripCheck_Cameras/FeatureServer/0',
+    source: 'Oregon DOT TripCheck',
+    pos: (p) => [Number(p.attributes_longitude), Number(p.attributes_latitude)],
+    map: (p) => ({ id: String(p.attributes_cameraId ?? p.ObjectId), title: str(p.attributes_title), subtitle: ['Verkehrskamera Oregon', str(p.attributes_route)].filter(Boolean).join(' · '), image: https(str(p.attributes_filename)) }),
+  },
+  {
+    id: 'mi',
+    label: 'MiDrive (Michigan)',
+    bbox: [-90.5, 41.6, -82.0, 47.6],
+    layer: 'https://services2.arcgis.com/67lKNkQ2TO1I3lhR/arcgis/rest/services/MiDrive%20Cameras/FeatureServer/0',
+    source: 'Michigan DOT (MiDrive)',
+    pos: (p) => [Number(p.Lon), Number(p.Lat)],
+    map: (p) => ({ id: String(p.OBJECTID), title: [str(p.Route), str(p.Location)].filter(Boolean).join(' '), subtitle: ['Verkehrskamera Michigan', str(p.County)].filter(Boolean).join(' · '), image: https(str(p.Image)), dir: directionToHeading(str(p.Direction), true) }),
+  },
+  {
+    id: 'ia',
+    label: 'Iowa DOT',
+    bbox: [-96.7, 40.3, -90.1, 43.6],
+    layer: 'https://services.arcgis.com/8lRhdTsQyJpO52F1/arcgis/rest/services/Traffic_Cameras_View/FeatureServer/0',
+    source: 'Iowa DOT (CC BY 4.0)',
+    map: (p) => ({ id: String(p.device_id ?? p.FID), title: str(p.Desc_) ?? str(p.ImageName), subtitle: ['Verkehrskamera Iowa', str(p.REGION)].filter(Boolean).join(' · '), image: https(str(p.ImageURL)), hls: https(str(p.VideoURL)) }),
+  },
+  {
+    // the catalog has no still image, only HLS streams
+    id: 'mo',
+    label: 'MoDOT (Missouri)',
+    bbox: [-95.8, 35.9, -89.0, 40.7],
+    layer: 'https://services2.arcgis.com/jWXb6JPWtBjOCalT/arcgis/rest/services/MODOT_Traffic_Cameras/FeatureServer/1',
+    source: 'Missouri DOT',
+    map: (p) => {
+      const hls = https(str(p.URL2));
+      return str(p.STREAM_ERROR) === 'Y' || !hls ? undefined : { id: String(p.CAM_ID__ ?? p.OBJECTID), title: str(p.DESCRIPTION), subtitle: 'Verkehrskamera Missouri', hls };
+    },
+  },
+  {
+    // snapshots are http only (blocked as mixed content) → position and link to the image
+    id: 'ga',
+    label: 'GDOT (Georgia)',
+    bbox: [-85.7, 30.3, -80.7, 35.1],
+    layer: 'https://services1.arcgis.com/2iUE8l8JKrP2tygQ/arcgis/rest/services/GDOT_Live_Traffic_Cameras/FeatureServer/0',
+    source: 'Georgia DOT (GDOT) / GEMA',
+    map: (p) => ({ id: String(p.cctv_id ?? p.OBJECTID), title: str(p.location_description) ?? str(p.name), subtitle: ['Verkehrskamera Georgia', str(p.county)].filter(Boolean).join(' · '), image: https(str(p.url)), url: str(p.url), hls: https(str(p.HLS)) }),
+  },
+  {
+    id: 'ky',
+    label: 'KYTC (Kentucky)',
+    bbox: [-89.7, 36.4, -81.9, 39.2],
+    layer: 'https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/trafficCamerasCur_Prd/FeatureServer/0',
+    source: 'Kentucky Transportation Cabinet (KYTC)',
+    map: (p) => ({ id: String(p.OBJECTID), title: str(p.description) ?? str(p.name), subtitle: 'Verkehrskamera Kentucky', image: https(str(p.snapshot)), url: str(p.snapshot) }),
+  },
+  {
+    id: 'nl-ca',
+    label: 'Newfoundland und Labrador',
+    bbox: [-67.9, 46.5, -52.5, 60.5],
+    layer: 'https://services8.arcgis.com/aCyQID5qQcyrJMm2/arcgis/rest/services/TI_HighwayCamera/FeatureServer/0',
+    source: 'Government of Newfoundland and Labrador, Transportation and Infrastructure',
+    map: (p) => ({ id: String(p.objectid), title: str(p.location), subtitle: 'Straßenkamera Neufundland und Labrador', image: https(str(p.url)) }),
+  },
+  {
+    // 511 platform: position and link to the camera page (no still image in the layer)
+    id: 'sk',
+    label: 'Highway Hotline (Saskatchewan)',
+    bbox: [-110.1, 49, -101.3, 60.1],
+    layer: 'https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Saskatchewan_Highway_Hotline/FeatureServer/0',
+    source: 'Saskatchewan Highway Hotline (Esri Canada)',
+    map: (p) => (str(p.Status) === 'Disabled' ? undefined : { id: String(p.Id ?? p.OBJECTID), title: str(p.Name), subtitle: ['Straßenkamera Saskatchewan', str(p.RoadwayName)].filter(Boolean).join(' · '), url: https(str(p.Url)) }),
+  },
+  {
+    id: 'yt',
+    label: 'Yukon 511',
+    bbox: [-141.1, 59.9, -123.7, 69.7],
+    layer: 'https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Yukon511/FeatureServer/0',
+    source: 'Yukon 511 (Esri Canada)',
+    map: (p) => (str(p.Status) === 'Disabled' ? undefined : { id: String(p.Id ?? p.OBJECTID), title: str(p.Roadway) ?? str(p.Description), subtitle: 'Straßenkamera Yukon', url: https(str(p.Url)) }),
+  },
+  {
+    id: 'ie-donegal',
+    label: 'Donegal (Irland)',
+    bbox: [-8.7, 54.5, -7.0, 55.5],
+    layer: 'https://services2.arcgis.com/WRtfelnPg3R7bCEW/arcgis/rest/services/TrafficCameras/FeatureServer/0',
+    source: 'Donegal County Council / Transport Infrastructure Ireland',
+    map: (p) => ({ id: String(p.ID ?? p.OBJECTID), title: str(p.Name), subtitle: 'Wetter-/Straßenkamera Donegal', image: https(str(p.WeatherCAM) ?? str(p.link)) }),
+  },
+];
+
+/** 511 portals on the same platform as Ontario/Alberta (`/api/v2/get/cameras`, free developer key per portal). */
+const IBI_511 = [
+  { id: 'ut', key: 'utah511', host: 'prod-ut.ibi511.com', label: 'UDOT Traffic (Utah)', bbox: [-114.1, 36.9, -109.0, 42.1] as [number, number, number, number], source: 'Utah DOT (UDOT Traffic)', name: 'UDOT' },
+  { id: 'az', key: 'arizona511', host: 'az511.com', label: 'AZ511 (Arizona)', bbox: [-114.9, 31.3, -109.0, 37.1] as [number, number, number, number], source: 'Arizona DOT (AZ511)', name: 'AZ511' },
+  { id: 'id', key: 'idaho511', host: '511.idaho.gov', label: 'Idaho 511', bbox: [-117.3, 41.9, -111.0, 49.1] as [number, number, number, number], source: 'Idaho Transportation Department (Idaho 511)', name: 'Idaho 511' },
+  { id: 'nv', key: 'nevada511', host: 'nvroads.com', label: 'Nevada Roads', bbox: [-120.1, 35.0, -114.0, 42.1] as [number, number, number, number], source: 'Nevada DOT (NVRoads)', name: 'NVRoads' },
+  { id: 'ak', key: 'alaska511', host: '511.alaska.gov', label: 'Alaska 511', bbox: [-170.0, 51.0, -129.9, 71.5] as [number, number, number, number], source: 'Alaska DOT&PF (Alaska 511)', name: 'Alaska 511' },
+  { id: 'ga511', key: 'georgia511', host: '511ga.org', label: 'Georgia 511', bbox: [-85.7, 30.3, -80.7, 35.1] as [number, number, number, number], source: 'Georgia DOT (Georgia 511)', name: 'Georgia 511' },
+  { id: 'la', key: 'louisiana511', host: '511la.org', label: 'Louisiana 511', bbox: [-94.1, 28.8, -88.7, 33.1] as [number, number, number, number], source: 'Louisiana DOTD (511 Louisiana)', name: 'Louisiana 511' },
+  { id: 'pa', key: 'pennsylvania511', host: '511pa.com', label: '511PA (Pennsylvania)', bbox: [-80.6, 39.7, -74.6, 42.3] as [number, number, number, number], source: 'PennDOT (511PA)', name: '511PA' },
+] as const;
 
 export const CAM_FEEDS: CamFeed[] = [
   {
@@ -497,6 +655,125 @@ export const CAM_FEEDS: CamFeed[] = [
     },
   },
   {
+    // DATEX2 v3.6 device list (CC BY); stills are plain JPEGs. No CORS → mirrored by the data Action
+    id: 'dgt',
+    label: 'DGT (Spanien)',
+    bbox: [-18.3, 27.5, 4.5, 43.9],
+    async load() {
+      const xml = await fetchText('https://nap.dgt.es/datex2/v3/dgt/DevicePublication/camaras_datex2_v36.xml', 60000);
+      return xmlBlocks(xml, 'ns2:device').flatMap((b) => {
+        const id = b.match(/\sid="([^"]+)"/)?.[1];
+        const lat = Number(xmlTag(b, 'loc:latitude'));
+        const lon = Number(xmlTag(b, 'loc:longitude'));
+        const img = https(xmlTag(b, 'fse:deviceUrl'));
+        if (!id || !img || !ok(lon, lat) || xmlTag(b, 'ns2:typeOfDevice') !== 'camera') return [];
+        const road = xmlTag(b, 'loc:roadName');
+        const km = xmlTag(b, 'lse:kilometerPoint');
+        const to = xmlTag(b, 'loc:roadDestination');
+        return [
+          cam(lon, lat, {
+            id: `dgt-${id}`,
+            title: [road, km && `km ${km}`].filter(Boolean).join(' · ') || 'Verkehrskamera',
+            subtitle: ['Verkehrskamera Spanien', to && `Richtung ${to}`, xmlTag(b, 'lse:province')].filter(Boolean).join(' · '),
+            image: img,
+            url: img,
+            source: 'Dirección General de Tráfico (DGT), Punto de Acceso Nacional – CC BY 4.0',
+          }),
+        ];
+      });
+    },
+  },
+  {
+    // WFS/GML of the Servei Català de Trànsit; stills via TransitCamera (https, the link in the catalog is http)
+    id: 'cat',
+    label: 'Servei Català de Trànsit (Katalonien)',
+    bbox: [0.1, 40.5, 3.4, 42.9],
+    async load() {
+      const xml = await fetchText('https://www.gencat.cat/transit/opendata/cameres.xml', 30000);
+      return xmlBlocks(xml, 'cite:cameres').flatMap((b) => {
+        const [lon, lat] = xmlTag(b, 'gml:coordinates').split(',').map(Number);
+        const link = xmlTag(b, 'cite:link').replace(/&#13;|&amp;/g, (m) => (m === '&amp;' ? '&' : '')).trim();
+        const name = link.match(/sctidcam=([\w.-]+)/)?.[1];
+        // SCT cameras by name; municipal ones (e.g. Terrassa) carry their own image URL
+        const img = name ? `https://mct.gencat.cat/mct2bo/TransitCamera?nom=${name}&visualitzacio=imatge` : https(link);
+        if (!img || !ok(lon, lat)) return [];
+        const road = xmlTag(b, 'cite:carretera');
+        const pk = xmlTag(b, 'cite:pk');
+        return [
+          cam(lon, lat, {
+            id: `cat-${(name ?? img).replace(/\W+/g, '-').slice(-40)}`,
+            title: [road, pk && `km ${pk}`].filter(Boolean).join(' · ') || 'Verkehrskamera',
+            subtitle: ['Verkehrskamera Katalonien', xmlTag(b, 'cite:municipi')].filter(Boolean).join(' · '),
+            image: img,
+            url: img,
+            source: `Servei Català de Trànsit (Generalitat de Catalunya)${xmlTag(b, 'cite:font') && xmlTag(b, 'cite:font') !== 'SCT' ? ` · ${xmlTag(b, 'cite:font')}` : ''}`,
+          }),
+        ];
+      });
+    },
+  },
+  {
+    // Trafikverket Open API (free key from Trafiklab / trafikinfo): POST with an XML query, answer as JSON
+    id: 'trafikverket',
+    label: 'Trafikverket (Schweden)',
+    bbox: [10.9, 55.3, 24.2, 69.1],
+    key: 'trafikverket',
+    async load() {
+      const key = store.getKeys().trafikverket!;
+      const body = `<REQUEST><LOGIN authenticationkey="${key.replace(/[^\w-]/g, '')}"/><QUERY objecttype="Camera" schemaversion="1.1" limit="5000"><FILTER><EQ name="Active" value="true"/></FILTER><INCLUDE>Id</INCLUDE><INCLUDE>Name</INCLUDE><INCLUDE>Direction</INCLUDE><INCLUDE>Geometry</INCLUDE><INCLUDE>PhotoUrl</INCLUDE><INCLUDE>Location</INCLUDE><INCLUDE>Type</INCLUDE></QUERY></REQUEST>`;
+      const res = await fetch('https://api.trafikinfo.trafikverket.se/v2/data.json', { method: 'POST', headers: { 'Content-Type': 'text/xml' }, body, signal: AbortSignal.timeout(30000) });
+      if (!res.ok) throw new Error(`Trafikverket HTTP ${res.status}`);
+      const j = (await res.json()) as { RESPONSE?: { RESULT?: { Camera?: { Id: string; Name?: string; Direction?: number | string; Geometry?: { WGS84?: string }; PhotoUrl?: string; Location?: string; Type?: string }[]; error?: { MESSAGE?: string } }[] } };
+      const result = j.RESPONSE?.RESULT?.[0];
+      if (result?.error) throw new Error(`Trafikverket: ${result.error.MESSAGE ?? 'error'}`);
+      return (result?.Camera ?? []).flatMap((c) => {
+        const m = c.Geometry?.WGS84?.match(/POINT\s*\(\s*(-?[\d.]+)\s+(-?[\d.]+)/);
+        const img = https(c.PhotoUrl);
+        if (!m || !img || !ok(m[1], m[2])) return [];
+        const dir = c.Direction != null && c.Direction !== '' ? Number(c.Direction) : undefined;
+        return [
+          cam(Number(m[1]), Number(m[2]), {
+            id: `tv-${c.Id}`,
+            title: c.Name || c.Location || 'Kamera',
+            subtitle: ['Straßenkamera Schweden', c.Type].filter(Boolean).join(' · '),
+            image: img,
+            url: img,
+            source: 'Trafikverket (CC0)',
+            dir: dir != null && dir >= 0 && dir <= 360 ? dir : undefined,
+          }),
+        ];
+      });
+    },
+  },
+  {
+    // Socrata dataset of the CHART cameras: positions plus a link to the operator's video page (no still image)
+    id: 'md',
+    label: 'CHART (Maryland)',
+    bbox: [-79.6, 37.9, -75.0, 39.8],
+    async load() {
+      const list = await fetchJson<{ location?: string; county?: string; feedid?: string; url?: string; lat?: string; long?: string }[]>('https://opendata.maryland.gov/resource/hua3-qc8n.json?$limit=2000', undefined, 30000);
+      return list.flatMap((c) => {
+        const url = https(c.url);
+        if (!c.feedid || !url || !ok(c.long, c.lat)) return [];
+        return [cam(Number(c.long), Number(c.lat), { id: `md-${c.feedid}`, title: c.location || 'Kamera', subtitle: ['Verkehrskamera Maryland', c.county].filter(Boolean).join(' · '), url, source: 'Maryland DOT State Highway Administration (CHART) via opendata.maryland.gov' })];
+      });
+    },
+  },
+  {
+    // Socrata dataset of the city/parish: position and link to the 511 camera page
+    id: 'br',
+    label: 'Baton Rouge (Louisiana)',
+    bbox: [-91.4, 30.3, -90.9, 30.65],
+    async load() {
+      const list = await fetchJson<{ id: string; image_view?: string; the_geom?: { coordinates?: number[] } }[]>('https://data.brla.gov/resource/6z6u-ts44.json?$limit=1000', undefined, 30000);
+      return list.flatMap((c) => {
+        const [lon, lat] = c.the_geom?.coordinates ?? [];
+        const url = https(c.image_view);
+        return url && ok(lon, lat) ? [cam(lon, lat, { id: `br-${c.id}`, title: `Kamera ${c.id}`, subtitle: 'Verkehrskamera Baton Rouge', url, source: 'City of Baton Rouge / East Baton Rouge Parish – Open Data' })] : [];
+      });
+    },
+  },
+  {
     id: 'nps',
     label: 'US-Nationalparks',
     bbox: [-170, 18, -64, 72],
@@ -514,10 +791,72 @@ export const CAM_FEEDS: CamFeed[] = [
         .map((w) => cam(Number(w.longitude), Number(w.latitude), { id: `nps-${w.id}`, title: w.title, subtitle: [w.relatedParks?.[0]?.fullName, w.isStreaming ? 'Livestream' : ''].filter(Boolean).join(' · '), image: w.images?.[0]?.url, url: w.url, source: 'US National Park Service', live: false }));
     },
   },
+  ...ARC_FEEDS.map(arcFeed),
+  ...IBI_511.map(
+    (a): CamFeed => ({
+      id: a.id,
+      label: a.label,
+      bbox: a.bbox,
+      key: a.key,
+      async load() {
+        const key = store.getKeys()[a.key];
+        if (!key) throw new Error(`${a.label}: key missing`);
+        const list = await fetchJson<{ Id: string | number; Roadway?: string; Location?: string; Direction?: string; Latitude: number; Longitude: number; Views?: { Url: string; Status?: string }[] }[]>(
+          `https://${a.host}/api/v2/get/cameras?format=json&key=${encodeURIComponent(key)}`,
+          undefined,
+          30000,
+        );
+        return list
+          .filter((c) => ok(c.Longitude, c.Latitude))
+          .flatMap((c) => {
+            const view = c.Views?.find((v) => v.Status !== 'Disabled') ?? c.Views?.[0];
+            const image = https(view?.Url);
+            if (!image) return [];
+            return [cam(c.Longitude, c.Latitude, { id: `${a.id}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: [`Verkehrskamera ${a.name}`, c.Roadway].filter(Boolean).join(' · '), image, url: image, source: a.source, dir: directionToHeading(c.Direction, true) })];
+          });
+      },
+    }),
+  ),
+  {
+    // OHGO public API (free key): cameras with several views; field casing differs between docs and answers, so both are read
+    id: 'ohgo',
+    label: 'OHGO (Ohio)',
+    bbox: [-84.9, 38.4, -80.5, 42.4],
+    key: 'ohgo',
+    async load() {
+      const key = store.getKeys().ohgo;
+      if (!key) throw new Error('OHGO: key missing');
+      type View = { direction?: string; smallUrl?: string; largeUrl?: string; SmallUrl?: string; LargeUrl?: string; Direction?: string };
+      type Cam = { id?: string; Id?: string; latitude?: number; Latitude?: number; longitude?: number; Longitude?: number; location?: string; Location?: string; description?: string; Description?: string; cameraViews?: View[]; CameraViews?: View[] };
+      const j = await fetchJson<{ results?: Cam[]; Results?: Cam[] }>(`https://publicapi.ohgo.com/api/v1/cameras?page-all=true&api-key=${encodeURIComponent(key)}`, undefined, 40000);
+      return (j.results ?? j.Results ?? []).flatMap((c, i) => {
+        const lat = c.latitude ?? c.Latitude;
+        const lon = c.longitude ?? c.Longitude;
+        const views = c.cameraViews ?? c.CameraViews ?? [];
+        const v = views.find((x) => x.direction ?? x.Direction) ?? views[0];
+        const image = https(v?.largeUrl ?? v?.LargeUrl ?? v?.smallUrl ?? v?.SmallUrl);
+        if (!image || !ok(lon, lat)) return [];
+        return [cam(Number(lon), Number(lat), { id: `ohgo-${c.id ?? c.Id ?? i}`, title: c.location ?? c.Location ?? c.description ?? c.Description ?? 'Kamera', subtitle: 'Verkehrskamera Ohio', image, url: image, source: 'Ohio DOT (OHGO)', dir: directionToHeading(v?.direction ?? v?.Direction, true) })];
+      });
+    },
+  },
+  {
+    // QLDTraffic GeoJSON API (apikey from the spec / registration); property names are not documented in detail → generic parser
+    id: 'qld',
+    label: 'QLDTraffic (Queensland)',
+    bbox: [138.0, -29.2, 153.6, -10.0],
+    key: 'qldtraffic',
+    async load() {
+      const key = store.getKeys().qldtraffic;
+      if (!key) throw new Error('QLDTraffic: key missing');
+      const fc = await fetchJson<Parameters<typeof genericCams>[0]>(`https://api.qldtraffic.qld.gov.au/v1/webcams?apikey=${encodeURIComponent(key)}`, undefined, 30000);
+      return genericCams(fc, 'Queensland Department of Transport and Main Roads (QLDTraffic)', 'qld');
+    },
+  },
 ];
 
 /** Feeds whose camera list the data Action mirrors (not signed URLs, keys or XML); images always live. */
-export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen', 'austin', 'wsdot', 'kingcounty']);
+export const SNAPSHOT_CAMS = new Set(['tfl', 'caltrans', 'nyc', 'dc', '511on.ca', '511.alberta.ca', 'alertca', 'autobahn', 'nps', 'is', 'nz', 'drivebc', 'nsw', 'calgary', 'deldot', 'vegvesen', 'austin', 'wsdot', 'kingcounty', 'dgt', 'cat', 'trafikverket', 'md', 'il', 'or', 'mi', 'ia', 'mo', 'ga', 'ky', 'nl-ca', 'sk', 'yt', 'ie-donegal', 'br', 'ut', 'az', 'id', 'nv', 'ak', 'ga511', 'la', 'pa', 'ohgo', 'qld']);
 
 export function camFeedsInView(b: { west: number; south: number; east: number; north: number }): CamFeed[] {
   const keys = store.getKeys();

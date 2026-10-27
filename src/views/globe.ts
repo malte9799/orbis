@@ -109,7 +109,7 @@ const DEFAULT_STATE: GlobeState = {
   terrain3d: false,
   extras: {},
   groups: {},
-  projection: 'mercator',
+  projection: 'globe',
   center: [store.getLastPlace().lon, store.getLastPlace().lat],
   zoom: 5,
 };
@@ -133,8 +133,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // only the view survives from the old saved state; layers now come from the Karten (src/hud)
   const state: GlobeState = {
     ...DEFAULT_STATE,
-    // v2: 2D map became the default view – reset the projection of older saved states once.
-    projection: (saved.version ?? 1) >= 2 && saved.projection === 'globe' ? 'globe' : 'mercator',
+    // only the globe exists (flattens by itself at high zoom) – old saved 2D states are ignored
+    projection: 'globe',
     center: Array.isArray(saved.center) ? saved.center : DEFAULT_STATE.center,
     zoom: saved.zoom ?? DEFAULT_STATE.zoom,
     version: STATE_VERSION,
@@ -405,18 +405,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   // ----- apply state to map -----------------------------------------------
   let renderProj = () => {};
-  function setProjection(next: GlobeState['projection']) {
-    if (next === state.projection) return;
-    state.projection = next;
-    map?.setProjection({ type: next });
-    if (state.wind && needsModel()) {
-      wind?.stop();
-      wind?.start();
-    }
-    renderProj();
-    save();
-  }
-
   const vis = (id: string, on: boolean) => {
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   };
@@ -1075,19 +1063,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
 
     // Locate button
-    // 2D / 3D switch
+    // solar-system button
     const projCtl = document.createElement('div');
     projCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group proj-ctl';
     projCtl.setAttribute('role', 'group');
     projCtl.setAttribute('aria-label', 'Ansicht');
     renderProj = () => {
       projCtl.innerHTML =
-        (['mercator', 'globe'] as const)
-          .map(
-            (p) =>
-              `<button type="button" data-proj="${p}" class="${state.projection === p ? 'on' : ''}" aria-pressed="${state.projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`,
-          )
-          .join('') +
         `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
     };
     renderProj();
@@ -1099,7 +1081,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         onOpenSpace(c.lat, c.lng);
         return;
       }
-      setProjection(btn.dataset.proj as GlobeState['projection']);
     });
 
     // Zooming further out of the 3D globe leaves Earth and enters the solar system.
@@ -1424,10 +1405,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   return {
     el,
     activate(focus) {
-      if (focus?.projection) {
-        if (map) setProjection(focus.projection);
-        else state.projection = focus.projection;
-      }
       hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
         initMap();
