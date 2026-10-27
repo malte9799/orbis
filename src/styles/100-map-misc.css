@@ -588,17 +588,13 @@ video.pop-cam {
   transform: none;
   margin-left: 4px;
 }
-.pop-cam-3d {
-  margin: 2px 0 4px;
+/* camera panel: live picture on top */
+.cam-media {
+  padding: 10px 12px 0;
 }
-/* camera popup docked bottom-left while its 3D board is shown (MapLibre positions popups by transform) */
-.maplibregl-popup.cam-docked {
-  transform: none !important;
-  top: auto !important;
-  left: 12px !important;
-  bottom: 56px;
-  max-width: min(320px, calc(100vw - 24px)) !important;
+.cam-media .pop-cam {
+  margin: 0;
 }
-.maplibregl-popup.cam-docked .maplibregl-popup-tip {
-  display: none;
+.cam-media video.pop-cam {
+  max-height: 260px;
 }

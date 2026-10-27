@@ -10,9 +10,8 @@ import { textureSafe } from './hls';
 
 const MOUNT_M = 10;
 const FOV_DEG = 56;
-/** the board keeps about this width on screen, at least MIN_W metres */
-const BOARD_PX = 320;
-const MIN_W = 40;
+/** distance of the board from the camera in metres: fixed size on the map, it shrinks when zooming out like the map itself */
+const DIST_M = 120;
 const COLOR = 0x7cfc9a;
 
 export interface CamView {
@@ -24,7 +23,7 @@ export interface CamView {
   video?: HTMLVideoElement;
   /** still image (needs CORS to be usable as a texture) */
   image?: string;
-  /** the popup element: when it leaves the page, the view is removed */
+  /** the panel element: when it leaves the page or is hidden, the view is removed */
   anchor: HTMLElement;
 }
 
@@ -101,7 +100,7 @@ export class CamViewLayer implements CustomLayerInterface {
   private check() {
     const v = this.view;
     if (!v) return;
-    if (!v.anchor.isConnected) return this.hide();
+    if (!v.anchor.isConnected || v.anchor.hidden) return this.hide();
     // the stream failed and the popup fell back to the still image
     if (v.video && !v.video.isConnected) {
       v.video = undefined;
@@ -182,10 +181,7 @@ export class CamViewLayer implements CustomLayerInterface {
     this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
     const elev = map.getTerrain() ? (map.queryTerrainElevation([v.lon, v.lat]) ?? 0) : 0;
     const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], elev + MOUNT_M);
-    const mpp = (40075016 * Math.cos((v.lat * Math.PI) / 180)) / (512 * 2 ** map.getZoom());
-    const w = Math.max(MIN_W, BOARD_PX * mpp);
-    const dist = w / (2 * Math.tan(((FOV_DEG / 2) * Math.PI) / 180));
-    const s = mc.meterInMercatorCoordinateUnits() * dist;
+    const s = mc.meterInMercatorCoordinateUnits() * DIST_M;
     // y is flipped between mercator space (south = +y) and the local frame (north = +y)
     this.group.matrix
       .makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z)

@@ -29,7 +29,9 @@ const cam = (
   lat: number,
   p: { id: string; title: string; subtitle?: string; image?: string; video?: string; hls?: string; url?: string; source: string; live?: boolean; dir?: number },
 ): Feature<Point> => {
-  const { dir, ...rest } = p;
+  const { dir: given, ...rest } = p;
+  // names often carry the direction of travel ("… NB", "… Westbound"): use it when the feed has no direction field
+  const dir = given ?? directionToHeading(p.title, false, true);
   // viewing direction only when known (the webcam layer draws a cone for dir >= 0)
   return { type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: { ...rest, kind: p.live === false ? 'signed' : 'road', ...(dir != null && Number.isFinite(dir) ? { dir } : {}) } };
 };
@@ -39,20 +41,34 @@ const cam = (
  * "SW") may use bare words (`bare`); in free names only travel forms count ("NB", "Westbound"),
  * since street names like "West Ave" contain cardinal words too. Mostly the direction of travel of
  * the road the camera watches – an approximation of where it looks. Ambiguous text: undefined.
+ * `travelOnly`: only "NB"/"Westbound" forms (for free names where "NE 124th St" is a street).
  */
-export function directionToHeading(value: string | undefined, bare = false): number | undefined {
-  const text = String(value ?? '').trim().toUpperCase().replace(/(\b[NS])-([EW]\b)/g, '$1$2');
+export function directionToHeading(value: string | undefined, bare = false, travelOnly = false): number | undefined {
+  const text = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\b([NSEW])\s*\/\s*B\b/g, '$1B')
+    .replace(/\b(NORTH|SOUTH)[\s\/-]?(EAST|WEST)\b/g, (_, a, b) => `${a[0]}${b[0]}`)
+    .replace(/(\b[NS])[-\/]([EW]\b)/g, '$1$2');
   if (!text) return undefined;
   const tiers: [RegExp, number][][] = [
     [[/\bNORTHBOUND\b|\bNB\b/, 0], [/\bSOUTHBOUND\b|\bSB\b/, 180], [/\bEASTBOUND\b|\bEB\b/, 90], [/\bWESTBOUND\b|\bWB\b/, 270]],
     [[/\bNORTHEAST\b|\bNE\b/, 45], [/\bNORTHWEST\b|\bNW\b/, 315], [/\bSOUTHEAST\b|\bSE\b/, 135], [/\bSOUTHWEST\b|\bSW\b/, 225]],
   ];
-  if (bare) tiers.push([[/\bNORTH\b|^N$/, 0], [/\bSOUTH\b|^S$/, 180], [/\bEAST\b|^E$/, 90], [/\bWEST\b|^W$/, 270]]);
+  if (travelOnly) tiers.length = 1;
+  else if (bare) tiers.push([[/\bNORTH\b|^N$/, 0], [/\bSOUTH\b|^S$/, 180], [/\bEAST\b|^E$/, 90], [/\bWEST\b|^W$/, 270]]);
   for (const forms of tiers) {
     const hits = new Set(forms.filter(([re]) => re.test(text)).map(([, h]) => h));
     if (hits.size) return hits.size === 1 ? [...hits][0] : undefined;
   }
   return undefined;
+}
+
+/** Heading from an Icelandic view description ("séð til vesturs", "í norðaustur"); place names after "í átt að" don't count. */
+export function icelandicHeading(text: string | undefined): number | undefined {
+  const m = (text ?? '').toLowerCase().match(/(?:til|í)\s+(norðaustur|norðvestur|suðaustur|suðvestur|norður|suður|austur|vestur)s?(?![\p{L}])/u);
+  if (!m) return undefined;
+  return { norðaustur: 45, norðvestur: 315, suðaustur: 135, suðvestur: 225, norður: 0, suður: 180, austur: 90, vestur: 270 }[m[1]];
 }
 
 /** only https URLs (an http stream would be blocked as mixed content) */
@@ -243,7 +259,7 @@ export const CAM_FEEDS: CamFeed[] = [
       const list = await fetchJson<{ id: string; commonName: string; lat: number; lon: number; additionalProperties?: { key: string; value: string }[] }[]>('https://api.tfl.gov.uk/Place/Type/JamCam', undefined, 30000);
       return list.map((c) => {
         const prop = (k: string) => c.additionalProperties?.find((p) => p.key === k)?.value;
-        return cam(c.lon, c.lat, { id: c.id, title: c.commonName, subtitle: 'Verkehrskamera London', image: prop('imageUrl'), video: prop('videoUrl'), url: prop('videoUrl') ?? prop('imageUrl'), source: 'Powered by TfL Open Data · Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights 2019' });
+        return cam(c.lon, c.lat, { id: c.id, title: c.commonName, subtitle: 'Verkehrskamera London', image: prop('imageUrl'), video: prop('videoUrl'), url: prop('videoUrl') ?? prop('imageUrl'), dir: directionToHeading(prop('view'), true), source: 'Powered by TfL Open Data · Contains OS data © Crown copyright and database rights 2016 and Geomni UK Map data © and database rights 2019' });
       });
     },
   },
@@ -457,7 +473,7 @@ export const CAM_FEEDS: CamFeed[] = [
           .filter((c) => ok(c.Longitude, c.Latitude))
           .map((c) => {
             const view = c.Views?.find((v) => v.Status !== 'Disabled') ?? c.Views?.[0];
-            return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, source: host === '511on.ca' ? '511 Ontario (Ministry of Transportation Ontario)' : '511 Alberta (Alberta Transportation)' });
+            return cam(c.Longitude, c.Latitude, { id: `${host}-${c.Id}`, title: c.Location || c.Roadway || 'Kamera', subtitle: c.Roadway, image: view?.Url, url: view?.Url, dir: directionToHeading(view?.Description), source: host === '511on.ca' ? '511 Ontario (Ministry of Transportation Ontario)' : '511 Alberta (Alberta Transportation)' });
           });
       },
     }),
@@ -482,6 +498,7 @@ export const CAM_FEEDS: CamFeed[] = [
             subtitle: ['Straßenwetterkamera Island', c.Vegheiti || `Route ${c.NrVegur}`].filter(Boolean).join(' · '),
             image: c.Slod,
             url: c.Slod,
+            dir: icelandicHeading(c.Skyring),
             source: 'Vegagerðin (Icelandic Road and Coastal Administration)',
           }),
         ];
@@ -506,6 +523,7 @@ export const CAM_FEEDS: CamFeed[] = [
             title: xmlTag(b, 'name') || xmlTag(b, 'description') || 'Verkehrskamera Neuseeland',
             subtitle: [xmlTag(b, 'highway'), xmlTag(b, 'direction')].filter(Boolean).join(' · ') || 'Verkehrskamera Neuseeland',
             image: `https://trafficnz.info${img}`,
+            dir: directionToHeading(xmlTag(b, 'direction'), true),
             url: `https://trafficnz.info${xmlTag(b, 'viewUrl') || img}`,
             source: 'NZ Transport Agency / Waka Kotahi',
           }),

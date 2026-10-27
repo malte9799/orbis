@@ -1,22 +1,19 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
-import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE, CAM_FOV_RADIUS, CARDINAL, ROAD_CAM_FOV_ANGLE, ROAD_CAM_FOV_RADIUS, fovSectors } from '../shared/cams';
+import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE, CAM_FOV_RADIUS, ROAD_CAM_FOV_ANGLE, ROAD_CAM_FOV_RADIUS, fovSectors } from '../shared/cams';
 import { LayerSpecification } from 'maplibre-gl';
 import { SNAPSHOT_CAMS, camFeedsInView } from '../../../api/camfeeds';
-import { cardHtml } from '../../popup';
-import { attachHls } from '../../hls';
-import { CamViewLayer } from '../../camview3d';
-import { escapeHtml, safeUrl } from '../../../util';
 import { hasWindyKey, loadDigitrafficCams, loadOsmWebcams, loadWindyWebcams } from '../../../api/cams';
 import { isSuperseded } from '../../../api/overpass';
 import { snapshotJson } from '../../../api/data';
+import { estimateHeadings, needsEstimate } from '../../../api/camdir';
 
 /** the overview dots/halo (not clickable) end here – above it only the live camera dots are drawn, otherwise every camera shows twice */
 const CAM_OVERVIEW_MAXZOOM = 14;
 
-type St = { fi: FeatureCollection; windy: FeatureCollection; feeds: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; key: string; osmCount: number; windyKey: string; heatAdded: boolean; heatLoaded: boolean; osmFc: FeatureCollection<Point> | null; fovKey: string };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('webcams', () => ({ fi: empty(), windy: empty(), feeds: new Map(), feedLoading: new Set(), feedErrors: new Set(), key: '', osmCount: 0, windyKey: '', heatAdded: false, heatLoaded: false, osmFc: null, fovKey: '' }));
+type St = { fi: FeatureCollection; windy: FeatureCollection; feeds: Map<string, { at: number; features: Feature<Point>[] }>; feedLoading: Set<string>; feedErrors: Set<string>; key: string; osmCount: number; windyKey: string; heatAdded: boolean; heatLoaded: boolean; osmFc: FeatureCollection<Point> | null; fovKey: string; estimating: boolean };
+const getState = (ctx: ExtraCtx) => ctx.state<St>('webcams', () => ({ fi: empty(), windy: empty(), feeds: new Map(), feedLoading: new Set(), feedErrors: new Set(), key: '', osmCount: 0, windyKey: '', heatAdded: false, heatLoaded: false, osmFc: null, fovKey: '', estimating: false }));
 
 function merge(ctx: ExtraCtx) {
   const st = getState(ctx);
@@ -177,6 +174,31 @@ async function loadWorldHeat(ctx: ExtraCtx) {
   }
 }
 
+/** road cameras without a direction in their feed: heading of the nearest road as an estimate (see camdir.ts) */
+function estimateMissing(ctx: ExtraCtx) {
+  const st = getState(ctx);
+  if (st.estimating) return;
+  const vb = ctx.map.getBounds();
+  const c = ctx.map.getCenter();
+  const cand = ([...st.fi.features, ...[...st.feeds.values()].flatMap((f) => f.features)] as Feature<Point>[])
+    .filter((f) => f.properties?.kind === 'road' && vb.contains(f.geometry.coordinates as [number, number]) && needsEstimate(f))
+    .sort((a, b) => Math.hypot(a.geometry.coordinates[0] - c.lng, a.geometry.coordinates[1] - c.lat) - Math.hypot(b.geometry.coordinates[0] - c.lng, b.geometry.coordinates[1] - c.lat));
+  if (!cand.length) return;
+  st.estimating = true;
+  estimateHeadings(cand)
+    .then((found) => {
+      for (const [f, dir] of found) f.properties = { ...f.properties, dir };
+      // the layer data carries the direction too (popup, 3D view)
+      if (found.size) merge(ctx);
+    })
+    .catch((e) => {
+      if (!isSuperseded(e)) console.warn('Webcam-Blickrichtung', e);
+    })
+    .finally(() => {
+      st.estimating = false;
+    });
+}
+
 function updateFov(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (!ctx.isOn('webcams')) return;
@@ -191,7 +213,8 @@ function updateFov(ctx: ExtraCtx) {
   const zoomed = ctx.map.getZoom() >= ALPR_FOV_ZOOM;
   const cams = zoomed ? withDir(st.osmFc?.features) : [];
   // road cameras of the feeds: direction from the feed's direction text (estimated, drawn fainter)
-  const road = zoomed ? withDir([...st.feeds.values()].flatMap((f) => f.features)) : [];
+  const road = zoomed ? withDir([...st.fi.features, ...[...st.feeds.values()].flatMap((f) => f.features)]) : [];
+  if (zoomed) estimateMissing(ctx);
   const key = [...cams, ...road].map((c) => c.join(',')).sort().join('|');
   if (key === st.fovKey) return;
   st.fovKey = key;
@@ -263,47 +286,9 @@ export default defineExtra({
     loadNow(ctx);
   },
   onMoveEnd: loadNow,
-  click({ ctx, p, pt }) {
-  const img = safeUrl(p.image);
-  // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
-  const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
-  const video = safeUrl(p.video);
-  const hls = safeUrl(p.hls);
-  const dir = Number(p.dir);
-  // road cameras of the feeds: the direction comes from the feed's direction text (mostly the road's direction of travel)
-  const est = p.kind === 'road';
-  const subtitle = dir >= 0 ? [p.subtitle, `Blickrichtung ${est ? 'ca. ' : ''}${Math.round(dir)}° (${CARDINAL[Math.round(dir / 45) % 8]})`].filter(Boolean).join(' · ') : p.subtitle;
-  const still = src
-    ? `<a class="pop-cam" href="${escapeHtml(safeUrl(p.url) ?? img)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" loading="lazy" referrerpolicy="no-referrer"></a>`
-    : '<div class="pop-sub">Livestream gerade nicht verfügbar</div>';
-  // the 3D board uses the playing video as a texture: HLS plays via hls.js from a blob: URL (see hls.ts),
-  // the plain video is loaded with CORS (crossorigin)
-  const media = hls
-    ? `<video class="pop-cam" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted playsinline controls></video>`
-    : video
-    ? `<video class="pop-cam" crossorigin="anonymous" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
-    : src
-    ? still
-    : `<a class="btn small pop-cam-link" href="${escapeHtml(safeUrl(p.url) ?? '#')}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>`;
-  const extra = dir >= 0 ? `${media}<button type="button" class="btn small pop-cam-3d">In 3D ansehen</button>` : media;
-  const after = (node: HTMLElement) => {
-    const el = node.querySelector<HTMLVideoElement>('video.pop-cam');
-    // stream not playable (offline, blocked): fall back to the still image
-    if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));
-    if (!(dir >= 0)) return;
-    // the camera's picture on an upright board in its viewing direction, while the popup is open
-    const view = ctx.state('webcams-3d', () => new CamViewLayer());
-    view.show(ctx.map, { lon: pt[0], lat: pt[1], dir, video: el ?? undefined, image: img ?? undefined, anchor: node });
-    // seen from above the board is only a line: tilt the map and look along the camera
-    node.querySelector('.pop-cam-3d')?.addEventListener('click', (e) => {
-      // the popup would cover the board: dock it in the corner while the 3D view is shown
-      node.closest('.maplibregl-popup')?.classList.add('cam-docked');
-      (e.currentTarget as HTMLElement).remove();
-      // the camera sits in the lower part of the view, the board above it
-      ctx.map.easeTo({ center: [pt[0], pt[1]], bearing: dir, pitch: 62, zoom: Math.max(ctx.map.getZoom(), 16), offset: [0, Math.round(ctx.map.getContainer().clientHeight * 0.22)], duration: 1200 });
-    });
-  };
-  return { type: 'html', html: cardHtml({ glyph: 'webcam', color: '#00bfa5', title: p.title, subtitle, date: p.updated, source: p.source, url: p.url, extra }), lng: pt[0], lat: pt[1], after };
+  click({ p, pt }) {
+    // the camera panel on the right shows the picture and the 3D board (see campanel.ts)
+    return { type: 'cam', p, lng: pt[0], lat: pt[1] };
   },
   layers: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
   clickLayers: ['webcams', 'webcams-osm'],
