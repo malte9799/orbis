@@ -214,7 +214,6 @@ function route() {
       if (active !== 'planet') return;
       v.activate({
         body: params.get('body') ?? 'mars',
-        projection: params.get('view') === '2d' ? 'mercator' : 'globe',
         lat: hasPos ? lat : undefined,
         lon: hasPos ? lon : undefined,
         zoom: Number.isFinite(z) ? z : undefined,
@@ -225,8 +224,7 @@ function route() {
     });
   } else if (next === 'globe') {
     const fromSpace = params.get('from') === 'space';
-    const proj = params.get('proj') === 'globe' ? 'globe' : undefined;
-    globe.activate(hasPos ? { lat, lon, zoom: fromSpace ? 2.2 : 6, projection: proj, fromSpace } : proj ? { projection: proj } : undefined);
+    globe.activate(hasPos ? { lat, lon, zoom: fromSpace ? 2.2 : 6, fromSpace } : undefined);
   } else if (!forecastLoaded || active !== 'forecast') {
     forecastLoaded = true;
     forecast.show(store.getLastPlace());

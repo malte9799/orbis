@@ -985,7 +985,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         deps.onOpenSpace(bodyId, c.lat, c.lng);
         return;
       }
-      setProjection(btn.dataset.proj as typeof projection);
     });
     renderProj();
     map.addControl({ onAdd: () => projCtl!, onRemove: () => projCtl!.remove() }, 'top-right');
@@ -1062,9 +1061,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   function renderProj() {
     if (!projCtl) return;
     projCtl.innerHTML =
-      (['mercator', 'globe'] as const)
-        .map((p) => `<button type="button" data-proj="${p}" class="${projection === p ? 'on' : ''}" aria-pressed="${projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`)
-        .join('') +
       `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
   }
 
@@ -1090,15 +1086,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     applyLabels();
     applyTerrain();
     refreshData();
-  }
-
-  function setProjection(next: typeof projection) {
-    if (next === projection) return;
-    projection = next;
-    map?.setProjection({ type: next });
-    models.globe = next === 'globe';
-    renderProj();
-    applyTerrain();
   }
 
   function goto(p: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean; pitch?: number }) {
@@ -1363,10 +1350,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const changed = o.body !== bodyId || !map;
       const prev = bodyId;
       bodyId = PLANET_MAPS[o.body]?.layers.length ? o.body : 'mars';
-      if (o.projection) {
-        if (map) setProjection(o.projection);
-        else projection = o.projection;
-      }
       el.hidden = false;
       if (changed) {
         layerId = cfg().products?.length ? 'auto' : cfg().layers[0].id;
