@@ -24,6 +24,9 @@ export interface KView {
   name?: string;
 }
 
+/** Tag/Nacht: permanent day, live terminator, permanent night. */
+export type NightMode = 'day' | 'auto' | 'night';
+
 export interface Karte {
   id: string;
   name: string;
@@ -32,7 +35,7 @@ export interface Karte {
   std?: boolean;
   base: BaseId;
   labels: boolean;
-  night: boolean;
+  night: NightMode;
   /** weather family id (catalog.ts) or null */
   main: string | null;
   /** overlay id of the chosen variant */
@@ -64,17 +67,17 @@ export const MAX_PINNED = 5;
 export const STANDARD: Karte[] = [
   {
     id: 'wetter', name: 'Wetter', icon: 'cloud', color: '#4f8dff', std: true, menu: 'wx',
-    base: 'satellite', labels: true, night: true, main: 'radar', mainVar: 'radar',
+    base: 'satellite', labels: true, night: 'auto', main: 'radar', mainVar: 'radar',
     layers: [{ id: 'cities', hidden: true }, { id: 'dwdwarn', hidden: true }],
   },
   {
     id: 'verkehr', name: 'Verkehr', icon: 'car', color: '#ffb547', std: true, menu: 'traffic',
-    base: 'dark', labels: true, night: true, main: null,
+    base: 'dark', labels: true, night: 'auto', main: null,
     tmode: 'auto', layers: [{ id: 'roadnet' }],
   },
   {
     id: 'infra', name: 'Infrastruktur', icon: 'power', color: '#00bfa5', std: true, menu: 'infra',
-    base: 'dark', labels: true, night: true, main: null,
+    base: 'dark', labels: true, night: 'auto', main: null,
     tmode: 'energie', layers: [],
   },
 ];
@@ -93,7 +96,7 @@ export const defaultTerrain3d = (): boolean => false;
 export function blankKarte(): Karte {
   return {
     id: newId(), name: 'Neue Karte', icon: 'pin', color: '#a58bff',
-    base: 'satellite', labels: true, night: true, main: null, layers: [], savedAt: Date.now(),
+    base: 'satellite', labels: true, night: 'auto', main: null, layers: [], savedAt: Date.now(),
   };
 }
 
@@ -165,7 +168,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
     color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : '#a58bff',
     base: BASES.some((b) => b.id === r.base) ? (r.base as BaseId) : 'satellite',
     labels: r.labels !== false,
-    night: r.night !== false,
+    night: r.night === 'day' || r.night === false ? 'day' : r.night === 'night' ? 'night' : 'auto',
     main: typeof r.main === 'string' && r.main ? r.main : null,
     layers,
   };

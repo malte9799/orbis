@@ -1,8 +1,8 @@
 /* ---------- Settings: right slide-over panel -------------------------------- */
 .settings-scrim {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  z-index: 9;
+  z-index: 29;
   /* invisible: only closes the panel on outside click, no dimming */
   background: none;
 }
@@ -16,8 +16,8 @@
 }
 
 .settings-panel {
-  position: absolute;
-  z-index: 10;
+  position: fixed;
+  z-index: 31;
   top: 60px;
   right: var(--hud-r, 14px);
   bottom: var(--hud-b, 16px);
@@ -448,18 +448,15 @@
 }
 
 /* phones: the right panel becomes a full-height sheet */
-.globe-view:not([data-layout='desktop']) .settings-panel {
-  inset: 8px 8px calc(8px + var(--safe-bottom, 0px)) auto;
-  width: min(344px, calc(100% - 16px));
-  z-index: 20;
-}
-
-.globe-view:not([data-layout='desktop']) .settings-scrim {
-  z-index: 19;
+@media (max-width: 720px) {
+  .settings-panel {
+    inset: 8px 8px calc(8px + var(--safe-bottom, 0px)) auto;
+    width: min(344px, calc(100% - 16px));
+  }
 }
 
 @media (max-width: 560px) {
-  .globe-view:not([data-layout='desktop']) .settings-panel {
+  .settings-panel {
     top: 0;
     right: 0;
     bottom: 0;

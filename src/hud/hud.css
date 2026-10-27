@@ -74,6 +74,7 @@
 
 /* ---------- top right: search + settings ---------- */
 .hud-tr { position: absolute; right: var(--hud-r); top: 12px; z-index: 8; display: flex; gap: 8px; align-items: center; }
+.hud[data-layout='desktop'] .hud-tr { right: calc(var(--hud-r) + 46px); }
 .hud-ibtn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); cursor: pointer; flex: none; }
 .hud-ibtn svg { width: 19px; height: 19px; }
 .hud-sx { position: relative; height: 38px; width: 38px; border-radius: 11px; background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--border); transition: width .22s ease, border-color .15s; flex: none; max-width: calc(100vw - 2 * var(--hud-r) - 46px); }
@@ -231,6 +232,7 @@
 .hud .opt svg { width: 16px; height: 16px; color: var(--text-2); flex: none; }
 .hud .opt small { display: block; font-size: 11.5px; color: var(--muted); }
 .hud .opt .toggle { margin-left: auto; }
+.hud .opt .seg { margin-left: auto; flex-wrap: nowrap; }
 .hud .toggle { width: 34px; height: 20px; border-radius: 999px; background: rgba(255,255,255,.14); position: relative; flex: none; transition: background .15s; }
 .hud .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .hud .toggle.on { background: var(--accent); }
@@ -355,7 +357,7 @@
    Landscape: no app bar (Orbis menu), side panel instead of the sheet.
    Switched by the data-layout attribute (hud.ts: desktop | portrait | landscape).
    ====================================================================== */
-.globe-view:not([data-layout='desktop']) .maplibregl-ctrl-scale { display: none; }
+.globe-view:not([data-layout='desktop']):not(.planet-view) .scalebar { display: none; }
 .hud:not([data-layout='desktop']) .hud-ibtn[data-act='settings'] { display: none; }
 
 /* --- Karten pills (both phone layouts) --- */
@@ -389,7 +391,7 @@
 .globe-view.hud-searching[data-layout='portrait'] .maplibregl-ctrl-bottom-right { visibility: hidden; }
 .hud[data-layout='portrait'] .hud-bar { left: 0; right: calc(46px + var(--safe-right, 0px)); top: 12px; max-width: none; padding-left: max(10px, var(--safe-left, 0px)); }
 .hud[data-layout='portrait'] .hud-r { display: contents; }
-body.hud-cover .topbar { z-index: 0; }
+body.hud-cover .orbis-nav { z-index: 0; }
 
 .hud-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 12; border-radius: 22px 22px 0 0; border-bottom: 0; display: flex; flex-direction: column; overflow: hidden; padding: 0 var(--safe-right, 0px) var(--safe-bottom, 0px) var(--safe-left, 0px); max-height: calc(100% + var(--topbar-total, 0px)); }
 .hud-sheet[data-detent='half'] { height: 55vh; }
@@ -489,7 +491,6 @@ body.hud-cover .topbar { z-index: 0; }
 
 /* --- landscape --- */
 @media (max-height: 499px) and (orientation: landscape) {
-  body.mode-map .topbar { display: none; }
   body.mode-map .globe-view { inset: 0; }
   .tl-now { display: none !important; }
 }
@@ -553,3 +554,40 @@ body.hud-cover .topbar { z-index: 0; }
   .maplibregl-ctrl-group button { width: 44px !important; height: 44px !important; }
   .globe-view[data-layout='desktop'] .proj-ctl button { width: 44px !important; height: 44px !important; }
 }
+
+/* ---------- map controls under the settings button (desktop): Grundkarte + Standort, Zoom, Kompass ---------- */
+.mapctl { display: contents; }
+.hud-tilt { max-height: 200px; transition: max-height .3s ease, opacity .25s ease, margin .3s ease, border-width .3s ease; }
+/* zoomed out: the 2D/3D group folds away and the compass below slides up into its place (margin cancels the column gap) */
+.hud-tilt.off { max-height: 0; opacity: 0; margin-bottom: -10px; border-width: 0; pointer-events: none; }
+.hud-ctl { position: absolute; right: var(--hud-r, 14px); top: 60px; z-index: 8; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.hud-cg { display: flex; flex-direction: column; width: 38px; border-radius: 19px; background: rgba(13,18,38,.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border: 1px solid var(--border); box-shadow: 0 6px 20px rgba(0,0,0,.3); overflow: hidden; }
+.hud-cg button { width: 36px; height: 38px; display: grid; place-items: center; border: 0; background: transparent; color: #fff; cursor: pointer; }
+.hud-cg button.on { color: var(--accent); }
+.hud-cg button svg { width: 20px; height: 20px; }
+.hud-cg:has(.hud-compass) { width: 38px; height: 38px; border-radius: 50%; border: 0; background: none; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.hud-compass { width: 38px !important; height: 38px !important; padding: 0; border-radius: 50%; }
+.hud-compass svg { width: 38px !important; height: 38px !important; }
+.hud-compass .disc { fill: rgba(40,40,40,.55); stroke: rgba(255,255,255,.12); }
+.hud-compass .ring { transform-origin: 22px 22px; transform: rotate(var(--hud-bearing, 0deg)); }
+.hud-compass .hd { transition: opacity .12s ease; fill: #fff; font: 600 15px -apple-system, system-ui, sans-serif; stroke: none; }
+.hud-bp { position: absolute; right: 46px; top: 0; width: 208px; padding: 4px; display: flex; flex-direction: column; gap: 1px; max-height: calc(100vh - 140px); overflow-y: auto; scrollbar-width: none; }
+.hud-bp[hidden] { display: none; }
+.hud-bp button { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px 0 4px; border: 1px solid transparent; border-radius: 10px; background: transparent; font-size: 13.5px; color: var(--text-2); cursor: pointer; text-align: left; }
+.hud-bp button:hover { background: var(--card); color: var(--text); }
+.hud-bp button.on { background: #fff; color: #0b1020; font-weight: 600; }
+.hud-bp .bth { width: 30px; height: 30px; border-radius: 8px; overflow: hidden; flex: none; display: block; }
+.hud-bp .bth img, .hud-bp .bth svg { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hud:not([data-layout='desktop']) .hud-ctl { display: none; }
+/* on desktop the map's own zoom/compass and locate buttons move into the column above */
+.globe-view[data-layout='desktop'] .nav-ctl, .globe-view[data-layout='desktop'] .loc-ctl { display: none; }
+
+/* 2D/3D: text button, below it (while tilted) the vertical tilt slider inside the same pill */
+.hud-tbtn { font: 600 14px -apple-system, system-ui, sans-serif; }
+.hud-tsl { display: flex; justify-content: center; max-height: 0; padding: 0; opacity: 0; overflow: hidden; pointer-events: none; transition: max-height .25s ease, padding .25s ease, opacity .2s ease; }
+.hud-tsl.open { max-height: 84px; padding: 2px 0 9px; opacity: 1; pointer-events: auto; }
+.hud-tsl input { -webkit-appearance: none; appearance: none; writing-mode: vertical-lr; direction: rtl; width: 20px; height: 64px; margin: 0; background: transparent; cursor: pointer; }
+.hud-tsl input::-webkit-slider-runnable-track { width: 2px; border-radius: 2px; background: #fff; }
+.hud-tsl input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-left: -5px; border-radius: 50%; background: #ececec; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.hud-tsl input::-moz-range-track { width: 2px; border-radius: 2px; background: #fff; }
+.hud-tsl input::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #ececec; }

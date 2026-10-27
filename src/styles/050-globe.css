@@ -210,7 +210,7 @@
   fill: #fff;
   stroke: none;
   width: 16px;
-  height: 16px;
+  height: 12px;
 }
 
 .tl-range {
@@ -265,22 +265,60 @@
   filter: invert(1);
 }
 
-.zoom-ctrl {
-  background: rgba(13, 18, 38, 0.6);
-  color: var(--text-2);
-  font-size: 10px;
-  line-height: 1.4;
-  padding: 0 5px;
-  margin-bottom: 2px;
+
+.scalebar {
+  position: relative;
+  padding-top: 15px;
+  margin: 0 0 28px 12px !important;
+  color: #fff;
+  font: 500 10px/1 -apple-system, system-ui, sans-serif;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
-.globe-view:not([data-layout='desktop']) .zoom-ctrl { display: none; }
 
-.maplibregl-ctrl-scale {
-  background: rgba(13, 18, 38, 0.6);
-  color: var(--text-2);
-  border-color: var(--text-2);
+.sb-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+}
+
+.sb-marks span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+}
+
+.sb-marks span:last-child {
+  transform: none;
+}
+
+.sb-bar {
+  display: flex;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(30, 34, 38);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.sb-zoom {
+  margin-top: 4px;
+}
+
+.sb-bar i {
+  display: block;
+  height: 100%;
+}
+
+.sb-bar .lt {
+  background: rgb(226, 229, 216);
+}
+
+.sb-bar .dk {
+  background: rgb(40, 44, 48);
 }
 
 .wx-popup .maplibregl-popup-content {

@@ -1,5 +1,5 @@
 import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
-import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import type { ModelSampler, ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
 import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum, snowUnit, snowVal } from '../units';
@@ -677,7 +677,46 @@ export class WindParticles {
 // ---------------------------------------------------------------------------
 // Day/night terminator
 
-export function nightPolygon(date = new Date()): Feature<Polygon> {
+const NIGHT_SIZE = 1024;
+const NIGHT_Z = 2;
+let nightTiles: Promise<ImageData> | null = null;
+
+/** Black Marble at z2 stitched into one mercator image (loaded once). */
+function loadNightTiles(urlFor: (z: number, x: number, y: number) => string): Promise<ImageData> {
+  nightTiles ??= (async () => {
+    const n = 1 << NIGHT_Z;
+    const tile = NIGHT_SIZE / n;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = NIGHT_SIZE;
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+    await Promise.all(
+      Array.from({ length: n * n }, (_, i) => {
+        const x = i % n;
+        const y = Math.floor(i / n);
+        return new Promise<void>((res) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            ctx.drawImage(img, x * tile, y * tile, tile, tile);
+            res();
+          };
+          img.onerror = () => res();
+          img.src = urlFor(NIGHT_Z, x, y);
+        });
+      }),
+    );
+    return ctx.getImageData(0, 0, NIGHT_SIZE, NIGHT_SIZE);
+  })();
+  return nightTiles;
+}
+
+/**
+ * Night side of the earth: the Black Marble image whose alpha follows the sun's elevation, so the
+ * night map shows only in the dark half and fades out smoothly across the terminator.
+ * Returns a PNG data URL for an image source covering NIGHT_COORDS.
+ */
+export async function nightImage(urlFor: (z: number, x: number, y: number) => string, date = new Date()): Promise<string> {
+  const src = await loadNightTiles(urlFor);
   const rad = Math.PI / 180;
   const dayOfYear = (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 0)) / 86400000;
   // Approximate solar declination & equation of time
@@ -689,15 +728,25 @@ export function nightPolygon(date = new Date()): Feature<Polygon> {
   const utcMinutes = date.getUTCHours() * 60 + date.getUTCMinutes() + date.getUTCSeconds() / 60;
   const subLon = -((utcMinutes + eqTime - 720) / 4); // where the sun is overhead
 
-  const ring: [number, number][] = [];
-  const tanDecl = Math.tan(Math.abs(decl) < 0.001 ? 0.001 : decl);
-  for (let lon = -180; lon <= 180; lon += 2) {
-    const ha = (lon - subLon) * rad;
-    const lat = Math.atan(-Math.cos(ha) / tanDecl) / rad;
-    ring.push([lon, lat]);
+  const sinD = Math.sin(decl);
+  const cosD = Math.cos(decl);
+  const out = new ImageData(new Uint8ClampedArray(src.data), NIGHT_SIZE, NIGHT_SIZE);
+  const d = out.data;
+  const cosHa = new Float32Array(NIGHT_SIZE);
+  for (let x = 0; x < NIGHT_SIZE; x++) cosHa[x] = Math.cos(((x + 0.5) / NIGHT_SIZE) * 360 * rad - Math.PI - subLon * rad);
+  for (let y = 0; y < NIGHT_SIZE; y++) {
+    const lat = Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / NIGHT_SIZE)));
+    const a = Math.sin(lat) * sinD;
+    const b = Math.cos(lat) * cosD;
+    for (let x = 0; x < NIGHT_SIZE; x++) {
+      const elev = a + b * cosHa[x]; // sin(sun elevation)
+      // Day (>= +0.05) → 0, deep twilight (<= -0.25, about -14°) → 1.
+      const t = Math.min(1, Math.max(0, (0.05 - elev) / 0.3));
+      d[(y * NIGHT_SIZE + x) * 4 + 3] = Math.round(src.data[(y * NIGHT_SIZE + x) * 4 + 3] * t * t * (3 - 2 * t));
+    }
   }
-  // Night covers the pole that is tilted away from the sun.
-  const pole = decl > 0 ? -90 : 90;
-  ring.push([180, pole], [-180, pole], ring[0]);
-  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = NIGHT_SIZE;
+  cv.getContext('2d')!.putImageData(out, 0, 0);
+  return cv.toDataURL('image/png');
 }

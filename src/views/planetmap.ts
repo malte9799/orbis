@@ -1,11 +1,11 @@
+import { createScaleBar } from '../scalebar';
+import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import {
   addProtocol,
   Map as MlMap,
   MercatorCoordinate,
-  NavigationControl,
-  ScaleControl,
   type CustomLayerInterface,
   type GeoJSONSource,
   type MapGeoJSONFeature,
@@ -970,8 +970,21 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       attributionControl: { compact: true },
       transformRequest: tileRecorder(() => map),
     });
-    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // camera controls (zoom, 2D/3D tilt, compass): same column as the Earth map, under the Orbis button
+    const ctl = createMapCtl({
+      zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+      setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+      resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
+    });
+    const ctlCol = document.createElement('div');
+    ctlCol.className = 'hud-ctl pm-ctl';
+    ctlCol.appendChild(ctl.el);
+    el.appendChild(ctlCol);
+    map.on('rotate', () => ctl.setBearing(map!.getBearing()));
+    map.on('pitch', () => ctl.syncPitch(map!.getPitch()));
+    ctl.syncPitch(map.getPitch());
+    bindTiltLimit(map, ctl);
+    createScaleBar(map, () => cfg().radiusKm * 1000, 'bottom-right');
 
     // 2D / 3D / solar system (same control as the Earth map)
     projCtl = document.createElement('div');
