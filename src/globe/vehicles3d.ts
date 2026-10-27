@@ -542,7 +542,7 @@ export class VehiclesLayer implements CustomLayerInterface {
   }
 
   private active() {
-    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe') return false;
+    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe' && this.map.getZoom() < 12) return false;
     // the models lag when there are too many at once (a whole city at once): only take over
     // while the view is small enough, with hysteresis so switching does not flicker
     const b = this.map.getBounds();
