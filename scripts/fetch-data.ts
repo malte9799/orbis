@@ -24,7 +24,7 @@ if (PREV && existsSync(PREV)) cpSync(PREV, OUT, { recursive: true, filter: (src)
 mkdirSync(OUT, { recursive: true });
 
 const metaPath = join(OUT, 'meta.json');
-const meta: { updated?: string; tasks: Record<string, number> } = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : { tasks: {} };
+const meta: { updated?: string; tasks: Record<string, number>; /** camera feeds the last 'cams' run knew (see below) */ camFeeds?: string[] } = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : { tasks: {} };
 meta.tasks ??= {};
 
 function write(path: string, data: unknown) {
@@ -275,6 +275,19 @@ await task('mars', 6 * 3600 * 1000, async () => {
   console.log(`  Perseverance ${data.m20.km} km, Curiosity ${data.msl.km} km, ${data.heli.flights.length} Ingenuity flights`);
 });
 
+// a feed newly added to SNAPSHOT_CAMS: refresh the camera lists (and the heatmap built from them)
+// right away instead of waiting for the daily run. Compared with the feeds the last run knew – not
+// with the files, since feeds that fail or need a key never get one.
+{
+  const { SNAPSHOT_CAMS } = await import('../src/api/camfeeds');
+  const added = [...SNAPSHOT_CAMS].filter((id) => !(meta.camFeeds ?? []).includes(id));
+  if (added.length) {
+    console.log(`  new camera feeds: ${added.join(', ')}`);
+    delete meta.tasks.cams;
+    delete meta.tasks['cams-world'];
+  }
+}
+
 await task('cams', DAY, async () => {
   const { CAM_FEEDS, SNAPSHOT_CAMS } = await import('../src/api/camfeeds');
   let ok = 0;
@@ -291,6 +304,7 @@ await task('cams', DAY, async () => {
     }
   }
   if (!ok) throw new Error('no camera feed reachable');
+  meta.camFeeds = [...SNAPSHOT_CAMS].sort();
 });
 
 // One merged position list from all camera snapshot files (plus the Finnish Digitraffic
