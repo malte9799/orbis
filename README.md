@@ -299,7 +299,7 @@ Originalquelle zurück. Der erste Lauf startet automatisch beim Push, danach per
 
 **Schlüssel für alle Nutzer teilen (optional):** Dienste mit kostenlosem Schlüssel, deren Daten sich als Datei abbilden
 lassen, kann die Action mit *deinem* Schlüssel abrufen – er liegt dann nur als GitHub-Secret vor, nie im Browser.
-Unterstützt: `FIRMS_MAP_KEY` (weltweite, anklickbare Feuer-Hotspots) und `NPS_API_KEY` (Nationalpark-Webcams).
+Unterstützt: `FIRMS_MAP_KEY` (weltweite, anklickbare Feuer-Hotspots) und `NPS_API_KEY` (Nationalpark-Webcams) `TRAFIKVERKET_KEY` (Straßenkameras Schweden) sowie `OHGO_API_KEY`, `QLDTRAFFIC_KEY` und die 511-Keys einzelner US-Staaten (`UTAH_511_API_KEY`, `ARIZONA_511_API_KEY`, `IDAHO_511_API_KEY`, `NEVADA_511_API_KEY`, `ALASKA_511_API_KEY`, `GEORGIA_511_API_KEY`, `LOUISIANA_511_API_KEY`, `PENNSYLVANIA_511_API_KEY`).
 Secret anlegen unter *Settings → Secrets and variables → Actions*. Ohne Secret wird die Ebene ohne Schlüssel bzw. mit dem
 alten Rasterbild angezeigt. Nicht für alle teilbar sind ortsabhängige oder Dauerverbindungs-Dienste (OpenWeatherMap,
 aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellungen*.

@@ -50,6 +50,17 @@ jobs:
           VICTORIA_KEY: ${{ secrets.VICTORIA_KEY }}
           CTA_KEY: ${{ secrets.CTA_KEY }}
           TRAFIKLAB_KEY: ${{ secrets.TRAFIKLAB_KEY }}
+          TRAFIKVERKET_KEY: ${{ secrets.TRAFIKVERKET_KEY }}
+          UTAH_511_API_KEY: ${{ secrets.UTAH_511_API_KEY }}
+          ARIZONA_511_API_KEY: ${{ secrets.ARIZONA_511_API_KEY }}
+          IDAHO_511_API_KEY: ${{ secrets.IDAHO_511_API_KEY }}
+          NEVADA_511_API_KEY: ${{ secrets.NEVADA_511_API_KEY }}
+          ALASKA_511_API_KEY: ${{ secrets.ALASKA_511_API_KEY }}
+          GEORGIA_511_API_KEY: ${{ secrets.GEORGIA_511_API_KEY }}
+          LOUISIANA_511_API_KEY: ${{ secrets.LOUISIANA_511_API_KEY }}
+          PENNSYLVANIA_511_API_KEY: ${{ secrets.PENNSYLVANIA_511_API_KEY }}
+          OHGO_API_KEY: ${{ secrets.OHGO_API_KEY }}
+          QLDTRAFFIC_KEY: ${{ secrets.QLDTRAFFIC_KEY }}
           ONTARIO_511_API_KEY: ${{ secrets.ONTARIO_511_API_KEY }}
           ALBERTA_511_API_KEY: ${{ secrets.ALBERTA_511_API_KEY }}
           MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN || vars.MAPILLARY_TOKEN }}
