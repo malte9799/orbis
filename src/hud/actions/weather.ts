@@ -60,6 +60,11 @@ export default (c: HudCore): Record<string, ActFn> => {
       }
       afterEdit();
     },
+    night: (_, v) => {
+      if (v !== 'day' && v !== 'auto' && v !== 'night') return;
+      edit().night = v;
+      afterEdit();
+    },
     var: (_, v) => {
       edit().mainVar = v;
       afterEdit();
@@ -73,6 +78,7 @@ export default (c: HudCore): Record<string, ActFn> => {
     },
     base: (id) => {
       edit().base = id as BaseId;
+      ui.basepick = false;
       afterEdit();
     },
     morebases: () => {
@@ -81,7 +87,6 @@ export default (c: HudCore): Record<string, ActFn> => {
     tog: (_, v) => {
       const d = edit();
       if (v === 'labels') d.labels = !d.labels;
-      else if (v === 'night') d.night = !d.night;
       else if (v === 'buildings3d') {
         // write the choice explicitly, so the base map no longer decides the default
         d.buildings3d = !(d.buildings3d ?? defaultBuildings3d(d.base));

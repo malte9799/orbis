@@ -4,6 +4,7 @@ import {
   Popup,
   ScaleControl,
   type GeoJSONSource,
+  type ImageSource,
   type MapGeoJSONFeature,
   type RasterTileSource,
 } from 'maplibre-gl';
@@ -39,20 +40,19 @@ import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
   isobars,
-  nightPolygon,
+  nightImage,
   registerFieldProtocol,
   setActiveSampler,
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
-import { mountRawDataLink } from '../inspector/inspector';
+import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { createEvents } from '../globe/events/engine';
 import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
 import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
-import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
+import { defaultBuildings3d, defaultTerrain3d, type Karte, type NightMode, type KView } from '../hud/karten';
 import { locate } from '../search';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -81,7 +81,7 @@ const OWM_LAYERS: { id: string; label: string }[] = [
 interface GlobeState {
   base: BaseId;
   labels: boolean;
-  night: boolean;
+  night: NightMode;
   overlay: OverlayId;
   /** wind particle animation */
   wind: boolean;
@@ -101,7 +101,7 @@ interface GlobeState {
 const DEFAULT_STATE: GlobeState = {
   base: 'satellite',
   labels: true,
-  night: true,
+  night: 'auto',
   overlay: 'none',
   wind: false,
   isobars: false,
@@ -176,6 +176,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let sampler: ModelSampler | null = null;
   let wind: WindParticles | null = null;
   let nightTimer = 0;
+  let nightSeq = 0;
   let refreshTimer = 0;
   let liveTimer = 0;
   let popup: Popup | null = null;
@@ -389,6 +390,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
+  async function locateMe() {
+    try {
+      const { lat, lon } = await locate();
+      store.setLastPlace({ name: '', lat, lon });
+      focusPlace(lat, lon, 8, true);
+    } catch {
+      toast('Standort konnte nicht ermittelt werden.', 'error');
+    }
+  }
+
   // ----- settings: right slide-over panel (see views/settings.ts) ----------
   const settings = createSettingsPanel(el.querySelector<HTMLElement>('.settings-panel')!, el.querySelector<HTMLElement>('.settings-scrim')!, {
     onKeysSaved() {
@@ -440,8 +451,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyNight() {
     clearInterval(nightTimer);
-    vis('night', state.night);
-    if (!state.night) return;
+    vis('night', state.night === 'auto');
+    vis('night-full', state.night === 'night');
+    if (state.night !== 'auto') return;
     updateNight();
     nightTimer = window.setInterval(updateNight, 60000);
   }
@@ -461,9 +473,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   /** The terminator follows the forecast timeline when one is shown. */
   function updateNight() {
-    if (!state.night) return;
+    if (state.night !== 'auto') return;
     const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
-    (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon(at));
+    const seq = ++nightSeq;
+    nightImage((z, x, y) => BLACK_MARBLE.replace('{z}', String(z)).replace('{y}', String(y)).replace('{x}', String(x)), at).then((url) => {
+      if (seq === nightSeq) (map?.getSource('night') as ImageSource | undefined)?.updateImage({ url });
+    });
   }
 
   // ----- forecast model ----------------------------------------------------
@@ -1118,15 +1133,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const locCtl = document.createElement('div');
     locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group loc-ctl';
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
-    locCtl.querySelector('button')!.addEventListener('click', async () => {
-      try {
-        const { lat, lon } = await locate();
-        store.setLastPlace({ name: '', lat, lon });
-        focusPlace(lat, lon, 8, true);
-      } catch {
-        toast('Standort konnte nicht ermittelt werden.', 'error');
-      }
-    });
+    locCtl.querySelector('button')!.addEventListener('click', () => void locateMe());
     map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
 
     map.on('load', () => {
@@ -1230,6 +1237,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // the compass appears only when the map is rotated or tilted
     const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
     map.on('rotate', syncRotated);
+    map.on('rotate', () => hud?.setBearing(map!.getBearing()));
+    map.on('pitch', () => hud?.syncPitch(map!.getPitch()));
     map.on('pitch', syncRotated);
     // 3D-Gelände folgt der Neigung: erst ab geneigter Kamera aktiv, von oben immer flach
     let terrainTilted = false;
@@ -1386,12 +1395,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       focusPlace(p.lat, p.lon, 7, true);
     },
     openSettings,
+    zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+    locate: () => void locateMe(),
+    setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+    resetNorth: () => map?.easeTo({ bearing: 0, pitch: 0, duration: 400 }),
     layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });
   el.appendChild(hud.el);
-  mountRawDataLink(hud.el.querySelector<HTMLElement>('.hud-tr')!, 'button', { cls: 'hud-ibtn' });
   hud.relayout();
   {
     const k = hud.current();

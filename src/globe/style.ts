@@ -31,6 +31,14 @@ export const BLUE_MARBLE =
   'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg';
 
 /** Earth at night (NASA Black Marble 2016 composite). */
+/** Corners of the whole-world mercator night image: top-left, top-right, bottom-right, bottom-left. */
+export const NIGHT_COORDS: [[number, number], [number, number], [number, number], [number, number]] = [
+  [-180, 85.0511],
+  [180, 85.0511],
+  [180, -85.0511],
+  [-180, -85.0511],
+];
+
 export const BLACK_MARBLE = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png';
 
 /** NASA FIRMS thermal anomalies rendered by GIBS WMS (works for its vector layers too). */
@@ -84,7 +92,7 @@ const empty = { type: 'geojson' as const, data: { type: 'FeatureCollection' as c
 
 /**
  * Complete style with every layer present but hidden; the panel only flips visibility,
- * which keeps the z-order stable: base → weather → warnings → labels → night → events.
+ * which keeps the z-order stable: base → night → weather → warnings → labels → events.
  */
 export function buildStyle(nasaDate: string, firesDate: string, projection: 'globe' | 'mercator'): StyleSpecification {
   return {
@@ -205,7 +213,12 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         bounds: [5.5, 47, 15.5, 55.2],
         attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>',
       },
-      night: empty,
+      // Placeholder pixel until the first render; the view swaps in the sun-masked Black Marble.
+      night: {
+        type: 'image',
+        url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        coordinates: NIGHT_COORDS,
+      },
       'dwd-warn': { ...empty, attribution: 'Warnungen © <a href="https://www.dwd.de/">DWD</a>' },
       gauges: { ...empty, attribution: 'Pegel: <a href="https://www.pegelonline.wsv.de/">WSV PEGELONLINE</a>' },
       cities: { ...empty, attribution: 'Wetter: <a href="https://open-meteo.com/">Open-Meteo</a>' },
@@ -240,6 +253,17 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
       ...baseLayers('light'),
       { id: 'hd', type: 'raster' as const, source: 'hd', layout: { visibility: 'none' as const } },
       {
+        id: 'night',
+        type: 'raster',
+        source: 'night',
+        maxzoom: 3,
+        layout: { visibility: 'none' },
+        // Only a global view: fades out between zoom 2 and 3.
+        paint: { 'raster-opacity': ['interpolate', ['linear'], ['zoom'], 2, 1, 3, 0], 'raster-fade-duration': 0, 'raster-resampling': 'linear' },
+      },
+      // Permanent night: Black Marble tiles at every zoom.
+      { id: 'night-full', type: 'raster' as const, source: 'blackmarble', layout: { visibility: 'none' as const } },
+      {
         id: 'field',
         type: 'raster',
         source: 'field',
@@ -271,13 +295,6 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         paint: { 'line-color': ['get', 'color'], 'line-width': 1 },
       },
       ...labelLayers(),
-      {
-        id: 'night',
-        type: 'fill',
-        source: 'night',
-        layout: { visibility: 'none' },
-        paint: { 'fill-color': '#000814', 'fill-opacity': 0.38, 'fill-antialias': false },
-      },
       {
         id: 'isobars',
         type: 'line',

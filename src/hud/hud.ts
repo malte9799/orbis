@@ -67,6 +67,12 @@ export interface HudHost {
   placeName(v: KView): Promise<string | undefined>;
   onPlace(p: Place): void;
   openSettings(): void;
+  /** map control column (desktop): zoom by delta levels, fly to the own position, reset the bearing */
+  zoomBy(delta: number): void;
+  locate(): void;
+  resetNorth(): void;
+  /** camera tilt in degrees (0 = top-down); animated for the 2D/3D button, immediate while the slider is dragged */
+  setPitch(deg: number, animate: boolean): void;
   families(): WxFamily[];
   /** the stack opened or closed (the map keeps its centre in the free area) */
   layout(): void;
@@ -93,6 +99,10 @@ export interface Hud {
   /** phone portrait: show the weather at a tapped point inside the sheet */
   showPlace(node: HTMLElement): void;
   clearPlace(): void;
+  /** map bearing in degrees: turns the compass needle */
+  setBearing(deg: number): void;
+  /** map pitch in degrees: keeps the 2D/3D button and its slider in sync */
+  syncPitch(deg: number): void;
   placeOpen(): boolean;
   /** phone portrait: content inside the sheet changed size (legend / timeline shown or hidden) */
   syncSheet(): void;
@@ -139,10 +149,17 @@ function suggestionsFor(k: Karte): [string, string][] {
 const isStd = (k: Karte) => !!k.std;
 const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.relative(t));
 
+/** compass dial: the tick ring turns against the map bearing, the red marker on it points north, the letter is the heading */
+const compassDial = () => {
+  // 14 slots; the one at north is left out, the red marker sits there and turns with the ring
+  const ticks = Array.from({ length: 13 }, (_, i) => `<line x1="22" y1="4.5" x2="22" y2="8" transform="rotate(${(i + 1) * (360 / 14)} 22 22)" stroke-width="1.3"/>`).join('');
+  return `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21.5" class="disc"/><g class="ring"><g stroke="#fff" stroke-linecap="round" opacity=".8">${ticks}</g><path d="M22 1.5l2.6 4.4h-5.2z" fill="#ff4d3d"/></g><text x="22" y="22" class="hd" text-anchor="middle" dominant-baseline="central">N</text></svg>`;
+};
+
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -169,6 +186,24 @@ export function createHud(host: HudHost): Hud {
       <div class="hud-sx"><button type="button" class="hud-sxb" data-act="search" title="Suchen ( / )" aria-label="Suchen"></button></div>
       <button type="button" class="hud-scx" data-act="search">Abbrechen</button>
       <button type="button" class="hud-ibtn" data-act="settings" title="Einstellungen" aria-label="Einstellungen">${ico('gear')}</button>
+    </div>
+    <div class="hud-ctl">
+      <div class="hud-cg">
+        <button type="button" data-act="basepick" title="Grundkarte" aria-label="Grundkarte wählen" aria-expanded="false">${ico('earth')}</button>
+        <button type="button" data-act="locate" title="Mein Standort" aria-label="Mein Standort">${ico('navarrow')}</button>
+      </div>
+      <div class="hud-cg">
+        <button type="button" data-act="zin" title="Hineinzoomen" aria-label="Hineinzoomen">${ico('plus', 2)}</button>
+        <button type="button" data-act="zout" title="Herauszoomen" aria-label="Herauszoomen">${ico('minus', 2)}</button>
+      </div>
+      <div class="hud-cg hud-tilt">
+        <button type="button" data-act="tilt" class="hud-tbtn" title="Neigung" aria-label="Kamera neigen">3D</button>
+        <div class="hud-tsl"><input type="range" min="0" max="100" step="1" value="75" aria-label="Neigung"/></div>
+      </div>
+      <div class="hud-cg">
+        <button type="button" data-act="north" class="hud-compass" title="Norden ausrichten" aria-label="Norden ausrichten">${compassDial()}</button>
+      </div>
+      <div class="hud-bp hud-glass" hidden></div>
     </div>
     <div class="hud-r" data-r="dialog"></div>`;
   const reg = (n: string) => root.querySelector<HTMLElement>(`[data-r="${n}"]`)!;
@@ -465,7 +500,7 @@ export function createHud(host: HudHost): Hud {
         <div class="baserow">${MAIN_BASES.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>
         ${showMore ? `<div class="fl basemore">${others.map((b) => `<button type="button" class="chip ${k.base === b ? 'on' : ''}" data-act="base" data-id="${b}">${BASE_LABEL[b]}</button>`).join('')}</div>` : `<button type="button" class="linkbtn" data-act="morebases">Weitere Grundkarten</button>`}
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="night" role="switch" aria-checked="${k.night}" tabindex="0">${ico('sun')}<div>Tag/Nacht</div><span class="toggle ${k.night ? 'on' : ''}"></span></div>
+        <div class="opt">${ico('sun')}<div>Tag/Nacht</div><div class="seg">${(['day', 'auto', 'night'] as const).map((v) => `<button type="button" data-act="night" data-v="${v}" class="${k.night === v ? 'on' : ''}" aria-pressed="${k.night === v}">${{ day: 'Tag', auto: 'Auto', night: 'Nacht' }[v]}</button>`).join('')}</div></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen, nur bei geneigter Kamera (Strg + Ziehen) – von oben deaktiviert</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
         <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>bei Wind & Böen und Satellit/Wolken (IR) sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
@@ -730,6 +765,7 @@ export function createHud(host: HudHost): Hud {
     if (layout !== 'portrait') placeNode = null;
     if (hadPlace && !placeNode) host.placeClosed();
     hadPlace = !!placeNode;
+    renderBasePick();
     renderBar();
     renderModes();
     root.classList.toggle('has-menu', !!reg('modes').firstElementChild);
@@ -752,6 +788,53 @@ export function createHud(host: HudHost): Hud {
       lastEdit = ui.edit;
       host.layout();
     }
+  }
+
+  // 2D/3D: the button flips the camera between top-down and 45°; while tilted a slider sets the angle
+  const tiltBtn = root.querySelector<HTMLButtonElement>('.hud-tbtn')!;
+  const tiltSl = root.querySelector<HTMLElement>('.hud-tsl')!;
+  const tiltIn = tiltSl.querySelector('input')!;
+  let tiltOpen = false;
+  let tiltDrag = false;
+  let tiltClick = 0;
+  function showTilt(open: boolean) {
+    tiltOpen = open;
+    tiltSl.classList.toggle('open', open);
+    tiltIn.tabIndex = open ? 0 : -1;
+    tiltBtn.textContent = open ? '2D' : '3D';
+  }
+  // The slider runs 0–100 % of the map's maximum tilt; at 0 it is 2D again.
+  const TILT_MAX = 60;
+  const toPitch = (v: number) => (v / 100) * TILT_MAX;
+  tiltIn.addEventListener('input', () => host.setPitch(toPitch(Number(tiltIn.value)), false));
+  tiltIn.addEventListener('change', () => {
+    if (Number(tiltIn.value) > 0) return;
+    tiltClick = performance.now();
+    showTilt(false);
+    host.setPitch(0, true);
+  });
+  tiltIn.addEventListener('pointerdown', () => (tiltDrag = true));
+  window.addEventListener('pointerup', () => (tiltDrag = false));
+  function syncPitch(p: number) {
+    if (!tiltDrag) tiltIn.value = String(Math.round((p / TILT_MAX) * 100));
+    if (p > 0.5) showTilt(true);
+    else if (!tiltDrag && tiltOpen && performance.now() - tiltClick > 700) showTilt(false);
+  }
+  function toggleTilt() {
+    tiltClick = performance.now();
+    showTilt(!tiltOpen);
+    if (tiltOpen) tiltIn.value = '75';
+    host.setPitch(tiltOpen ? toPitch(75) : 0, true);
+  }
+
+  const bp = root.querySelector<HTMLElement>('.hud-bp')!;
+  function renderBasePick() {
+    const k = view(cur);
+    bp.hidden = !ui.basepick;
+    root.querySelector('[data-act="basepick"]')?.setAttribute('aria-expanded', String(ui.basepick));
+    root.querySelector('[data-act="basepick"]')?.classList.toggle('on', ui.basepick);
+    if (!ui.basepick) return;
+    bp.innerHTML = BASES.map((b) => `<button type="button" data-act="base" data-id="${b.id}" class="${k.base === b.id ? 'on' : ''}" aria-pressed="${k.base === b.id}"><i class="bth">${baseThumb(b.id)}</i><span>${BASE_LABEL[b.id]}</span></button>`).join('');
   }
 
   // ----- actions -----------------------------------------------------------
@@ -842,6 +925,7 @@ export function createHud(host: HudHost): Hud {
     encodeKarte,
   };
   const ACT = buildActions(core);
+  ACT.tilt = toggleTilt;
 
   root.addEventListener('click', (e) => {
     if (sheet.suppressClick()) {
@@ -1049,6 +1133,7 @@ export function createHud(host: HudHost): Hud {
     if (!visible()) return;
     const t = e.target as HTMLElement;
     let changed = false;
+    if (ui.basepick && !t.closest('.hud-bp, [data-act="basepick"]')) (ui.basepick = false), (changed = true);
     if (ui.menu && !t.closest('.hud-menu, [data-act="menu"]')) (ui.menu = false), (changed = true);
     if (root.contains(t) && t.closest('.hud-sheet, .gallery, .addpop, [data-act="gallery"], [data-act="add"], .scrim, .dlg')) {
       if (changed) render();
@@ -1153,6 +1238,21 @@ export function createHud(host: HudHost): Hud {
     clearPlace() {
       placeNode = null;
       render();
+    },
+    syncPitch,
+    setBearing(deg) {
+      root.style.setProperty('--hud-bearing', `${-deg}deg`);
+      const heading = ['N', 'O', 'S', 'W'][Math.round((((deg % 360) + 360) % 360) / 90) % 4];
+      const t = root.querySelector<SVGTextElement>('.hud-compass .hd');
+      if (t && t.dataset.h !== heading) {
+        // fade the old letter out, swap, fade the new one in
+        t.dataset.h = heading;
+        t.style.opacity = '0';
+        window.setTimeout(() => {
+          t.textContent = t.dataset.h!;
+          t.style.opacity = '1';
+        }, 120);
+      }
     },
     placeOpen: () => !!placeNode && layout === 'portrait',
     syncSheet: () => {
