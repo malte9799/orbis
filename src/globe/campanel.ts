@@ -5,6 +5,8 @@ import { attachHls } from './hls';
 import { CamViewLayer } from './camview3d';
 import { CARDINAL } from './layers/shared/cams';
 import { category, tile } from './sidepanel';
+import { camdirWritable, cloudKey, hasRemoteDir } from '../api/camdircloud';
+import { openCamDirModal } from './camdirmodal';
 import './flightpanel.css';
 
 // Right-hand panel of the selected webcam (like the flight and ship panel): live picture, viewing
@@ -45,6 +47,7 @@ export class CamPanel {
       <div class="fp-actions">
         <button type="button" data-act="tilt">In 3D ansehen</button>
         <button type="button" data-act="zoom">Heranzoomen</button>
+        <button type="button" data-act="edit" hidden>Richtung bearbeiten</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
@@ -53,6 +56,7 @@ export class CamPanel {
       const act = (e.target as HTMLElement).closest('button')?.dataset.act;
       if (act === 'zoom') this.fly(false);
       else if (act === 'tilt') this.fly(true);
+      else if (act === 'edit') this.edit();
     });
     this.body.addEventListener(
       'toggle',
@@ -80,6 +84,30 @@ export class CamPanel {
     this.root.hidden = true;
   }
 
+  /** opens the editor: picture next to a satellite map with the viewing direction */
+  private edit() {
+    const s = this.sel;
+    if (!s) return;
+    const p = s.p;
+    const img = safeUrl(p.image);
+    openCamDirModal({
+      title: String(p.title ?? 'Webcam'),
+      lng: s.lng,
+      lat: s.lat,
+      dir: this.dir(),
+      image: img ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : undefined,
+      hls: safeUrl(p.hls) ?? undefined,
+      key: cloudKey(p.id, s.lng, s.lat),
+      saved: hasRemoteDir(cloudKey(p.id, s.lng, s.lat)),
+      // the layer data carries the new direction after the save – the panel follows
+      onChange: (dir) => {
+        if (this.sel !== s) return;
+        s.p = dir === null ? { ...p, dir: undefined, dirset: undefined } : { ...p, dir, dirset: true };
+        this.render();
+      },
+    });
+  }
+
   private dir(): number {
     const d = Number(this.sel?.p.dir);
     return Number.isFinite(d) && d >= 0 ? d : -1;
@@ -103,7 +131,7 @@ export class CamPanel {
     const p = s.p;
     const dir = this.dir();
     // road cameras of the feeds: the direction is the road's direction of travel or an estimate
-    const est = p.kind === 'road';
+    const est = p.kind === 'road' && !p.dirset;
     const img = safeUrl(p.image);
     // still images are cached by browsers – add a cache-buster (not for signed Windy URLs)
     const src = img && p.kind === 'road' ? `${img}${img.includes('?') ? '&' : '?'}t=${Math.floor(Date.now() / 60000)}` : img;
@@ -126,6 +154,10 @@ export class CamPanel {
     const source = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(String(p.source ?? ''))}${link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>` : ''}</div></details>`;
     this.body.innerHTML = `<div class="cam-media">${media}</div>${tiles}${note}${cats}${source}`;
     (this.root.querySelector('[data-act="tilt"]') as HTMLElement).hidden = dir < 0;
+    // own worker + token in the settings: the direction can be corrected
+    const edit = this.root.querySelector<HTMLElement>('[data-act="edit"]')!;
+    edit.hidden = !camdirWritable();
+    this.root.querySelector('.fp-actions')!.classList.toggle('three', !edit.hidden && dir >= 0);
     const el = this.body.querySelector<HTMLVideoElement>('video.pop-cam');
     // stream not playable (offline, blocked): fall back to the still image
     if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));

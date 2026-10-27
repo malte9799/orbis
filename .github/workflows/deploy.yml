@@ -102,6 +102,8 @@ jobs:
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
+          # worker with corrected camera viewing directions (proxy/camdir-worker.js) – same place, Variables
+          VITE_CAMDIR_URL: ${{ vars.CAMDIR_URL }}
           # optional Mapillary client token for the street game (public by nature, it ends up in the bundle) – same place, Variables
           VITE_MAPILLARY_TOKEN: ${{ vars.MAPILLARY_TOKEN }}
       # Preview-Tab-Titel „Orbis – #prN <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten

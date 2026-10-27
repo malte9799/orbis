@@ -217,7 +217,7 @@ Karte gezeichnet, Isobaren per Marching Squares.
 | `src/globe/` | Karten-Ebenen, Stil, Popups, Zeitleiste |
 | `src/space/` | Sonnensystem, Ephemeriden, Mond/Mars, Raumsonden |
 | `scripts/` | Daten-Snapshots, Trek-Produktlisten, Bahn- und Modell-Skripte |
-| `proxy/` | Cloudflare-Worker (Daten-Proxy) |
+| `proxy/` | Cloudflare-Worker (Daten-Proxy, Kamera-Richtungen) |
 | `docs/` | Banner und [Datenquellen-Liste](docs/DATENQUELLEN.md) |
 
 ## 🚢 Deployment
@@ -263,6 +263,24 @@ Proxy; nach einem Update des Proxy-Codes muss der Worker neu deployt werden. Der
 
 Alternativ kann jeder Nutzer eine eigene Worker-Adresse unter *Einstellungen → Daten-Proxy* eintragen; sie hat Vorrang vor der
 eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen zu.
+
+</details>
+
+<details>
+<summary><b>🧭 Kamera-Richtungen (eigener Cloudflare-Worker)</b></summary>
+
+Im Kamera-Panel rechts öffnet *Richtung bearbeiten* einen Dialog: links das Kamerabild, rechts eine Satellitenkarte mit dem Sichtkegel.
+Die Richtung lässt sich durch Klicken/Ziehen auf der Karte, per Regler, Gradfeld oder N/O/S/W einstellen; „Bild über die Karte legen“
+dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, damit Straßen und Gebäude zur Deckung kommen.
+*Speichern* schickt den Wert an einen eigenen Worker, den alle Besucher beim Laden der Webcams mitlesen.
+
+1. Cloudflare → *Workers & Pages → KV* → Namespace anlegen.
+2. Neuen Worker mit dem Inhalt von `proxy/camdir-worker.js` erstellen, unter *Bindings* den Namespace als `CAMDIR` einbinden.
+3. *Settings → Variables and Secrets*: Secret `ADMIN_TOKEN` (lange Zufallszeichenfolge), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
+4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
+5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
+
+Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Moderation, Ratenbegrenzung) sind im Worker vorbereitet, aber noch nicht eingebaut.
 
 </details>
 
