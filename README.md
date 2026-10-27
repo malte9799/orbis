@@ -217,7 +217,7 @@ Karte gezeichnet, Isobaren per Marching Squares.
 | `src/globe/` | Karten-Ebenen, Stil, Popups, Zeitleiste |
 | `src/space/` | Sonnensystem, Ephemeriden, Mond/Mars, Raumsonden |
 | `scripts/` | Daten-Snapshots, Trek-Produktlisten, Bahn- und Modell-Skripte |
-| `proxy/` | Cloudflare-Worker (Daten-Proxy) |
+| `proxy/` | Cloudflare-Worker (Daten-Proxy, Kamera-Richtungen) |
 | `docs/` | Banner und [Datenquellen-Liste](docs/DATENQUELLEN.md) |
 
 ## 🚢 Deployment
@@ -267,6 +267,26 @@ eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen 
 </details>
 
 <details>
+<summary><b>🧭 Kamera-Richtungen (eigener Cloudflare-Worker)</b></summary>
+
+Im Kamera-Panel rechts öffnet *Richtung bearbeiten* einen Dialog: links das Kamerabild, rechts eine Satellitenkarte mit dem Sichtkegel.
+Die Richtung lässt sich durch Klicken/Ziehen auf der Karte, per Regler, Gradfeld oder N/O/S/W einstellen; „Bild über die Karte legen“
+dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, damit Straßen und Gebäude zur Deckung kommen.
+*Speichern* schickt den Wert an einen eigenen Worker, den alle Besucher beim Laden der Webcams mitlesen.
+
+1. Cloudflare → *Workers & Pages → KV* → Namespace anlegen.
+2. Neuen Worker mit dem Inhalt von `proxy/camdir-worker.js` erstellen, unter *Bindings* den Namespace als `CAMDIR` einbinden.
+3. *Settings → Variables and Secrets*: Secret `ADMIN_TOKEN` (lange Zufallszeichenfolge), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
+4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
+5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
+
+Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld – aus „Fluchtpunkt“, „Punkte abgleichen“ oder „Überlagerung“) speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für die Pose den Worker neu deployen.
+
+Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Moderation, Ratenbegrenzung) sind im Worker vorbereitet, aber noch nicht eingebaut.
+
+</details>
+
+<details>
 <summary><b>📷 Mapillary-Token für den Straßen-Rater einbauen</b></summary>
 
 <br>
@@ -299,7 +319,7 @@ Originalquelle zurück. Der erste Lauf startet automatisch beim Push, danach per
 
 **Schlüssel für alle Nutzer teilen (optional):** Dienste mit kostenlosem Schlüssel, deren Daten sich als Datei abbilden
 lassen, kann die Action mit *deinem* Schlüssel abrufen – er liegt dann nur als GitHub-Secret vor, nie im Browser.
-Unterstützt: `FIRMS_MAP_KEY` (weltweite, anklickbare Feuer-Hotspots) und `NPS_API_KEY` (Nationalpark-Webcams).
+Unterstützt: `FIRMS_MAP_KEY` (weltweite, anklickbare Feuer-Hotspots) und `NPS_API_KEY` (Nationalpark-Webcams) `TRAFIKVERKET_KEY` (Straßenkameras Schweden) sowie `OHGO_API_KEY`, `QLDTRAFFIC_KEY` und die 511-Keys einzelner US-Staaten (`UTAH_511_API_KEY`, `ARIZONA_511_API_KEY`, `IDAHO_511_API_KEY`, `NEVADA_511_API_KEY`, `ALASKA_511_API_KEY`, `GEORGIA_511_API_KEY`, `LOUISIANA_511_API_KEY`, `PENNSYLVANIA_511_API_KEY`).
 Secret anlegen unter *Settings → Secrets and variables → Actions*. Ohne Secret wird die Ebene ohne Schlüssel bzw. mit dem
 alten Rasterbild angezeigt. Nicht für alle teilbar sind ortsabhängige oder Dauerverbindungs-Dienste (OpenWeatherMap,
 aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellungen*.

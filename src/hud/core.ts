@@ -21,6 +21,8 @@ export interface HudUi {
   menu: boolean;
   rename: boolean;
   folded: boolean;
+  /** the base-map chooser under the settings button */
+  basepick: boolean;
 }
 
 export interface HudCore {

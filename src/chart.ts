@@ -1,5 +1,6 @@
 import type { Forecast } from './api/openmeteo';
 import { escapeHtml, fmt } from './util';
+import { precipSumTxt, rainNum, rainUnit, windTxt } from './units';
 import { describe, weatherIcon } from './weather';
 
 /**
@@ -89,7 +90,7 @@ export function renderHourlyChart(container: HTMLElement, f: Forecast, hours = 4
         ${grid}
         <path d="${area}" fill="url(#tfill)"/>
         <path d="${line}" class="tline"/>
-        <text class="panel-title" x="${padL}" y="${pTop - 8}">Niederschlag (mm/h, max. ${fmt.num(pMax, 1)})</text>
+        <text class="panel-title" x="${padL}" y="${pTop - 8}">Niederschlag (${rainUnit()}, max. ${rainNum(pMax)})</text>
         <line class="baseline" x1="${padL}" x2="${W - padR}" y1="${pTop + pH}" y2="${pTop + pH}"/>
         ${bars}
         ${axis}
@@ -124,8 +125,8 @@ export function renderHourlyChart(container: HTMLElement, f: Forecast, hours = 4
       <div class="tip-row tip-cond">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 22)} <span>${escapeHtml(describe(h.weather_code[i]))}</span></div>
       <div class="tip-row"><span>Temperatur</span><b>${fmt.temp(h.temperature_2m[i], 1)}</b></div>
       <div class="tip-row"><span>Gefühlt</span><b>${fmt.temp(h.apparent_temperature[i], 1)}</b></div>
-      <div class="tip-row"><span>Niederschlag</span><b>${fmt.num(h.precipitation[i], 1)} mm${prob != null ? ` · ${prob} %` : ''}</b></div>
-      <div class="tip-row"><span>Wind / Böen</span><b>${Math.round(h.wind_speed_10m[i])} / ${Math.round(h.wind_gusts_10m[i])} km/h</b></div>`;
+      <div class="tip-row"><span>Niederschlag</span><b>${precipSumTxt(h.precipitation[i], 1)}${prob != null ? ` · ${prob} %` : ''}</b></div>
+      <div class="tip-row"><span>Wind / Böen</span><b>${windTxt(h.wind_speed_10m[i])} / ${windTxt(h.wind_gusts_10m[i])}</b></div>`;
     tip.hidden = false;
     const cRect = container.getBoundingClientRect();
     const px = rect.left - cRect.left + (x(k) / W) * rect.width;

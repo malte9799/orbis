@@ -2,8 +2,8 @@ import {
   Map as MlMap,
   NavigationControl,
   Popup,
-  ScaleControl,
   type GeoJSONSource,
+  type ImageSource,
   type MapGeoJSONFeature,
   type RasterTileSource,
 } from 'maplibre-gl';
@@ -29,6 +29,7 @@ import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
 import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
+import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
 import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
 import { labelPaint } from '../globe/vector';
@@ -38,24 +39,24 @@ import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
   FIELDS,
   isobars,
-  nightPolygon,
+  nightImage,
   registerFieldProtocol,
   setActiveSampler,
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
-import { mountRawDataLink } from '../inspector/inspector';
+import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
-import { openSettings } from '../settings';
 import { createEvents } from '../globe/events/engine';
 import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
 import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
-import { defaultBuildings3d, defaultTerrain3d, type Karte, type KView } from '../hud/karten';
+import { defaultBuildings3d, defaultTerrain3d, type Karte, type NightMode, type KView } from '../hud/karten';
 import { locate } from '../search';
-import { store, type Place } from '../store';
+import { createScaleBar } from '../scalebar';
+import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
+import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -79,7 +80,7 @@ const OWM_LAYERS: { id: string; label: string }[] = [
 interface GlobeState {
   base: BaseId;
   labels: boolean;
-  night: boolean;
+  night: NightMode;
   overlay: OverlayId;
   /** wind particle animation */
   wind: boolean;
@@ -99,7 +100,7 @@ interface GlobeState {
 const DEFAULT_STATE: GlobeState = {
   base: 'satellite',
   labels: true,
-  night: true,
+  night: 'auto',
   overlay: 'none',
   wind: false,
   isobars: false,
@@ -107,7 +108,7 @@ const DEFAULT_STATE: GlobeState = {
   terrain3d: false,
   extras: {},
   groups: {},
-  projection: 'mercator',
+  projection: 'globe',
   center: [store.getLastPlace().lon, store.getLastPlace().lat],
   zoom: 5,
 };
@@ -121,8 +122,10 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 export interface GlobeView {
   el: HTMLElement;
-  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
+  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean; jump?: boolean }): void;
   deactivate(): void;
+  /** resolves once the map has drawn its current view (used to hand over from the forecast map) */
+  settled(): Promise<void>;
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
@@ -131,8 +134,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // only the view survives from the old saved state; layers now come from the Karten (src/hud)
   const state: GlobeState = {
     ...DEFAULT_STATE,
-    // v2: 2D map became the default view – reset the projection of older saved states once.
-    projection: (saved.version ?? 1) >= 2 && saved.projection === 'globe' ? 'globe' : 'mercator',
+    // only the globe exists (flattens by itself at high zoom) – old saved 2D states are ignored
+    projection: 'globe',
     center: Array.isArray(saved.center) ? saved.center : DEFAULT_STATE.center,
     zoom: saved.zoom ?? DEFAULT_STATE.zoom,
     version: STATE_VERSION,
@@ -143,7 +146,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   el.className = 'view globe-view';
   el.innerHTML = `
     <div class="map" id="map"></div>
-    <dialog class="settings-dialog"></dialog>
     <div class="globe-bottom">
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
@@ -173,6 +175,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let sampler: ModelSampler | null = null;
   let wind: WindParticles | null = null;
   let nightTimer = 0;
+  let nightSeq = 0;
   let refreshTimer = 0;
   let liveTimer = 0;
   let popup: Popup | null = null;
@@ -184,6 +187,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
+  let camPanel: CamPanel | null = null;
 
   const ev = createEvents({
     map: () => map,
@@ -281,8 +285,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const lay = (id: string) => k.layers.find((l) => l.id === id && !l.hidden);
     const minMag = Number(lay('quakes')?.filter) || 0;
     if (map.getLayer('quakes')) map.setFilter('quakes', (minMag ? ['>=', ['get', 'mag'], minMag] : null) as never);
-    const kinds = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
-    if (map.getLayer('aircraft')) map.setFilter('aircraft', (kinds.length ? ['in', ['get', 'kind'], ['literal', kinds]] : null) as never);
+    const acOpts = lay('aircraft')?.filter?.split(',').filter(Boolean) ?? [];
+    const kinds = acOpts.filter((t) => t !== 'mil');
+    const acFilter = [...(kinds.length ? [['in', ['get', 'kind'], ['literal', kinds]]] : []), ...(acOpts.includes('mil') ? [['==', ['get', 'mil'], true]] : [])];
+    if (map.getLayer('aircraft')) map.setFilter('aircraft', (acFilter.length ? ['all', ...acFilter] : null) as never);
     const opts = lay('lightning')?.filter?.split(',').filter(Boolean) ?? [];
     const volTok = opts.find((t) => t.startsWith('vol-'));
     const vol = volTok ? Number(volTok.slice(4)) : NaN;
@@ -383,33 +389,29 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
-  // ----- settings dialog (API keys, sources) --------------------------------
-  const settings = el.querySelector<HTMLDialogElement>('.settings-dialog')!;
-  const openSettingsDialog = () =>
-    openSettings(settings, () => {
-      ev.reset('firms');
-      if (hud) applyKarte(hud.current());
-      ev.apply();
-      ev.ensure();
-      extras?.resume();
-      refreshHud();
-      toast('Einstellungen gespeichert');
-    });
-
-  // ----- apply state to map -----------------------------------------------
-  let renderProj = () => {};
-  function setProjection(next: GlobeState['projection']) {
-    if (next === state.projection) return;
-    state.projection = next;
-    map?.setProjection({ type: next });
-    if (state.wind && needsModel()) {
-      wind?.stop();
-      wind?.start();
+  async function locateMe() {
+    try {
+      const { lat, lon } = await locate();
+      store.setLastPlace({ name: '', lat, lon });
+      focusPlace(lat, lon, 8, true);
+    } catch {
+      toast('Standort konnte nicht ermittelt werden.', 'error');
     }
-    renderProj();
-    save();
   }
 
+  // ----- settings: one global panel (main.ts), opened from the Orbis menu --------
+  const openSettings = () => document.dispatchEvent(new CustomEvent('orbis:settings'));
+  const onKeysSaved = () => {
+    ev.reset('firms');
+    if (hud) applyKarte(hud.current());
+    ev.apply();
+    ev.ensure();
+    extras?.resume();
+    refreshHud();
+  };
+  document.addEventListener('orbis:keys-saved', onKeysSaved);
+
+  // ----- apply state to map -----------------------------------------------
   const vis = (id: string, on: boolean) => {
     if (map?.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   };
@@ -445,8 +447,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyNight() {
     clearInterval(nightTimer);
-    vis('night', state.night);
-    if (!state.night) return;
+    vis('night', state.night === 'auto');
+    vis('night-full', state.night === 'night');
+    if (state.night !== 'auto') return;
     updateNight();
     nightTimer = window.setInterval(updateNight, 60000);
   }
@@ -466,9 +469,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   /** The terminator follows the forecast timeline when one is shown. */
   function updateNight() {
-    if (!state.night) return;
+    if (state.night !== 'auto') return;
     const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
-    (map?.getSource('night') as GeoJSONSource | undefined)?.setData(nightPolygon(at));
+    const seq = ++nightSeq;
+    nightImage((z, x, y) => BLACK_MARBLE.replace('{z}', String(z)).replace('{y}', String(y)).replace('{x}', String(x)), at).then((url) => {
+      if (seq === nightSeq) (map?.getSource('night') as ImageSource | undefined)?.updateImage({ url });
+    });
   }
 
   // ----- forecast model ----------------------------------------------------
@@ -740,7 +746,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     state.overlay === 'radar' ? (radar?.frames.length ? 'radar' : 'none') : needsModel() && globalModel ? 'model' : 'none';
 
   const timeLabel = (ms: number) =>
-    new Date(ms).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    dateTimeTxt(ms, { weekday: 'short', hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }) + (tzUtc() ? ' UTC' : '');
 
   let timelineKey = '';
   function renderTimeline() {
@@ -770,7 +776,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
     }</small>`;
     // day ticks under the slider (only rebuilt when the time axis changes)
-    const key = `${mode}:${times[0]}:${times.length}`;
+    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}`;
     if (key !== timelineKey) {
       timelineKey = key;
       let html = '';
@@ -778,8 +784,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         let lastDay = '';
         times.forEach((tt, i) => {
           const d = new Date(tt);
-          const day = d.toLocaleDateString('de-DE', { weekday: 'short' });
-          if (day !== lastDay && d.getHours() < 3) {
+          const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
+          if (day !== lastDay && (tzUtc() ? d.getUTCHours() : d.getHours()) < 3) {
             html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
           }
           lastDay = day;
@@ -875,13 +881,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       case 'sat-storm':
         return t('Satellit Gewitter', 'Meteosat Konvektions-RGB · live, Europa & Afrika', 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, 'ruhig'], [100, 'kräftige Gewitter']]);
       case 'water':
-        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'sst':
-        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · °C', 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, '−2'], [35, '10'], [65, '20'], [100, '32']]);
+        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'seaice':
         return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
       case 'imerg':
-        return t('Niederschlag Satellit', 'NASA IMERG · mm/h', 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, '0,1'], [50, '5'], [100, '50+']]);
+        return t('Niederschlag Satellit', 'NASA IMERG · ' + rainUnit(), 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, rainNum(0.1)], [50, rainNum(5)], [100, rainNum(50) + '+']]);
       default:
         return null;
     }
@@ -907,6 +913,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const hideReadout = () => {
     readout.hidden = true;
   };
+  // units changed in the settings: legend and (stale) readout follow at once
+  window.addEventListener(OPTIONS_EVENT, () => {
+    renderLegend();
+    renderTimeline();
+    hideReadout();
+    popup?.remove(); // an open card still shows the old unit
+  });
   function updateReadout(point: { x: number; y: number }, lngLat: { lng: number; lat: number }, touch = false) {
     const o = state.overlay;
     if (touch && o === 'radar') {
@@ -914,7 +927,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const byte = radarGl?.sample(lngLat.lng, lngLat.lat);
       if (byte == null) return hideReadout();
       const rr = rainRate(byte);
-      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${fmt.num(rr, rr < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag';
+      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${rainTxt(rr, rr < 1 ? 1 : 0)}` : 'kein Niederschlag';
       readout.style.transform = `translate(${Math.max(8, point.x - 40)}px, ${Math.max(8, point.y - 64)}px)`;
       readout.hidden = false;
       return;
@@ -952,6 +965,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   /** Opens the launch tracker panel for the next launch of a pad (popup button). */
   async function openLaunchTracker(l: Launch, lng: number, lat: number) {
     popup?.remove();
+    camPanel?.close();
     flightPanel?.close();
     shipPanel?.close();
     let d: LaunchDetail;
@@ -976,7 +990,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   async function weatherPopup(lng: number, lat: number, rain?: number | null) {
     // radar read-out of the Orbis composites: available even if the weather request fails
     const radarLine =
-      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${fmt.num(rain, rain < 1 ? 1 : 0)} mm/h` : 'kein Niederschlag')}</b></div>` : '';
+      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${rainTxt(rain, rain < 1 ? 1 : 0)}` : 'kein Niederschlag')}</b></div>` : '';
     const loadingHtml = `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`;
     let node: HTMLElement;
     if (hud?.layout() === 'portrait') {
@@ -997,11 +1011,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div><div class="pop-temp">${fmt.temp(c.temperature_2m, 1)}</div><div>${escapeHtml(describe(c.weather_code))}</div></div></div>
         <div class="pop-grid">
           <span>Gefühlt</span><b>${fmt.temp(c.apparent_temperature)}</b>
-          <span>Wind</span><b>${Math.round(c.wind_speed_10m)} km/h ${compass(c.wind_direction_10m)}</b>
-          <span>Böen</span><b>${Math.round(c.wind_gusts_10m)} km/h</b>
+          <span>Wind</span><b>${windTxt(c.wind_speed_10m)} ${windDirTxt(c.wind_direction_10m)}</b>
+          <span>Böen</span><b>${windTxt(c.wind_gusts_10m)}</b>
           <span>Feuchte</span><b>${Math.round(c.relative_humidity_2m)} %</b>
           <span>Wolken</span><b>${Math.round(c.cloud_cover)} %</b>
-          <span>Druck</span><b>${Math.round(c.pressure_msl)} hPa</b>
+          <span>Druck</span><b>${pressureTxt(c.pressure_msl)}</b>
         </div>
         <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
       </div>`;
@@ -1041,13 +1055,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // bottom right, stacked from the bottom up: zoom/compass, 2D/3D, locate (later controls sit on top)
     map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');
     el.querySelector('.maplibregl-ctrl-zoom-in')?.parentElement?.classList.add('nav-ctl');
-    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-left');
-    // zoom level next to the scale bar
-    const zoomEl = document.createElement('div');
-    zoomEl.className = 'maplibregl-ctrl zoom-ctrl';
-    const showZoom = () => (zoomEl.textContent = `Zoom ${map!.getZoom().toFixed(1)}`);
-    map.addControl({ onAdd: () => { showZoom(); map!.on('zoom', showZoom); return zoomEl; }, onRemove: () => { map?.off('zoom', showZoom); zoomEl.remove(); } }, 'bottom-left');
-
+    createScaleBar(map);
     // phones: the attribution stays collapsed until the "i" button is tapped (MapLibre opens it
     // by itself whenever new sources bring attributions)
     const attrib = el.querySelector<HTMLElement>('.maplibregl-ctrl-attrib');
@@ -1060,32 +1068,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
 
     // Locate button
-    // 2D / 3D switch
-    const projCtl = document.createElement('div');
-    projCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group proj-ctl';
-    projCtl.setAttribute('role', 'group');
-    projCtl.setAttribute('aria-label', 'Ansicht');
-    renderProj = () => {
-      projCtl.innerHTML =
-        (['mercator', 'globe'] as const)
-          .map(
-            (p) =>
-              `<button type="button" data-proj="${p}" class="${state.projection === p ? 'on' : ''}" aria-pressed="${state.projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`,
-          )
-          .join('') +
-        `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
-    };
-    renderProj();
-    projCtl.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-proj]');
-      if (!btn || !map) return;
-      if (btn.dataset.proj === 'space') {
-        const c = map.getCenter();
-        onOpenSpace(c.lat, c.lng);
-        return;
-      }
-      setProjection(btn.dataset.proj as GlobeState['projection']);
-    });
 
     // Zooming further out of the 3D globe leaves Earth and enters the solar system.
     // A gesture (events less than 250 ms apart, incl. trackpad/free-spinning momentum) that reaches the minimum
@@ -1117,20 +1099,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       },
       { passive: true },
     );
-    map.addControl({ onAdd: () => projCtl, onRemove: () => projCtl.remove() }, 'bottom-right');
 
     const locCtl = document.createElement('div');
     locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group loc-ctl';
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
-    locCtl.querySelector('button')!.addEventListener('click', async () => {
-      try {
-        const { lat, lon } = await locate();
-        store.setLastPlace({ name: '', lat, lon });
-        focusPlace(lat, lon, 8, true);
-      } catch {
-        toast('Standort konnte nicht ermittelt werden.', 'error');
-      }
-    });
+    locCtl.querySelector('button')!.addEventListener('click', () => void locateMe());
     map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
 
     map.on('load', () => {
@@ -1150,12 +1123,23 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
+      camPanel = new CamPanel(el, { map: () => map });
+      camPanel.onOpen = () => {
+        flightPanel?.close();
+        shipPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+      };
       shipPanel.onOpen = () => {
+        camPanel?.close();
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
       };
-      sondePanel.onOpen = () => flightPanel?.close();
+      sondePanel.onOpen = () => {
+        camPanel?.close();
+        flightPanel?.close();
+      };
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
@@ -1223,6 +1207,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // the compass appears only when the map is rotated or tilted
     const syncRotated = () => el.classList.toggle('rotated', !!map && (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5));
     map.on('rotate', syncRotated);
+    map.on('rotate', () => hud?.setBearing(map!.getBearing()));
+    map.on('pitch', () => hud?.syncPitch(map!.getPitch()));
+    hud?.bindMap(map);
     map.on('pitch', syncRotated);
     // 3D-Gelände folgt der Neigung: erst ab geneigter Kamera aktiv, von oben immer flach
     let terrainTilted = false;
@@ -1235,6 +1222,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     };
     map.on('pitch', syncTerrainPitch);
+    // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
+    const levelOut = () => {
+      if (!map) return;
+      const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
+      if (map.getPitch() > limit) map.setPitch(limit);
+    };
+    map.on('zoom', levelOut);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
@@ -1288,6 +1282,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (picked) {
         shipPanel?.close();
         launchPanel?.close();
+        camPanel?.close();
         if (picked.startsWith('sonde:')) {
           flightPanel?.close();
           sondePanel?.open(picked.slice('sonde:'.length));
@@ -1300,11 +1295,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras?.clearSelection();
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
+        camPanel?.close();
         shipPanel?.close();
         launchPanel?.close();
         sondePanel?.close();
         flightPanel?.open(extraResult.hex);
       } else if (extraResult?.type === 'sonde') {
+        camPanel?.close();
         shipPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
@@ -1313,8 +1310,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         launchPanel?.close();
         shipPanel?.open(extraResult.mmsi);
+      } else if (extraResult?.type === 'cam') {
+        popup?.remove();
+        camPanel?.open({ p: extraResult.p, lng: extraResult.lng, lat: extraResult.lat });
       } else if (extraResult?.type === 'weather') {
-        weatherPopup(extraResult.lng, extraResult.lat);
+        if (store.getOptions().clickWx) weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {
         const node = openPopup({ lng: extraResult.lng, lat: extraResult.lat }, extraResult.html);
         extraResult.after?.(node);
@@ -1331,9 +1331,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else if (isWeatherKarte(curKarte)) {
-        const { lng, lat } = e.lngLat;
-        const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
-        weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
+        if (store.getOptions().clickWx) {
+          const { lng, lat } = e.lngLat;
+          const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
+          weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
+        }
       }
     });
     for (const l of interactive) {
@@ -1370,13 +1372,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       store.setLastPlace(p);
       focusPlace(p.lat, p.lon, 7, true);
     },
-    openSettings: openSettingsDialog,
+    openSettings,
+    zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+    locate: () => void locateMe(),
+    setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+    resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
     layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });
   el.appendChild(hud.el);
-  mountRawDataLink(hud.el.querySelector<HTMLElement>('.hud-tr')!, 'button', { cls: 'hud-ibtn' });
   hud.relayout();
   {
     const k = hud.current();
@@ -1390,12 +1395,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   return {
     el,
     activate(focus) {
-      if (focus?.projection) {
-        if (map) setProjection(focus.projection);
-        else state.projection = focus.projection;
-      }
       hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
+        if (focus?.jump && focus.lat != null && focus.lon != null) {
+          state.center = [focus.lon, focus.lat];
+          state.zoom = focus.zoom ?? 6;
+        }
         initMap();
       } else {
         map.resize();
@@ -1403,7 +1408,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         extras?.resume();
       }
       const hasPos = focus?.lat != null && focus?.lon != null;
-      if (hasPos && focus?.fromSpace && map && ready) {
+      if (hasPos && focus?.jump && map && ready) {
+        // seamless hand-over from the forecast map: same view, no flight
+        map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: focus!.zoom ?? 6 });
+      } else if (hasPos && focus?.fromSpace && map && ready) {
         // coming back from the solar system: start far out and dive in
         map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: map.getMinZoom() });
         map.easeTo({ zoom: focus!.zoom ?? 2.2, duration: 1600 });
@@ -1430,6 +1438,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         const url = live[state.overlay];
         if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
+    },
+    settled() {
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        setTimeout(done, 4000);
+        if (!map) return done();
+        map.resize();
+        map.once('idle', done);
+        map.triggerRepaint();
+      });
     },
     deactivate() {
       clearInterval(refreshTimer);

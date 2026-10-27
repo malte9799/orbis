@@ -1,6 +1,7 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import { loadWaves } from '../../../api/ocean';
 import { waveLabel } from '../shared/ocean';
+import { heightUnit } from '../../../units';
 
 type St = { key: string };
 const getState = (ctx: ExtraCtx) => ctx.state<St>('waves', () => ({ key: '' }));
@@ -18,7 +19,7 @@ function loadNow(ctx: ExtraCtx) {
     .then((r) => {
       if (st.key !== key) return;
       ctx.setData('waves', r.fc);
-      ctx.set('waves', { loading: false, count: r.fc.features.length, note: `Raster ${r.step}° · Zahl = Wellenhöhe in m – zoomen für feineres Raster` });
+      ctx.set('waves', { loading: false, count: r.fc.features.length, note: `Raster ${r.step}° · Zahl = Wellenhöhe in ${heightUnit()} – zoomen für feineres Raster` });
     })
     .catch((e) => {
       console.warn('Open-Meteo Marine', e);

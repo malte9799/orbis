@@ -1,7 +1,8 @@
 import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
-import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
+import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import type { ModelSampler, ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
+import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum, snowUnit, snowVal } from '../units';
 
 // ---------------------------------------------------------------------------
 // Forecast fields rendered as raster tiles through a custom protocol: the grid is
@@ -130,37 +131,37 @@ const num = (d = 0) => (v: number) => fmt.num(v, d);
 export const FIELDS: Record<FieldId, FieldDef> = {
   wind: {
     label: 'Wind',
-    unit: 'km/h',
+    get unit() { return windUnit(); },
     variable: 'wind_speed_10m',
     color: ramp(WIND_STOPS),
     legend: { stops: WIND_STOPS, ticks: [0, 30, 60, 100, 130] },
-    format: num(),
+    format: windNum,
     particles: true,
   },
   gusts: {
     label: 'Windböen',
-    unit: 'km/h',
+    get unit() { return windUnit(); },
     variable: 'wind_gusts_10m',
     color: ramp(WIND_STOPS),
     legend: { stops: WIND_STOPS, ticks: [0, 30, 60, 100, 130] },
-    format: num(),
+    format: windNum,
     particles: true,
   },
   temp: {
     label: 'Temperatur',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'temperature_2m',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   feels: {
     label: 'Gefühlte Temperatur',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'apparent_temperature',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   humidity: {
     label: 'Luftfeuchtigkeit',
@@ -173,20 +174,20 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   dewpoint: {
     label: 'Taupunkt',
-    unit: '°C',
+    get unit() { return tempUnit(); },
     variable: 'dew_point_2m',
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
-    format: num(),
+    format: tempNum,
   },
   precip: {
     label: 'Niederschlag',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     color: ramp(PRECIP_STOPS, 210, 0.08),
     legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
-    format: num(1),
+    format: rainNum,
   },
   cloud: {
     label: 'Bewölkung',
@@ -199,40 +200,40 @@ export const FIELDS: Record<FieldId, FieldDef> = {
   },
   pressure: {
     label: 'Luftdruck',
-    unit: 'hPa',
+    get unit() { return pressureUnit(); },
     variable: 'pressure_msl',
     color: ramp(PRESSURE_STOPS, 150),
     legend: { stops: PRESSURE_STOPS, ticks: [970, 990, 1013, 1030, 1045] },
-    format: num(),
+    format: pressureNum,
   },
   snow: {
     label: 'Schneehöhe',
-    unit: 'cm',
+    get unit() { return snowUnit(); },
     variable: 'snow_depth',
     organic: { warp: 0.3, texture: 0.3 },
     color: ramp(SNOW_STOPS, 210, 0.01),
     legend: { stops: SNOW_STOPS, ticks: [0.01, 0.5, 1, 2, 3] },
-    format: (v) => fmt.num(v * 100, 0),
+    format: (v) => fmt.num(snowVal(v * 100), snowUnit() === 'in' ? 1 : 0),
   },
   precipmix: {
     label: 'Niederschlag',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     phase: 'mix',
     color: ramp(PRECIP_STOPS, 215, 0.08),
     legend: { stops: PRECIP_STOPS, ticks: [0.1, 3, 10, 20, 40] },
-    format: num(1),
+    format: rainNum,
   },
   snowfall: {
     label: 'Schneefall',
-    unit: 'mm/h',
+    get unit() { return rainUnit(); },
     variable: 'precipitation',
     organic: { warp: 0.5, texture: 0.6 },
     phase: 'snow-only',
     color: ramp(SNOWFALL_STOPS, 225, 0.08),
     legend: { stops: SNOWFALL_STOPS, ticks: [0.1, 1.5, 3, 6] },
-    format: num(1),
+    format: rainNum,
   },
   cape: {
     label: 'Gewitterenergie (CAPE)',
@@ -676,7 +677,46 @@ export class WindParticles {
 // ---------------------------------------------------------------------------
 // Day/night terminator
 
-export function nightPolygon(date = new Date()): Feature<Polygon> {
+const NIGHT_SIZE = 1024;
+const NIGHT_Z = 2;
+let nightTiles: Promise<ImageData> | null = null;
+
+/** Black Marble at z2 stitched into one mercator image (loaded once). */
+function loadNightTiles(urlFor: (z: number, x: number, y: number) => string): Promise<ImageData> {
+  nightTiles ??= (async () => {
+    const n = 1 << NIGHT_Z;
+    const tile = NIGHT_SIZE / n;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = NIGHT_SIZE;
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+    await Promise.all(
+      Array.from({ length: n * n }, (_, i) => {
+        const x = i % n;
+        const y = Math.floor(i / n);
+        return new Promise<void>((res) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            ctx.drawImage(img, x * tile, y * tile, tile, tile);
+            res();
+          };
+          img.onerror = () => res();
+          img.src = urlFor(NIGHT_Z, x, y);
+        });
+      }),
+    );
+    return ctx.getImageData(0, 0, NIGHT_SIZE, NIGHT_SIZE);
+  })();
+  return nightTiles;
+}
+
+/**
+ * Night side of the earth: the Black Marble image whose alpha follows the sun's elevation, so the
+ * night map shows only in the dark half and fades out smoothly across the terminator.
+ * Returns a PNG data URL for an image source covering NIGHT_COORDS.
+ */
+export async function nightImage(urlFor: (z: number, x: number, y: number) => string, date = new Date()): Promise<string> {
+  const src = await loadNightTiles(urlFor);
   const rad = Math.PI / 180;
   const dayOfYear = (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 0)) / 86400000;
   // Approximate solar declination & equation of time
@@ -688,15 +728,25 @@ export function nightPolygon(date = new Date()): Feature<Polygon> {
   const utcMinutes = date.getUTCHours() * 60 + date.getUTCMinutes() + date.getUTCSeconds() / 60;
   const subLon = -((utcMinutes + eqTime - 720) / 4); // where the sun is overhead
 
-  const ring: [number, number][] = [];
-  const tanDecl = Math.tan(Math.abs(decl) < 0.001 ? 0.001 : decl);
-  for (let lon = -180; lon <= 180; lon += 2) {
-    const ha = (lon - subLon) * rad;
-    const lat = Math.atan(-Math.cos(ha) / tanDecl) / rad;
-    ring.push([lon, lat]);
+  const sinD = Math.sin(decl);
+  const cosD = Math.cos(decl);
+  const out = new ImageData(new Uint8ClampedArray(src.data), NIGHT_SIZE, NIGHT_SIZE);
+  const d = out.data;
+  const cosHa = new Float32Array(NIGHT_SIZE);
+  for (let x = 0; x < NIGHT_SIZE; x++) cosHa[x] = Math.cos(((x + 0.5) / NIGHT_SIZE) * 360 * rad - Math.PI - subLon * rad);
+  for (let y = 0; y < NIGHT_SIZE; y++) {
+    const lat = Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + 0.5)) / NIGHT_SIZE)));
+    const a = Math.sin(lat) * sinD;
+    const b = Math.cos(lat) * cosD;
+    for (let x = 0; x < NIGHT_SIZE; x++) {
+      const elev = a + b * cosHa[x]; // sin(sun elevation)
+      // Day (>= +0.05) → 0, deep twilight (<= -0.25, about -14°) → 1.
+      const t = Math.min(1, Math.max(0, (0.05 - elev) / 0.3));
+      d[(y * NIGHT_SIZE + x) * 4 + 3] = Math.round(src.data[(y * NIGHT_SIZE + x) * 4 + 3] * t * t * (3 - 2 * t));
+    }
   }
-  // Night covers the pole that is tilted away from the sun.
-  const pole = decl > 0 ? -90 : 90;
-  ring.push([180, pole], [-180, pole], ring[0]);
-  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = NIGHT_SIZE;
+  cv.getContext('2d')!.putImageData(out, 0, 0);
+  return cv.toDataURL('image/png');
 }

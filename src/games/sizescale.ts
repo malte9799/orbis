@@ -1,5 +1,6 @@
 import type { Position } from 'geojson';
 import { escapeHtml } from '../util';
+import { areaVal, areaUnit } from '../units';
 import { outlineShape } from './quizitems';
 import { ringArea, type SizeItem } from './sizeduel';
 
@@ -222,8 +223,8 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     log.push({ a: cur.a.name, b: cur.b.name, f, pts });
     svg.querySelector<SVGGElement>('.sc-true')!.style.display = '';
     handle!.style.display = 'none';
-    const trueArea = `${nfa.format(Math.round(cur.b.area))} km²`;
-    $('.sc-vs-areas').textContent = `${nfa.format(Math.round(cur.a.area))} km² vs ${trueArea}`;
+    const trueArea = `${nfa.format(Math.round(areaVal(cur.b.area)))} ${areaUnit()}`;
+    $('.sc-vs-areas').textContent = `${nfa.format(Math.round(areaVal(cur.a.area)))} ${areaUnit()} vs ${trueArea}`;
     const r = cur.ratio; // B's real area relative to A
     const mine = f * f * r; // what the drawing shows
     const x = (v: number) => (v >= 10 ? nfa : v >= 1 ? nf : nf2).format(v) + '×';

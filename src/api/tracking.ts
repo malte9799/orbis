@@ -3,6 +3,7 @@ import { degreesLat, degreesLong, eciToGeodetic, gstime, propagate, twoline2satr
 import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
+import { distTxt, speedTxt, uTok } from '../units';
 
 // ---------------------------------------------------------------------------
 // Satellites – orbital elements from CelesTrak, positions computed in the browser (SGP4)
@@ -129,7 +130,7 @@ export function satPopupInfo(s: Sat, date = new Date()) {
     title: s.name,
     subtitle: `${SAT_GROUPS[s.group] ?? s.group} · NORAD ${s.id}`,
     details: p
-      ? `Höhe ${fmt.num(p.heightKm, 0)} km · ${fmt.num(p.speedKmS * 3600, 0)} km/h · Umlaufzeit ${fmt.num(periodMin, 0)} min`
+      ? `Höhe ${distTxt(p.heightKm, 0)} · ${speedTxt(p.speedKmS * 3600)} · Umlaufzeit ${fmt.num(periodMin, 0)} min`
       : '',
     url: `https://celestrak.org/satcat/table-satcat.php?CATNR=${s.id}`,
   };
@@ -157,6 +158,20 @@ interface Ac {
   squawk?: string;
   baro_rate?: number;
   emergency?: string;
+  /** bit 0: military (readsb aircraft database) */
+  dbFlags?: number;
+  /** position source (adsb_icao, mlat, tisb_* …) and ADS-B version: navigation quality is only comparable for DO-260A/B */
+  type?: string;
+  version?: number;
+  nic?: number;
+  nac_p?: number;
+  /** fields that were derived from MLAT/TIS-B instead of the aircraft's own report */
+  mlat?: string[];
+  tisb?: string[];
+  /** set by readsb when the aircraft stopped reporting a GPS position; last good position */
+  gpsOkBefore?: number;
+  gpsOkLat?: number;
+  gpsOkLon?: number;
 }
 
 export type AircraftKind = 'plane' | 'heli' | 'glider' | 'balloon' | 'drone' | 'vehicle';
@@ -270,6 +285,97 @@ let globalCache: { at: number; fc: AircraftResult } | null = null;
 let globalFailedAt = 0;
 let lastProxy: string | undefined;
 
+// ---------------------------------------------------------------------------
+// Browser cache (IndexedDB – the worldwide overview is too big for localStorage)
+
+const idb = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    const req = indexedDB.open('orbis-cache', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+async function kvGet<T>(key: string): Promise<T | undefined> {
+  try {
+    const db = await idb();
+    return await new Promise((resolve) => {
+      const r = db.transaction('kv').objectStore('kv').get(key);
+      r.onsuccess = () => resolve(r.result as T | undefined);
+      r.onerror = () => resolve(undefined);
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function kvSet(key: string, value: unknown) {
+  idb()
+    .then((db) => db.transaction('kv', 'readwrite').objectStore('kv').put(value, key))
+    .catch(() => undefined);
+}
+
+/** Latest position of every aircraft seen in a zoomed-in request – they beat the (older) overview when zooming out. */
+const LIVE_KEEP_MS = 3600000;
+const LIVE_MAX = 30000;
+const liveSeen = new Map<string, { at: number; f: Feature<Point> }>();
+let liveSavedAt = 0;
+
+function rememberLive(fc: AircraftResult) {
+  const now = Date.now();
+  for (const f of fc.features) liveSeen.set(String(f.properties?.hex), { at: now, f });
+  if (liveSeen.size > LIVE_MAX) {
+    const oldest = [...liveSeen.entries()].sort((a, b) => a[1].at - b[1].at).slice(0, liveSeen.size - LIVE_MAX);
+    for (const [k] of oldest) liveSeen.delete(k);
+  }
+  if (now - liveSavedAt > 30000) {
+    liveSavedAt = now;
+    kvSet('ac-live', [...liveSeen.entries()]);
+  }
+}
+
+let hydrated: Promise<void> | null = null;
+function hydrate(): Promise<void> {
+  hydrated ??= (async () => {
+    const [live, glob] = await Promise.all([kvGet<[string, { at: number; f: Feature<Point> }][]>('ac-live'), kvGet<{ at: number; fc: AircraftResult }>('ac-global')]);
+    const now = Date.now();
+    for (const [k, v] of live ?? []) if (now - v.at < LIVE_KEEP_MS && !liveSeen.has(k)) liveSeen.set(k, v);
+    if (glob && !globalCache) globalCache = glob;
+  })();
+  return hydrated;
+}
+
+/** Position of an aircraft seen `ageS` seconds ago, carried forward along its course. */
+function advance(f: Feature<Point>, ageS: number): Feature<Point> {
+  const p = f.properties ?? {};
+  const v = Number(p.speedKmh);
+  if (p.ground || !(v > 0) || ageS < 1) return f;
+  const km = (v * Math.min(ageS, 600)) / 3600;
+  const th = (Number(p.track) * Math.PI) / 180;
+  const [lon, lat] = f.geometry.coordinates;
+  return { ...f, geometry: { type: 'Point', coordinates: [lon + (km * Math.sin(th)) / (111.2 * Math.max(0.05, Math.cos((lat * Math.PI) / 180))), lat + (km * Math.cos(th)) / 111.2] } };
+}
+
+/** Overview aircraft that were seen more recently in a zoomed-in view are replaced by that newer position. */
+function mergeLive(base: AircraftResult | null, baseAt: number): AircraftResult {
+  const now = Date.now();
+  const used = new Set<string>();
+  const features: Feature<Point>[] = [];
+  for (const f of base?.features ?? []) {
+    const hex = String(f.properties?.hex);
+    const seen = liveSeen.get(hex);
+    if (seen && seen.at > baseAt) {
+      used.add(hex);
+      features.push(advance(seen.f, (now - seen.at) / 1000));
+    } else features.push(f);
+  }
+  // overview not available: the recently seen aircraft are still better than an empty map
+  if (!base) {
+    for (const [hex, v] of liveSeen) if (now - v.at < 600000 && !used.has(hex)) features.push(advance(v.f, (now - v.at) / 1000));
+  }
+  return { type: 'FeatureCollection', features, source: base ? base.source : 'Zwischenspeicher (zuletzt gesehen)' };
+}
+
 /** A newly entered proxy may fix what failed before – retry everything right away. */
 function resetOnProxyChange() {
   const proxy = proxyBase();
@@ -281,19 +387,50 @@ function resetOnProxyChange() {
 
 /**
  * Worldwide overview of all aircraft from OpenSky (anonymous: 4 of 400 daily credits per
- * call) – cached for two minutes and shown when zoomed out.
+ * call) – cached for two minutes (also across page reloads) and shown when zoomed out.
+ * Aircraft seen more recently in a zoomed-in view show their newer position instead.
  */
 export async function loadGlobalAircraft(): Promise<AircraftResult> {
   resetOnProxyChange();
-  if (globalCache && Date.now() - globalCache.at < 120000) return globalCache.fc;
-  if (Date.now() - globalFailedAt < 300000) throw new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)');
-  const json = await fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000).catch((e) => {
-    globalFailedAt = Date.now();
+  await hydrate();
+  if (globalCache && Date.now() - globalCache.at < 120000) return mergeLive(globalCache.fc, globalCache.at);
+  const stale = () => (globalCache ? mergeLive(globalCache.fc, globalCache.at) : liveSeen.size ? mergeLive(null, 0) : null);
+  const [osk, mil] = await Promise.allSettled([
+    Date.now() - globalFailedAt < 300000
+      ? Promise.reject(new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)'))
+      : fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000).catch((e) => {
+          globalFailedAt = Date.now();
+          throw e;
+        }),
+    loadMilitaryAircraft(),
+  ]);
+  // OpenSky has no military flag: the worldwide military list of adsb.lol replaces those aircraft
+  const milFc = mil.status === 'fulfilled' ? mil.value : null;
+  if (osk.status === 'rejected') {
+    // older overview (with its military aircraft) first, else at least the military list
+    const s = stale();
+    if (s) return s;
+    if (milFc) return { ...milFc, source: 'nur Militär (adsb.lol) – OpenSky nicht erreichbar' };
+    throw osk.reason;
+  }
+  const milHex = new Set(milFc?.features.map((f) => String(f.properties?.hex)) ?? []);
+  const base = toFeatures(parseOpenSky(osk.value), '').features.filter((f) => !milHex.has(String(f.properties?.hex)));
+  const fc: AircraftResult = { type: 'FeatureCollection', features: [...base, ...(milFc?.features ?? [])], source: milFc ? 'OpenSky Network + adsb.lol (Militär)' : 'OpenSky Network (Weltübersicht)' };
+  globalCache = { at: Date.now(), fc };
+  kvSet('ac-global', globalCache);
+  return mergeLive(fc, globalCache.at);
+}
+
+let milFailedAt = 0;
+
+/** All aircraft that the readsb database marks as military, worldwide (adsb.lol, ~70 KB). */
+export async function loadMilitaryAircraft(): Promise<AircraftResult> {
+  if (Date.now() - milFailedAt < 300000) throw new Error('adsb.lol-Militärliste pausiert');
+  const json = await fetchJson<unknown>(viaProxy('https://api.adsb.lol/v2/mil'), undefined, 15000).catch((e) => {
+    milFailedAt = Date.now();
     throw e;
   });
-  const fc = toFeatures(parseOpenSky(json), 'OpenSky Network (Weltübersicht)');
-  globalCache = { at: Date.now(), fc };
-  return fc;
+  return toFeatures(readsb(json), 'adsb.lol (Militär)');
 }
 
 /** One aircraft by its Mode-S code, wherever it is (for the selected aircraft when the map is far away from it). */
@@ -305,7 +442,9 @@ export async function loadAircraftByHex(hex: string): Promise<AircraftResult> {
   let last: unknown;
   for (const [label, base] of sources) {
     try {
-      return toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+      const fc = toFeatures(readsb(await fetchJson<unknown>(viaProxy(base + encodeURIComponent(hex)), undefined, 8000)), label);
+      rememberLive(fc);
+      return fc;
     } catch (e) {
       last = e;
     }
@@ -338,6 +477,7 @@ export async function loadAircraft(lat: number, lon: number, radiusNm: number): 
       preferredSource = i;
       health.fails = 0;
       lastResult = { at: Date.now(), lat, lon, nm: r, fc };
+      rememberLive(fc);
       return fc;
     } catch (e) {
       health.fails++;
@@ -362,6 +502,7 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
     // a tower transponder (type TWR without any further description) is a fixed station, not a vehicle
     if ((a.t ?? '').trim().toUpperCase() === 'TWR' && /^(TWR)?$/.test(clean(a.desc).toUpperCase())) continue;
     const onGround = a.alt_baro === 'ground';
+    const nav = navQuality(a, onGround);
     const altFt = typeof a.alt_baro === 'number' ? a.alt_baro : 0;
     features.push({
       type: 'Feature',
@@ -383,10 +524,35 @@ function toFeatures(list: Ac[], source: string): AircraftResult {
         track: a.track ?? a.true_heading ?? 0,
         ground: onGround,
         emergency: a.emergency && a.emergency !== 'none' ? a.emergency : '',
+        mil: ((a.dbFlags ?? 0) & 1) === 1,
+        nic: a.nic ?? null,
+        nacp: a.nac_p ?? null,
+        ...nav,
       },
     });
   }
   return { type: 'FeatureCollection', features, source };
+}
+
+/**
+ * Navigation quality the aircraft reports about its own position (only airborne DO-260A/B ADS-B,
+ * values not derived from MLAT/TIS-B): `navBad` true when NACp < 8 (≥ 93 m uncertainty), NIC < 7
+ * (containment ≥ 0.2 NM; NIC 0 with NACp ≥ 10 counts as unknown, not bad) or readsb flags a GPS
+ * loss – thresholds after the US ADS-B-Out minima (14 CFR 91.227), as in God's Eye View. Lost GPS:
+ * the last good position (`navLon`/`navLat`) places the aircraft. Without usable values: `{}`.
+ */
+function navQuality(a: Ac, onGround: boolean): { navBad?: boolean; navLon?: number; navLat?: number } {
+  if (onGround || typeof a.alt_baro !== 'number') return {};
+  if (a.type !== 'adsb_icao' && a.type !== 'mlat') return {};
+  if (a.version !== 1 && a.version !== 2) return {};
+  const derived = (f: string) => !!(a.mlat?.includes(f) || a.tisb?.includes(f));
+  const nic = a.nic != null && !derived('nic') ? a.nic : null;
+  const nacp = a.nac_p != null && !derived('nac_p') ? a.nac_p : null;
+  const lost = (a.gpsOkBefore ?? 0) > 0;
+  if (nic == null && nacp == null && !lost) return {};
+  const navBad = lost || (nacp != null && nacp < 8) || (nic != null && nic < 7 && !(nic === 0 && nacp != null && nacp >= 10));
+  const okPos = lost && a.gpsOkLat != null && a.gpsOkLon != null && Math.abs(a.gpsOkLat) <= 90 && Math.abs(a.gpsOkLon) <= 180;
+  return okPos ? { navBad, navLon: a.gpsOkLon, navLat: a.gpsOkLat } : { navBad };
 }
 
 // ---------------------------------------------------------------------------
@@ -428,7 +594,7 @@ export async function loadSondes(): Promise<FeatureCollection<Point>> {
         // the label above the 3D model is the serial itself (like a callsign)
         callsign: s.serial,
         title: `Wetterballon ${s.serial}`,
-        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${fmt.num(s.alt, 0)} m · ${rising ? 'steigt' : falling ? 'fällt (Fallschirm)' : 'gelandet'}`,
+        subtitle: `${s.subtype || s.type || 'Radiosonde'} · Höhe ${uTok('height', s.alt)} · ${rising ? 'steigt' : falling ? 'fällt (Fallschirm)' : 'gelandet'}`,
         date: s.datetime,
         url: `https://sondehub.org/#!mt=Mapnik&f=${encodeURIComponent(s.serial)}&q=${encodeURIComponent(s.serial)}`,
         altM: Math.round(s.alt),

@@ -8,6 +8,8 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import { store, type Place } from './store';
 import { createForecastView } from './views/forecast';
 import { createGlobeView } from './views/globe';
+import { createNavMenu, type NavRoute } from './nav';
+import { createSettingsPanel } from './views/settings';
 
 installCapture();
 
@@ -19,6 +21,12 @@ const app = document.getElementById('app')!;
 const forecast = createForecastView((p: Place) => {
   location.hash = `#/karte?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
 });
+// Vollbild-Knopf der Vorhersage-Karte: nahtlos in die große Karte wechseln
+window.addEventListener('orbis:fc-fullscreen', ((e: CustomEvent<{ lat: number; lon: number; zoom: number; done: (p: Promise<void>) => void }>) => {
+  const { lat, lon, zoom, done } = e.detail;
+  location.hash = `#/karte?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&zoom=${zoom.toFixed(2)}&jump=1`;
+  done(globe.settled());
+}) as EventListener);
 const globe = createGlobeView(
   (p: Place) => {
     store.setLastPlace(p);
@@ -88,67 +96,21 @@ function loadGames(): Promise<GamesView> {
 }
 
 let forecastLoaded = false;
-let active: 'forecast' | 'globe' | 'space' | 'planet' | 'stars' | 'games' | null = null;
+let active: NavRoute | null = null;
 
-const nav = document.querySelector<HTMLElement>('.tabs')!;
-const knob = nav.querySelector<HTMLAnchorElement>('.space-knob')!;
-
-// Topbar in der Weltall-Ansicht: standardmäßig die NASA-Eyes-Gruppe zeigen,
-// per „Weltall“-Knopf zwischen Eyes-Auswahl und den übrigen Ansichts-Links umschalten.
-let eyesMode = false;
-function setEyesMode(on: boolean) {
-  eyesMode = on;
-  nav.classList.toggle('mode-eyes', on);
-  knob?.setAttribute('aria-expanded', String(on));
-  document.querySelector('.eyes-group')?.toggleAttribute('hidden', !on);
-}
-knob?.addEventListener('click', (e) => {
-  e.preventDefault();
-  setEyesMode(!eyesMode);
-  if (eyesMode && active !== 'space') location.hash = '#/weltall';
+// Settings: one global slide-over panel, opened from the Orbis menu
+const settingsScrim = document.createElement('div');
+settingsScrim.className = 'settings-scrim';
+settingsScrim.hidden = true;
+const settingsEl = document.createElement('aside');
+settingsEl.className = 'settings-panel';
+settingsEl.hidden = true;
+document.body.append(settingsScrim, settingsEl);
+const settingsPanel = createSettingsPanel(settingsEl, settingsScrim, {
+  onKeysSaved: () => document.dispatchEvent(new CustomEvent('orbis:keys-saved')),
 });
-// In der Weltall-Ansicht schaltet der normale „Weltall“-Tab die Eyes-Gruppe wieder ein,
-// in der Planeten-Ansicht holt er die Trek-Leiste zurück
-const spaceTab = nav.querySelector<HTMLAnchorElement>('a[data-route="space"]');
-spaceTab?.addEventListener('click', (e) => {
-  if (active === 'space' && !eyesMode) {
-    e.preventDefault();
-    setEyesMode(true);
-    return;
-  }
-  if (active === 'planet' && !trekMode) {
-    e.preventDefault();
-    setTrekMode(true);
-  }
-});
-
-// Trek-Kategorien (Planeten-Ansicht): Dropdown schließt bei Auswahl und Klick außerhalb
-const trekGroup = nav.querySelector<HTMLElement>('.trek-group')!;
-nav.querySelectorAll<HTMLAnchorElement>('.trek-group a').forEach((a) =>
-  a.addEventListener('click', () => a.closest('details')?.removeAttribute('open')),
-);
-document.addEventListener('click', (e) => {
-  const dd = (e.target as HTMLElement).closest?.('.trek-dd');
-  nav.querySelectorAll<HTMLDetailsElement>('.trek-dd[open]').forEach((d) => {
-    if (d !== dd) d.removeAttribute('open');
-  });
-});
-
-// Topbar in der Planeten-Ansicht: die Trek-Kategorien stehen standardmäßig,
-// per „Planeten“-Knopf (wie „Weltall“ in der Weltall-Ansicht) kehrt man zur normalen Leiste zurück
-let trekMode = false;
-function setTrekMode(on: boolean) {
-  trekMode = on;
-  nav.classList.toggle('mode-trek', on);
-  trekGroup.toggleAttribute('hidden', !on);
-  worldLink?.setAttribute('aria-expanded', String(on));
-}
-const worldLink = nav.querySelector<HTMLAnchorElement>('a.world-link')!;
-worldLink.addEventListener('click', (e) => {
-  if (active !== 'planet') return; // sonst: normale Navigation zur Planeten-Karte
-  e.preventDefault();
-  setTrekMode(!trekMode);
-});
+document.addEventListener('orbis:settings', () => settingsPanel.open());
+const navMenu = createNavMenu(() => settingsPanel.open());
 
 function route() {
   const [path, query = ''] = location.hash.replace(/^#/, '').split('?');
@@ -174,44 +136,9 @@ function route() {
   document.body.classList.toggle('mode-space', next === 'space');
   document.body.classList.toggle('mode-planet', next === 'planet');
   document.body.classList.toggle('mode-stars', next === 'stars');
-  document.querySelectorAll<HTMLAnchorElement>('.tabs a[data-route]').forEach((a) => {
-    const on = a.dataset.route === (next === 'planet' ? 'space' : next === 'stars' ? 'stars' : next);
-    a.classList.toggle('active', on);
-    if (on) a.setAttribute('aria-current', 'page');
-    else a.removeAttribute('aria-current');
-  });
-
-  // Eyes-Auswahl: beim Betreten der Weltall-Ansicht standardmäßig die Eyes-Gruppe zeigen,
-  // außer innerhalb der Ansicht wurde per Knopf umgeschaltet
   const eyes = params.get('eyes');
-  if (next === 'space') {
-    if (active !== 'space') setEyesMode(true);
-  } else if (eyesMode) {
-    setEyesMode(false);
-  }
-  document.querySelectorAll<HTMLAnchorElement>('.eyes-group a').forEach((a) => {
-    a.classList.toggle('active', eyesMode && a.dataset.eyes === (eyes ?? 'earth'));
-  });
-  // Trek-Kategorien nur in der Planeten-Ansicht (beim Betreten standardmäßig an); der aktuelle
-  // Körper ist markiert, der Titel seiner Kategorie zeigt den Körpernamen (z. B. „Mars“ statt
-  // „Planeten“), rechts zeigt „Planeten“ die aktive Ansicht
-  if (next === 'planet') {
-    if (active !== 'planet') setTrekMode(true);
-  } else if (trekMode) {
-    setTrekMode(false);
-  }
-  const bodyParam = params.get('body') ?? 'mars';
-  document.querySelectorAll<HTMLAnchorElement>('.trek-group a').forEach((a) => {
-    a.classList.toggle('active', next === 'planet' && a.dataset.body === bodyParam);
-  });
-  nav.querySelectorAll<HTMLDetailsElement>('.trek-dd').forEach((dd) => {
-    const sum = dd.querySelector<HTMLElement>('summary')!;
-    const chosen = dd.querySelector<HTMLAnchorElement>(`a[data-body="${CSS.escape(bodyParam)}"]`);
-    sum.textContent = chosen?.textContent ?? sum.dataset.cat ?? '';
-    // die Kategorie des gewählten Körpers ist hervorgehoben
-    sum.classList.toggle('active', !!chosen);
-  });
-  nav.querySelector<HTMLAnchorElement>('a.world-link')?.classList.toggle('active', next === 'planet');
+  navMenu.update(next, eyes, params.get('body'));
+  settingsPanel.close();
 
   if (next === 'games') {
     loadGames().then((v) => {
@@ -248,7 +175,6 @@ function route() {
       if (active !== 'planet') return;
       v.activate({
         body: params.get('body') ?? 'mars',
-        projection: params.get('view') === '2d' ? 'mercator' : 'globe',
         lat: hasPos ? lat : undefined,
         lon: hasPos ? lon : undefined,
         zoom: Number.isFinite(z) ? z : undefined,
@@ -259,8 +185,9 @@ function route() {
     });
   } else if (next === 'globe') {
     const fromSpace = params.get('from') === 'space';
-    const proj = params.get('proj') === 'globe' ? 'globe' : undefined;
-    globe.activate(hasPos ? { lat, lon, zoom: fromSpace ? 2.2 : 6, projection: proj, fromSpace } : proj ? { projection: proj } : undefined);
+    const zoomP = parseFloat(params.get('zoom') ?? '');
+    const jump = params.get('jump') === '1';
+    globe.activate(hasPos ? { lat, lon, zoom: Number.isFinite(zoomP) ? zoomP : fromSpace ? 2.2 : 6, fromSpace, jump } : undefined);
   } else if (!forecastLoaded || active !== 'forecast') {
     forecastLoaded = true;
     forecast.show(store.getLastPlace());

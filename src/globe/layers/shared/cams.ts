@@ -53,6 +53,10 @@ export const ALPR_FOV_RADIUS = 80; // metres
 export const ALPR_FOV_ANGLE = 60; // degrees
 export const CAM_FOV_RADIUS = 80; // metres
 export const CAM_FOV_ANGLE = 60; // degrees
+/** road cameras of the feeds: the direction is mostly the road's direction of travel, view angle and
+ * range are typical values (as in God's Eye View), not measurements */
+export const ROAD_CAM_FOV_RADIUS = 210; // metres
+export const ROAD_CAM_FOV_ANGLE = 56; // degrees
 
 /** Sector polygons on the ground (metres → degrees), one per [lon, lat, heading]. */
 export function fovSectors(cams: [number, number, number][], radius: number, angle: number): Feature[] {

@@ -11,7 +11,8 @@ Neue Dinge sind meist **eine neue Datei** in einem Ordner; die Sammlung geschieh
 | Ereignis-Gruppe (Erdbeben, Brände …) | `src/globe/events/groups/<id>.ts` | `defineGroup` |
 | Karten-Menü: Verkehr / Infrastruktur / Wetter-Familie / Wetter-Menü | `src/hud/menus/{traffic,infra,wxfamilies,wxmenu}/<id>.ts` | `defineMenuCat`, `defineWxFamily`, `defineWxMenuItem` |
 | Klick-Aktion im HUD (`data-act="…"`) | `src/hud/actions/<thema>.ts` | Funktion `(core) => ({ name: (id, v, ev) => … })` |
-| API-Schlüssel im Einstellungsdialog | `src/settings/keys/<id>.ts` | `defineKey` |
+| API-Schlüssel im Einstellungs-Panel (Gruppe, Kurzanleitung, Hinweis) | `src/settings/keys/<id>.ts` | `defineKey` |
+| Einstellungs-Panel (Allgemein, Einheiten, Schlüssel) / Einheiten-Umrechnung | `src/views/settings.ts` / `src/units.ts` | – |
 | Globale CSS-Regeln | `src/styles/NNN-<bereich>.css` | Nummer = Cascade-Reihenfolge |
 | Daten/Geometrie der Spiele | `src/games/data.ts`, Menübilder `src/games/menu-art.ts` | – |
 

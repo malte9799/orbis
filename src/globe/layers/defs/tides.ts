@@ -1,7 +1,8 @@
 import { defineExtra } from '../types';
 import { loadTideDetails, loadTideStations } from '../../../api/ocean';
 import { cardHtml } from '../../popup';
-import { escapeHtml, fmt } from '../../../util';
+import { escapeHtml } from '../../../util';
+import { dateTimeTxt, heightTxt } from '../../../units';
 
 export default defineExtra({
   id: 'tides',
@@ -45,10 +46,10 @@ export default defineExtra({
       after: (node) => {
         loadTideDetails(id)
           .then((d) => {
-            const t = (iso: string) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+            const t = (iso: string) => dateTimeTxt(new Date(iso), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
             const rows: [string, string][] = [];
-            if (d.level) rows.push(['Wasserstand', `${fmt.num(d.level.v, 2)} m (über MLLW) · ${t(d.level.t)}`]);
-            for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${fmt.num(n.v, 2)} m`]);
+            if (d.level) rows.push(['Wasserstand', `${heightTxt(d.level.v, 2)} (über MLLW) · ${t(d.level.t)}`]);
+            for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${heightTxt(n.v, 2)}`]);
             const el = node.querySelector('.pop-loading');
             if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
           })

@@ -108,38 +108,6 @@
   border-color: var(--accent);
 }
 
-.settings-dialog {
-  width: min(460px, calc(100% - 24px));
-  padding: 20px 22px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--card-solid);
-  color: var(--text);
-}
-
-.settings-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.settings-dialog h2 {
-  margin-bottom: 8px;
-}
-
-.settings-dialog h3 {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  margin: 16px 0 6px;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
-}
-
 .btn.primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -212,6 +180,30 @@
   overflow: hidden;
   background: #0b1220;
   border: 1px solid var(--border);
+}
+.fcm-full {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(11, 16, 32, 0.85);
+  color: var(--text);
+  cursor: pointer;
+}
+.fcm-full:hover {
+  background: rgba(30, 40, 70, 0.95);
+}
+.fcm-full svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 .fcm-status {
   position: absolute;
@@ -348,6 +340,11 @@
   overflow: hidden;
   background: rgba(255, 255, 255, 0.05);
   min-height: 120px;
+}
+video.pop-cam {
+  width: 100%;
+  max-height: 220px;
+  background: #000;
 }
 .pop-cam img {
   display: block;
@@ -614,4 +611,14 @@
 .globe-bottom .legend-ticks span:only-child {
   transform: none;
   margin-left: 4px;
+}
+/* camera panel: live picture on top */
+.cam-media {
+  padding: 10px 12px 0;
+}
+.cam-media .pop-cam {
+  margin: 0;
+}
+.cam-media video.pop-cam {
+  max-height: 260px;
 }

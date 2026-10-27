@@ -8,7 +8,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { dirname, join } from 'node:path';
 
 // the app modules expect a browser – provide the bits they touch
-const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY, ontario511: process.env.ONTARIO_511_API_KEY, alberta511: process.env.ALBERTA_511_API_KEY };
+const envKeys = { nps: process.env.NPS_API_KEY, windy: process.env.WINDY_KEY, victoria: process.env.VICTORIA_KEY, cta: process.env.CTA_KEY, trafiklab: process.env.TRAFIKLAB_KEY, trafikverket: process.env.TRAFIKVERKET_KEY, utah511: process.env.UTAH_511_API_KEY, arizona511: process.env.ARIZONA_511_API_KEY, idaho511: process.env.IDAHO_511_API_KEY, nevada511: process.env.NEVADA_511_API_KEY, alaska511: process.env.ALASKA_511_API_KEY, georgia511: process.env.GEORGIA_511_API_KEY, louisiana511: process.env.LOUISIANA_511_API_KEY, pennsylvania511: process.env.PENNSYLVANIA_511_API_KEY, ohgo: process.env.OHGO_API_KEY, qldtraffic: process.env.QLDTRAFFIC_KEY, ontario511: process.env.ONTARIO_511_API_KEY, alberta511: process.env.ALBERTA_511_API_KEY };
 (globalThis as { localStorage?: unknown }).localStorage = {
   getItem: (k: string) => (k === 'wg.keys' ? JSON.stringify(envKeys) : null),
   setItem() {},
@@ -24,7 +24,7 @@ if (PREV && existsSync(PREV)) cpSync(PREV, OUT, { recursive: true, filter: (src)
 mkdirSync(OUT, { recursive: true });
 
 const metaPath = join(OUT, 'meta.json');
-const meta: { updated?: string; tasks: Record<string, number> } = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : { tasks: {} };
+const meta: { updated?: string; tasks: Record<string, number>; /** camera feeds the last 'cams' run knew (see below) */ camFeeds?: string[] } = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : { tasks: {} };
 meta.tasks ??= {};
 
 function write(path: string, data: unknown) {
@@ -133,15 +133,8 @@ await task('firms', 0, async () => {
 rmSync(join(OUT, 'cables'), { recursive: true, force: true });
 delete meta.tasks.cables;
 
-await task('osm-cables', DAY, async () => {
-  const query = `[out:json][timeout:600];(
-    way["telecom"="line"]["location"~"underwater|submarine"];
-    way["communication"="line"]["location"~"underwater|submarine"];
-    way["submarine"="yes"]["telecom"="line"];
-    way["seamark:type"="cable_submarine"]["seamark:cable_submarine:category"~"^(fibre_optic|fiber_optic|optical|telephone|telegraph|telecommunication|communication)$"];
-  );out tags geom;`;
-  type OsmWay = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
-  let elements: OsmWay[] | null = null;
+/** Runs a worldwide Overpass query, trying a second public server when the first one fails. */
+async function overpassAll<T>(query: string): Promise<T[]> {
   const errors: string[] = [];
   for (const server of ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
     try {
@@ -152,13 +145,25 @@ await task('osm-cables', DAY, async () => {
         signal: AbortSignal.timeout(660000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      ({ elements } = (await res.json()) as { elements: OsmWay[] });
-      break;
+      return ((await res.json()) as { elements: T[] }).elements;
     } catch (e) {
       errors.push(`${new URL(server).host}: ${e instanceof Error ? e.message : e}`);
     }
   }
-  if (!elements) throw new Error(`Overpass – ${errors.join(', ')}`);
+  throw new Error(`Overpass – ${errors.join(', ')}`);
+}
+
+const ODBL = 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\n';
+
+await task('osm-cables', DAY, async () => {
+  const query = `[out:json][timeout:600];(
+    way["telecom"="line"]["location"~"underwater|submarine"];
+    way["communication"="line"]["location"~"underwater|submarine"];
+    way["submarine"="yes"]["telecom"="line"];
+    way["seamark:type"="cable_submarine"]["seamark:cable_submarine:category"~"^(fibre_optic|fiber_optic|optical|telephone|telegraph|telecommunication|communication)$"];
+  );out tags geom;`;
+  type OsmWay = { id: number; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] };
+  const elements = await overpassAll<OsmWay>(query);
   const PALETTE = ['#9c6bff', '#4fc3f7', '#4db6ac', '#f06292', '#ffb74d', '#aed581', '#7986cb', '#ba68c8'];
   const r = (v: number) => Math.round(v * 1000) / 1000;
   const features = [];
@@ -188,7 +193,29 @@ await task('osm-cables', DAY, async () => {
   }
   if (features.length < 100) throw new Error(`only ${features.length} cables – Overpass answer incomplete?`);
   write('osm-cables/cables.json', { type: 'FeatureCollection', features });
-  write('osm-cables/LICENSE.txt', 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\n');
+  write('osm-cables/LICENSE.txt', ODBL);
+});
+
+// Data centres from OpenStreetMap (ODbL) as points; the app merges them with PeeringDB's facilities.
+// Only name and operator are kept (no contact tags).
+await task('osm-datacenters', 7 * DAY, async () => {
+  type El = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
+  const elements = await overpassAll<El>(`[out:json][timeout:600];(nwr["telecom"="data_center"];nwr["building"="data_center"];);out tags center;`);
+  const r = (v: number) => Math.round(v * 1e5) / 1e5;
+  const features = [];
+  for (const el of elements) {
+    const pos = el.center ?? (el.lat != null && el.lon != null ? { lat: el.lat, lon: el.lon } : null);
+    if (!pos) continue;
+    const t = el.tags ?? {};
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [r(pos.lon), r(pos.lat)] },
+      properties: { osm: `${el.type}/${el.id}`, name: t.name ?? '', operator: t.operator ?? '', city: t['addr:city'] ?? '' },
+    });
+  }
+  if (features.length < 1000) throw new Error(`only ${features.length} data centres – Overpass answer incomplete?`);
+  write('osm-datacenters/datacenters.json', { type: 'FeatureCollection', features });
+  write('osm-datacenters/LICENSE.txt', ODBL);
 });
 
 await task('volcanoes', DAY, async () => {
@@ -248,6 +275,19 @@ await task('mars', 6 * 3600 * 1000, async () => {
   console.log(`  Perseverance ${data.m20.km} km, Curiosity ${data.msl.km} km, ${data.heli.flights.length} Ingenuity flights`);
 });
 
+// a feed newly added to SNAPSHOT_CAMS: refresh the camera lists (and the heatmap built from them)
+// right away instead of waiting for the daily run. Compared with the feeds the last run knew – not
+// with the files, since feeds that fail or need a key never get one.
+{
+  const { SNAPSHOT_CAMS } = await import('../src/api/camfeeds');
+  const added = [...SNAPSHOT_CAMS].filter((id) => !(meta.camFeeds ?? []).includes(id));
+  if (added.length) {
+    console.log(`  new camera feeds: ${added.join(', ')}`);
+    delete meta.tasks.cams;
+    delete meta.tasks['cams-world'];
+  }
+}
+
 await task('cams', DAY, async () => {
   const { CAM_FEEDS, SNAPSHOT_CAMS } = await import('../src/api/camfeeds');
   let ok = 0;
@@ -264,6 +304,7 @@ await task('cams', DAY, async () => {
     }
   }
   if (!ok) throw new Error('no camera feed reachable');
+  meta.camFeeds = [...SNAPSHOT_CAMS].sort();
 });
 
 // One merged position list from all camera snapshot files (plus the Finnish Digitraffic

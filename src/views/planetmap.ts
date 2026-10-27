@@ -1,11 +1,11 @@
+import { createScaleBar } from '../scalebar';
+import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { mountRawDataLink } from '../inspector/inspector';
 import { tileRecorder } from '../inspector/tiles';
 import {
   addProtocol,
   Map as MlMap,
   MercatorCoordinate,
-  NavigationControl,
-  ScaleControl,
   type CustomLayerInterface,
   type GeoJSONSource,
   type MapGeoJSONFeature,
@@ -22,6 +22,7 @@ import { buildSiteScene, hasSceneModel } from '../space/surface-models';
 import { PLANET_MAPS, type PlanetMapConfig, type TileLayer } from '../space/planets';
 import { FONT_BOLD, FONT_ITALIC, FONT_REGULAR, OFM_GLYPHS } from '../globe/vector';
 import { escapeHtml, fmt } from '../util';
+import { distTxt } from '../units';
 
 // Map of another planet – the counterpart of the Earth map (views/globe.ts): MapLibre with
 // 2D (mercator) / 3D (globe) switch, zooming far out hands over to the solar system.
@@ -787,7 +788,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const f = MOON_FEATURES.find((x) => featureId(x) === id);
       if (!f) return;
       label = KIND_LABEL[f.kind];
-      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', `${fmt.num(f.km, 0)} km`]);
+      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', distTxt(f.km, 0)]);
       [coordLon, coordLat] = [f.lon, f.lat];
       zoomTo = featureZoom(f);
     } else if (kind === 'rover') {
@@ -798,13 +799,13 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       [coordLon, coordLat] = p0 ?? (tr.id === 'm20' ? [77.45, 18.44] : [137.44, -4.59]);
       if (t) {
         const n = trackCount(t, Date.now());
-        rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', `${fmt.num(trackKm(t, n), 1)} km`]);
+        rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', distTxt(trackKm(t, n), 1)]);
       }
       body = '<p>Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell – vergrößert und mit dem Zoom mitskalierend.</p>';
     } else {
       label = 'Hubschrauber';
       const f = getMarsTracks()?.heli.flights ?? [];
-      rows.push(['Flüge', String(f.length)], ['Flugstrecke gesamt', `${fmt.num(f.reduce((a, x) => a + x.len, 0) / 1000, 1)} km`]);
+      rows.push(['Flüge', String(f.length)], ['Flugstrecke gesamt', distTxt(f.reduce((a, x) => a + x.len, 0) / 1000, 1)]);
       [coordLon, coordLat] = heliAt(Date.now()) ?? [77.45, 18.44];
       body = '<p>Ingenuity flog zwischen April 2021 und Januar 2024 72-mal. Der Punkt markiert den letzten Landeplatz.</p>';
     }
@@ -969,8 +970,21 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       attributionControl: { compact: true },
       transformRequest: tileRecorder(() => map),
     });
-    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new ScaleControl({ unit: 'metric' }), 'bottom-right');
+    // camera controls (zoom, 2D/3D tilt, compass): same column as the Earth map, under the Orbis button
+    const ctl = createMapCtl({
+      zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+      setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+      resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
+    });
+    const ctlCol = document.createElement('div');
+    ctlCol.className = 'hud-ctl pm-ctl';
+    ctlCol.appendChild(ctl.el);
+    el.appendChild(ctlCol);
+    map.on('rotate', () => ctl.setBearing(map!.getBearing()));
+    map.on('pitch', () => ctl.syncPitch(map!.getPitch()));
+    ctl.syncPitch(map.getPitch());
+    bindTiltLimit(map, ctl);
+    createScaleBar(map, () => cfg().radiusKm * 1000, 'bottom-right');
 
     // 2D / 3D / solar system (same control as the Earth map)
     projCtl = document.createElement('div');
@@ -984,7 +998,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
         deps.onOpenSpace(bodyId, c.lat, c.lng);
         return;
       }
-      setProjection(btn.dataset.proj as typeof projection);
     });
     renderProj();
     map.addControl({ onAdd: () => projCtl!, onRemove: () => projCtl!.remove() }, 'top-right');
@@ -1061,9 +1074,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   function renderProj() {
     if (!projCtl) return;
     projCtl.innerHTML =
-      (['mercator', 'globe'] as const)
-        .map((p) => `<button type="button" data-proj="${p}" class="${projection === p ? 'on' : ''}" aria-pressed="${projection === p}" title="${p === 'globe' ? '3D-Globus' : '2D-Karte'}">${p === 'globe' ? '3D' : '2D'}</button>`)
-        .join('') +
       `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
   }
 
@@ -1089,15 +1099,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     applyLabels();
     applyTerrain();
     refreshData();
-  }
-
-  function setProjection(next: typeof projection) {
-    if (next === projection) return;
-    projection = next;
-    map?.setProjection({ type: next });
-    models.globe = next === 'globe';
-    renderProj();
-    applyTerrain();
   }
 
   function goto(p: { lat: number; lon: number; zoom: number; fromSpace?: boolean; jump?: boolean; pitch?: number }) {
@@ -1362,10 +1363,6 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const changed = o.body !== bodyId || !map;
       const prev = bodyId;
       bodyId = PLANET_MAPS[o.body]?.layers.length ? o.body : 'mars';
-      if (o.projection) {
-        if (map) setProjection(o.projection);
-        else projection = o.projection;
-      }
       el.hidden = false;
       if (changed) {
         layerId = cfg().products?.length ? 'auto' : cfg().layers[0].id;

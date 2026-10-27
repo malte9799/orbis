@@ -4,6 +4,7 @@ import { empty } from '../shared/geo';
 import { LIGHTNING_LINES_MS, LIGHTNING_THUNDER_MS, LightningStream } from '../../../api/lightning';
 import { cardHtml } from '../../popup';
 import { fmt } from '../../../util';
+import { clockTxt, coordsTxt } from '../../../units';
 
 /** Geographic circle radius in screen px: px = km · (1000 / 156543.03392) · 2^zoom / cos(lat).
  *  Interpolation stops every second zoom keep the exponential(2) curve exact over the whole
@@ -340,7 +341,7 @@ export default defineExtra({
     const ago = secs < 90 ? `vor ${secs} s` : `vor ${Math.round(secs / 60)} min`;
     const n = Number(p.n);
     const d = getState(ctx).stream?.delay;
-    const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${new Date(at).toLocaleTimeString('de-DE')} Uhr (${ago})</b><span>Position</span><b>${fmt.num(pt[1], 3)}°, ${fmt.num(pt[0], 3)}°</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
+    const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${clockTxt(at, true)} (${ago})</b><span>Position</span><b>${coordsTxt(pt[1] as number, pt[0] as number)}</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
     return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
   },
   layers: ['lightning-thunder', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-glow', 'lightning'],

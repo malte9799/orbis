@@ -21,6 +21,10 @@ export default (c: HudCore): Record<string, ActFn> => {
     },
     search: () => setSearch(!ui.search),
     settings: () => host.openSettings(),
+    basepick: () => {
+      ui.basepick = !ui.basepick;
+    },
+    locate: () => host.locate(),
     menu: () => {
       ui.menu = !ui.menu;
     },
