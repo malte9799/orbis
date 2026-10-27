@@ -2,10 +2,16 @@ import type { StyleSpecification } from 'maplibre-gl';
 import { regionsGeoJSON } from './regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
-export type BaseId = 'satellite' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
+export type BaseId = 'satellite' | 'clarity' | 'mapbox' | 'maptiler' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
+
+/** Base maps that need an API key (settings → keys): id → key name. */
+export const KEYED_BASES: Partial<Record<BaseId, 'mapbox' | 'maptiler'>> = { mapbox: 'mapbox', maptiler: 'maptiler' };
 
 export const BASES: { id: BaseId; label: string }[] = [
   { id: 'satellite', label: 'Satellit' },
+  { id: 'clarity', label: 'Satellit Clarity' },
+  { id: 'mapbox', label: 'Mapbox Satellit' },
+  { id: 'maptiler', label: 'MapTiler Satellit' },
   { id: 'sentinel', label: 'Sentinel-2' },
   { id: 'topo', label: 'Topografie' },
   { id: 'nasa', label: 'NASA Tagesbild' },
@@ -18,6 +24,15 @@ export const BASES: { id: BaseId; label: string }[] = [
 
 /** Sentinel-2 cloudless mosaic (EOX, CC BY-NC-SA 4.0 – non-commercial use). */
 export const EOX_S2 = 'https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg';
+/** Esri World Imagery Clarity: sharper, more recent variant of the Esri imagery (no key). */
+export const ESRI_CLARITY = 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+export const mapboxSat = (key: string) => `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=${encodeURIComponent(key)}`;
+export const maptilerSat = (key: string) => `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${encodeURIComponent(key)}`;
+
+/** Base maps usable right now (keyed ones only with a stored key). */
+export const availableBases = (keys: { mapbox?: string; maptiler?: string }) =>
+  BASES.filter((b) => { const k = KEYED_BASES[b.id]; return !k || !!keys[k]; });
+
 export const OPENTOPO = 'https://tile.opentopomap.org/{z}/{x}/{y}.png';
 
 export function gibsDate(daysAgo = 1): string {
@@ -110,6 +125,13 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tileSize: 256,
         maxzoom: 18,
         attribution: 'Powered by <a href="https://www.esri.com/">Esri</a> · Bilder: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      },
+      clarity: {
+        type: 'raster',
+        tiles: [ESRI_CLARITY],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: 'Powered by <a href="https://www.esri.com/">Esri</a> · Esri World Imagery Clarity: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
       },
       sentinel: {
         type: 'raster',
@@ -246,6 +268,14 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         layout: { visibility: 'none' as const },
         paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
       },
+      {
+        id: 'base-clarity',
+        type: 'raster' as const,
+        source: 'clarity',
+        layout: { visibility: 'none' as const },
+        paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
+      },
+      // base-mapbox / base-maptiler are added at runtime once the key exists (globe.ts)
       { id: 'base-sentinel', type: 'raster' as const, source: 'sentinel', layout: { visibility: 'none' as const } },
       { id: 'base-topo', type: 'raster' as const, source: 'opentopo', layout: { visibility: 'none' as const } },
       { id: 'base-nasa', type: 'raster' as const, source: 'nasa', layout: { visibility: 'none' as const } },

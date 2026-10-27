@@ -1,9 +1,9 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
-import { BASES } from '../globe/style';
+import { availableBases } from '../globe/style';
 import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
-import type { Place } from '../store';
+import { store, type Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
 import {
   BASE_GRADIENT,
@@ -471,7 +471,7 @@ export function createHud(host: HudHost): Hud {
 
   function stackBody(k: Karte): string {
     const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? 'Tagesbild von gestern' : k.main && k.main !== 'radar' && k.main !== 'sat' ? 'Vorhersage, ab jetzt' : 'Live';
-    const bases = BASES.map((b) => b.id);
+    const bases = availableBases(store.getKeys()).map((b) => b.id);
     const others = bases.filter((b) => !MAIN_BASES.includes(b));
     const showMore = ui.moreBases || others.includes(k.base);
     return `
@@ -785,7 +785,7 @@ export function createHud(host: HudHost): Hud {
     root.querySelector('[data-act="basepick"]')?.setAttribute('aria-expanded', String(ui.basepick));
     root.querySelector('[data-act="basepick"]')?.classList.toggle('on', ui.basepick);
     if (!ui.basepick) return;
-    bp.innerHTML = BASES.map((b) => `<button type="button" data-act="base" data-id="${b.id}" class="${k.base === b.id ? 'on' : ''}" aria-pressed="${k.base === b.id}"><i class="bth">${baseThumb(b.id)}</i><span>${BASE_LABEL[b.id]}</span></button>`).join('');
+    bp.innerHTML = availableBases(store.getKeys()).map((b) => `<button type="button" data-act="base" data-id="${b.id}" class="${k.base === b.id ? 'on' : ''}" aria-pressed="${k.base === b.id}"><i class="bth">${baseThumb(b.id)}</i><span>${BASE_LABEL[b.id]}</span></button>`).join('');
   }
 
   // ----- actions -----------------------------------------------------------

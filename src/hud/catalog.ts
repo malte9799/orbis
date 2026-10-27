@@ -1,7 +1,7 @@
 import { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU, type TrafficCat, type WxFamily, type WxMenuItem } from './menus';
 import { EXTRAS, type CatId } from '../globe/layers';
 import { GROUPS, LINKED_EXTRA_IDS } from '../globe/events';
-import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
+import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, ESRI_CLARITY, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
 
 export { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU };
 export type { TrafficCat, WxFamily, WxMenuItem };
@@ -77,10 +77,13 @@ export const catalogOf = (id: string) => CATALOG.find((c) => c.id === id);
 /** the four big thumbnails; the other base maps sit behind "Weitere" */
 export const MAIN_BASES: BaseId[] = ['satellite', 'dark', 'light', 'topo'];
 export const BASE_LABEL: Record<BaseId, string> = {
-  satellite: 'Satellit', sentinel: 'Sentinel-2', topo: 'Gelände', nasa: 'NASA Tagesbild', blue: 'Blue Marble', night: 'Nachtlichter', dark: 'Dunkel', light: 'Hell',
+  satellite: 'Satellit', clarity: 'Satellit Clarity', mapbox: 'Mapbox Satellit', maptiler: 'MapTiler Satellit', sentinel: 'Sentinel-2', topo: 'Gelände', nasa: 'NASA Tagesbild', blue: 'Blue Marble', night: 'Nachtlichter', dark: 'Dunkel', light: 'Hell',
 };
 export const BASE_GRADIENT: Record<BaseId, string> = {
   satellite: 'linear-gradient(135deg,#1d3b2a,#3d5a3a 40%,#0d2340 41%,#163a66)',
+  clarity: 'linear-gradient(135deg,#1d3b2a,#3d5a3a 40%,#0d2340 41%,#163a66)',
+  mapbox: 'linear-gradient(135deg,#22402c,#44663f 40%,#0f2a48 41%,#1a4470)',
+  maptiler: 'linear-gradient(135deg,#27402a,#4d6a3c 40%,#10304f 41%,#1b4a76)',
   sentinel: 'linear-gradient(135deg,#2c4a2a,#5b6b3a 40%,#143a55 41%,#1d4f72)',
   topo: 'linear-gradient(135deg,#a8b88a,#d9cfa3 45%,#9cc4dd 46%)',
   nasa: 'linear-gradient(135deg,#243b57,#4c6b46 40%,#1a2f52 41%,#2a4c7a)',
@@ -102,6 +105,9 @@ function miniMap(land: string, water: string, road: string, border: string) {
 export function baseThumb(id: BaseId): string {
   switch (id) {
     case 'satellite': return `<img alt="" loading="lazy" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/4"/>`;
+    case 'clarity': return `<img alt="" loading="lazy" src="${ESRI_CLARITY.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
+    case 'mapbox':
+    case 'maptiler': return ''; // thumbnail would need the key in the markup – gradient only
     case 'sentinel': return `<img alt="" loading="lazy" src="${EOX_S2.replace('{z}/{y}/{x}', '3/2/4')}"/>`;
     case 'topo': return `<img alt="" loading="lazy" src="${OPENTOPO.replace('{z}/{x}/{y}', '3/4/2')}"/>`;
     case 'nasa': return `<img alt="" loading="lazy" src="https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/${gibsDate(1)}/GoogleMapsCompatible_Level9/3/2/4.jpg"/>`;

@@ -45,7 +45,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, KEYED_BASES, mapboxSat, maptilerSat, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { createEvents } from '../globe/events/engine';
@@ -402,6 +402,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // ----- settings: one global panel (main.ts), opened from the Orbis menu --------
   const openSettings = () => document.dispatchEvent(new CustomEvent('orbis:settings'));
   const onKeysSaved = () => {
+    // a changed Mapbox/MapTiler key means new tile URLs: drop the cached source, applyBase re-adds it
+    for (const id of ['base-mapbox', 'base-maptiler']) {
+      if (map?.getLayer(id)) map.removeLayer(id);
+      if (map?.getSource(id)) map.removeSource(id);
+    }
+    applyBase();
     ev.reset('firms');
     if (hud) applyKarte(hud.current());
     ev.apply();
@@ -425,7 +431,24 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyBase() {
     if (!map) return;
-    for (const b of BASES) vis(`base-${b.id}`, state.base === b.id);
+    const keyName = KEYED_BASES[state.base];
+    const keyVal = keyName ? store.getKeys()[keyName] : undefined;
+    // keyed base without a key (removed or never entered): show the plain satellite map instead
+    const base: BaseId = keyName && !keyVal ? 'satellite' : state.base;
+    if (keyName && keyVal && !map.getLayer(`base-${base}`)) {
+      map.addSource(`base-${base}`, {
+        type: 'raster',
+        tiles: [base === 'mapbox' ? mapboxSat(keyVal) : maptilerSat(keyVal)],
+        tileSize: 256,
+        maxzoom: base === 'mapbox' ? 19 : 20,
+        attribution:
+          base === 'mapbox'
+            ? '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.maxar.com/">Maxar</a>'
+            : '© <a href="https://www.maptiler.com/copyright/">MapTiler</a> © <a href="https://www.maptiler.com/copyright/">satellite imagery providers</a>',
+      });
+      map.addLayer({ id: `base-${base}`, type: 'raster', source: `base-${base}`, layout: { visibility: 'none' } }, 'base-sentinel');
+    }
+    for (const b of BASES) vis(`base-${b.id}`, base === b.id);
     const layers = map.getStyle().layers;
     for (const l of layers) {
       if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
