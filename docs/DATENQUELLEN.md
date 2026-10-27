@@ -179,6 +179,22 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | 511 ([Ontario](https://511on.ca/developers/doc), [Alberta](https://511.alberta.ca/developers/doc)) | Kameras Kanada | 🟢 🔑 kostenlos – My511-Konto anlegen, Key auf der Developers-Seite anfordern (10 Aufrufe/min) |
 | [Hong Kong Transport Department](https://data.gov.hk) | Kameras Hongkong | 🟢 |
 | [LTA / data.gov.sg](https://api.data.gov.sg) | Kameras Singapur | 🟢 |
+| [DGT – Punto de Acceso Nacional](https://nap.dgt.es/en/dataset/camaras-dgt-localizaciones-datex2-v3-6) | Spanien (außer Baskenland/Katalonien) – rund 1.970 Straßenkameras (DATEX2 v3.6, Standbilder) | 🟢 CC BY, 📦 |
+| [Servei Català de Trànsit](https://www.gencat.cat/transit/opendata/cameres.xml) | Katalonien – rund 160 Straßenkameras (WFS/GML, Standbilder) | 🟢 📦 |
+| [Trafikverket Open API](https://api.trafikinfo.trafikverket.se/) | Straßenkameras Schweden (Objekttyp `Camera`) | 🔑 `TRAFIKVERKET_KEY`, 📦 |
+| [Maryland CHART](https://opendata.maryland.gov/d/hua3-qc8n) | Maryland – rund 450 Straßenkameras (Standort + Link zur Live-Videoseite, kein Standbild) | 🟢 📦 |
+| [Illinois DOT / Travel Midwest](https://services2.arcgis.com/aIrBD8yn1TDTEXoz/arcgis/rest/services/TrafficCamerasTM_Public/FeatureServer) | Illinois – rund 3.750 Kameras (ArcGIS, Standbilder) | 🟢 📦 |
+| [Iowa DOT](https://data.iowadot.gov/datasets/IowaDOT::traffic-cameras-3/about) | Iowa – rund 1.270 Kameras, ~700 davon als Livestream (HLS) | 🟢 CC BY 4.0, 📦 |
+| [MoDOT](https://www.arcgis.com/home/item.html?id=38774183927d423488f9e2e707a6eca5) | Missouri – rund 830 Kameras, alle als Livestream (HLS) | 🟢 📦 |
+| [Oregon TripCheck (ArcGIS)](https://services.arcgis.com/uUvqNMGPm7axC2dD/arcgis/rest/services/TripCheck_Cameras/FeatureServer) | Oregon – rund 1.200 Kameras (Bildserver beim Test nicht erreichbar, URLs ungeprüft) | 🟢 📦 |
+| [MiDrive](https://services2.arcgis.com/67lKNkQ2TO1I3lhR/arcgis/rest/services/MiDrive%20Cameras/FeatureServer) | Michigan – rund 600 Kameras mit Blickrichtung | 🟢 📦 |
+| [GDOT](https://hub.arcgis.com/datasets/GEMA-SOC::gdot-live-traffic-cameras) · [KYTC](https://services2.arcgis.com/CcI36Pduqd0OR4W9/arcgis/rest/services/trafficCamerasCur_Prd/FeatureServer) | Georgia (~3.200) und Kentucky (~250): Standbilder nur über http – Karte zeigt Position und Link | 🟢 📦 |
+| [Baton Rouge Open Data](https://data.brla.gov/Transportation-and-Infrastructure/Traffic-Camera/6z6u-ts44) | Baton Rouge (LA) – 118 Kameras, Link zur 511-Seite | 🟢 📦 |
+| [Newfoundland & Labrador](https://services8.arcgis.com/aCyQID5qQcyrJMm2/arcgis/rest/services/TI_HighwayCamera/FeatureServer) · [Saskatchewan](https://hotline.gov.sk.ca) · [Yukon 511](https://511yukon.ca) | Straßenkameras Kanada (NL 48 mit Bild; SK 55 und YT 21 nur Position + Link) | 🟢 📦 |
+| [Donegal County Council / TII](https://services2.arcgis.com/WRtfelnPg3R7bCEW/arcgis/rest/services/TrafficCameras/FeatureServer) | Irland (Donegal) – 123 Wetter-/Straßenkameras | 🟢 📦 |
+| 511-Portale auf der IBI-Plattform: [UDOT](https://prod-ut.ibi511.com/developers/doc) (Utah), [AZ511](https://az511.com/developers/doc), [Idaho 511](https://511.idaho.gov/developers/doc), [NVRoads](https://nvroads.com/developers/doc), [Alaska 511](https://511.alaska.gov/developers/doc), [Georgia 511](https://511ga.org/developers/doc), [Louisiana 511](https://511la.org/developers/doc), [511PA](https://511pa.com/developers/doc) | Verkehrskameras je Bundesstaat (`/api/v2/get/cameras`, 10 Aufrufe/min) – Endpunkt je Portal bestätigt, Antwortformat wie 511 Ontario/Alberta; ohne Key nicht abrufbar | 🔑 kostenlos je Portal: `UTAH_511_API_KEY`, `ARIZONA_511_API_KEY`, `IDAHO_511_API_KEY`, `NEVADA_511_API_KEY`, `ALASKA_511_API_KEY`, `GEORGIA_511_API_KEY`, `LOUISIANA_511_API_KEY`, `PENNSYLVANIA_511_API_KEY`, 📦 |
+| [OHGO Public API](https://publicapi.ohgo.com) | Ohio – Kameras mit mehreren Ansichten (Feldnamen laut Doku, ungetestet) | 🔑 kostenlos, `OHGO_API_KEY`, 📦 |
+| [QLDTraffic](https://qldtraffic.qld.gov.au/more/Developers-and-Data/) | Queensland – Webcams (GeoJSON, Pfad `/v1/webcams`, Felder ungetestet) | 🔑 `QLDTRAFFIC_KEY`, 📦 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
 | [DeFlock](https://deflock.org) · [deflock-data](https://github.com/flockhopper3/deflock-data) · [Tiles](https://tiles.dontgetflocked.com) | Kennzeichen-Kameras (ALPR) mit Blickrichtung | 🟢 OSM-basiert |
 | [Radio Browser](https://www.radio-browser.info) | Über 50.000 Radiosender, eingebauter Player | 🟢 📦 |
