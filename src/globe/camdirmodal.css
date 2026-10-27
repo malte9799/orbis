@@ -1,63 +1,39 @@
-/* editor for the viewing direction of a webcam: picture and map side by side (or stacked in the overlay view) */
+/* editor for the viewing direction of a webcam: a full-screen workspace – picture and map side by side
+   (the map over the picture in the overlay view) and a side bar with the settings */
 .cdm {
   position: fixed;
   inset: 0;
   z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgba(5, 8, 20, 0.66);
-}
-.cdm-box {
-  width: min(1180px, 100%);
-  max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  overflow: auto;
-  background: rgba(13, 18, 38, 0.96);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  background: #090d1c;
   color: var(--text);
   font-size: 14px;
 }
-.cdm-head {
+
+/* top bar */
+.cdm-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 16px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13, 18, 38, 0.98);
 }
-.cdm-head b {
-  min-width: 0;
+.cdm-title {
+  max-width: 24ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 15px;
 }
-.cdm-x {
-  width: 30px;
-  height: 30px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
+.cdm-sp {
+  flex: 1;
+}
+.cdm-msg {
   color: var(--text-2);
-  font-size: 20px;
-  cursor: pointer;
-}
-.cdm-x:hover {
-  background: var(--card);
-  color: var(--text);
-}
-
-/* mode switch and map style */
-.cdm-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+  font-size: 13px;
 }
 .cdm-seg {
   display: flex;
@@ -66,7 +42,6 @@
   overflow: hidden;
 }
 .cdm .cdm-seg button {
-  height: 34px;
   border: 0;
   border-radius: 0;
   border-right: 1px solid var(--border);
@@ -97,162 +72,6 @@
 .cdm-sel option {
   color: #000;
 }
-
-/* picture and map: same size, the shape of the picture (so that the overlay lines up exactly) */
-.cdm-main {
-  --ar: 1.7778;
-  --ph: min(46vh, 420px);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.cdm-pic,
-.cdm-map {
-  position: relative;
-  justify-self: center;
-  width: min(100%, calc(var(--ph) * var(--ar)));
-  aspect-ratio: var(--ar);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #000;
-}
-.cdm-pic img,
-.cdm-pic video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  user-select: none;
-}
-.cdm-none {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--text-2);
-}
-.cdm-mapel {
-  position: absolute;
-  inset: 0;
-}
-.cdm-main.mt .cdm-pic {
-  cursor: crosshair;
-}
-.cdm-pts {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.cdm .cdm-pt {
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  transform: translate(-50%, -50%);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #e5484d;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  pointer-events: auto;
-  cursor: pointer;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
-}
-.cdm .cdm-pt.wait {
-  background: #f0b23e;
-  color: #0b1020;
-  animation: cdm-pulse 1s ease-in-out infinite;
-}
-.cdm .cdm-pt:hover {
-  background: #ff7b7f;
-}
-@keyframes cdm-pulse {
-  50% {
-    box-shadow: 0 0 0 6px rgba(240, 178, 62, 0.35);
-  }
-}
-
-/* overlay view: the map lies over the picture, same size, same place */
-.cdm-main.ov {
-  grid-template-columns: 1fr;
-  --ph: min(48vh, 460px);
-}
-.cdm-main.ov .cdm-pic,
-.cdm-main.ov .cdm-map {
-  grid-area: 1 / 1;
-}
-.cdm-main.ov .cdm-map {
-  z-index: 1;
-  background: transparent;
-}
-.cdm-main.ov .cdm-pts {
-  display: none;
-}
-
-.cdm-hint {
-  color: var(--text-2);
-  font-size: 12.5px;
-}
-.cdm-hint[hidden],
-.cdm-fit[hidden],
-.cdm-adv[hidden] {
-  display: none;
-}
-.cdm-fit {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--card);
-  font-size: 13px;
-}
-.cdm-fit-txt {
-  flex: 1 1 280px;
-  min-width: 0;
-}
-.cdm-fit-btns {
-  display: flex;
-  gap: 6px;
-}
-.cdm-ctl {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cdm-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.cdm-lbl {
-  color: var(--text-2);
-  width: 56px;
-}
-.cdm-range {
-  flex: 1 1 200px;
-  min-width: 0;
-}
-.cdm-num {
-  width: 70px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-.cdm-quick {
-  display: flex;
-  gap: 4px;
-}
 .cdm button {
   height: 34px;
   padding: 0 14px;
@@ -262,9 +81,6 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-}
-.cdm .cdm-quick button {
-  padding: 0 10px;
 }
 .cdm button:hover:not(:disabled) {
   background: var(--card);
@@ -282,69 +98,92 @@
 .cdm .cdm-save:hover:not(:disabled) {
   background: #e8ecf8;
 }
-.cdm-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.cdm-msg {
-  margin-right: auto;
+.cdm .cdm-x {
+  width: 34px;
+  padding: 0;
+  border-color: transparent;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 22px;
 }
 .cdm-reset[hidden] {
   display: none;
 }
 
-/* overlay settings */
-.cdm-adv {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 6px 16px;
-  align-items: center;
-}
-.cdm-sl {
-  display: grid;
-  grid-template-columns: 150px 1fr 56px;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-2);
-  font-size: 12.5px;
-}
-.cdm-sl output {
-  color: var(--text);
-  text-align: right;
-}
-.cdm-nudge {
+/* body: work area and side bar */
+.cdm-body {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--text-2);
-  font-size: 12.5px;
 }
-.cdm-nudge span {
-  margin-right: 4px;
+.cdm-area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
-.cdm .cdm-nudge button {
-  height: 28px;
-  padding: 0 9px;
+.cdm-views {
+  --ar: 1.7778;
+  position: absolute;
+  inset: 10px;
+  container-type: size;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  overflow: hidden;
 }
-@media (max-width: 760px) {
-  .cdm-main {
-    grid-template-columns: 1fr;
-    --ph: 30vh;
-  }
-  .cdm-main.ov {
-    --ph: 36vh;
-  }
-  .cdm-sl {
-    grid-template-columns: 120px 1fr 52px;
-  }
+.cdm-pic,
+.cdm-map {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+.cdm-pic {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  user-select: none;
+  touch-action: none;
+}
+.cdm-views.mt .cdm-pic {
+  cursor: crosshair;
+}
+.cdm-mapel {
+  position: absolute;
+  inset: 0;
 }
 
-/* vanishing point mode: road edges drawn in the picture */
+/* the picture in its own shape; zoom and shift apply to it (and to the map in the overlay view) */
+.cdm-frame {
+  position: relative;
+  flex: none;
+  width: min(100cqw, calc(100cqh * var(--ar)));
+  aspect-ratio: var(--ar);
+  transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(var(--zs, 1));
+}
+.cdm-frame img,
+.cdm-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+  pointer-events: none;
+}
+.cdm-none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+.cdm-pts {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .cdm-lines {
   position: absolute;
   inset: 0;
@@ -357,14 +196,121 @@
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
+/* points keep their size when the picture is zoomed */
+.cdm .cdm-pt {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--zs, 1)));
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+.cdm .cdm-pt.wait {
+  background: #f0b23e;
+  color: #0b1020;
+  animation: cdm-pulse 1s ease-in-out infinite;
+}
 .cdm .cdm-pt.vp {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   background: #f0b23e;
   color: #0b1020;
   pointer-events: none;
 }
-.cdm-main.ov .cdm-lines {
+.cdm .cdm-pt:hover {
+  background: #ff7b7f;
+}
+@keyframes cdm-pulse {
+  50% {
+    box-shadow: 0 0 0 6px rgba(240, 178, 62, 0.35);
+  }
+}
+
+/* overlay view: the map lies over the picture, same size, same place */
+.cdm-views.ov {
+  grid-template-columns: 1fr;
+}
+.cdm-views.ov .cdm-pic,
+.cdm-views.ov .cdm-map {
+  grid-area: 1 / 1;
+}
+.cdm-views.ov .cdm-map {
+  z-index: 1;
+  place-self: center;
+  width: min(100cqw, calc(100cqh * var(--ar)));
+  aspect-ratio: var(--ar);
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(var(--zs, 1));
+}
+.cdm-views.ov .cdm-pts,
+.cdm-views.ov .cdm-lines {
+  display: none;
+}
+.cdm-views.ov.peek .cdm-map {
+  visibility: hidden;
+}
+
+/* zoom buttons */
+.cdm-zb {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+.cdm .cdm-zb button {
+  width: 34px;
+  padding: 0;
+  background: rgba(13, 18, 38, 0.85);
+  font-size: 18px;
+}
+.cdm-zl {
+  font-size: 12px;
+  color: var(--text-2);
+  text-shadow: 0 1px 3px #000;
+}
+
+/* side bar */
+.cdm-side {
+  width: 340px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: rgba(13, 18, 38, 0.98);
+}
+.cdm-info {
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cdm-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cdm-acts[hidden],
+.cdm-roads[hidden],
+.cdm-ovc[hidden],
+.cdm-flip[hidden] {
   display: none;
 }
 .cdm-roads {
@@ -375,10 +321,6 @@
   color: var(--text-2);
   font-size: 12.5px;
 }
-.cdm-roads[hidden],
-.cdm-flip[hidden] {
-  display: none;
-}
 .cdm .cdm-roads button {
   height: 28px;
   padding: 0 10px;
@@ -386,4 +328,128 @@
 .cdm .cdm-roads button.on {
   background: #fff;
   color: #0b1020;
+}
+.cdm-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--card);
+}
+.cdm-h {
+  margin-top: 2px;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.cdm-st {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cdm-stl {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+}
+.cdm-stc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cdm .cdm-stc button {
+  width: 32px;
+  padding: 0;
+  font-size: 17px;
+}
+.cdm-stc input {
+  width: 66px;
+  height: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+.cdm-u {
+  width: 18px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.cdm-quick {
+  display: flex;
+  gap: 4px;
+}
+.cdm .cdm-quick button {
+  flex: 1;
+  padding: 0;
+}
+.cdm-nudge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.cdm-nudge span:first-child {
+  flex: 1;
+}
+.cdm-pad {
+  display: flex;
+  gap: 4px;
+}
+.cdm .cdm-pad button {
+  width: 32px;
+  padding: 0;
+}
+.cdm .cdm-sm {
+  height: 30px;
+  padding: 0 8px;
+}
+.cdm-sl {
+  display: grid;
+  grid-template-columns: 1fr 120px 44px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.cdm-sl output {
+  color: var(--text);
+  text-align: right;
+}
+
+@media (max-width: 900px) {
+  .cdm-body {
+    flex-direction: column;
+  }
+  .cdm-side {
+    width: auto;
+    max-height: 44%;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .cdm-views {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+  .cdm-views.ov {
+    grid-template-rows: 1fr;
+  }
+  .cdm-title {
+    max-width: 14ch;
+  }
+  .cdm-zb {
+    bottom: auto;
+    top: 18px;
+  }
 }
