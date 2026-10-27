@@ -17,6 +17,8 @@ import './camdirmodal.css';
 //                        direction (and tilt, height, field of view) is computed
 //  · Überlagerung      – the picture in the back, the real 3D map (terrain, buildings) in front of it seen from the
 //                        camera; drag to turn and tilt, steppers and keys for the fine work
+// The map always shows the real 3D view from the camera's position (terrain, buildings), never from above: heading, tilt,
+// height and field of view of the camera steer it, in every way of working – so picture and map are directly comparable.
 // The picture zooms with the wheel (at the cursor) and pans by dragging; points keep their exact place on it.
 
 export interface CamDirModalOpts {
@@ -62,7 +64,7 @@ const STYLES: { id: MapStyle; label: string }[] = [
   { id: 'light', label: 'Hell (Straßen)' },
 ];
 const HINTS: Record<'dir' | 'overlay', string> = {
-  dir: 'Auf die Karte klicken: Die Kamera blickt dorthin. Die Karte lässt sich mit der Maus verschieben und zoomen; das Bild links zoomt mit dem Mausrad.',
+  dir: 'In die Karte klicken: Die Kamera blickt dorthin. Ziehen dreht und kippt die Karte, das Mausrad zoomt sie (Sichtfeld). Das Bild links zoomt mit dem Mausrad.',
   overlay: 'Ziehen: Richtung und Neigung. Rechte Maustaste ziehen: Ansicht verschieben. Mausrad: zoomen. Pfeiltasten: fein (Umschalt = grob). „B“ halten: nur das Bild.',
 };
 
@@ -117,6 +119,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
   let roads: Road[] = []; // roads next to the camera
   let groundElev = 0; // terrain height at the camera (overlay view)
   let ar = 16 / 9; // aspect of the picture
+  let zf = 1; // zoom of the map in the split views (1 = the field of view of the picture)
   const v = { alt: o.pose?.alt ?? 6, down: o.pose?.down ?? 12, roll: o.pose?.roll ?? 0, fov: o.pose?.fov ?? 36, op: 60 };
   // the pose is saved along with the direction once it was worked out or tuned (or when one was stored before)
   let poseSet = !!o.pose;
@@ -146,7 +149,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
       <div class="cdm-area">
         <div class="cdm-views">
           <section class="cdm-pic"><div class="cdm-frame">${o.hls ? '<video autoplay muted playsinline></video>' : o.image ? `<img alt="Webcam-Bild" src="${escapeHtml(o.image)}" referrerpolicy="no-referrer" draggable="false">` : '<div class="cdm-none">Kein Bild verfügbar</div>'}<svg class="cdm-lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="cdm-pts"></div></div></section>
-          <section class="cdm-map"><div class="cdm-mapel"></div></section>
+          <section class="cdm-map"><div class="cdm-mapbox"><div class="cdm-mapel"></div><button type="button" class="cdm-mz" hidden>Sichtfeld wie das Bild</button></div></section>
         </div>
         <div class="cdm-zb"><button type="button" data-z="in" aria-label="Vergrößern">+</button><button type="button" data-z="out" aria-label="Verkleinern">−</button><button type="button" data-z="0" aria-label="Ansicht zurücksetzen" title="Ansicht zurücksetzen">⟲</button><span class="cdm-zl"></span></div>
       </div>
@@ -218,16 +221,21 @@ export function openCamDirModal(o: CamDirModalOpts) {
     touchPitch: false,
     attributionControl: { compact: true },
   });
-  map.touchZoomRotate.disableRotation();
+  // the camera is steered by us, never by the map's own gestures
+  for (const h of [map.dragPan, map.scrollZoom, map.touchZoomRotate, map.doubleClickZoom, map.keyboard, map.boxZoom]) h.disable();
   const canvas = map.getCanvas();
-  const resizer = new ResizeObserver(() => map.resize());
+  // free camera again after a resize: its zoom depends on the size of the map
+  const resizer = new ResizeObserver(() => {
+    map.resize();
+    if (map.isStyleLoaded()) lookFromCamera();
+  });
   resizer.observe(mapEl);
 
   // ---- parameters (steppers) ---------------------------------------------------------------------------
   const get = (id: Param['id']) => (id === 'dir' ? dir : v[id]);
   const poseChanged = () => {
     poseSet = true;
-    if (overlay) lookFromCamera();
+    lookFromCamera();
     refreshUi();
   };
   const put = (id: Param['id'], x: number) => {
@@ -293,6 +301,12 @@ export function openCamDirModal(o: CamDirModalOpts) {
     views.style.setProperty('--ty', `${z.y}px`);
     q('.cdm-zl').textContent = z.s > 1.01 ? `×${z.s.toFixed(1).replace('.', ',')}` : '';
   };
+  /** zoom of the map in the split views: field of view relative to the picture's */
+  const mapZoom = (f: number | 'reset') => {
+    zf = f === 'reset' || f === 1 ? 1 : clamp(zf * f, 0.12, 2.2);
+    q('.cdm-mz').hidden = Math.abs(zf - 1) < 0.02;
+    lookFromCamera();
+  };
   /** zoom around a screen point: the spot under it stays where it is */
   const zoomAt = (cx: number, cy: number, f: number) => {
     const r = (overlay ? views : pic).getBoundingClientRect();
@@ -309,6 +323,7 @@ export function openCamDirModal(o: CamDirModalOpts) {
     z.s = 1;
     z.x = z.y = 0;
     applyZoom();
+    mapZoom(1);
   };
   const zoomCentre = (f: number) => {
     const r = (overlay ? views : pic).getBoundingClientRect();
@@ -379,10 +394,9 @@ export function openCamDirModal(o: CamDirModalOpts) {
     const show = (id: string) => {
       if (id === 'sat') return style === 'sat' || style === 'satroads';
       if (id.startsWith('vbase-')) return id.startsWith(`vbase-${style}-`) && !(overlay && id.endsWith('-bg'));
-      if (id === 'roads') return overlay || style === 'satroads';
-      if (id === 'bld') return overlay;
-      if (id === 'roadq') return true;
-      return !overlay; // cone, cone-line, cam
+      if (id === 'roads' || id === 'bld' || id === 'roadq') return true; // edges to line up with the picture
+      if (id === 'cam') return false; // the view starts at the camera
+      return !overlay; // cone, cone-line
     };
     for (const l of map.getStyle().layers) map.setLayoutProperty(l.id, 'visibility', show(l.id) ? 'visible' : 'none');
   };
@@ -437,14 +451,14 @@ export function openCamDirModal(o: CamDirModalOpts) {
 
   // free camera at the camera's position: heading = bearing, 90° pitch = horizon, vertical field of view
   const lookFromCamera = () => {
-    map.setVerticalFieldOfView(v.fov);
+    map.setVerticalFieldOfView(clamp(v.fov * zf, 4, 110));
     // the height is above the ground: with the terrain on, its elevation at the camera is added
     map.jumpTo(map.calculateCameraOptionsFromCameraLngLatAltRotation([o.lng + off.e / mPerLng, o.lat + off.n / M_LAT], groundElev + v.alt, dir, 90 - v.down, v.roll));
     q('.cdm-off').textContent = off.e || off.n ? `${Math.round(Math.hypot(off.e, off.n) * 10) / 10} m` : '';
   };
   const draw = () => {
     (map.getSource('cone') as GeoJSONSource | undefined)?.setData({ type: 'FeatureCollection', features: fovSectors([[o.lng, o.lat, dir]], CONE_M, ROAD_CAM_FOV_ANGLE) });
-    if (overlay) lookFromCamera();
+    lookFromCamera();
     refreshUi();
     // the main map shows the preview as well (cone, panel)
     previewDir(o.key, dir);
@@ -460,14 +474,12 @@ export function openCamDirModal(o: CamDirModalOpts) {
   });
   map.on('idle', () => {
     // terrain tiles arrive after the switch: follow the real ground height at the camera
-    if (overlay) {
-      const e = map.queryTerrainElevation([o.lng + off.e / mPerLng, o.lat + off.n / M_LAT]);
-      if (e !== null && e !== undefined && Math.abs(e - groundElev) > 0.2) {
-        groundElev = e;
-        lookFromCamera();
-      }
+    const e = map.queryTerrainElevation([o.lng + off.e / mPerLng, o.lat + off.n / M_LAT]);
+    if (e !== null && e !== undefined && Math.abs(e - groundElev) > 0.2) {
+      groundElev = e;
+      lookFromCamera();
     }
-    if (!overlay && !roads.length) refreshRoads();
+    if (!roads.length) refreshRoads();
   });
 
   // ---- point pairs and vanishing point ------------------------------------------------------------------------
@@ -654,7 +666,6 @@ export function openCamDirModal(o: CamDirModalOpts) {
 
   // ---- modes --------------------------------------------------------------------------------------------------------
   function setMode(m: Mode) {
-    const was = overlay;
     mode = m;
     overlay = m === 'overlay';
     views.classList.toggle('ov', overlay);
@@ -670,22 +681,14 @@ export function openCamDirModal(o: CamDirModalOpts) {
     renderPts();
     renderRoads();
     if ((m === 'dir' || m === 'vp') && !roads.length) whenLoaded(refreshRoads);
-    // in the overlay view the camera is steered by us, otherwise by the mouse
-    for (const h of [map.dragPan, map.scrollZoom, map.touchZoomRotate, map.doubleClickZoom, map.keyboard]) overlay ? h.disable() : h.enable();
-    map.touchZoomRotate.disableRotation();
     mapEl.style.opacity = overlay ? String(v.op / 100) : '';
     canvas.style.cursor = overlay ? 'grab' : 'crosshair';
     whenLoaded(() => {
       applyLayers();
-      // real terrain in the overlay view (the 3D buildings stand on it)
-      map.setTerrain(overlay ? { source: 'dem', exaggeration: 1 } : null);
-      groundElev = overlay ? (map.queryTerrainElevation([o.lng + off.e / mPerLng, o.lat + off.n / M_LAT]) ?? groundElev) : 0;
+      // real terrain (the 3D buildings stand on it)
+      map.setTerrain({ source: 'dem', exaggeration: 1 });
+      groundElev = map.queryTerrainElevation([o.lng + off.e / mPerLng, o.lat + off.n / M_LAT]) ?? groundElev;
       map.resize();
-      if (overlay) lookFromCamera();
-      else if (was) {
-        map.setVerticalFieldOfView(36.87);
-        map.jumpTo({ center: [o.lng, o.lat], zoom: 17.5, bearing: 0, pitch: 0, roll: 0 });
-      }
       draw();
     });
   }
@@ -717,20 +720,25 @@ export function openCamDirModal(o: CamDirModalOpts) {
     }
     lookFromCamera();
   });
+  q('.cdm-mz').addEventListener('click', () => mapZoom('reset'));
 
-  // ---- overlay view: drag turns and tilts, right button shifts the view, wheel zooms ------------------------------
-  let od: { x: number; y: number; pan: boolean } | null = null;
+  // ---- map view: drag turns and tilts (a click without moving is for the way of working), in the overlay view the
+  // right button shifts the view and the wheel zooms it, in the split views the wheel changes the field of view ----------
+  let od: { x: number; y: number; pan: boolean; moved: boolean } | null = null;
   canvas.addEventListener('contextmenu', (e) => overlay && e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
-    if (!overlay) return;
-    od = { x: e.clientX, y: e.clientY, pan: e.button !== 0 };
+    od = { x: e.clientX, y: e.clientY, pan: overlay && e.button !== 0, moved: false };
     canvas.setPointerCapture(e.pointerId);
-    canvas.style.cursor = od.pan ? 'move' : 'grabbing';
   });
   canvas.addEventListener('pointermove', (e) => {
-    if (!overlay || !od) return;
+    if (!od) return;
     const dx = e.clientX - od.x;
     const dy = e.clientY - od.y;
+    if (!od.moved) {
+      if (Math.hypot(dx, dy) < 5) return;
+      od.moved = true;
+      canvas.style.cursor = od.pan ? 'move' : 'grabbing';
+    }
     od.x = e.clientX;
     od.y = e.clientY;
     if (od.pan) {
@@ -739,24 +747,25 @@ export function openCamDirModal(o: CamDirModalOpts) {
       applyZoom();
       return;
     }
+    if (e.buttons !== 1) return;
     // zoomed in, the same movement on screen is a smaller change of the view
-    const k = 0.15 / z.s;
+    const k = (0.15 / (overlay ? z.s : 1)) * (overlay ? 1 : zf);
     v.down = clamp(v.down + dy * k, -10, 60);
     poseSet = true;
     setDir(dir - dx * k); // dragging right turns the view to the left, like moving the picture along
   });
   const odEnd = () => {
     od = null;
-    if (overlay) canvas.style.cursor = 'grab';
+    canvas.style.cursor = overlay ? 'grab' : 'crosshair';
   };
   canvas.addEventListener('pointerup', odEnd);
   canvas.addEventListener('pointercancel', odEnd);
   canvas.addEventListener(
     'wheel',
     (e) => {
-      if (!overlay) return;
       e.preventDefault();
-      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.2 : 1 / 1.2);
+      if (overlay) zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.2 : 1 / 1.2);
+      else mapZoom(e.deltaY < 0 ? 1 / 1.18 : 1.18);
     },
     { passive: false },
   );

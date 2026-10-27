@@ -119,6 +119,7 @@
   position: relative;
   flex: 1;
   min-width: 0;
+  container-type: inline-size;
 }
 .cdm-views {
   --ar: 1.7778;
@@ -135,16 +136,38 @@
   position: relative;
   min-width: 0;
   min-height: 0;
+  container-type: size;
+  display: grid;
+  place-items: center;
+}
+.cdm-pic {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  user-select: none;
+  touch-action: none;
+}
+/* the map has the shape of the picture, so that both show the same view */
+.cdm-mapbox {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--ar)));
+  aspect-ratio: var(--ar);
   border-radius: 12px;
   overflow: hidden;
   background: #000;
 }
-.cdm-pic {
-  container-type: size;
-  display: grid;
-  place-items: center;
-  user-select: none;
-  touch-action: none;
+.cdm .cdm-mz {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 2;
+  height: 28px;
+  padding: 0 10px;
+  background: rgba(13, 18, 38, 0.85);
+  font-size: 12.5px;
+}
+.cdm .cdm-mz[hidden] {
+  display: none;
 }
 .cdm-views.mt .cdm-pic {
   cursor: crosshair;
@@ -246,19 +269,22 @@
 }
 .cdm-views.ov .cdm-map {
   z-index: 1;
-  place-self: center;
-  width: min(100cqw, calc(100cqh * var(--ar)));
-  aspect-ratio: var(--ar);
-  height: auto;
+  pointer-events: none;
+}
+.cdm-views.ov .cdm-mapbox {
+  pointer-events: auto;
   border-radius: 0;
   background: transparent;
   transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(var(--zs, 1));
+}
+.cdm-views.ov .cdm-mz {
+  display: none;
 }
 .cdm-views.ov .cdm-pts,
 .cdm-views.ov .cdm-lines {
   display: none;
 }
-.cdm-views.ov.peek .cdm-map {
+.cdm-views.ov.peek .cdm-mapbox {
   visibility: hidden;
 }
 
@@ -451,5 +477,13 @@
   .cdm-zb {
     bottom: auto;
     top: 18px;
+  }
+}
+
+/* little room: picture above, map below */
+@container (max-width: 720px) {
+  .cdm-views:not(.ov) {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
   }
 }
