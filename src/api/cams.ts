@@ -190,10 +190,15 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
 // locations, not a warning system – in Germany using one while driving is
 // illegal (§ 23 StVO).
 
+const speedcamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
+
 export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bboxStr(b);
+  const hit = speedcamCache.get(bb);
+  if (hit && Date.now() - hit.at < 10 * 60000) return hit.fc;
+  // `rel` statt `nwr`: type=enforcement gibt es nur als Relation – nwr würde alle Knoten und Wege danach durchsuchen (viel langsamer)
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(
-    `[out:json][timeout:25];(node["highway"="speed_camera"](${bb});nwr["type"="enforcement"](${bb}););out center tags 4000;`,
+    `[out:json][timeout:25];(node["highway"="speed_camera"](${bb});rel["type"="enforcement"](${bb}););out center tags 4000;`,
     'speedcams',
     30000,
   );
@@ -228,5 +233,7 @@ export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>
     if (el.type === 'node') nodePts.push([lon, lat]);
     features.push(point(lon, lat, props));
   }
-  return { type: 'FeatureCollection', features };
+  const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features };
+  speedcamCache.set(bb, { at: Date.now(), fc });
+  return fc;
 }

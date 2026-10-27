@@ -71,7 +71,7 @@ die CC0-Kameramodell-Daten (`cctv-database.com`) können ins Kamera-Popup.
 | Panoramax · KartaView | freie Straßenfotos | B/P | gleiches Panel wie Mapillary; Panoramax hat Vektorkacheln + STAC |
 | OSRM (FOSSGIS) | Routen zwischen zwei Kartenpunkten | B | Nutzungsregeln beachten (max. 1 Anfrage/s, kein Massenabruf) |
 | ✅ Photon (komoot) | Adress-/POI-Suche ergänzend zur Open-Meteo-Ortssuche | B | in `search.ts` als zweite Stufe |
-| TomTom Traffic Flow | Live-Verkehrsfluss weltweit | B, 🔑 BYOK | neuer Schlüssel unter `src/settings/keys/tomtom.ts`, Raster-/Vektorkacheln |
+| ✅ TomTom Traffic Flow | Live-Verkehrsfluss weltweit | B, 🔑 BYOK | Schlüssel `src/settings/keys/tomtom.ts`, Vektorkacheln direkt von MapLibre; Ebene `traffic.ts` + `shared/trafficsim.ts` (Fahrzeugpunkte auf Straßenlinien, Tempo/Dichte nach Lage) |
 | GDELT DOC 2.0 | Nachrichten zum Ort im Klick-Panel | B/P | Google News RSS **nicht** übernehmen (Nutzungsbedingungen) |
 | NOAA GFS / ECMWF Open Data | Windmodell-Alternative | D | GRIB2 dekodieren → im `data`-Branch als PNG-Vektorfeld ablegen; nur sinnvoll, wenn Open-Meteos 10 000/Tag-Limit drückt |
 | GTFS-RT Ontario (MiWay, Hamilton, Durham, Guelph, Kingston, Barrie, YRT, Burlington) | Fahrzeuge | B/P | Fleißarbeit, je ein Eintrag in `vehicles.ts`; Lizenzen jeweils widerruflich, Attribution nötig |

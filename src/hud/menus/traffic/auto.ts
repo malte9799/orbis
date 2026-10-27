@@ -10,5 +10,6 @@ export default defineMenuCat({
     { label: 'Straßen', layers: ['roadnet'] },
     { label: 'Staus & Baustellen', layers: ['autobahn'] },
     { label: 'Blitzer & Rotlicht', layers: ['blitzer'] },
+    { label: 'Simulation', layers: ['traffic'] },
   ],
 });
