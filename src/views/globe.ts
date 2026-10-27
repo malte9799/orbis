@@ -1244,7 +1244,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('pitch', syncTerrainPitch);
     // zoomed out to the whole Earth: turn north up and look straight down again
     const levelOut = () => {
-      if (!map || map.getZoom() > 3.5 || map.isEasing()) return;
+      if (!map || map.getZoom() > 3.5) return;
       if (Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5) map.easeTo({ bearing: 0, pitch: 0, duration: 700 });
     };
     map.on('zoomend', levelOut);
