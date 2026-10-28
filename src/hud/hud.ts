@@ -269,12 +269,15 @@ export function createHud(host: HudHost): Hud {
   }
   /** the unfolded bar: the pinned Karten as cards first, then every other Karte */
   function barGallery(): string {
-    const others = [...STANDARD, ...st.own].filter((k) => !st.pinned.includes(k.id));
+    const slot = (k: Karte) => {
+      const i = st.pinned.indexOf(k.id);
+      return i < 0 ? null : i;
+    };
     return `<div class="bg-head"><h4><span>Karten</span><small>★ = in der Leiste · Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)}</small></h4>
         <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="Karten einklappen" title="Einklappen">${ico('x', 2)}</button></div>
-      <div class="ggrid kc-grid">${pins().map((k, i) => kcard(k, i)).join('')}</div>
-      ${others.length ? `<h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>` : ''}
-      <div class="ggrid kc-grid">${others.map((k) => kcard(k, null)).join('')}
+      <div class="ggrid kc-grid">${STANDARD.map((k) => kcard(k, slot(k))).join('')}</div>
+      <h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>
+      <div class="ggrid kc-grid">${st.own.map((k) => kcard(k, slot(k))).join('')}
         <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}Neue leere Karte<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>`;
   }
 
