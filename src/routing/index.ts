@@ -21,6 +21,8 @@ export interface RoutingHost {
   leftInset(): number;
   /** the map view is shown in navigation: hide the Karten HUD and let go of its padding */
   navUi(on: boolean): void;
+  /** the planner / navigation is open: hide every layer of the Karte (only the base map stays) */
+  layersHidden(on: boolean): void;
   /** the locate mode changed (button state) */
   mode(m: LocMode): void;
 }
@@ -243,6 +245,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
   // ----- open / close ----------------------------------------------------------------------
   function open(dest?: { lat: number; lon: number; name?: string }) {
     refreshProviders();
+    host.layersHidden(true);
     panel.setMode('plan');
     panel.el.hidden = false;
     container.classList.add('route-open');
@@ -266,6 +269,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     layer.clear();
     routes = [];
     panel.clearResult();
+    host.layersHidden(false);
   }
 
   function click(e: MapMouseEvent): boolean {
@@ -360,6 +364,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     panel.setMode('plan');
     panel.el.hidden = true;
     container.classList.remove('route-open');
+    host.layersHidden(false);
     if (arrived) toast('Du hast dein Ziel erreicht.');
   }
 

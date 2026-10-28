@@ -123,6 +123,7 @@
 .rt-eta span span { color: inherit; }
 
 /* navigation: the Karten HUD steps aside */
+.globe-view.route-open .globe-bottom,
 .globe-view.nav-active .hud, .globe-view.nav-active .maplibregl-ctrl-top-right, .globe-view.nav-active .route-ctl, .globe-view.nav-active .globe-bottom, .globe-view.nav-active .scalebar { display: none !important; }
 .globe-view.nav-active .maplibregl-ctrl-bottom-right { bottom: calc(100px + var(--safe-bottom, 0px)) !important; }
 

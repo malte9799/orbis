@@ -222,8 +222,18 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
    */
   const isWeatherKarte = (k: Karte | null): boolean => !!k && (k.menu === 'wx' || k.main != null);
 
-  function applyKarte(k: Karte) {
-    curKarte = k;
+  /** the route planner / navigation is open: only the base map stays, every layer of the Karte is switched off */
+  let routeClean = false;
+  const cleanKarte = (k: Karte): Karte => ({ ...k, main: null, mainVar: undefined, wind: false, isobars: false, layers: [] });
+  function setRouteClean(on: boolean) {
+    if (routeClean === on) return;
+    routeClean = on;
+    if (hud) applyKarte(hud.current());
+  }
+
+  function applyKarte(real: Karte) {
+    curKarte = real;
+    const k = routeClean ? cleanKarte(real) : real;
     const prev = { base: state.base, labels: state.labels, night: state.night, overlay: state.overlay, wind: state.wind, isobars: state.isobars, buildings3d: state.buildings3d, terrain3d: state.terrain3d };
     const fam = families().find((f) => f.id === k.main);
     let overlay: OverlayId = 'none';
@@ -1168,6 +1178,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         el,
         {
           leftInset: () => (hud?.layout() === 'desktop' ? hud.stackWidth() : 0),
+          layersHidden: setRouteClean,
           navUi(on) {
             el.classList.toggle('nav-active', on);
             if (on) map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
