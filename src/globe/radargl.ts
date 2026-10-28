@@ -46,6 +46,8 @@ uniform sampler2D u_flow;
 uniform float u_wa;
 uniform float u_wb;
 uniform float u_opacity;
+// forecast: how many step lengths the newest step is carried beyond its own time (0 = measurement)
+uniform float u_ext;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -90,7 +92,10 @@ void main() {
   vec2 f = texture(u_flow, v_uv).rg;
   f *= smoothstep(0.0, 0.08, min(min(v_uv.x, 1.0 - v_uv.x), min(v_uv.y, 1.0 - v_uv.y)));
   vec2 a = bicubic(u_a, v_uv - f * r);
-  vec2 b = bicubic(u_b, v_uv + f * (1.0 - r));
+  vec2 pb = v_uv + f * (1.0 - r) - f * u_ext;
+  vec2 b = bicubic(u_b, pb);
+  // carried in from beyond the tile edge: unknown (the neighbouring tile is a texture of its own)
+  if (u_ext > 0.0 && (pb.x < 0.0 || pb.y < 0.0 || pb.x > 1.0 || pb.y > 1.0)) b = vec2(0.0);
   // mix the values first, colour afterwards. Both steps are already carried to the same moment
   // by the motion field, so a linear mix on the (sqrt-coded) bytes keeps cells at their strength.
   // (An extra "lift" against dimming made the picture swell up in the middle of every step.)
@@ -294,21 +299,27 @@ export class RadarGl implements CustomLayerInterface {
   }
 
   /** the two steps around the current time and the position between them */
-  private pair(): { a: GlFrame | null; b: GlFrame | null; ratio: number; c: GlFrame | null } {
+  private pair(): { a: GlFrame | null; b: GlFrame | null; ratio: number; c: GlFrame | null; ext: number } {
     const f = this.frames;
-    if (!f.length) return { a: null, b: null, ratio: 0, c: null };
-    if (this.time <= f[0].time) return { a: f[0], b: null, ratio: 0, c: f[1] ?? null };
+    if (!f.length) return { a: null, b: null, ratio: 0, c: null, ext: 0 };
+    // beyond the newest step: forecast, the newest step carried on with the motion between the last two
+    if (f.length >= 2 && this.time > f[f.length - 1].time) {
+      const p = f[f.length - 2];
+      const l = f[f.length - 1];
+      return { a: p, b: l, ratio: 1, c: null, ext: (this.time - l.time) / (l.time - p.time) };
+    }
+    if (this.time <= f[0].time) return { a: f[0], b: null, ratio: 0, c: f[1] ?? null, ext: 0 };
     for (let i = 0; i < f.length - 1; i++) {
       if (this.time >= f[i].time && this.time < f[i + 1].time) {
-        return { a: f[i], b: f[i + 1], ratio: (this.time - f[i].time) / (f[i + 1].time - f[i].time), c: f[i + 2] ?? null };
+        return { a: f[i], b: f[i + 1], ratio: (this.time - f[i].time) / (f[i + 1].time - f[i].time), c: f[i + 2] ?? null, ext: 0 };
       }
     }
-    return { a: f[f.length - 1], b: null, ratio: 0, c: null };
+    return { a: f[f.length - 1], b: null, ratio: 0, c: null, ext: 0 };
   }
 
   /** Rain value [byte] under a point of the step shown, mixed like the shader does; null = none */
   sample(lng: number, lat: number): number | null {
-    const { a, b, ratio } = this.pair();
+    const { a, b, ratio, ext } = this.pair();
     if (!a) return null;
     const z = this.lastZ;
     const n = 2 ** z;
@@ -325,6 +336,22 @@ export class RadarGl implements CustomLayerInterface {
       const v = e.bytes[py * e.size + px];
       return v >= NODATA_MIN ? null : v;
     };
+    if (ext > 0 && b) {
+      // forecast: the value of the newest step from where the motion field carries it from
+      const e = this.tiles.get(`${b.key}/${z}/${x}/${y}`);
+      const fl = this.flows.get(`${a.key}>${b.key}/${z}/${x}/${y}`);
+      if (!e?.bytes) return null;
+      let u = fx - x;
+      let w = fy - y;
+      if (fl) {
+        const k = (Math.min(FLOW_G - 1, Math.floor(w * FLOW_G)) * FLOW_G + Math.min(FLOW_G - 1, Math.floor(u * FLOW_G))) * 2;
+        u -= fl.data[k] * ext;
+        w -= fl.data[k + 1] * ext;
+      }
+      if (u < 0 || w < 0 || u >= 1 || w >= 1) return null;
+      const v = e.bytes[Math.floor(w * e.size) * e.size + Math.floor(u * e.size)];
+      return v >= NODATA_MIN ? null : v;
+    }
     const va = read(a);
     const vb = read(b);
     if (va === null && vb === null) return null;
@@ -522,7 +549,7 @@ export class RadarGl implements CustomLayerInterface {
   render(gl: WebGL2RenderingContext, args: CustomRenderMethodInput) {
     const map = this.map;
     if (!map || !this.visible) return;
-    const { a, b, ratio } = this.pair();
+    const { a, b, ratio, ext } = this.pair();
     if (!a) return;
 
     // One zoom level below the map's: a quarter of the tiles (RainViewer rate-limits hard), and
@@ -559,6 +586,7 @@ export class RadarGl implements CustomLayerInterface {
     gl.uniform1i(u('u_lut'), 2);
     gl.uniform1i(u('u_flow'), 3);
     gl.uniform1f(u('u_opacity'), this.opacity);
+    gl.uniform1f(u('u_ext'), ext);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
 
@@ -594,6 +622,7 @@ export class RadarGl implements CustomLayerInterface {
         const ta = ea.state === 'ready' ? this.upload(gl, ea) : null;
         const tb = eb && eb.state === 'ready' ? this.upload(gl, eb) : null;
         if (!ta && !tb) continue;
+        if (ext > 0 && !tb) continue; // forecast needs the newest step
         // motion field of this tile for this pair of steps (a few per frame, the rest follows)
         let flowTex = this.zeroFlowTex;
         if (ta && tb && b && ea.bytes && eb?.bytes) {
@@ -629,6 +658,10 @@ export class RadarGl implements CustomLayerInterface {
         // a step that has not arrived yet must not dim the other one
         if (!ta) gl.uniform1f(u('u_wb'), 1);
         if (!tb) gl.uniform1f(u('u_wa'), 1);
+        if (ext > 0) {
+          gl.uniform1f(u('u_wa'), 0);
+          gl.uniform1f(u('u_wb'), 1);
+        }
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, ta ?? this.emptyTex);
         gl.activeTexture(gl.TEXTURE1);

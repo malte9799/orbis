@@ -11,6 +11,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import {
   kindColor,
   loadRadarFrames,
+  radarForecastSteps,
   type EventKind,
   type RadarFrames,
 } from '../api/events';
@@ -20,7 +21,8 @@ import {
   getGlobalModel,
   isLimitError,
   ModelSampler,
-  nearestTimeIndex,
+  nearestSubIndex,
+  SUBSTEPS,
   type ModelGrid,
 } from '../api/model';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
@@ -527,7 +529,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (g !== globalModel) {
         const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[timeIdx] : Date.now();
         globalModel = g;
-        timeIdx = nearestTimeIndex(g.times, prevTime);
+        timeIdx = nearestSubIndex(g.times, prevTime);
         detailModel = null;
         detailKey = '';
       }
@@ -707,6 +709,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     // measurements only: RainViewer's own nowcast steps are not shown
     radar.frames = radar.frames.filter((f) => !f.nowcast && !f.hd);
     if (state.overlay !== 'radar' || !radar.frames.length) return;
+    const measured = radar.frames;
 
     // one WebGL layer for all steps: it mixes the values of two neighbouring steps
     if (!radarGl) {
@@ -723,7 +726,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       map.addLayer({ id: 'radar-attr', type: 'circle', source: 'radar-attr', paint: { 'circle-opacity': 0 } }, 'anchor-weather');
     }
     const maxzoom = store.getKeys().radarHost ? 10 : 7;
-    radarGl.setFrames(radar.frames.map((f) => rainviewerFrame(radar!.host, f.path, f.time * 1000, maxzoom)));
+    radarGl.setFrames(measured.map((f) => rainviewerFrame(radar!.host, f.path, f.time * 1000, maxzoom)));
+    // one hour ahead of now: the layer carries the newest step on with the motion of the last two
+    radar.frames = [...measured, ...radarForecastSteps(measured[measured.length - 1].time)];
     showRadarFrame(lastPastRadarFrame());
     setRadarVisible(true);
   }
@@ -781,7 +786,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (mode === 'none') return;
     const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
     const idx = mode === 'radar' ? radarIdx : timeIdx;
-    let t = times[idx];
+    let t = mode === 'radar' ? times[idx] : sampler?.time ?? times[Math.round(idx)];
     if (mode === 'radar') {
       // radar slider: one step per minute
       rangeEl.step = '1';
@@ -789,7 +794,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       rangeEl.value = String(Math.round((radarT - times[0]) / 60000));
       t = radarT;
     } else {
-      rangeEl.step = '1';
+      // 3-hourly model data, hourly slider: the steps in between are mixed in the sampler
+      rangeEl.step = String(1 / SUBSTEPS);
       rangeEl.max = String(times.length - 1);
       rangeEl.value = String(idx);
     }
@@ -821,7 +827,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function setTimeIndex(i: number) {
     if (timelineMode() === 'radar') showRadarFrame(i);
     else if (globalModel) {
-      timeIdx = Math.max(0, Math.min(globalModel.times.length - 1, i));
+      timeIdx = Math.max(0, Math.min(globalModel.times.length - 1, Math.round(i * SUBSTEPS) / SUBSTEPS));
       updateSampler();
     }
   }
@@ -843,7 +849,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   nowBtn.addEventListener('click', () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
-    else if (globalModel) setTimeIndex(nearestTimeIndex(globalModel.times));
+    else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
   });
   playBtn.addEventListener('click', () => {
     if (playTimer || playRaf) return stopAnimation();
@@ -871,8 +877,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
     playTimer = window.setInterval(() => {
       const n = radarMode ? radar!.frames.length : Number(rangeEl.max) + 1;
-      setTimeIndex(((radarMode ? radarIdx : timeIdx) + 1) % n);
-    }, radarMode ? 700 : 1100);
+      const step = radarMode ? 1 : 1 / SUBSTEPS;
+      setTimeIndex(radarMode ? (radarIdx + 1) % n : timeIdx + step >= n - 1 + 1e-6 ? 0 : timeIdx + step);
+    }, radarMode ? 700 : 450);
   });
 
   // ----- legend & readout --------------------------------------------------
