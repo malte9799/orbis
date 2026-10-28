@@ -199,7 +199,27 @@ export interface PlanOptions {
   arriveBy: boolean;
   /** upper bound on transfers, undefined = no limit */
   maxTransfers?: number;
+  /** allowed transit modes (MOTIS names), undefined = all */
+  modes?: string[];
+  /** extra minutes planned for every transfer */
+  extraTransferMin?: number;
+  /** longest walk to the first / from the last stop in minutes */
+  maxWalkMin?: number;
+  /** step-free routing */
+  wheelchair?: boolean;
 }
+
+/** Mode groups of the filter; the MOTIS modes each one stands for. */
+export const MODE_GROUPS: { id: string; label: string; modes: string[] }[] = [
+  { id: 'fern', label: 'Fernverkehr', modes: ['HIGHSPEED_RAIL', 'LONG_DISTANCE', 'NIGHT_RAIL'] },
+  { id: 'regio', label: 'Regionalverkehr', modes: ['REGIONAL_FAST_RAIL', 'REGIONAL_RAIL'] },
+  { id: 'sbahn', label: 'S-Bahn', modes: ['SUBURBAN'] },
+  { id: 'ubahn', label: 'U-Bahn', modes: ['SUBWAY'] },
+  { id: 'tram', label: 'Straßenbahn', modes: ['TRAM'] },
+  { id: 'bus', label: 'Bus', modes: ['BUS'] },
+  { id: 'fernbus', label: 'Fernbus', modes: ['COACH'] },
+  { id: 'faehre', label: 'Fähre', modes: ['FERRY'] },
+];
 
 export interface PlanResult {
   list: Itinerary[];
@@ -219,6 +239,13 @@ export async function planConnections(from: Stop, to: Stop, o: PlanOptions, curs
     language: 'de',
   });
   if (o.maxTransfers != null) q.set('maxTransfers', String(o.maxTransfers));
+  if (o.modes && o.modes.length) q.set('transitModes', o.modes.join(','));
+  if (o.extraTransferMin) q.set('additionalTransferTime', String(o.extraTransferMin));
+  if (o.maxWalkMin != null) {
+    q.set('maxPreTransitTime', String(o.maxWalkMin * 60));
+    q.set('maxPostTransitTime', String(o.maxWalkMin * 60));
+  }
+  if (o.wheelchair) q.set('pedestrianProfile', 'WHEELCHAIR');
   if (cursor) q.set('pageCursor', cursor);
   const r = await fetchJson<{ itineraries?: ItineraryDto[]; previousPageCursor?: string; nextPageCursor?: string }>(`${BASE}/v5/plan?${q}`, undefined, 30000);
   return { list: parseItineraries(r.itineraries ?? []), prev: r.previousPageCursor, next: r.nextPageCursor };

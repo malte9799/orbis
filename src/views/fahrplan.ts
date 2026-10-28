@@ -1,4 +1,4 @@
-import { departures, durationTxt, nearbyStops, inTxt, legColor, planConnections, searchStops, type PlanResult, type Departure, type Itinerary, type Leg, type PlanOptions, type Stop } from '../api/connections';
+import { MODE_GROUPS, departures, durationTxt, nearbyStops, inTxt, legColor, planConnections, searchStops, type PlanResult, type Departure, type Itinerary, type Leg, type PlanOptions, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
 import { locate } from '../search';
 import { store, type SavedStop } from '../store';
@@ -106,7 +106,15 @@ export function createFahrplanView(): FahrplanView {
         <select class="fp-mode" aria-label="Abfahrt oder Ankunft"><option value="dep">Abfahrt</option><option value="arr">Ankunft</option></select>
         <input type="datetime-local" class="fp-time" aria-label="Zeitpunkt"/>
         <button type="button" class="btn small fp-now">Jetzt</button>
-        <select class="fp-tr" aria-label="Umstiege"><option value="">Beliebig viele Umstiege</option><option value="0">Direkt</option><option value="1">Max. 1 Umstieg</option><option value="2">Max. 2 Umstiege</option></select>
+        <button type="button" class="btn small fp-optbtn" aria-expanded="false">Optionen</button>
+      </div>
+      <div class="fp-optpanel" hidden>
+        <div class="fp-og"><span class="fp-oh">Verkehrsmittel</span><div class="fp-mchips">${MODE_GROUPS.map((g) => `<button type="button" class="fp-mchip on" data-g="${g.id}" aria-pressed="true">${g.label}</button>`).join('')}</div></div>
+        <label class="fp-og"><span class="fp-oh">Umstiege</span><select class="fp-tr"><option value="">Beliebig viele</option><option value="0">Direkt</option><option value="1">Max. 1 Umstieg</option><option value="2">Max. 2 Umstiege</option></select></label>
+        <label class="fp-og"><span class="fp-oh">Umstiegszeit</span><select class="fp-xt"><option value="0">Normal</option><option value="5">+5 min</option><option value="10">+10 min</option></select></label>
+        <label class="fp-og"><span class="fp-oh">Fußweg zur Haltestelle</span><select class="fp-walk"><option value="">Standard</option><option value="5">bis 5 min</option><option value="10">bis 10 min</option><option value="20">bis 20 min</option></select></label>
+        <label class="fp-chk"><input type="checkbox" class="fp-wc"/> Stufenfrei (Rollstuhl, Kinderwagen)</label>
+        <button type="button" class="btn small fp-reset">Zurücksetzen</button>
       </div>
       <button type="button" class="btn primary wide fp-go">Verbindungen suchen</button>
       <div class="fp-res" aria-live="polite"></div>
@@ -124,6 +132,66 @@ export function createFahrplanView(): FahrplanView {
   const timeIn = q<HTMLInputElement>('.fp-time');
   const modeSel = q<HTMLSelectElement>('.fp-mode');
   const trSel = q<HTMLSelectElement>('.fp-tr');
+  const xtSel = q<HTMLSelectElement>('.fp-xt');
+  const walkSel = q<HTMLSelectElement>('.fp-walk');
+  const wcChk = q<HTMLInputElement>('.fp-wc');
+  const optBtn = q<HTMLButtonElement>('.fp-optbtn');
+  const optPanel = q('.fp-optpanel');
+  const chipsOf = () => [...el.querySelectorAll<HTMLButtonElement>('.fp-mchip')];
+
+  // options (persisted): modes switched off, transfers, extra transfer time, walking limit, step-free
+  const optsState = () => ({
+    off: chipsOf().filter((c) => !c.classList.contains('on')).map((c) => c.dataset.g!),
+    tr: trSel.value,
+    xt: xtSel.value,
+    walk: walkSel.value,
+    wc: wcChk.checked,
+  });
+  const activeOptions = () => {
+    const o = optsState();
+    return o.off.length + (o.tr !== '' ? 1 : 0) + (o.xt !== '0' ? 1 : 0) + (o.walk !== '' ? 1 : 0) + (o.wc ? 1 : 0);
+  };
+  const syncOptBtn = () => {
+    const n = activeOptions();
+    optBtn.textContent = n ? `Optionen (${n})` : 'Optionen';
+    optBtn.classList.toggle('on', n > 0);
+  };
+  const applyOptions = (o: Partial<ReturnType<typeof optsState>>) => {
+    const off = new Set(o.off ?? []);
+    chipsOf().forEach((c) => {
+      const on = !off.has(c.dataset.g!);
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', String(on));
+    });
+    trSel.value = o.tr ?? '';
+    xtSel.value = o.xt ?? '0';
+    walkSel.value = o.walk ?? '';
+    wcChk.checked = !!o.wc;
+    syncOptBtn();
+  };
+  applyOptions(store.getFpOptions() as Partial<ReturnType<typeof optsState>>);
+  const optsChanged = () => {
+    store.setFpOptions(optsState());
+    syncOptBtn();
+  };
+  optBtn.addEventListener('click', () => {
+    optPanel.hidden = !optPanel.hidden;
+    optBtn.setAttribute('aria-expanded', String(!optPanel.hidden));
+  });
+  optPanel.addEventListener('click', (e) => {
+    const c = (e.target as HTMLElement).closest<HTMLButtonElement>('.fp-mchip');
+    if (c) {
+      // the last remaining mode stays on
+      if (c.classList.contains('on') && chipsOf().filter((x) => x.classList.contains('on')).length === 1) return;
+      c.classList.toggle('on');
+      c.setAttribute('aria-pressed', String(c.classList.contains('on')));
+      optsChanged();
+    } else if ((e.target as HTMLElement).closest('.fp-reset')) {
+      applyOptions({});
+      optsChanged();
+    }
+  });
+  optPanel.addEventListener('change', optsChanged);
   const goBtn = q<HTMLButtonElement>('.fp-go');
   timeIn.value = localInput(Date.now());
 
@@ -262,6 +330,18 @@ export function createFahrplanView(): FahrplanView {
       ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
   }
 
+  /** the filters of the options panel as API options */
+  function planExtras(): Partial<PlanOptions> {
+    const o = optsState();
+    const off = new Set(o.off);
+    return {
+      modes: off.size ? MODE_GROUPS.filter((g) => !off.has(g.id)).flatMap((g) => g.modes) : undefined,
+      extraTransferMin: Number(o.xt) || undefined,
+      maxWalkMin: o.walk === '' ? undefined : Number(o.walk),
+      wheelchair: o.wc || undefined,
+    };
+  }
+
   async function search() {
     if (!from || !to) {
       toast('Bitte Start und Ziel aus der Vorschlagsliste wählen.', 'error');
@@ -272,7 +352,7 @@ export function createFahrplanView(): FahrplanView {
     goBtn.disabled = true;
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
-      lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value) };
+      lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
       const r = await planConnections(from, to, lastOpts);
       if (my !== searchSeq) return;
       items = r.list;
