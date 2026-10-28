@@ -1,9 +1,9 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
-import { BASES } from '../globe/style';
+import { availableBases } from '../globe/style';
 import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
-import type { Place } from '../store';
+import { store, type Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
 import {
   BASE_GRADIENT,
@@ -16,7 +16,7 @@ import {
   INFRA_MENU,
   infraCatOf,
   ISOBAR_OPTION_MAINS,
-  MAIN_BASES,
+  BASE_GROUPS,
   TRAFFIC_LAYER_IDS,
   TRAFFIC_MENU,
   trafficCatOf,
@@ -155,7 +155,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -471,18 +471,16 @@ export function createHud(host: HudHost): Hud {
 
   function stackBody(k: Karte): string {
     const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? 'Tagesbild von gestern' : k.main && k.main !== 'radar' && k.main !== 'sat' ? 'Vorhersage, ab jetzt' : 'Live';
-    const bases = BASES.map((b) => b.id);
-    const others = bases.filter((b) => !MAIN_BASES.includes(b));
-    const showMore = ui.moreBases || others.includes(k.base);
+    const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
+    const baseGroups = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) })).filter((g) => g.ids.length);
     return `
         <div class="slot"><span>Ebenen</span><small>oben liegt oben</small></div>
         ${k.layers.map(layerRow).join('') || '<div class="muted" style="font-size:12.5px;padding:4px">Noch keine Ebenen.</div>'}
         <button type="button" class="addbtn ${ui.add ? 'on' : ''}" data-act="add">${ico('plus')}Ebene hinzufügen</button>
         <div class="slot"><span>Wetter</span><small>höchstens eine</small></div>
         ${mainCard(k)}
-        <div class="slot"><span>Grundkarte</span></div>
-        <div class="baserow">${MAIN_BASES.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>
-        ${showMore ? `<div class="fl basemore">${others.map((b) => `<button type="button" class="chip ${k.base === b ? 'on' : ''}" data-act="base" data-id="${b}">${BASE_LABEL[b]}</button>`).join('')}</div>` : `<button type="button" class="linkbtn" data-act="morebases">Weitere Grundkarten</button>`}
+        ${baseGroups.map((g) => `<div class="slot"><span>Grundkarte · ${g.label}</span></div>
+        <div class="baserow">${g.ids.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>`).join('')}
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt">${ico('sun')}<div>Tag/Nacht</div><div class="seg">${(['day', 'auto', 'night'] as const).map((v) => `<button type="button" data-act="night" data-v="${v}" class="${k.night === v ? 'on' : ''}" aria-pressed="${k.night === v}">${{ day: 'Tag', auto: 'Auto', night: 'Nacht' }[v]}</button>`).join('')}</div></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
@@ -785,7 +783,11 @@ export function createHud(host: HudHost): Hud {
     root.querySelector('[data-act="basepick"]')?.setAttribute('aria-expanded', String(ui.basepick));
     root.querySelector('[data-act="basepick"]')?.classList.toggle('on', ui.basepick);
     if (!ui.basepick) return;
-    bp.innerHTML = BASES.map((b) => `<button type="button" data-act="base" data-id="${b.id}" class="${k.base === b.id ? 'on' : ''}" aria-pressed="${k.base === b.id}"><i class="bth">${baseThumb(b.id)}</i><span>${BASE_LABEL[b.id]}</span></button>`).join('');
+    const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
+    bp.innerHTML = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) }))
+      .filter((g) => g.ids.length)
+      .map((g) => `<div class="bpgrp">${g.label}</div>${g.ids.map((id) => `<button type="button" data-act="base" data-id="${id}" class="${k.base === id ? 'on' : ''}" aria-pressed="${k.base === id}"><i class="bth">${baseThumb(id)}</i><span>${BASE_LABEL[id]}</span></button>`).join('')}`)
+      .join('');
   }
 
   // ----- actions -----------------------------------------------------------

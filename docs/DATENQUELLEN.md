@@ -216,6 +216,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 |---|---|---|
 | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektorkarte (Dunkel/Hell), Ortsnamen auf Deutsch, Grenzen | 🟢 ODbL |
 | [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
+| [Esri World Imagery Clarity](https://clarity.maptiles.arcgis.com) | Satellit Clarity (schärfer/aktueller als Esri-Standard) | ⚠️ wie Esri World Imagery, Attribution „Powered by Esri“ |
+| [Mapbox Satellite](https://www.mapbox.com/maps/satellite) | Satellitenbild, nur mit eigenem Token (Einstellungen) | 🔑 kostenloses Kontingent, Mapbox-Bedingungen |
+| [MapTiler Satellite](https://www.maptiler.com/maps/) | Satellitenbild, nur mit eigenem Key (Einstellungen) | 🔑 Free-Plan nicht-kommerziell |
 | [EOX Sentinel-2 cloudless](https://s2maps.eu) | Wolkenloses Satellitenbild (Copernicus Sentinel-2) | 🟢 CC BY-NC-SA 4.0, 🚫 |
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Höhenmodell für die 3D-Geländeanpassung (USGS 3DEP, SRTM, GMTED, ETOPO1) – wird nicht als sichtbare Ebene angezeigt | 🟢 |

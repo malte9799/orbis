@@ -573,6 +573,8 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud-compass .hd { transition: opacity .12s ease; fill: #fff; font: 600 15px -apple-system, system-ui, sans-serif; stroke: none; }
 .hud-bp { position: absolute; right: 46px; top: 0; width: 208px; padding: 4px; display: flex; flex-direction: column; gap: 1px; max-height: calc(100vh - 140px); overflow-y: auto; scrollbar-width: none; }
 .hud-bp[hidden] { display: none; }
+.hud-bp .bpgrp { font: 600 10px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 8px 6px 2px; }
+.hud-bp .bpgrp:first-child { padding-top: 2px; }
 .hud-bp button { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px 0 4px; border: 1px solid transparent; border-radius: 10px; background: transparent; font-size: 13.5px; color: var(--text-2); cursor: pointer; text-align: left; }
 .hud-bp button:hover { background: var(--card); color: var(--text); }
 .hud-bp button.on { background: #fff; color: #0b1020; font-weight: 600; }
