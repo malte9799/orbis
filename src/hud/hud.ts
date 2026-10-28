@@ -286,12 +286,6 @@ export function createHud(host: HudHost): Hud {
     const scrollLeft = prev?.scrollLeft ?? 0;
     const was = prev?.classList.contains('expanded') ?? false;
     const from = prev?.getBoundingClientRect();
-    // where every Karte (and its name) was, to carry them over to the new layout
-    const old = new Map<string, { kc: DOMRect; nm: DOMRect }>();
-    prev?.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
-      const nm = el.querySelector('.nm');
-      if (nm && !old.has(el.dataset.id!)) old.set(el.dataset.id!, { kc: el.getBoundingClientRect(), nm: nm.getBoundingClientRect() });
-    });
     const expanded = barExpanded();
     reg('bar').innerHTML = `<div class="hud-bar hud-glass${expanded ? ' expanded' : ''}" role="group" aria-label="Karten">
       ${
@@ -304,33 +298,17 @@ export function createHud(host: HudHost): Hud {
     </div>`;
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
-    // unfolding / folding: the box grows (or shrinks) and each Karte moves from its old place to the new one
+    // unfolding / folding: the box grows (or shrinks) while its content fades in, staggered; nothing flies around
     if (from && was !== expanded && layout === 'desktop' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const to = bar.getBoundingClientRect();
-      const timing = { duration: 340, easing: 'cubic-bezier(.3,.9,.3,1)' };
+      const easing = 'cubic-bezier(.25,.8,.25,1)';
       bar.style.overflow = 'hidden';
-      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], timing).onfinish = () => (bar.style.overflow = '');
-      bar.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
-        const o = old.get(el.dataset.id!);
-        const nm = el.querySelector<HTMLElement>('.nm');
-        if (!o || !nm) return;
-        const kc = el.getBoundingClientRect();
-        const nmr = nm.getBoundingClientRect();
-        el.style.overflow = 'hidden';
+      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], { duration: 320, easing }).onfinish = () => (bar.style.overflow = '');
+      const items = expanded ? bar.querySelectorAll<HTMLElement>('.bg-head, h4, .kc') : bar.querySelectorAll<HTMLElement>('.kc, .sep, .all');
+      items.forEach((el, i) => {
         el.animate(
-          [
-            { transform: `translate(${o.kc.left - kc.left}px, ${o.kc.top - kc.top}px)`, width: `${o.kc.width}px`, height: `${o.kc.height}px` },
-            { transform: 'translate(0, 0)', width: `${kc.width}px`, height: `${kc.height}px` },
-          ],
-          timing,
-        ).onfinish = () => (el.style.overflow = '');
-        // the name keeps its place relative to the moving Karte, then slides to its new spot
-        nm.animate(
-          [
-            { transform: `translate(${o.nm.left - o.kc.left - (nmr.left - kc.left)}px, ${o.nm.top - o.kc.top - (nmr.top - kc.top)}px)` },
-            { transform: 'translate(0, 0)' },
-          ],
-          timing,
+          [{ opacity: 0, transform: expanded ? 'translateY(8px) scale(.97)' : 'none' }, { opacity: 1, transform: 'none' }],
+          { duration: 240, delay: 90 + Math.min(i, 10) * 18, easing, fill: 'backwards' },
         );
       });
     }
