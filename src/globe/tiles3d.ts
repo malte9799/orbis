@@ -6,6 +6,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { TILES_SOURCES, type TilesSourceDef } from './tiles3dSources';
 import { fixTile } from './gltf1';
+import { TileEngine } from './tiles/engine';
 import { plateauAt, type PlateauSet } from './plateau';
 
 // OGC 3D Tiles (Google Photorealistic 3D Tiles or any tileset.json) as a MapLibre custom layer.
@@ -18,8 +19,11 @@ import { plateauAt, type PlateauSet } from './plateau';
 
 const A = 6378137;
 const E2 = 0.00669437999014;
-/** the ENU frame is re-anchored when the map centre moved further than this (metres): it is planar */
-const REANCHOR_M = 15000;
+/**
+ * the ENU frame is re-anchored when the map centre moved further than this (metres). The frame is flat, the Earth
+ * is not: the ground sinks d²/2R below it (0.3 m at 2 km, 8 m at 10 km), which put whole cities under the map.
+ */
+const REANCHOR_M = 1500;
 const RAD = Math.PI / 180;
 
 const SEL_KEY = 'orbis.tiles3d.sel';
@@ -120,7 +124,10 @@ function enuAxes(lon: number, lat: number) {
 }
 
 interface Entry {
-  tiles: TilesRenderer;
+  /** the library's renderer (engine v1) … */
+  tiles?: TilesRenderer;
+  /** … or our own engine (v2, see tiles/engine.ts) */
+  engine?: TileEngine;
   attribution: string;
   opacity: number;
   /** height of the ground above the ellipsoid (metres): the tiles are lowered by it, see groundHeight */
@@ -132,6 +139,8 @@ interface Entry {
   /** what the group is actually lowered by: the ground minus the map terrain under the centre */
   offset: number;
   checked: number;
+  /** the ground height of engine v2 was measured at least once */
+  groundSet?: boolean;
   /** lowest point (metres above the ellipsoid) and centre of every loaded tile */
   lows: Map<unknown, { centre: THREE.Vector3; low: number }>;
 }
@@ -255,7 +264,7 @@ function groundHeight(e: Entry, lon: number, lat: number): number | null {
   const c = ecef(lon, lat, 0);
   let best = Infinity;
   let ground: number | null = null;
-  for (const tile of e.tiles.activeTiles) {
+  for (const tile of e.tiles!.activeTiles) {
     const l = e.lows.get(tile);
     if (!l) continue;
     const d = l.centre.distanceTo(c);
@@ -265,6 +274,18 @@ function groundHeight(e: Entry, lon: number, lat: number): number | null {
     }
   }
   return ground;
+}
+
+/**
+ * Our own engine (v2) for sources without a key; the library's renderer (v1) for the rest (Google and Cesium
+ * need their auth plugins) and as a switch back: localStorage 'orbis.tiles3d.engine' = 'v1'.
+ */
+function useV2(src: TilesSourceDef): boolean {
+  try {
+    return !src.key && !!src.url && localStorage.getItem('orbis.tiles3d.engine') !== 'v1';
+  } catch {
+    return false;
+  }
 }
 
 export class Tiles3DLayer implements CustomLayerInterface {
@@ -333,6 +354,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
       this.hooks.note(`${src.label}: Schlüssel fehlt (Einstellungen → 3D-Kacheln)`);
       return null;
     }
+    if (useV2(src)) return this.createV2(src);
     const url = src.url;
     const tiles = (url ? new TilesRenderer(url) : new TilesRenderer()) as TilesRenderer & { registerPlugin(p: unknown): void };
     tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, meshoptDecoder: MeshoptDecoder, autoDispose: false }));
@@ -406,11 +428,20 @@ export class Tiles3DLayer implements CustomLayerInterface {
     return entry;
   }
 
+  private createV2(src: TilesSourceDef): Entry {
+    const engine = new TileEngine(src.url!, { repaint: () => this.map.triggerRepaint(), note: (m) => this.hooks.note(`${src.label}: ${m}`), upload: (t) => this.renderer?.initTexture(t) });
+    engine.setOpacity(state.opacity);
+    const entry: Entry = { engine, attribution: src.attribution, opacity: state.opacity, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
+    this.world.add(engine.group);
+    if (this.anchor) this.place(entry);
+    return entry;
+  }
+
   private drop(id: string) {
     const e = this.entries.get(id);
     if (!e) return;
-    this.world.remove(e.tiles.group);
-    e.tiles.dispose();
+    this.world.remove(e.engine?.group ?? e.tiles!.group);
+    (e.engine ?? e.tiles)!.dispose();
     this.entries.delete(id);
   }
 
@@ -428,14 +459,15 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   /** the tile renderer of a shown source (for the debug page) */
   tilesOf(id: string) {
-    return this.entries.get(id)?.tiles;
+    const e = this.entries.get(id);
+    return e?.tiles ?? e?.engine;
   }
 
   /** per shown source: how its tiles are doing (for the debug page) */
   debugInfo() {
     return [...this.entries].map(([id, e]) => {
-      const s = (e.tiles as unknown as { stats: Record<string, number> }).stats;
-      return { id, loaded: s.loaded, failed: s.failed, queued: s.queued, downloading: s.downloading, active: s.active, visible: s.visible, ground: Math.round(e.ground), ring: footprint(e.tiles) };
+      const s = ((e.engine ?? e.tiles) as unknown as { stats: Record<string, number> }).stats;
+      return { id, engine: e.engine ? 'v2' : 'v1', loaded: s.loaded, failed: s.failed, queued: s.queued, downloading: s.downloading, active: s.active, visible: s.visible, ground: Math.round(e.ground), ring: footprint((e.engine ?? e.tiles) as unknown as TilesRenderer) };
     });
   }
 
@@ -489,7 +521,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
     for (const e of this.entries.values()) {
       if (e.opacity === state.opacity) continue;
       e.opacity = state.opacity;
-      e.tiles.forEachLoadedModel((scene) => this.applyOpacity(scene, e.opacity));
+      if (e.engine) e.engine.setOpacity(e.opacity);
+      else e.tiles!.forEachLoadedModel((scene) => this.applyOpacity(scene, e.opacity));
     }
   }
 
@@ -501,14 +534,14 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   private place(entry: Entry) {
     const { lon, lat } = this.anchor!;
-    const tiles = entry.tiles;
+    const group = entry.engine?.group ?? entry.tiles!.group;
     const { e, n, u } = enuAxes(lon, lat);
     const p = ecef(lon, lat, 0);
     const m = new THREE.Matrix4().makeBasis(e, n, u).invert(); // rotation ECEF → ENU (basis is orthonormal)
     m.multiply(new THREE.Matrix4().makeTranslation(-p.x, -p.y, -p.z));
     m.premultiply(new THREE.Matrix4().makeTranslation(0, 0, -entry.offset)); // ENU "up" is z
-    tiles.group.matrix.copy(m);
-    tiles.group.matrixWorldNeedsUpdate = true;
+    group.matrix.copy(m);
+    group.matrixWorldNeedsUpdate = true;
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
@@ -552,11 +585,31 @@ export class Tiles3DLayer implements CustomLayerInterface {
     const now = performance.now();
     for (const e of this.entries.values()) {
       e.centre.copy(ecef(c.lng, c.lat, e.ground));
+      if (e.engine) {
+        e.engine.update(this.lod, { width: canvas.clientWidth, height: canvas.clientHeight }, { errorTarget: 6, falloff: 6, density: falloffDensity });
+        if (now - e.checked > 400) {
+          e.checked = now;
+          // the ground under the map centre; it follows slowly, so a change of the level of detail does not make the tiles jump
+          const gp = e.engine.groundAt(ecef(c.lng, c.lat, 0));
+          if (gp) {
+            const g = heightOf(gp.x, gp.y, gp.z);
+            e.ground = !e.groundSet || Math.abs(g - e.ground) > 100 ? g : e.ground + (g - e.ground) * 0.3;
+            e.groundSet = true;
+          }
+          const terrain = map.getTerrain() ? (map.queryTerrainElevation(c) ?? 0) : 0;
+          if (Math.abs(e.ground - terrain - e.offset) > 0.05) {
+            e.offset = e.ground - terrain;
+            this.place(e);
+          }
+        }
+        continue;
+      }
+      const tiles = e.tiles!;
       e.depthWeight = Math.max(30, 0.5 / falloffDensity / 1.5); // ~half the camera's distance to the centre
-      e.tiles.errorFalloff = e.tiles.errorTarget;
-      e.tiles.errorFalloffDensity = falloffDensity;
-      e.tiles.setResolution(this.lod, canvas.clientWidth, canvas.clientHeight);
-      e.tiles.update();
+      tiles.errorFalloff = tiles.errorTarget;
+      tiles.errorFalloffDensity = falloffDensity;
+      tiles.setResolution(this.lod, canvas.clientWidth, canvas.clientHeight);
+      tiles.update();
       if (now - e.checked > 400) {
         e.checked = now;
         const g = groundHeight(e, c.lng, c.lat);
