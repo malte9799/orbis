@@ -167,7 +167,20 @@
   background: var(--border);
 }
 
-/* on phones the map view has its own logo menu (hud) */
-body.mode-map:has(.globe-view:not([data-layout='desktop'])) .orbis-nav {
-  display: none;
+/* phones (same breakpoints as the HUD layouts): bigger touch target in the corner, the search icon sits left of it */
+@media (max-width: 719px), (max-height: 499px) {
+  .orbis-nav {
+    top: calc(10px + var(--safe-top));
+    right: calc(6px + var(--safe-right));
+  }
+
+  .orbis-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+  }
+
+  body:has(.globe-view.hud-searching) .orbis-nav {
+    visibility: hidden;
+  }
 }

@@ -11,18 +11,18 @@
 /* ---------- Karten bar ---------- */
 .hud-bar { position: absolute; left: var(--hud-l); top: 12px; z-index: 7; display: flex; gap: 2px; padding: 4px; border-radius: 14px; align-items: center; max-width: calc(100% - var(--hud-l) - 112px - var(--safe-right, 0px)); overflow-x: auto; scrollbar-width: none; }
 .hud-bar::-webkit-scrollbar { display: none; }
-.hud-bar button { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px 0 6px; border: 0; border-radius: 10px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; position: relative; white-space: nowrap; flex: none; }
-.hud-bar button:hover { background: var(--card); color: var(--text); }
+.hud-bar button, .hud-bar .kc { display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px 0 6px; border: 0; border-radius: 10px; background: transparent; font-size: 13.5px; font-weight: 500; color: var(--text-2); cursor: pointer; position: relative; white-space: nowrap; flex: none; }
+.hud-bar button:hover, .hud-bar .kc:hover { background: var(--card); color: var(--text); }
 .hud-bar .mi { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--mc) 30%, transparent); color: var(--mc); }
 .hud-bar .mi svg { width: 14px; height: 14px; }
-.hud-bar button.on { background: #fff; color: #0b1020; font-weight: 600; }
-.hud-bar button.on .mi { background: var(--mc); color: #fff; }
+.hud-bar button.on, .hud-bar .kc.on { background: #fff; color: #0b1020; font-weight: 600; }
+.hud-bar button.on .mi, .hud-bar .kc.on .mi { background: var(--mc); color: #fff; }
 .hud-bar .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; flex: none; }
-.hud-bar .all { padding: 0 12px; }
-.hud-bar .all svg { width: 15px; height: 15px; }
+.hud-bar .all { padding: 0; width: 34px; justify-content: center; }
+.hud-bar .all svg { width: 16px; height: 16px; }
 .hud-bar .all.open { background: var(--card-2); color: #fff; }
 .hud-bar kbd { font: 500 10px ui-monospace, 'SF Mono', Menlo, monospace; color: var(--muted); margin-left: 2px; }
-.hud-bar button.on kbd { color: #6b7590; }
+.hud-bar button.on kbd, .hud-bar .kc.on kbd { color: #6b7590; }
 
 /* arrow of the active Karte instead of the number: up = menu open, down = folded */
 .hud-bar .arr { display: grid; place-items: center; width: 16px; height: 16px; color: #6b7590; transition: transform .18s ease; }
@@ -275,29 +275,29 @@
 .hud .gc { border-radius: 13px; overflow: hidden; background: var(--card); border: 1px solid var(--border); cursor: pointer; position: relative; text-align: left; padding: 0; color: inherit; min-width: 0; }
 .hud .gc:hover { border-color: var(--border-2); }
 .hud .gc.cur { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
-.hud .gc .th { height: 84px; display: grid; place-items: center; }
-.hud .gc .thi svg { width: 34px; height: 34px; color: rgba(255,255,255,.75); }
-.hud .gc .gt { padding: 8px 10px 10px; display: grid; gap: 5px; }
-.hud .gc .gt b { font-size: 13.5px; display: flex; align-items: center; gap: 6px; min-width: 0; }
-.hud .gc .gt b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hud .gc .gt b i { width: 18px; height: 18px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex: none; }
-.hud .gc .gt b i svg { width: 11px; height: 11px; }
-.hud .gc .gt small { font-size: 11px; color: var(--muted); }
-.hud .gc .icons { display: flex; gap: 3px; overflow: hidden; }
-.hud .gc .icons span { width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; color: #fff; flex: none; }
-.hud .gc .icons span.main { box-shadow: 0 0 0 1px rgba(255,255,255,.8); }
-.hud .gc .icons span svg { width: 10px; height: 10px; }
-.hud .gc .icons .more { width: auto; padding: 0 4px; font: 600 9px ui-monospace, Menlo, monospace; background: var(--card-2); }
-.hud .gc .pin, .hud .gc .del { position: absolute; top: 6px; width: 26px; height: 26px; border-radius: 8px; background: rgba(0,0,0,.55); display: grid; place-items: center; color: rgba(255,255,255,.7); border: 0; cursor: pointer; padding: 0; }
-.hud .gc .pin { right: 6px; }
-.hud .gc .del { right: 36px; opacity: 0; }
+.hud .gc .th, .hud-bar .kc .th { height: 84px; display: grid; place-items: center; }
+.hud .gc .thi svg, .hud-bar .kc .thi svg { width: 34px; height: 34px; color: rgba(255,255,255,.75); }
+.hud .gc .gt, .hud-bar .kc .gt { padding: 8px 10px 10px; display: grid; gap: 5px; }
+.hud .gc .gt b, .hud-bar .kc .gt b { font-size: 13.5px; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hud .gc .gt b span, .hud-bar .kc .gt b span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .gc .gt b i, .hud-bar .kc .gt b i { width: 18px; height: 18px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex: none; }
+.hud .gc .gt b i svg, .hud-bar .kc .gt b i svg { width: 11px; height: 11px; }
+.hud .gc .gt small, .hud-bar .kc .gt small { font-size: 11px; color: var(--muted); }
+.hud .gc .icons, .hud-bar .kc .icons { display: flex; gap: 3px; overflow: hidden; }
+.hud .gc .icons span, .hud-bar .kc .icons span { width: 16px; height: 16px; border-radius: 5px; display: grid; place-items: center; color: #fff; flex: none; }
+.hud .gc .icons span.main, .hud-bar .kc .icons span.main { box-shadow: 0 0 0 1px rgba(255,255,255,.8); }
+.hud .gc .icons span svg, .hud-bar .kc .icons span svg { width: 10px; height: 10px; }
+.hud .gc .icons .more, .hud-bar .kc .icons .more { width: auto; padding: 0 4px; font: 600 9px ui-monospace, Menlo, monospace; background: var(--card-2); }
+.hud .gc .pin, .hud .gc .del, .hud-bar .kc .pin, .hud-bar .kc .del { position: absolute; top: 6px; width: 26px; height: 26px; border-radius: 8px; background: rgba(0,0,0,.55); display: grid; place-items: center; color: rgba(255,255,255,.7); border: 0; cursor: pointer; padding: 0; }
+.hud .gc .pin, .hud-bar .kc .pin { right: 6px; }
+.hud .gc .del, .hud-bar .kc .del { right: 36px; opacity: 0; }
 .hud .gc:hover .del, .hud .gc .del:focus-visible { opacity: 1; }
-.hud .gc .pin svg, .hud .gc .del svg { width: 14px; height: 14px; }
-.hud .gc .pin.on { color: #ffd166; }
-.hud .gc .pin.on svg path { fill: currentColor; }
-.hud .gc .std { position: absolute; left: 6px; top: 6px; font: 600 9.5px ui-monospace, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 5px; color: var(--text-2); }
-.hud .gc .chg { position: absolute; left: 6px; top: 6px; font: 600 9.5px ui-monospace, Menlo, monospace; background: rgba(255,181,71,.9); color: #241500; padding: 2px 6px; border-radius: 5px; }
-.hud .gc .std + .chg { top: 26px; }
+.hud .gc .pin svg, .hud .gc .del svg, .hud-bar .kc .pin svg, .hud-bar .kc .del svg { width: 14px; height: 14px; }
+.hud .gc .pin.on, .hud-bar .kc .pin.on { color: #ffd166; }
+.hud .gc .pin.on svg path, .hud-bar .kc .pin.on svg path { fill: currentColor; }
+.hud .gc .std, .hud-bar .kc .std { position: absolute; left: 6px; top: 6px; font: 600 9.5px ui-monospace, Menlo, monospace; letter-spacing: .06em; text-transform: uppercase; background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 5px; color: var(--text-2); }
+.hud .gc .chg, .hud-bar .kc .chg { position: absolute; left: 6px; top: 6px; font: 600 9.5px ui-monospace, Menlo, monospace; background: rgba(255,181,71,.9); color: #241500; padding: 2px 6px; border-radius: 5px; }
+.hud .gc .std + .chg, .hud-bar .kc .std + .chg { top: 26px; }
 .hud .gc.new { display: grid; place-items: center; align-content: center; gap: 6px; border-style: dashed; background: transparent; min-height: 150px; color: var(--text-2); font-size: 13px; text-align: center; }
 .hud .gc.new svg { width: 22px; height: 22px; }
 .hud .gc.new small { color: var(--muted); font-size: 11.5px; padding: 0 12px; }
@@ -362,8 +362,8 @@
 
 /* --- Karten pills (both phone layouts) --- */
 .hud:not([data-layout='desktop']) .hud-bar { background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0 28px 0 0; gap: 6px; scroll-snap-type: x proximity; scroll-padding-left: max(10px, var(--safe-left, 0px)); overflow-x: auto; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent); }
-.hud:not([data-layout='desktop']) .hud-bar button { height: 36px; padding: 0 12px 0 5px; border-radius: 12px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border); scroll-snap-align: start; }
-.hud:not([data-layout='desktop']) .hud-bar button.on { background: #fff; border-color: #fff; }
+.hud:not([data-layout='desktop']) .hud-bar button, .hud:not([data-layout='desktop']) .hud-bar .kc { height: 36px; padding: 0 12px 0 5px; border-radius: 12px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border); scroll-snap-align: start; }
+.hud:not([data-layout='desktop']) .hud-bar button.on, .hud:not([data-layout='desktop']) .hud-bar .kc.on { background: #fff; border-color: #fff; }
 .hud:not([data-layout='desktop']) .hud-bar .mi { width: 26px; height: 26px; border-radius: 8px; }
 .hud:not([data-layout='desktop']) .hud-bar kbd, .hud:not([data-layout='desktop']) .hud-bar .sep { display: none; }
 .hud:not([data-layout='desktop']) .hud-bar .all { padding: 0 12px; }
@@ -372,7 +372,8 @@
 .hud:not([data-layout='desktop']) .subs button { height: 34px; }
 
 /* --- search: a plain magnifier, opens over the whole pill row --- */
-.hud:not([data-layout='desktop']) .hud-tr { top: 10px; right: calc(6px + var(--safe-right, 0px)); }
+.hud:not([data-layout='desktop']) .hud-tr { top: 10px; right: calc(52px + var(--safe-right, 0px)); }
+.hud:not([data-layout='desktop']).searching .hud-tr { right: calc(6px + var(--safe-right, 0px)); }
 .hud:not([data-layout='desktop']) .hud-sx { width: 40px; height: 40px; background: none; border: 0; border-radius: 12px; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .hud:not([data-layout='desktop']) .hud-sxb { width: 40px; height: 40px; filter: drop-shadow(0 1px 3px rgba(0,0,0,.8)); }
 .hud:not([data-layout='desktop']) .hud-sxb svg { width: 22px; height: 22px; stroke-width: 2; }
@@ -389,7 +390,7 @@
 .hud[data-layout='portrait'].searching .hud-sx.open { flex: 1; width: auto; max-width: none; }
 .hud[data-layout='portrait'].searching .hud-sheet,
 .globe-view.hud-searching[data-layout='portrait'] .maplibregl-ctrl-bottom-right { visibility: hidden; }
-.hud[data-layout='portrait'] .hud-bar { left: 0; right: calc(46px + var(--safe-right, 0px)); top: 12px; max-width: none; padding-left: max(10px, var(--safe-left, 0px)); }
+.hud[data-layout='portrait'] .hud-bar { left: 0; right: calc(92px + var(--safe-right, 0px)); top: 12px; max-width: none; padding-left: max(10px, var(--safe-left, 0px)); }
 .hud[data-layout='portrait'] .hud-r { display: contents; }
 body.hud-cover .orbis-nav { z-index: 0; }
 
@@ -500,9 +501,10 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud-menu { position: absolute; left: var(--hud-l); top: calc(56px + var(--safe-top, 0px)); z-index: 12; display: grid; padding: 6px; min-width: 170px; }
 .hud-menu a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; color: var(--text); text-decoration: none; font-size: 14px; }
 .hud-menu a.on { background: var(--accent); color: #fff; }
-.hud[data-layout='landscape'] .hud-bar { left: calc(var(--hud-l) + 48px); right: calc(var(--hud-r) + 46px); top: calc(10px + var(--safe-top, 0px)); max-width: none; }
-.hud[data-layout='landscape'] .hud-tr { top: calc(10px + var(--safe-top, 0px)); right: var(--hud-r); }
-.hud[data-layout='landscape'] .hud-sx.open { width: calc(100vw - var(--hud-l) - 48px - var(--hud-r) - 84px); }
+.hud[data-layout='landscape'] .hud-bar { left: var(--hud-l); right: calc(var(--hud-r) + 92px); top: calc(10px + var(--safe-top, 0px)); max-width: none; }
+.hud[data-layout='landscape'] .hud-tr { top: calc(10px + var(--safe-top, 0px)); right: calc(var(--hud-r) + 46px); }
+.hud[data-layout='landscape'].searching .hud-tr { right: var(--hud-r); }
+.hud[data-layout='landscape'] .hud-sx.open { width: calc(100vw - var(--hud-l) - var(--hud-r) - 84px); }
 .hud[data-layout='landscape'] .sum { top: calc(58px + var(--safe-top, 0px)); }
 .hud[data-layout='landscape'] .wxm { left: var(--hud-l); top: calc(54px + var(--safe-top, 0px)); max-height: calc(100% - 62px - var(--safe-top, 0px)); }
 .hud[data-layout='landscape'].is-edit .wxm { display: none; }
@@ -535,7 +537,7 @@ body.hud-cover .orbis-nav { z-index: 0; }
   .hud .hud-ibtn { width: 44px; height: 44px; }
   .hud .hud-sx:not(.open) { width: 44px; height: 44px; }
   .hud .hud-sx.open { height: 44px; }
-  .hud[data-layout='desktop'] .hud-bar button { height: 44px; }
+  .hud[data-layout='desktop'] .hud-bar button, .hud[data-layout='desktop'] .hud-bar .kc { height: 44px; }
   .hud .lyr .ic { width: 44px; height: 44px; }
   .hud .lyr .grip { padding: 14px 6px; margin: -14px -6px; }
   .hud .chip, .hud .fl .chip { min-height: 44px; }
@@ -591,3 +593,28 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud-tsl input::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-left: -5px; border-radius: 50%; background: #ececec; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .hud-tsl input::-moz-range-track { width: 2px; border-radius: 2px; background: #fff; }
 .hud-tsl input::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #ececec; }
+
+/* ---------- the unfolded bar (desktop): the pinned pills become cards, all other Karten follow ---------- */
+.hud-bar .kc { cursor: pointer; }
+.hud-bar .kc-top { display: contents; }
+.hud-bar .kc-body { display: none; }
+.hud-bar.expanded { display: grid; gap: 12px; padding: 14px; box-sizing: border-box; width: min(600px, calc(100% - var(--hud-l) - 140px)); max-width: none; max-height: calc(100% - 76px); overflow-y: auto; align-items: start; border-radius: 16px; }
+.hud-bar.expanded > * { animation: bar-in .28s .1s ease both; }
+.hud-bar.expanded h4 { margin: 0; font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex: 1; }
+.hud-bar.expanded h4 small { font: 400 11.5px Inter, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
+.hud-bar.expanded .bg-head { display: flex; align-items: center; gap: 10px; }
+.hud-bar.expanded .kc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; animation: none; }
+.hud-bar.expanded .gc { color: var(--text); }
+.hud .hud-bar.expanded .kc { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; height: auto; padding: 0; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--card); color: var(--text); font-weight: 500; white-space: normal; animation: none; }
+.hud .hud-bar.expanded .kc:hover { border-color: var(--border-2); }
+.hud .hud-bar.expanded .kc.on { background: var(--card); border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.25); color: var(--text); }
+.hud .hud-bar.expanded .kc-top { display: flex; align-items: center; gap: 7px; padding: 8px 9px; min-width: 0; }
+.hud .hud-bar.expanded .kc .nm { font-size: 13px; font-weight: 600; max-width: none; flex: 1; min-width: 0; }
+.hud .hud-bar.expanded .kc .mi { width: 22px; height: 22px; }
+.hud .hud-bar.expanded .kc.on .mi { background: color-mix(in srgb, var(--mc) 30%, transparent); color: var(--mc); }
+.hud .hud-bar.expanded .kc kbd { display: none; }
+.hud .hud-bar.expanded .kc-body { display: block; position: relative; animation: bar-in .28s .12s ease both; }
+.hud .hud-bar.expanded .kc .th { height: 58px; }
+.hud .hud-bar.expanded .kc .gt { padding: 7px 9px 9px; display: grid; gap: 5px; }
+@keyframes bar-in { from { opacity: 0; transform: translateY(6px); } }
+.hud.gal-open .wxm { visibility: hidden; }
