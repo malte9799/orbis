@@ -151,6 +151,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [OpenRailwayMap](https://www.openrailwaymap.org) | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | 🟢 |
 | [OpenStreetMap Overpass](https://overpass-api.de) (+ [private.coffee](https://overpass.private.coffee)) | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | 🟢 🌐 |
 | Leihrad-Betreiber über [GBFS](https://gbfs.org) (Liste in `src/api/bikesystems.ts`, übernommen aus God's Eye View) | Leihräder: Stationen mit freien Rädern und Plätzen, live, 61 Systeme mit ~17.000 Stationen – Lyft (Citi Bike, Divvy, Capital Bikeshare, Bay Wheels), Bluebikes, BIKETOWN, BCycle (18 US-Städte), PBSC (u. a. Bike Share Toronto, Bike Itaú/Tembici in Brasilien, Santiago, Bogotá, Bicing, BiciMAD, spanische Städte), Urban Sharing (Oslo, Bergen, Trondheim), Entur (Stavanger, Skien), JCDecaux (Lillestrøm, Valencia, Sevilla), nextbike (AMBici), Social Bicycles (Buffalo) | 🟢 Betreiber-Feeds, Nutzung mit Nennung; Einzelheiten je Betreiber (z. B. AMBici CC0, JCDecaux Licence Ouverte, Lyft-Datenlizenz) |
+| [TomTom Traffic Flow](https://developer.tomtom.com/traffic-api/documentation/traffic-flow/raster-flow-tiles) (Vektorkacheln, Schlüssel unter `src/settings/keys/tomtom.ts`) | Ebene „Verkehr: Fahrzeuge & Lage“: Straßen grün/gelb/rot nach Verkehrslage, simulierte Fahrzeuge fahren entsprechend langsamer und dichter. Ohne Key fahren Fahrzeuge auf dem OpenFreeMap-Straßennetz mit Normaltempo | 🔑 BYOK (Free-Tarif), Nennung „Verkehrslage © TomTom“; Kacheln nur im Browser, nicht weiterverbreitet |
 | [Waymarked Trails](https://waymarkedtrails.org) ([Rad](https://cycling.waymarkedtrails.org), [Wandern](https://hiking.waymarkedtrails.org)) | Radnetz, Wandernetz | 🟢 |
 
 ## 8. Kameras & Radio
@@ -215,6 +216,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 |---|---|---|
 | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektorkarte (Dunkel/Hell), Ortsnamen auf Deutsch, Grenzen | 🟢 ODbL |
 | [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
+| [Esri World Imagery Clarity](https://clarity.maptiles.arcgis.com) | Satellit Clarity (schärfer/aktueller als Esri-Standard) | ⚠️ wie Esri World Imagery, Attribution „Powered by Esri“ |
+| [Mapbox Satellite](https://www.mapbox.com/maps/satellite) | Satellitenbild, nur mit eigenem Token (Einstellungen) | 🔑 kostenloses Kontingent, Mapbox-Bedingungen |
+| [MapTiler Satellite](https://www.maptiler.com/maps/) | Satellitenbild, nur mit eigenem Key (Einstellungen) | 🔑 Free-Plan nicht-kommerziell |
 | [EOX Sentinel-2 cloudless](https://s2maps.eu) | Wolkenloses Satellitenbild (Copernicus Sentinel-2) | 🟢 CC BY-NC-SA 4.0, 🚫 |
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Höhenmodell für die 3D-Geländeanpassung (USGS 3DEP, SRTM, GMTED, ETOPO1) – wird nicht als sichtbare Ebene angezeigt | 🟢 |

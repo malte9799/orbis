@@ -45,7 +45,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, KEYED_BASES, mapboxSat, maptilerSat, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { createEvents } from '../globe/events/engine';
@@ -122,8 +122,10 @@ const REFRESH_MS = 10 * 60 * 1000;
 
 export interface GlobeView {
   el: HTMLElement;
-  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean }): void;
+  activate(focus?: { lat?: number; lon?: number; zoom?: number; projection?: 'globe' | 'mercator'; fromSpace?: boolean; jump?: boolean }): void;
   deactivate(): void;
+  /** resolves once the map has drawn its current view (used to hand over from the forecast map) */
+  settled(): Promise<void>;
 }
 
 export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace: (lat: number, lon: number) => void): GlobeView {
@@ -400,6 +402,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // ----- settings: one global panel (main.ts), opened from the Orbis menu --------
   const openSettings = () => document.dispatchEvent(new CustomEvent('orbis:settings'));
   const onKeysSaved = () => {
+    // a changed Mapbox/MapTiler key means new tile URLs: drop the cached source, applyBase re-adds it
+    for (const id of ['base-mapbox', 'base-maptiler']) {
+      if (map?.getLayer(id)) map.removeLayer(id);
+      if (map?.getSource(id)) map.removeSource(id);
+    }
+    applyBase();
     ev.reset('firms');
     if (hud) applyKarte(hud.current());
     ev.apply();
@@ -423,7 +431,24 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function applyBase() {
     if (!map) return;
-    for (const b of BASES) vis(`base-${b.id}`, state.base === b.id);
+    const keyName = KEYED_BASES[state.base];
+    const keyVal = keyName ? store.getKeys()[keyName] : undefined;
+    // keyed base without a key (removed or never entered): show the plain satellite map instead
+    const base: BaseId = keyName && !keyVal ? 'satellite' : state.base;
+    if (keyName && keyVal && !map.getLayer(`base-${base}`)) {
+      map.addSource(`base-${base}`, {
+        type: 'raster',
+        tiles: [base === 'mapbox' ? mapboxSat(keyVal) : maptilerSat(keyVal)],
+        tileSize: 256,
+        maxzoom: base === 'mapbox' ? 19 : 20,
+        attribution:
+          base === 'mapbox'
+            ? '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.maxar.com/">Maxar</a>'
+            : '© <a href="https://www.maptiler.com/copyright/">MapTiler</a> © <a href="https://www.maptiler.com/copyright/">satellite imagery providers</a>',
+      });
+      map.addLayer({ id: `base-${base}`, type: 'raster', source: `base-${base}`, layout: { visibility: 'none' } }, 'base-sentinel');
+    }
+    for (const b of BASES) vis(`base-${b.id}`, base === b.id);
     const layers = map.getStyle().layers;
     for (const l of layers) {
       if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
@@ -1220,6 +1245,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     };
     map.on('pitch', syncTerrainPitch);
+    // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
+    const levelOut = () => {
+      if (!map) return;
+      const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
+      if (map.getPitch() > limit) map.setPitch(limit);
+    };
+    map.on('zoom', levelOut);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
@@ -1388,6 +1420,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     activate(focus) {
       hud?.importShared(new URLSearchParams(location.hash.split('?')[1] ?? '').get('k'));
       if (!map) {
+        if (focus?.jump && focus.lat != null && focus.lon != null) {
+          state.center = [focus.lon, focus.lat];
+          state.zoom = focus.zoom ?? 6;
+        }
         initMap();
       } else {
         map.resize();
@@ -1395,7 +1431,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         extras?.resume();
       }
       const hasPos = focus?.lat != null && focus?.lon != null;
-      if (hasPos && focus?.fromSpace && map && ready) {
+      if (hasPos && focus?.jump && map && ready) {
+        // seamless hand-over from the forecast map: same view, no flight
+        map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: focus!.zoom ?? 6 });
+      } else if (hasPos && focus?.fromSpace && map && ready) {
         // coming back from the solar system: start far out and dive in
         map.jumpTo({ center: [focus!.lon!, focus!.lat!], zoom: map.getMinZoom() });
         map.easeTo({ zoom: focus!.zoom ?? 2.2, duration: 1600 });
@@ -1422,6 +1461,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         const url = live[state.overlay];
         if (url) (map.getSource(state.overlay) as RasterTileSource).setTiles([typeof url === 'function' ? url() : url + t]);
       }, 5 * 60000);
+    },
+    settled() {
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        setTimeout(done, 4000);
+        if (!map) return done();
+        map.resize();
+        map.once('idle', done);
+        map.triggerRepaint();
+      });
     },
     deactivate() {
       clearInterval(refreshTimer);

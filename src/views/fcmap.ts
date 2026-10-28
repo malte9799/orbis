@@ -48,6 +48,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let modelMin = 0;
   let curSampler: ModelSampler | null = null;
   let modelError: string | null = null;
+  let fullscreening = false;
 
   host.innerHTML = `
     <div class="fcm-head">
@@ -56,7 +57,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${m.label}</button>`).join('')}
       </div>
     </div>
-    <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div></div>
+    <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div>
+      <button type="button" class="fcm-full" aria-label="Vollbild: große Karte öffnen" title="Große Karte öffnen"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></svg></button></div>
     <div class="fcm-legend"></div>
     <div class="fcm-time">
       <button type="button" class="btn icon-btn fcm-play" aria-label="Abspielen" title="Abspielen">
@@ -93,6 +95,61 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     render();
   });
   playBtn.addEventListener('click', () => (playing ? stop() : play()));
+  host.querySelector('.fcm-full')!.addEventListener('click', () => void goFullscreen());
+
+  /** Pulls the map up to the full view, switches to the big map underneath and fades this one out. */
+  async function goFullscreen() {
+    if (!map || fullscreening) return;
+    fullscreening = true;
+    stop();
+    const r = mapEl.getBoundingClientRect();
+    const c = map.getCenter();
+    const zoom = map.getZoom();
+    const topbar = document.querySelector<HTMLElement>('.topbar')?.getBoundingClientRect().height ?? 56;
+    // lift the map out of the card (keeping its space) and animate it to the globe view's rectangle
+    host.style.minHeight = `${host.offsetHeight}px`;
+    const holder = document.createElement('div');
+    holder.style.height = `${r.height}px`;
+    mapEl.before(holder);
+    const s = mapEl.style;
+    s.position = 'fixed';
+    s.zIndex = '60';
+    s.margin = '0';
+    s.left = `${r.left}px`;
+    s.top = `${r.top}px`;
+    s.width = `${r.width}px`;
+    s.height = `${r.height}px`;
+    document.body.appendChild(mapEl);
+    mapEl.getBoundingClientRect();
+    s.transition = 'left .5s cubic-bezier(.4,0,.2,1), top .5s cubic-bezier(.4,0,.2,1), width .5s cubic-bezier(.4,0,.2,1), height .5s cubic-bezier(.4,0,.2,1), border-radius .5s';
+    s.left = '0px';
+    s.top = `${topbar}px`;
+    s.width = '100vw';
+    s.height = `calc(100vh - ${topbar}px)`;
+    s.borderRadius = '0';
+    s.borderWidth = '0';
+    let raf = 0;
+    const follow = () => {
+      map?.resize();
+      raf = requestAnimationFrame(follow);
+    };
+    follow();
+    await new Promise((res) => setTimeout(res, 540));
+    cancelAnimationFrame(raf);
+    map.resize();
+    // switch to the big map (same view, no flight) and wait until it has drawn
+    let settled: Promise<void> = Promise.resolve();
+    window.dispatchEvent(new CustomEvent('orbis:fc-fullscreen', { detail: { lat: c.lat, lon: c.lng, zoom, done: (p: Promise<void>) => (settled = p) } }));
+    await settled;
+    s.transition = 'opacity .4s ease';
+    s.pointerEvents = 'none';
+    s.opacity = '0';
+    await new Promise((res) => setTimeout(res, 420));
+    holder.remove();
+    host.style.minHeight = '';
+    destroy();
+    mapEl.remove();
+  }
 
   function play() {
     if (mode === 'radar' ? radarFrames.length < 2 : !grid) return;
@@ -396,17 +453,16 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
           : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);
   }
 
-  return {
-    destroy() {
-      destroyed = true;
-      stop();
-      particles?.stop();
-      io.disconnect();
-      setActiveSampler(null, key);
-      map?.remove();
-      map = null;
-    },
-  };
+  function destroy() {
+    destroyed = true;
+    stop();
+    particles?.stop();
+    io.disconnect();
+    setActiveSampler(null, key);
+    map?.remove();
+    map = null;
+  }
+  return { destroy };
 }
 
 function formatWhen(ms: number) {

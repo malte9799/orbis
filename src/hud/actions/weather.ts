@@ -81,9 +81,6 @@ export default (c: HudCore): Record<string, ActFn> => {
       ui.basepick = false;
       afterEdit();
     },
-    morebases: () => {
-      ui.moreBases = true;
-    },
     tog: (_, v) => {
       const d = edit();
       if (v === 'labels') d.labels = !d.labels;

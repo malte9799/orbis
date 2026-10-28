@@ -21,6 +21,12 @@ const app = document.getElementById('app')!;
 const forecast = createForecastView((p: Place) => {
   location.hash = `#/karte?lat=${p.lat.toFixed(4)}&lon=${p.lon.toFixed(4)}`;
 });
+// Vollbild-Knopf der Vorhersage-Karte: nahtlos in die große Karte wechseln
+window.addEventListener('orbis:fc-fullscreen', ((e: CustomEvent<{ lat: number; lon: number; zoom: number; done: (p: Promise<void>) => void }>) => {
+  const { lat, lon, zoom, done } = e.detail;
+  location.hash = `#/karte?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&zoom=${zoom.toFixed(2)}&jump=1`;
+  done(globe.settled());
+}) as EventListener);
 const globe = createGlobeView(
   (p: Place) => {
     store.setLastPlace(p);
@@ -145,7 +151,9 @@ function route() {
     });
   } else if (next === 'globe') {
     const fromSpace = params.get('from') === 'space';
-    globe.activate(hasPos ? { lat, lon, zoom: fromSpace ? 2.2 : 6, fromSpace } : undefined);
+    const zoomP = parseFloat(params.get('zoom') ?? '');
+    const jump = params.get('jump') === '1';
+    globe.activate(hasPos ? { lat, lon, zoom: Number.isFinite(zoomP) ? zoomP : fromSpace ? 2.2 : 6, fromSpace, jump } : undefined);
   } else if (!forecastLoaded || active !== 'forecast') {
     forecastLoaded = true;
     forecast.show(store.getLastPlace());
