@@ -51,6 +51,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Blitzer & Rotlicht, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts mit Live-Tracking, Stream & Erinnerung |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
+| 🧭 **Route & Navigation** | Routenplanung für Auto, Rad und Fuß mit Alternativen und Zwischenstopps; Dienst wählbar (OSM/OSRM, Valhalla, Google Routes, Mapbox, TomTom, OpenRouteService, GraphHopper – mit automatischem Fallback). Navigation mit gefiltertem GPS, Kompass-/Kursrotation der Karte, Abbiegehinweisen, Sprachansage und automatischer Neuberechnung |
 | 🏗️ **Infrastruktur** | Dritte Standardkarte: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffvorkommen, Seekabel & Pipelines, Radio, Kameras |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |

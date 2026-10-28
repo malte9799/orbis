@@ -1,7 +1,7 @@
 // The API keys the user can enter in the settings panel. One file per key in ./keys; index.ts
 // collects them, so a new key never touches a list that other features edit as well.
 
-export type KeyGroupId = 'weather' | 'webcams' | 'transit' | 'snapshot';
+export type KeyGroupId = 'weather' | 'webcams' | 'transit' | 'routing' | 'snapshot';
 export interface KeyStep {
   t: string;
   u?: string;
@@ -34,5 +34,6 @@ export const KEY_GROUPS: { id: KeyGroupId; label: string }[] = [
   { id: 'weather', label: 'Wetter, Feuer & Radar' },
   { id: 'webcams', label: 'Webcams & Schiffe' },
   { id: 'transit', label: 'Verkehr & Nahverkehr' },
+  { id: 'routing', label: 'Routenplanung' },
   { id: 'snapshot', label: 'Schon mit Daten im Repo (Fallback-Snapshot)' },
 ];

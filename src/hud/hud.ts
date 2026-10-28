@@ -71,6 +71,8 @@ export interface HudHost {
   /** map control column (desktop): zoom by delta levels, fly to the own position, reset the bearing */
   zoomBy(delta: number): void;
   locate(): void;
+  /** open the route planner */
+  route(): void;
   resetNorth(): void;
   /** camera tilt in degrees (0 = top-down); animated for the 2D/3D button, immediate while the slider is dragged */
   setPitch(deg: number, animate: boolean): void;
@@ -186,6 +188,7 @@ export function createHud(host: HudHost): Hud {
       <div class="hud-cg">
         <button type="button" data-act="basepick" title="Grundkarte" aria-label="Grundkarte wählen" aria-expanded="false">${ico('earth')}</button>
         <button type="button" data-act="locate" title="Mein Standort" aria-label="Mein Standort">${ico('navarrow')}</button>
+        <button type="button" data-act="route" title="Route planen" aria-label="Route planen">${ico('route')}</button>
       </div>
       <div class="hud-bp hud-glass" hidden></div>
     </div>
