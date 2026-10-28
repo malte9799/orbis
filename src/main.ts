@@ -161,8 +161,25 @@ function route() {
   active = next;
 }
 
-window.addEventListener('hashchange', route);
+// remember the last page (forecast / map / space / planet / games) and reopen it on the next start
+const LAST_ROUTE_KEY = 'orbis.lastRoute';
+if (!location.hash || location.hash === '#' || location.hash === '#/') {
+  try {
+    const saved = localStorage.getItem(LAST_ROUTE_KEY);
+    if (saved && saved.startsWith('#/')) history.replaceState(null, '', saved);
+  } catch {}
+}
+function saveRoute() {
+  try {
+    localStorage.setItem(LAST_ROUTE_KEY, location.hash || '#/');
+  } catch {}
+}
+window.addEventListener('hashchange', () => {
+  route();
+  saveRoute();
+});
 route();
+saveRoute();
 
 // launch reminders (browser notifications for tracked rockets) run independently of the active view
 import('./launch/tracker')
