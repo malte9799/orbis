@@ -379,14 +379,17 @@ export class ModelSampler {
   constructor(
     readonly global: ModelGrid,
     readonly detail: ModelGrid | null,
-    /** time index into global.times */
+    /** time index into global.times; between two steps (e.g. 1.5) the neighbours are mixed */
     readonly t: number,
   ) {}
 
-  private detailT = -1;
+  private detailT = new Map<number, number>();
 
   get time(): number {
-    return this.global.times[this.t];
+    const times = this.global.times;
+    const i = Math.min(Math.floor(this.t), times.length - 1);
+    const j = Math.min(i + 1, times.length - 1);
+    return times[i] + (times[j] - times[i]) * (this.t - i);
   }
 
   /** Weight of the detail grid at this point (0 outside, 1 well inside). */
@@ -410,23 +413,49 @@ export class ModelSampler {
     return this.detail ? g + (this.detail.dy - g) * w : g;
   }
 
-  sample(v: ModelVar, lat: number, lon: number): number {
-    const gv = smooth(this.global, v, this.t, lat, lon);
-    const w = this.detailWeight(lat, lon);
+  /** value (in the interpolation space of its variable) at one time step of the global grid */
+  private at(v: ModelVar, lat: number, lon: number, t: number, w: number): number {
+    const gv = smooth(this.global, v, t, lat, lon);
     let r = gv;
     if (w > 0) {
       const d = this.detail!;
-      if (this.detailT < 0) {
+      let dt = this.detailT.get(t);
+      if (dt === undefined) {
         // match time step by timestamp (both grids share the model run, but be safe)
-        const target = this.time;
-        this.detailT = Math.max(0, d.times.findIndex((tt) => tt >= target));
+        const target = this.global.times[t];
+        dt = Math.max(0, d.times.findIndex((tt) => tt >= target));
+        this.detailT.set(t, dt);
       }
-      const dv = smooth(d, v, this.detailT, lat, lon);
+      const dv = smooth(d, v, dt, lat, lon);
       if (!Number.isNaN(dv)) r = Number.isNaN(gv) ? dv : dv * w + gv * (1 - w);
+    }
+    return r;
+  }
+
+  sample(v: ModelVar, lat: number, lon: number): number {
+    const w = this.detailWeight(lat, lon);
+    const i = Math.min(Math.floor(this.t), this.global.times.length - 1);
+    const fr = this.t - i;
+    let r = this.at(v, lat, lon, i, w);
+    if (fr > 1e-6 && i + 1 < this.global.times.length) {
+      const r2 = this.at(v, lat, lon, i + 1, w);
+      r = Number.isNaN(r) ? r2 : Number.isNaN(r2) ? r : r + (r2 - r) * fr;
     }
     const tf = TRANSFORMS[v];
     return tf && !Number.isNaN(r) ? tf[1](r) : r;
   }
+}
+
+/** Steps per model time step on the timeline: the 3-hourly data is shown in hourly steps (mixed in between). */
+export const SUBSTEPS = 3;
+
+/** Time index (in 1/SUBSTEPS steps) closest to a moment; may lie between two model steps. */
+export function nearestSubIndex(times: number[], at = Date.now()): number {
+  if (at <= times[0]) return 0;
+  for (let i = 0; i < times.length - 1; i++) {
+    if (at < times[i + 1]) return Math.round(((i + (at - times[i]) / (times[i + 1] - times[i])) * SUBSTEPS)) / SUBSTEPS;
+  }
+  return times.length - 1;
 }
 
 export function nearestTimeIndex(times: number[], at = Date.now()): number {
