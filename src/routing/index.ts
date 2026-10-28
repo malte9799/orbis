@@ -12,7 +12,6 @@ import { RoutePanel } from './panel';
 import { PROVIDERS } from './providers';
 import { defaultProvider, planRoute, usable } from './router';
 import { announce } from './speech';
-import { ARROW } from './text';
 import type { LngLat, Profile, Route } from './types';
 import { Voice } from './voice';
 import type { Fix, GpsStatus } from './gps';
@@ -383,15 +382,15 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     // the driven stretch is dimmed; the arrow sits on the line when the position is close to it
     layer.progress(nav.prep.route.geometry, p.snap.index, p.snap.point);
 
-    panel.guideSet('arrow', ARROW[s.maneuver]);
+    panel.guideArrow(s.maneuver);
     panel.guideSet('dist', p.arrived ? '' : distance(p.toNext));
     panel.guideSet('text', s.text);
     const after = p.after != null ? steps[p.after] : null;
-    panel.guideSet('then', after && nav.prep.stepAt[p.after!] - nav.prep.stepAt[p.next] < 400 ? `Danach: ${after.text}` : '');
+    panel.guideSet('then', after && nav.prep.stepAt[p.after!] - nav.prep.stepAt[p.next] < 400 ? `Danach  ${after.text}` : '');
     panel.guideSet('eta', clockTxt(Date.now() + p.remainingTime * 1000));
     panel.guideSet('time', duration(p.remainingTime));
     panel.guideSet('rest', distance(p.remaining));
-    panel.guideSet('speed', f.speed != null ? speedTxt(f.speed * 3.6) : '–');
+    panel.guideSet('speed', f.speed != null ? speedTxt(f.speed * 3.6).replace(' ', '\n') : '–');
     panel.guideStatus('');
 
     if (p.arrived) {

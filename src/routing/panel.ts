@@ -3,8 +3,8 @@ import { debounce, escapeHtml } from '../util';
 import { clockTxt } from '../units';
 import type { Place } from '../store';
 import { distance, duration } from './format';
-import { ARROW } from './text';
-import { PROFILES, type LngLat, type Profile, type Route, type RoutingProvider } from './types';
+import { maneuverSvg, profileSvg } from './icons';
+import { PROFILES, type LngLat, type Maneuver, type Profile, type Route, type RoutingProvider } from './types';
 
 // The DOM of the route planner and of the guidance. Pure view: all decisions are made in ./index.ts.
 
@@ -34,8 +34,9 @@ export interface PanelHooks {
   /** share of the route the panel may cover etc. – none */
 }
 
-const ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v16M8 4 4 8M8 4l4 4M16 20V4M16 20l-4-4M16 20l4-4"/></svg>';
+const ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14M8 5 4.5 8.5M8 5l3.5 3.5M16 19V5M16 19l-3.5-3.5M16 19l3.5-3.5"/></svg>';
 const ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+const ICON_PIN_END = '<svg viewBox="0 0 24 34" aria-hidden="true"><path d="M12 1C6 1 1.5 5.6 1.5 11.5 1.5 19.5 12 33 12 33s10.5-13.5 10.5-21.5C22.5 5.6 18 1 12 1z" fill="#ea4335"/><circle cx="12" cy="11.5" r="4" fill="#fff"/></svg>';
 const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
 export class RoutePanel {
@@ -58,16 +59,22 @@ export class RoutePanel {
     this.el.hidden = true;
     this.el.innerHTML = `
       <section class="rt-plan" aria-label="Routenplanung">
-        <header><b>Route planen</b><button type="button" class="rt-x" data-a="close" aria-label="Schließen">${ICON_X}</button></header>
-        <div class="rt-stops"></div>
-        <div class="rt-row">
-          <button type="button" class="rt-link" data-a="addvia">+ Zwischenstopp</button>
-          <button type="button" class="rt-link" data-a="swap">${ICON_SWAP} Tauschen</button>
+        <div class="rt-grab" aria-hidden="true"></div>
+        <header class="rt-head">
+          <div class="rt-prof" role="radiogroup" aria-label="Fortbewegung">${PROFILES.map((p) => `<button type="button" role="radio" data-p="${p.id}" aria-checked="false" title="${p.label}" aria-label="${p.label}">${profileSvg(p.id)}</button>`).join('')}</div>
+          <button type="button" class="rt-x" data-a="close" aria-label="Schließen">${ICON_X}</button>
+        </header>
+        <div class="rt-body">
+          <div class="rt-stops"></div>
+          <button type="button" class="rt-swap" data-a="swap" title="Start und Ziel tauschen" aria-label="Start und Ziel tauschen">${ICON_SWAP}</button>
         </div>
-        <div class="rt-prof" role="radiogroup" aria-label="Fortbewegung">${PROFILES.map((p) => `<button type="button" role="radio" data-p="${p.id}" aria-checked="false">${p.icon}<span>${p.label}</span></button>`).join('')}</div>
-        <label class="rt-prov">Routing-Dienst <select data-a="provider"></select></label>
-        <div class="rt-note"></div>
+        <button type="button" class="rt-link" data-a="addvia">+ Zwischenstopp hinzufügen</button>
         <div class="rt-result" aria-live="polite"></div>
+        <details class="rt-opt">
+          <summary>Routing-Dienst</summary>
+          <select data-a="provider" aria-label="Routing-Dienst"></select>
+          <div class="rt-note"></div>
+        </details>
       </section>
       <section class="rt-guide" hidden aria-label="Navigation"></section>`;
     this.plan = this.el.querySelector('.rt-plan')!;
@@ -113,7 +120,7 @@ export class RoutePanel {
       .map((s, i) => {
         const role = i === 0 ? 'Start' : i === n - 1 ? 'Ziel' : 'Stopp';
         return `<div class="rt-stop" data-i="${i}">
-          <span class="rt-dot ${i === 0 ? 'start' : i === n - 1 ? 'end' : 'via'}" aria-hidden="true"></span>
+          <span class="rt-dot ${i === 0 ? 'start' : i === n - 1 ? 'end' : 'via'}" aria-hidden="true">${i === n - 1 ? ICON_PIN_END : ''}</span>
           <div class="rt-field">
             <input type="text" value="${escapeHtml(s.label)}" placeholder="${role} suchen …" aria-label="${role}" autocomplete="off" spellcheck="false" data-i="${i}"/>
             <ul class="rt-sug" hidden></ul>
@@ -225,18 +232,20 @@ export class RoutePanel {
     this.routes = routes;
     this.active = active;
     const r = routes[active];
-    const eta = new Date(Date.now() + r.duration * 1000);
+    const eta = (x: Route) => escapeHtml(clockTxt(new Date(Date.now() + x.duration * 1000)));
     this.result.innerHTML = `
       ${fallbackNote ? `<div class="rt-msg">${escapeHtml(fallbackNote)}</div>` : ''}
-      <div class="rt-alts">${routes
+      <div class="rt-alts" role="radiogroup" aria-label="Routen">${routes
         .map(
-          (a, i) => `<button type="button" class="rt-alt ${i === active ? 'on' : ''}" data-r="${i}">
-            <b>${duration(a.duration)}</b><span>${distance(a.distance)}</span>${a.summary ? `<small>${escapeHtml(a.summary)}</small>` : ''}</button>`,
+          (a, i) => `<button type="button" class="rt-alt ${i === active ? 'on' : ''}" role="radio" aria-checked="${i === active}" data-r="${i}">
+            <span class="rt-time">${duration(a.duration)}</span>
+            <span class="rt-meta">${distance(a.distance)} · Ankunft ${eta(a)}</span>
+            <span class="rt-via">${i === 0 ? 'Schnellste Route' : 'Alternative'}${a.summary ? ` · über ${escapeHtml(a.summary)}` : ''}</span></button>`,
         )
         .join('')}</div>
-      <div class="rt-sum">Ankunft ca. <b>${escapeHtml(clockTxt(eta))}</b> · ${escapeHtml(provider.label)}</div>
-      <div class="rt-row"><button type="button" class="rt-go" data-a="start">Navigation starten</button><button type="button" class="rt-link" data-a="steps">Wegbeschreibung</button></div>
-      <ol class="rt-steps" hidden>${r.steps.map((s) => `<li><span class="rt-arr">${ARROW[s.maneuver]}</span><span class="rt-txt">${escapeHtml(s.text)}</span><small>${s.distance ? distance(s.distance) : ''}</small></li>`).join('')}</ol>`;
+      <div class="rt-row"><button type="button" class="rt-go" data-a="start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>Start</button><button type="button" class="rt-pill" data-a="steps">Schritte</button></div>
+      <div class="rt-src">${escapeHtml(provider.label)}</div>
+      <ol class="rt-steps" hidden>${r.steps.map((s) => `<li><span class="rt-arr">${maneuverSvg(s.maneuver, 26)}</span><span class="rt-txt">${escapeHtml(s.text)}</span><small>${s.distance ? distance(s.distance) : ''}</small></li>`).join('')}</ol>`;
   }
 
   clearResult() {
@@ -256,19 +265,30 @@ export class RoutePanel {
     this.el.classList.toggle('guiding', mode === 'guide');
     if (mode === 'guide') {
       this.guide.innerHTML = `
-        <div class="rt-banner" aria-live="polite">
-          <span class="rt-big" data-g="arrow">↑</span>
-          <div class="rt-bt"><b data-g="dist"></b><span data-g="text"></span><small data-g="then"></small></div>
+        <div class="rt-top">
+          <div class="rt-banner" aria-live="polite">
+            <span class="rt-big" data-g="arrow"></span>
+            <div class="rt-bt"><b data-g="dist"></b><span data-g="text"></span></div>
+          </div>
+          <div class="rt-then" data-g="then"></div>
         </div>
-        <div class="rt-bar">
-          <div class="rt-stat"><b data-g="eta">–</b><small>Ankunft</small></div>
-          <div class="rt-stat"><b data-g="time">–</b><small>Restzeit</small></div>
-          <div class="rt-stat"><b data-g="rest">–</b><small>Rest</small></div>
-          <div class="rt-stat"><b data-g="speed">–</b><small>Tempo</small></div>
-          <button type="button" class="rt-ib" data-a="voice" title="Sprachansagen" aria-label="Sprachansagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
-          <button type="button" class="rt-ib rt-stopbtn" data-a="stopnav">Beenden</button>
+        <div class="rt-fabs">
+          <div class="rt-speed" aria-label="Tempo"><b data-g="speed">–</b></div>
+          <button type="button" class="rt-recentre" data-a="recentre" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>Zentrieren</button>
+          <button type="button" class="rt-circ rt-mute" data-a="voice" title="Sprachansagen" aria-label="Sprachansagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
         </div>
-        <button type="button" class="rt-recentre" data-a="recentre" hidden>Zentrieren</button>`;
+        <div class="rt-sheet">
+          <button type="button" class="rt-circ rt-end" data-a="stopnav" title="Navigation beenden" aria-label="Navigation beenden">${ICON_X}</button>
+          <div class="rt-eta"><b data-g="time">–</b><span><span data-g="rest">–</span> · <span data-g="eta">–</span></span></div>
+        </div>`;
+    }
+  }
+
+  guideArrow(m: Maneuver) {
+    const e = this.guide.querySelector<HTMLElement>('[data-g=arrow]');
+    if (e && e.dataset.m !== m) {
+      e.dataset.m = m;
+      e.innerHTML = maneuverSvg(m, 56);
     }
   }
 

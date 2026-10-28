@@ -11,8 +11,9 @@ const SRC = 'gps-acc';
 
 const ARROW = `
 <div class="gps-puck">
-  <svg class="gps-cone" viewBox="-40 -40 80 80" aria-hidden="true"><defs><radialGradient id="gpsCone" cx="0" cy="0" r="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4f8cff" stop-opacity=".55"/><stop offset="1" stop-color="#4f8cff" stop-opacity="0"/></radialGradient></defs><path d="M0 0 L-19 -37 A42 42 0 0 1 19 -37 Z" fill="url(#gpsCone)"/></svg>
-  <svg class="gps-dot" viewBox="-14 -14 28 28" aria-hidden="true"><circle r="12.5" fill="#fff"/><circle r="9" fill="#2f6bff"/><path class="gps-arrow" d="M0 -6.5 L5 5 L0 2.4 L-5 5 Z" fill="#fff"/></svg>
+  <svg class="gps-cone" viewBox="-40 -40 80 80" aria-hidden="true"><defs><radialGradient id="gpsCone" cx="0" cy="0" r="40" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#4285f4" stop-opacity=".6"/><stop offset="1" stop-color="#4285f4" stop-opacity="0"/></radialGradient></defs><path d="M0 0 L-19 -37 A42 42 0 0 1 19 -37 Z" fill="url(#gpsCone)"/></svg>
+  <svg class="gps-dot" viewBox="-14 -14 28 28" aria-hidden="true"><circle r="12" fill="#fff"/><circle r="8.5" fill="#4285f4"/></svg>
+  <svg class="gps-nav" viewBox="-20 -20 40 40" aria-hidden="true"><path d="M0 -16 L12.5 14 L0 7.5 L-12.5 14 Z" fill="#4285f4" stroke="#fff" stroke-width="3.2" stroke-linejoin="round"/></svg>
 </div>`;
 
 export class Puck {
@@ -44,7 +45,7 @@ export class Puck {
   private ensureLayers() {
     if (this.map.getSource(SRC)) return;
     this.map.addSource(SRC, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    this.map.addLayer({ id: SRC, type: 'fill', source: SRC, paint: { 'fill-color': '#4f8cff', 'fill-opacity': 0.14, 'fill-outline-color': 'rgba(79,140,255,.5)' } });
+    this.map.addLayer({ id: SRC, type: 'fill', source: SRC, paint: { 'fill-color': '#4285f4', 'fill-opacity': 0.14, 'fill-outline-color': 'rgba(66,133,244,.45)' } });
   }
 
   show() {
@@ -89,6 +90,11 @@ export class Puck {
     this.hasHeading = true;
     this.heading = deg;
     this.el.classList.add('has-heading');
+  }
+
+  /** navigation look: a chevron instead of the dot (like the map apps while guiding) */
+  setNav(on: boolean) {
+    this.el.classList.toggle('nav', on);
   }
 
   /** is the arrow on the map */

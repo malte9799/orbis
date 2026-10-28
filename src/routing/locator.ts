@@ -71,6 +71,7 @@ export class Locator {
   /** navigation camera (tilted, zoom by speed, arrow low on the screen); null = plain follow */
   setNavCamera(c: NavCamera | null) {
     this.cam = c;
+    this.puck.setNav(!!c);
     this.userZoom = 0;
     if (c && this.puck.position()) {
       const speed = this.gps.fix?.speed ?? 0;
