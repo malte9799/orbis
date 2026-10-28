@@ -2,10 +2,10 @@ import type { StyleSpecification } from 'maplibre-gl';
 import { regionsGeoJSON } from './regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from './vector';
 
-export type BaseId = 'satellite' | 'clarity' | 'mapbox' | 'maptiler' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light';
+export type BaseId = 'satellite' | 'clarity' | 'mapbox' | 'maptiler' | 'sentinel' | 'topo' | 'nasa' | 'blue' | 'night' | 'dark' | 'light' | 'pmdark' | 'pmlight';
 
 /** Base maps that need an API key (settings → keys): id → key name. */
-export const KEYED_BASES: Partial<Record<BaseId, 'mapbox' | 'maptiler'>> = { mapbox: 'mapbox', maptiler: 'maptiler' };
+export const KEYED_BASES: Partial<Record<BaseId, 'mapbox' | 'maptiler' | 'protomaps'>> = { mapbox: 'mapbox', maptiler: 'maptiler', pmdark: 'protomaps', pmlight: 'protomaps' };
 
 export const BASES: { id: BaseId; label: string }[] = [
   { id: 'satellite', label: 'Satellit' },
@@ -19,7 +19,12 @@ export const BASES: { id: BaseId; label: string }[] = [
   { id: 'night', label: 'Nachtlichter' },
   { id: 'dark', label: 'Dunkel' },
   { id: 'light', label: 'Hell' },
+  { id: 'pmdark', label: 'Protomaps Dunkel' },
+  { id: 'pmlight', label: 'Protomaps Hell' },
 ];
+
+/** the base maps drawn with light colours (dark labels, light 3D buildings) */
+export const isLightBase = (b: BaseId) => b === 'light' || b === 'pmlight';
 
 
 /** Sentinel-2 cloudless mosaic (EOX, CC BY-NC-SA 4.0 – non-commercial use). */
@@ -30,7 +35,7 @@ export const mapboxSat = (key: string) => `https://api.mapbox.com/v4/mapbox.sate
 export const maptilerSat = (key: string) => `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${encodeURIComponent(key)}`;
 
 /** Base maps usable right now (keyed ones only with a stored key). */
-export const availableBases = (keys: { mapbox?: string; maptiler?: string }) =>
+export const availableBases = (keys: { mapbox?: string; maptiler?: string; protomaps?: string }) =>
   BASES.filter((b) => { const k = KEYED_BASES[b.id]; return !k || !!keys[k]; });
 
 export const OPENTOPO = 'https://tile.opentopomap.org/{z}/{x}/{y}.png';

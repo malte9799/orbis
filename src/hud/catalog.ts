@@ -77,11 +77,11 @@ export const catalogOf = (id: string) => CATALOG.find((c) => c.id === id);
 /** base maps grouped for the picker (HUD stack and quick picker) */
 export const BASE_GROUPS: { label: string; ids: BaseId[] }[] = [
   { label: 'Satellit', ids: ['satellite', 'clarity', 'mapbox', 'maptiler', 'sentinel', 'nasa'] },
-  { label: 'Karte', ids: ['dark', 'light', 'topo'] },
+  { label: 'Karte', ids: ['dark', 'light', 'pmdark', 'pmlight', 'topo'] },
   { label: 'Weitere', ids: ['blue', 'night'] },
 ];
 export const BASE_LABEL: Record<BaseId, string> = {
-  satellite: 'Satellit', clarity: 'Satellit Clarity', mapbox: 'Mapbox Satellit', maptiler: 'MapTiler Satellit', sentinel: 'Sentinel-2', topo: 'Gelände', nasa: 'NASA Tagesbild', blue: 'Blue Marble', night: 'Nachtlichter', dark: 'Dunkel', light: 'Hell',
+  satellite: 'Satellit', clarity: 'Satellit Clarity', mapbox: 'Mapbox Satellit', maptiler: 'MapTiler Satellit', sentinel: 'Sentinel-2', topo: 'Gelände', nasa: 'NASA Tagesbild', blue: 'Blue Marble', night: 'Nachtlichter', dark: 'Dunkel', light: 'Hell', pmdark: 'Protomaps Dunkel', pmlight: 'Protomaps Hell',
 };
 export const BASE_GRADIENT: Record<BaseId, string> = {
   satellite: 'linear-gradient(135deg,#1d3b2a,#3d5a3a 40%,#0d2340 41%,#163a66)',
@@ -95,6 +95,8 @@ export const BASE_GRADIENT: Record<BaseId, string> = {
   night: 'linear-gradient(135deg,#05060c,#1b1405 40%,#04050a 41%,#0b0c14)',
   dark: 'linear-gradient(135deg,#141a2a,#1d2438 45%,#0a0f1c 46%)',
   light: 'linear-gradient(135deg,#e7e3da,#f1eee7 45%,#bcd3e6 46%)',
+  pmdark: 'linear-gradient(135deg,#1f1f1f,#2a2a2a 45%,#31353f 46%)',
+  pmlight: 'linear-gradient(135deg,#e2dfda,#efece7 45%,#80deea 46%)',
 };
 
 function miniMap(land: string, water: string, road: string, border: string) {
@@ -156,6 +158,8 @@ export function baseThumb(id: BaseId): string {
   switch (id) {
     case 'dark': return miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a');
     case 'light': return miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5');
+    case 'pmdark': return miniMap('#1f1f1f', '#31353f', '#474747', '#6b6b6b');
+    case 'pmlight': return miniMap('#e2dfda', '#80deea', '#ffffff', '#b9a9d0');
     default: return '';
   }
 }

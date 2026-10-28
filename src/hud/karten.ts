@@ -88,7 +88,7 @@ export const DEFAULT_PINNED = STANDARD.map((k) => k.id);
 export const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o)) as T;
 
 /** whether 3D-Gebäude is on without an explicit choice: standard on Dunkel and Hell */
-export const defaultBuildings3d = (base: BaseId): boolean => base === 'dark' || base === 'light';
+export const defaultBuildings3d = (base: BaseId): boolean => base === 'dark' || base === 'light' || base === 'pmdark' || base === 'pmlight';
 
 /** whether 3D-Gelände is on without an explicit choice: standard off – it only engages when the map is tilted */
 export const defaultTerrain3d = (): boolean => false;

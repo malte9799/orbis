@@ -215,6 +215,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
 | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektorkarte (Dunkel/Hell), Ortsnamen auf Deutsch, Grenzen | 🟢 ODbL |
+| [Protomaps](https://protomaps.com) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektor-Grundkarten „Protomaps Dunkel/Hell“ (Stile aus `@protomaps/basemaps`, Sprites/Schriften von protomaps.github.io), nur mit eigenem Key (Einstellungen) | 🔑 kostenlos für nicht-kommerzielle Nutzung, ODbL; Attribution „Protomaps © OpenStreetMap“ |
 | [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
 | [Esri World Imagery Clarity](https://clarity.maptiles.arcgis.com) | Satellit Clarity (schärfer/aktueller als Esri-Standard) | ⚠️ wie Esri World Imagery, Attribution „Powered by Esri“ |
 | [Mapbox Satellite](https://www.mapbox.com/maps/satellite) | Satellitenbild, nur mit eigenem Token (Einstellungen) | 🔑 kostenloses Kontingent, Mapbox-Bedingungen |

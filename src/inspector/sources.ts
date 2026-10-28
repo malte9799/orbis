@@ -10,6 +10,7 @@ const PROVIDERS: [RegExp, string][] = [
   [/bigdatacloud/, 'BigDataCloud'],
   [/rainviewer\.com$/, 'RainViewer'],
   [/openfreemap\.org$/, 'OpenFreeMap'],
+  [/protomaps\.(com|github\.io)$/, 'Protomaps'],
   [/nasa\.gov$/, 'NASA'],
   [/noaa\.gov$/, 'NOAA'],
 ];

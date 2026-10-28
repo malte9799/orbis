@@ -35,6 +35,7 @@ import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
 import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
 import { labelPaint } from '../globe/vector';
+import { PM_ATTR, PM_SOURCE, PM_SPRITE_ID, PM_SPRITE_URL, PM_TILES, pmPrefix, protomapsLayers, type PmFlavor } from '../globe/protomaps';
 import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
@@ -47,7 +48,7 @@ import {
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
-import { BASES, KEYED_BASES, mapboxSat, maptilerSat, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, type BaseId } from '../globe/style';
+import { BASES, KEYED_BASES, mapboxSat, maptilerSat, BLACK_MARBLE, buildStyle, DWD_RADAR_WMS, eumetsatIr, eumetsatStorm, HD_SAT, HD_SAT_BACKUP, gibsDate, gibsFires, gibsTrueColor, IMERG_WMS, isLightBase, type BaseId } from '../globe/style';
 import { tileRecorder } from '../inspector/tiles';
 import { createHud, type Hud, type LayerInfo, type LegendInfo } from '../hud/hud';
 import { createEvents } from '../globe/events/engine';
@@ -433,6 +434,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (map?.getLayer(id)) map.removeLayer(id);
       if (map?.getSource(id)) map.removeSource(id);
     }
+    removeProtomaps();
     applyBase();
     ev.reset('firms');
     if (hud) applyKarte(hud.current());
@@ -455,13 +457,37 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     reorder();
   };
 
+  const PM_FLAVORS: PmFlavor[] = ['dark', 'light'];
+  let pmKey = '';
+
+  function removeProtomaps() {
+    if (!map) return;
+    for (const l of map.getStyle().layers) if (PM_FLAVORS.some((f) => l.id.startsWith(pmPrefix(f)))) map.removeLayer(l.id);
+    if (map.getSource(PM_SOURCE)) map.removeSource(PM_SOURCE);
+    pmKey = '';
+  }
+
+  /** Protomaps vector source and layers (flat base map below the weather, labels below our own label layers). */
+  function ensureProtomaps(key: string) {
+    if (!map || pmKey === key) return;
+    removeProtomaps();
+    map.addSource(PM_SOURCE, { type: 'vector', tiles: [PM_TILES(key)], maxzoom: 15, attribution: PM_ATTR });
+    for (const f of PM_FLAVORS) {
+      if (!map.getSprite().some((s) => s.id === PM_SPRITE_ID(f))) map.addSprite(PM_SPRITE_ID(f), PM_SPRITE_URL(f));
+      for (const l of protomapsLayers(f)) map.addLayer(l, l.type === 'symbol' ? 'lbl-border-country' : 'hd');
+    }
+    pmKey = key;
+  }
+
   function applyBase() {
     if (!map) return;
     const keyName = KEYED_BASES[state.base];
     const keyVal = keyName ? store.getKeys()[keyName] : undefined;
     // keyed base without a key (removed or never entered): show the plain satellite map instead
     const base: BaseId = keyName && !keyVal ? 'satellite' : state.base;
-    if (keyName && keyVal && !map.getLayer(`base-${base}`)) {
+    const pm = base === 'pmdark' || base === 'pmlight';
+    if (pm && keyVal) ensureProtomaps(keyVal);
+    if (keyName && keyVal && !pm && !map.getLayer(`base-${base}`)) {
       map.addSource(`base-${base}`, {
         type: 'raster',
         tiles: [base === 'mapbox' ? mapboxSat(keyVal) : maptilerSat(keyVal)],
@@ -477,13 +503,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     for (const b of BASES) vis(`base-${b.id}`, base === b.id);
     const layers = map.getStyle().layers;
     for (const l of layers) {
-      if (l.id.startsWith('vbase-dark-')) vis(l.id, state.base === 'dark');
-      else if (l.id.startsWith('vbase-light-')) vis(l.id, state.base === 'light');
-      else if (l.id.startsWith('lbl-')) vis(l.id, state.labels);
+      if (l.id.startsWith('vbase-dark-')) vis(l.id, base === 'dark');
+      else if (l.id.startsWith('vbase-light-')) vis(l.id, base === 'light');
+      else if (l.id.startsWith('pm-')) {
+        // Protomaps brings its own labels: they follow the Beschriftung switch, ours stay off
+        const flavor = PM_FLAVORS.find((f) => l.id.startsWith(pmPrefix(f)));
+        vis(l.id, base === `pm${flavor}` && (l.type !== 'symbol' || state.labels));
+      } else if (l.id.startsWith('lbl-')) vis(l.id, state.labels && !pm);
     }
     applyBuildings();
     // dark text on the light map, white text everywhere else
-    const c = labelPaint(state.base === 'light' ? 'onLight' : 'onDark');
+    const c = labelPaint(isLightBase(state.base) ? 'onLight' : 'onDark');
     for (const l of layers) {
       if (!l.id.startsWith('lbl-')) continue;
       if (l.type === 'symbol' && l.id !== 'lbl-water') {
@@ -507,7 +537,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function applyBuildings() {
     if (!map?.getLayer('buildings-3d')) return;
     vis('buildings-3d', state.buildings3d);
-    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
+    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', isLightBase(state.base) ? '#ddd6cb' : '#1c2538');
   }
 
   /** 3D-Gelände: only lifts the real elevation model when the camera is tilted – top-down it stays flat. */
