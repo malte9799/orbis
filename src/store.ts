@@ -59,6 +59,14 @@ export interface Place {
   countryCode?: string;
 }
 
+export interface SavedStop {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  area?: string;
+}
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -90,6 +98,18 @@ export const store = {
     if (idx >= 0) favs.splice(idx, 1);
     else favs.push(p);
     write('wg.favorites', favs);
+    return idx < 0;
+  },
+
+  /** saved public transport stops (Fahrplan) */
+  getStations: (): SavedStop[] => read('wg.stations', []),
+  isStation: (id: string) => store.getStations().some((s) => s.id === id),
+  toggleStation(s: SavedStop): boolean {
+    const all = store.getStations();
+    const idx = all.findIndex((x) => x.id === s.id);
+    if (idx >= 0) all.splice(idx, 1);
+    else all.push(s);
+    write('wg.stations', all);
     return idx < 0;
   },
 
