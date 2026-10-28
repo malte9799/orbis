@@ -17,7 +17,7 @@ interface OrsFeature {
 
 export default defineProvider({
   id: 'ors',
-  order: 50,
+  order: 60,
   label: 'OpenRouteService',
   note: 'Kostenloser Schlüssel (2 000 Routen/Tag). Sehr gute Rad- und Fußprofile.',
   key: 'ors',

@@ -6,7 +6,7 @@ const PROFILE = { car: 'driving-traffic', bike: 'cycling', foot: 'walking' } as 
 
 export default defineProvider({
   id: 'mapbox',
-  order: 30,
+  order: 40,
   label: 'Mapbox Directions',
   note: 'Mit Verkehrslage (Auto). Nutzt den Mapbox-Schlüssel aus den Einstellungen.',
   key: 'mapbox',

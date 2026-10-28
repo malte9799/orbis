@@ -46,7 +46,7 @@ interface GhPath {
 
 export default defineProvider({
   id: 'graphhopper',
-  order: 60,
+  order: 70,
   label: 'GraphHopper',
   note: 'Kostenloser Schlüssel (500 Routen/Tag). Deutsche Ansagen.',
   key: 'graphhopper',

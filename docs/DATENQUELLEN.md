@@ -223,7 +223,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Höhenmodell für die 3D-Geländeanpassung (USGS 3DEP, SRTM, GMTED, ETOPO1) – wird nicht als sichtbare Ebene angezeigt | 🟢 |
 | [MapLibre GL JS](https://maplibre.org) | Kartendarstellung (2D & Globus) | 🟢 BSD-3 |
-| [OSRM / Valhalla (FOSSGIS)](https://routing.openstreetmap.de) | Routenplanung & Navigation (Auto, Rad, Fuß), Standard ohne Schlüssel | 🟢 OSM-Daten (ODbL), faire Nutzung – kein Dauerbetrieb im Produktivdienst |
+| [Valhalla / OSRM (FOSSGIS)](https://routing.openstreetmap.de) | Routenplanung & Navigation (Auto, Rad, Fuß), Standard ohne Schlüssel: Valhalla, OSRM zeigt vorab die schnelle Route und ist Fallback | 🟢 OSM-Daten (ODbL), faire Nutzung – kein Dauerbetrieb im Produktivdienst |
 | [Google Routes](https://developers.google.com/maps/documentation/routes) | Routenplanung mit Live-Verkehr, nur mit eigenem Key | 🔑 Google-Bedingungen, Abrechnung nötig (Gratis-Kontingent) |
 | [Mapbox Directions](https://docs.mapbox.com/api/navigation/directions/) · [TomTom Routing](https://developer.tomtom.com/routing-api/documentation/routing/calculate-route) | Routenplanung mit Verkehrslage, mit dem vorhandenen Mapbox-/TomTom-Key | 🔑 kostenloses Kontingent |
 | [OpenRouteService](https://openrouteservice.org) · [GraphHopper](https://www.graphhopper.com) | Routenplanung (Rad/Fuß/Auto), nur mit eigenem Key | 🔑 kostenloses Kontingent |

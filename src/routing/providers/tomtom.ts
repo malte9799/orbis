@@ -42,7 +42,7 @@ const man = (m: string): Maneuver => {
 
 export default defineProvider({
   id: 'tomtom',
-  order: 40,
+  order: 50,
   label: 'TomTom Routing',
   note: 'Mit Live-Verkehr (Auto). Nutzt den TomTom-Schlüssel aus den Einstellungen.',
   key: 'tomtom',

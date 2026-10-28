@@ -10,7 +10,7 @@ import { RouteLayer } from './layer';
 import { Locator, type LocMode, type NavCamera } from './locator';
 import { RoutePanel } from './panel';
 import { PROVIDERS } from './providers';
-import { defaultProvider, planRoute, usable } from './router';
+import { defaultProvider, planRoute, providerById, usable, type Planned } from './router';
 import { announce } from './speech';
 import type { LngLat, Profile, Route } from './types';
 import { Voice } from './voice';
@@ -200,14 +200,25 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
         panel.hint('Start und Ziel angeben.');
         return;
       }
-      const res = await planRoute({ points, profile, alternatives: points.length === 2 }, store.getKeys(), provider);
-      if (my !== planSeq) return;
-      routes = res.routes;
-      active = 0;
-      layer.show(routes, 0);
-      layer.stops(points);
-      fit(routes[0]);
-      showResult(res.failed.length ? `${res.failed[0].provider.label} war nicht erreichbar – berechnet mit ${res.provider.label}.` : undefined, res.provider.id);
+      const show = (res: Planned, refining: boolean) => {
+        routes = res.routes;
+        active = 0;
+        layer.show(routes, 0);
+        layer.stops(points);
+        showResult(res.failed.length ? `${res.failed[0].provider.label} war nicht erreichbar – berechnet mit ${res.provider.label}.` : undefined, res.provider.id, refining);
+      };
+      // the fast route appears at once, the better one replaces it when it is there
+      let previewed = false;
+      const res = await planRoute({ points, profile, alternatives: points.length === 2 }, store.getKeys(), provider, (pre) => {
+        if (my !== planSeq || nav) return;
+        previewed = true;
+        show(pre, true);
+        fit(routes[0]);
+      });
+      if (my !== planSeq || nav) return;
+      show(res, false);
+      // a preview was shown: the view stays, only the data is swapped
+      if (!previewed) fit(routes[0]);
     } catch (e) {
       if (my !== planSeq) return;
       routes = [];
@@ -218,10 +229,10 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
   }
 
   let lastProvider = '';
-  function showResult(note?: string, providerId?: string) {
+  function showResult(note?: string, providerId?: string, refining = false) {
     if (providerId) lastProvider = providerId;
     const p = PROVIDERS.find((x) => x.id === (lastProvider || routes[active]?.provider)) ?? PROVIDERS[0];
-    panel.showRoutes(routes, active, p, note);
+    panel.showRoutes(routes, active, p, note, refining ? `${providerById(provider)?.label ?? 'Der gewählte Dienst'} verbessert die Route …` : undefined);
   }
 
   function fit(r: Route) {

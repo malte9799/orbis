@@ -6,7 +6,7 @@ const PATH = { car: 'routed-car', bike: 'routed-bike', foot: 'routed-foot' } as 
 
 export default defineProvider({
   id: 'fossgis',
-  order: 10,
+  order: 20,
   label: 'OpenStreetMap (OSRM, FOSSGIS)',
   note: 'Kostenlos, ohne Schlüssel. Auto, Rad und Fuß auf OpenStreetMap-Daten.',
   profiles: ['car', 'bike', 'foot'],

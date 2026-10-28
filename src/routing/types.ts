@@ -79,6 +79,8 @@ export interface RoutingProvider {
   /** needs an API key from the settings (store key name); undefined = free, no key */
   key?: string;
   profiles: Profile[];
+  /** id of a faster provider whose answer is shown first while this slower one is still calculating */
+  preview?: string;
   /** needs a key the user has not entered yet */
   available(keys: ApiKeys): boolean;
   route(req: RouteRequest, keys: ApiKeys): Promise<Route[]>;

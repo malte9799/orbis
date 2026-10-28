@@ -228,13 +228,14 @@ export class RoutePanel {
     this.result.innerHTML = text ? `<div class="rt-msg">${escapeHtml(text)}</div>` : '';
   }
 
-  showRoutes(routes: Route[], active: number, provider: RoutingProvider, fallbackNote?: string) {
+  showRoutes(routes: Route[], active: number, provider: RoutingProvider, fallbackNote?: string, refining?: string) {
     this.routes = routes;
     this.active = active;
     const r = routes[active];
     const eta = (x: Route) => escapeHtml(clockTxt(new Date(Date.now() + x.duration * 1000)));
     this.result.innerHTML = `
       ${fallbackNote ? `<div class="rt-msg">${escapeHtml(fallbackNote)}</div>` : ''}
+      ${refining ? `<div class="rt-msg"><span class="rt-spin" aria-hidden="true"></span>${escapeHtml(refining)}</div>` : ''}
       <div class="rt-alts" role="radiogroup" aria-label="Routen">${routes
         .map(
           (a, i) => `<button type="button" class="rt-alt ${i === active ? 'on' : ''}" role="radio" aria-checked="${i === active}" data-r="${i}">

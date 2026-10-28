@@ -36,9 +36,10 @@ function trip(t: ValhallaTrip, req: { profile: 'car' | 'bike' | 'foot' }): Route
 
 export default defineProvider({
   id: 'valhalla',
-  order: 20,
+  order: 10,
   label: 'OpenStreetMap (Valhalla, FOSSGIS)',
-  note: 'Kostenlos, ohne Schlüssel. Deutsche Ansagen vom Server, gute Rad- und Fußrouten.',
+  note: 'Standard. Kostenlos, ohne Schlüssel. Deutsche Ansagen vom Server, gute Rad- und Fußrouten. Während Valhalla rechnet, zeigt Orbis schon die schnelle OSRM-Route.',
+  preview: 'fossgis',
   profiles: ['car', 'bike', 'foot'],
   available: () => true,
   async route(req) {

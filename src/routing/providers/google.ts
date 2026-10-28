@@ -37,7 +37,7 @@ const loc = (p: LngLat) => ({ location: { latLng: { latitude: p[1], longitude: p
 
 export default defineProvider({
   id: 'google',
-  order: 5,
+  order: 30,
   label: 'Google Routes',
   note: 'Mit Live-Verkehr (Auto), beste Abdeckung. Schlüssel mit „Routes API“, per HTTP-Referrer beschränken.',
   key: 'googleRoutes',
