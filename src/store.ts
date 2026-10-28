@@ -50,6 +50,15 @@ const APP_OPTION_DEFAULTS: AppOptions = {
   tz: 'auto',
 };
 
+/** route planner choices (src/routing) */
+export interface RoutePrefs {
+  profile?: 'car' | 'bike' | 'foot';
+  /** routing provider id (src/routing/providers) */
+  provider?: string;
+  /** spoken guidance */
+  voice?: boolean;
+}
+
 export interface Place {
   name: string;
   lat: number;
@@ -108,6 +117,9 @@ export const store = {
     // visible legends/readouts re-render with the new units
     window.dispatchEvent(new Event(OPTIONS_EVENT));
   },
+
+  getRoutePrefs: (): RoutePrefs => read('wg.route', {}),
+  setRoutePrefs: (p: RoutePrefs) => write('wg.route', p),
 
   cacheGet<T>(key: string, maxAgeMs: number): T | null {
     const entry = read<{ t: number; v: T } | null>(`wg.cache.${key}`, null);

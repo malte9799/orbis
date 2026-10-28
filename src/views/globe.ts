@@ -52,7 +52,8 @@ import { createEvents } from '../globe/events/engine';
 import { GROUPS, LINKED_EXTRA, LINKED_GROUP, type GroupId } from '../globe/events';
 import { catalogOf, ISOBAR_OPTION_MAINS, OWM_FAMILY, WX_FAMILIES } from '../hud/catalog';
 import { defaultBuildings3d, defaultTerrain3d, type Karte, type NightMode, type KView } from '../hud/karten';
-import { locate } from '../search';
+import { createRouting, type Routing } from '../routing';
+import type { LocMode } from '../routing/locator';
 import { createScaleBar } from '../scalebar';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
@@ -180,6 +181,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let liveTimer = 0;
   let popup: Popup | null = null;
   let longPressAt = 0;
+  let routing: Routing | null = null;
 
   // ----- event feeds (fires, storms, quakes …): see src/globe/events ----------
   let extras: ExtraLayers | null = null;
@@ -389,13 +391,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
-  async function locateMe() {
-    try {
-      const { lat, lon } = await locate();
-      store.setLastPlace({ name: '', lat, lon });
-      focusPlace(lat, lon, 8, true);
-    } catch {
-      toast('Standort konnte nicht ermittelt werden.', 'error');
+  /** locate button: GPS position with heading (off → follow → follow with heading → off) */
+  function locateMe() {
+    if (!map || !ready) {
+      toast('Karte wird noch geladen.', 'info');
+      return;
+    }
+    routing?.locator.cycle();
+  }
+
+  const LOC_TITLE: Record<LocMode, string> = {
+    off: 'Mein Standort',
+    track: 'Mein Standort (Karte folgt nicht)',
+    follow: 'Karte nach Norden, folgt dem Standort – erneut tippen: Blickrichtung',
+    heading: 'Karte dreht sich mit der Blickrichtung – erneut tippen: Standort aus',
+  };
+  function locMode(m: LocMode) {
+    for (const b of el.querySelectorAll<HTMLElement>('.loc-ctl button, [data-act=locate]')) {
+      b.dataset.loc = m;
+      b.title = LOC_TITLE[m];
     }
   }
 
@@ -1041,9 +1055,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <span>Druck</span><b>${pressureTxt(c.pressure_msl)}</b>
         </div>
         <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
+        <button class="btn small wide" data-wx="route">Route hierher →</button>
       </div>`;
       node.querySelector('[data-wx=open]')!.addEventListener('click', async () => {
         onOpenForecast(await reverseGeocodePoint(lat, lng));
+      });
+      node.querySelector('[data-wx=route]')!.addEventListener('click', () => {
+        popup?.remove();
+        hud?.clearPlace();
+        routing?.open({ lat, lon: lng });
       });
     } catch {
       node.querySelector('.pop-loading')!.textContent = 'Wetterdaten nicht verfügbar.';
@@ -1128,6 +1148,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
     locCtl.querySelector('button')!.addEventListener('click', () => void locateMe());
     map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
+    // phones have no HUD control column: the route planner gets its own button above the locate button
+    const routeCtl = document.createElement('div');
+    routeCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group route-ctl';
+    routeCtl.innerHTML = `<button type="button" title="Route planen" aria-label="Route planen"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="6" cy="17" r="2"/><circle cx="18" cy="7" r="2"/><path d="M8 17h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/></svg></button>`;
+    routeCtl.querySelector('button')!.addEventListener('click', () => routing?.open());
+    map.addControl({ onAdd: () => routeCtl, onRemove: () => routeCtl.remove() }, 'bottom-right');
 
     map.on('load', () => {
       ready = true;
@@ -1137,6 +1163,20 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
       extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
+      routing = createRouting(
+        map!,
+        el,
+        {
+          leftInset: () => (hud?.layout() === 'desktop' ? hud.stackWidth() : 0),
+          navUi(on) {
+            el.classList.toggle('nav-active', on);
+            if (on) map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
+            else applyPadding();
+          },
+          mode: locMode,
+        },
+        (lat, lon) => store.setLastPlace({ name: '', lat, lon }),
+      );
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
         select: (hex) => extras?.selectFlight(hex),
@@ -1281,6 +1321,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const areaLayers = ['nws-fill', 'dwd-warn-fill', 'cables'];
     map.on('click', (e) => {
       if (longPressAt && performance.now() - longPressAt < 700) return;
+      // the route planner owns the click while it picks a point / chooses an alternative / is open
+      if (routing?.click(e)) return;
       if (hud?.placeOpen()) {
         // a second tap on the map closes the place sheet
         hud.clearPlace();
@@ -1397,7 +1439,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     },
     openSettings,
     zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
-    locate: () => void locateMe(),
+    locate: () => locateMe(),
+    route: () => routing?.open(),
     setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
     resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
     layout: () => applyPadding(true),
