@@ -1,4 +1,4 @@
-import { departures, durationTxt, nearbyStops, inTxt, legColor, planConnections, searchStops, type Departure, type Itinerary, type Stop } from '../api/connections';
+import { departures, durationTxt, nearbyStops, inTxt, legColor, planConnections, searchStops, type PlanResult, type Departure, type Itinerary, type Leg, type PlanOptions, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
 import { locate } from '../search';
 import { store, type SavedStop } from '../store';
@@ -153,32 +153,115 @@ export function createFahrplanView(): FahrplanView {
   });
   q('.fp-now').addEventListener('click', () => (timeIn.value = localInput(Date.now())));
 
-  const legHtml = (l: Itinerary['legs'][number]) => {
-    const late = l.delayMin != null && l.delayMin > 0 ? ` <span class="fp-late">+${l.delayMin}</span>` : '';
-    const name = l.mode === 'WALK' ? `Fußweg${l.walkM != null ? ` · ${l.walkM} m` : ''}` : esc(l.line || modeStyle(l.mode).label);
-    return `<li class="fp-leg${l.cancelled ? ' cancelled' : ''}" style="--c:${legColor(l)}">
-      <span class="fp-t">${hm(l.dep)}${late}</span>
-      <span class="fp-pt"><b>${esc(l.from)}</b>${l.track ? ` <small>Gl. ${esc(l.track)}</small>` : ''}</span>
-      <span class="fp-ln"><i class="fp-badge">${name}</i>${l.headsign ? ` <small>→ ${esc(l.headsign)}</small>` : ''}${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}</span>
-      <span class="fp-t">${hm(l.arr)}</span>
-      <span class="fp-pt"><b>${esc(l.to)}</b></span>
-    </li>`;
+  /** time cell: scheduled time, and the real-time one below it when it differs (green ≤ 5 min late, red beyond) */
+  const timeCell = (actual: number, sched: number, delay: number | null) => {
+    if (delay == null) return `<span class="fp-tm"><b>${hm(actual)}</b></span>`;
+    const cls = delay <= 5 ? 'ok' : 'late';
+    return delay === 0 ? `<span class="fp-tm"><b class="${cls}">${hm(actual)}</b></span>` : `<span class="fp-tm"><b>${hm(sched)}</b><b class="${cls}">${hm(actual)}</b></span>`;
   };
+  const stationRow = (name: string, track: string | undefined, actual: number, sched: number, delay: number | null, color: string) =>
+    `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small>Gleis ${esc(track)}</small>` : ''}</div></div>`;
+  const walkTxt = (legs: Leg[]) => {
+    const w = legs.reduce((n, l) => n + (l.walkM ?? 0), 0);
+    return `Fußweg${w ? ` · ${w} m` : ''} · ${durationTxt(legs.reduce((n, l) => n + (l.arr - l.dep), 0))}`;
+  };
+  const gap = (cls: string, color: string, label: string, mins: string, icon: string) =>
+    `<div class="fp-gap ${cls}" style="--c:${color}"><span class="fp-gm">${esc(mins)}</span><span class="fp-gl"></span><div class="fp-gb"><span class="fp-gi">${icon}</span>${esc(label)}</div></div>`;
+  const ICON_WALK = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.8"/><path d="M9 21l2-6 3 2v4M11 15l1-5-3 1-1 3M12 10l2 2h3"/></svg>';
+  const ICON_SWAP = '<svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>';
+
+  const legBody = (l: Leg) => {
+    const stops = l.via.length
+      ? `<details class="fp-stops"><summary>${l.via.length} Haltestelle${l.via.length > 1 ? 'n' : ''}</summary><ul>${l.via
+          .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
+          .join('')}</ul></details>`
+      : '';
+    return `<div class="fp-body${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge">${esc(l.line || modeStyle(l.mode).label)}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
+  };
+
+  /** the connection as a timeline: station rows, the ride between them and the transfers */
+  const timeline = (it: Itinerary) => {
+    const out: string[] = [];
+    const rides = it.legs.filter((l) => l.mode !== 'WALK');
+    let walks: Leg[] = [];
+    let prev: Leg | null = null;
+    if (!rides.length) {
+      const l = it.legs[0];
+      if (l) out.push(stationRow(l.from, undefined, l.dep, l.schedDep, null, '#8a93a8'), gap('walk', '#8a93a8', walkTxt(it.legs), '', ICON_WALK), stationRow(it.legs[it.legs.length - 1].to, undefined, it.arr, it.arr, null, '#8a93a8'));
+      return out.join('');
+    }
+    for (const l of it.legs) {
+      if (l.mode === 'WALK') {
+        walks.push(l);
+        continue;
+      }
+      const c = legColor(l);
+      if (prev) {
+        const wait = Math.max(0, l.dep - prev.arr);
+        out.push(gap('swap', '#8a93a8', walks.length ? walkTxt(walks) : 'Umstieg', durationTxt(wait), walks.length ? ICON_WALK : ICON_SWAP));
+      } else if (walks.length) {
+        out.push(stationRow(walks[0].from, undefined, walks[0].dep, walks[0].schedDep, null, '#8a93a8'), gap('walk', '#8a93a8', walkTxt(walks), '', ICON_WALK));
+      }
+      walks = [];
+      out.push(stationRow(l.from, l.track, l.dep, l.schedDep, l.delayMin, c));
+      out.push(`<div class="fp-ride" style="--c:${c}"><span class="fp-gm">${esc(durationTxt(l.arr - l.dep))}</span><span class="fp-gl"></span>${legBody(l)}</div>`);
+      out.push(stationRow(l.to, l.toTrack, l.arr, l.schedArr, l.arrDelayMin, c));
+      prev = l;
+    }
+    if (walks.length) out.push(gap('walk', '#8a93a8', walkTxt(walks), '', ICON_WALK), stationRow(walks[walks.length - 1].to, undefined, it.arr, it.arr, null, '#8a93a8'));
+    return out.join('');
+  };
+
   const itinHtml = (it: Itinerary) => {
-    const trains = it.legs.filter((l) => l.mode !== 'WALK');
-    const badges = trains.map((l) => `<i class="fp-badge" style="--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</i>`).join('');
-    const delay = trains[0]?.delayMin;
+    const rides = it.legs.filter((l) => l.mode !== 'WALK');
+    const first = rides[0] ?? it.legs[0];
+    const last = rides[rides.length - 1] ?? it.legs[it.legs.length - 1];
+    const live = first?.delayMin != null || last?.arrDelayMin != null;
+    const cls = (d: number | null | undefined) => (d == null || d <= 5 ? 'ok' : 'late');
+    const total = Math.max(1, it.arr - it.dep);
+    const bar = it.legs
+      .map((l) => {
+        const w = Math.max(6, ((l.arr - l.dep) / total) * 100);
+        return l.mode === 'WALK'
+          ? `<span class="fp-seg walk" style="flex:${w}" title="Fußweg"></span>`
+          : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`;
+      })
+      .join('');
     return `<details class="fp-itin">
       <summary>
-        <span class="fp-times"><b>${hm(it.dep)}</b> → <b>${hm(it.arr)}</b>${delay && delay > 0 ? ` <span class="fp-late">+${delay}</span>` : ''}</span>
-        <span class="fp-sum">${esc(durationTxt(it.arr - it.dep))} · ${it.transfers === 0 ? 'direkt' : `${it.transfers} Umstieg${it.transfers > 1 ? 'e' : ''}`}</span>
-        <span class="fp-badges">${badges}</span>
+        <span class="fp-l1"><b>${hm(it.dep)} – ${hm(it.arr)}</b><span>| ${esc(durationTxt(it.arr - it.dep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
+        ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
+        <span class="fp-bar">${bar}</span>
+        <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
       </summary>
-      <ul class="fp-legs">${it.legs.map(legHtml).join('')}</ul>
+      <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(it.arr - it.dep))}</span></div>${timeline(it)}</div>
     </details>`;
   };
 
+  // all connections found so far (earlier / later pages are merged into it) and the paging cursors
+  let items: Itinerary[] = [];
+  let cursors: { prev?: string; next?: string } = {};
+  let lastOpts: PlanOptions | null = null;
   let searchSeq = 0;
+
+  function renderResults() {
+    if (!items.length) {
+      res.innerHTML = '<p class="fp-hint">Keine Verbindung gefunden.</p>';
+      return;
+    }
+    let day = '';
+    const rows = items
+      .map((it) => {
+        const d = dayTxt(it.dep);
+        const head = d !== day ? `<p class="fp-day">${esc(d)}</p>` : '';
+        day = d;
+        return head + itinHtml(it);
+      })
+      .join('');
+    res.innerHTML = `<div class="fp-route">${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</div>
+      ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
+  }
+
   async function search() {
     if (!from || !to) {
       toast('Bitte Start und Ziel aus der Vorschlagsliste wählen.', 'error');
@@ -189,17 +272,46 @@ export function createFahrplanView(): FahrplanView {
     goBtn.disabled = true;
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
-      const list = await planConnections(from, to, { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value) });
+      lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value) };
+      const r = await planConnections(from, to, lastOpts);
       if (my !== searchSeq) return;
-      res.innerHTML = list.length
-        ? `<p class="fp-day">${esc(dayTxt(list[0].dep))} · ${esc(from.name)} → ${esc(to.name)}</p>${list.map(itinHtml).join('')}`
-        : '<p class="fp-hint">Keine Verbindung gefunden.</p>';
+      items = r.list;
+      cursors = { prev: r.prev, next: r.next };
+      renderResults();
     } catch {
       if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';
     } finally {
       if (my === searchSeq) goBtn.disabled = false;
     }
   }
+
+  res.addEventListener('click', async (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.fp-page');
+    if (!btn || !from || !to || !lastOpts) return;
+    const dir = btn.dataset.page as 'prev' | 'next';
+    const cursor = cursors[dir];
+    if (!cursor) return;
+    const my = searchSeq;
+    btn.disabled = true;
+    try {
+      const r: PlanResult = await planConnections(from, to, lastOpts, cursor);
+      if (my !== searchSeq) return;
+      const key = (i: Itinerary) => `${i.dep}-${i.arr}`;
+      const seen = new Set(items.map(key));
+      const fresh = r.list.filter((i) => !seen.has(key(i)));
+      if (dir === 'prev') {
+        items = [...fresh, ...items];
+        cursors.prev = r.prev;
+      } else {
+        items = [...items, ...fresh];
+        cursors.next = r.next;
+      }
+      renderResults();
+    } catch {
+      btn.disabled = false;
+      toast('Weitere Verbindungen konnten nicht geladen werden.', 'error');
+    }
+  });
   goBtn.addEventListener('click', search);
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.target as HTMLElement).closest('.fp-search') && (e.target as HTMLElement).tagName === 'INPUT' && from && to) search();

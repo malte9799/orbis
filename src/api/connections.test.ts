@@ -20,12 +20,14 @@ describe('parseItineraries', () => {
         transfers: 0,
         legs: [
           { mode: 'WALK', from: { name: 'A' }, to: { name: 'B' }, startTime: '2026-10-28T08:00:00Z', endTime: '2026-10-28T08:05:00Z', distance: 320.4 },
-          { mode: 'HIGHSPEED_RAIL', from: { name: 'B', track: '7' }, to: { name: 'C' }, startTime: '2026-10-28T08:10:00Z', scheduledStartTime: '2026-10-28T08:05:00Z', endTime: '2026-10-28T09:30:00Z', realTime: true, displayName: 'ICE 1601', headsign: 'München' },
+          { mode: 'HIGHSPEED_RAIL', from: { name: 'B', track: '7' }, to: { name: 'C' }, startTime: '2026-10-28T08:10:00Z', scheduledStartTime: '2026-10-28T08:05:00Z', endTime: '2026-10-28T09:30:00Z', realTime: true, displayName: 'ICE 1601', headsign: 'München', scheduledEndTime: '2026-10-28T09:20:00Z', intermediateStops: [{ name: 'Z', arrival: '2026-10-28T08:40:00Z', scheduledArrival: '2026-10-28T08:35:00Z' }] },
         ],
       },
     ]);
     expect(it.legs[0]).toMatchObject({ mode: 'WALK', line: '', walkM: 320, delayMin: null });
     expect(it.legs[1]).toMatchObject({ line: 'ICE 1601', headsign: 'München', track: '7', delayMin: 5 });
+    expect(it.legs[1]).toMatchObject({ arrDelayMin: 10, schedDep: Date.parse('2026-10-28T08:05:00Z') });
+    expect(it.legs[1].via).toEqual([{ name: 'Z', time: Date.parse('2026-10-28T08:40:00Z'), delayMin: 5 }]);
     expect(it.arr - it.dep).toBe(90 * 60000);
   });
 });

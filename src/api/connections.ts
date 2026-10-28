@@ -25,13 +25,18 @@ export interface Leg {
   from: string;
   to: string;
   track?: string;
+  toTrack?: string;
   dep: number;
   arr: number;
+  /** scheduled times (equal to dep/arr without real-time data) */
+  schedDep: number;
+  schedArr: number;
   /** minutes later than scheduled, null without real-time data */
   delayMin: number | null;
+  arrDelayMin: number | null;
   cancelled: boolean;
-  /** stops between start and end (names only) */
-  via: string[];
+  /** stops between start and end */
+  via: { name: string; time: number; delayMin: number | null }[];
   /** walking distance in meters, foot legs only */
   walkM?: number;
 }
@@ -74,6 +79,7 @@ interface LegDto {
   startTime: string;
   endTime: string;
   scheduledStartTime?: string;
+  scheduledEndTime?: string;
   realTime?: boolean;
   headsign?: string;
   routeShortName?: string;
@@ -143,11 +149,17 @@ export function parseItineraries(list: ItineraryDto[]): Itinerary[] {
         from: l.from.name ?? '',
         to: l.to.name ?? '',
         track: l.from.track ?? l.from.scheduledTrack,
+        toTrack: l.to.track ?? l.to.scheduledTrack,
         dep: ms(l.startTime),
         arr: ms(l.endTime),
+        schedDep: ms(l.scheduledStartTime ?? l.from.scheduledDeparture ?? l.startTime),
+        schedArr: ms(l.scheduledEndTime ?? l.to.scheduledArrival ?? l.endTime),
         delayMin: delayOf(l.startTime, l.scheduledStartTime ?? l.from.scheduledDeparture, l.realTime),
+        arrDelayMin: delayOf(l.endTime, l.scheduledEndTime ?? l.to.scheduledArrival, l.realTime),
         cancelled: !!l.cancelled,
-        via: (l.intermediateStops ?? []).map((s) => s.name ?? '').filter(Boolean),
+        via: (l.intermediateStops ?? [])
+          .filter((s) => s.name)
+          .map((s) => ({ name: s.name!, time: ms(s.arrival ?? s.departure), delayMin: delayOf(s.arrival ?? s.departure, s.scheduledArrival ?? s.scheduledDeparture, l.realTime) })),
         walkM: foot && l.distance != null ? Math.round(l.distance) : undefined,
       };
     }),
@@ -189,7 +201,15 @@ export interface PlanOptions {
   maxTransfers?: number;
 }
 
-export async function planConnections(from: Stop, to: Stop, o: PlanOptions): Promise<Itinerary[]> {
+export interface PlanResult {
+  list: Itinerary[];
+  /** cursors for the earlier / later connections */
+  prev?: string;
+  next?: string;
+}
+
+/** Connections from → to; with `cursor` (a previous result's prev/next) the page before / after it. */
+export async function planConnections(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
   const q = new URLSearchParams({
     fromPlace: from.id,
     toPlace: to.id,
@@ -199,8 +219,9 @@ export async function planConnections(from: Stop, to: Stop, o: PlanOptions): Pro
     language: 'de',
   });
   if (o.maxTransfers != null) q.set('maxTransfers', String(o.maxTransfers));
-  const r = await fetchJson<{ itineraries?: ItineraryDto[] }>(`${BASE}/v5/plan?${q}`, undefined, 30000);
-  return parseItineraries(r.itineraries ?? []);
+  if (cursor) q.set('pageCursor', cursor);
+  const r = await fetchJson<{ itineraries?: ItineraryDto[]; previousPageCursor?: string; nextPageCursor?: string }>(`${BASE}/v5/plan?${q}`, undefined, 30000);
+  return { list: parseItineraries(r.itineraries ?? []), prev: r.previousPageCursor, next: r.nextPageCursor };
 }
 
 /** The next `n` departures at a stop, starting at `from` (default: now). */
