@@ -9,8 +9,8 @@
 //      optional variable ALLOWED_ORIGINS (comma separated, e.g. https://malte9799.github.io)
 //
 // Routes
-//   GET    /dirs                  → { dirs: { "<camera key>": { d: 0..359, at: <ms>, p?: {down, alt, roll, fov} } } }
-//   PUT    /dirs   {key, dir, pose?: {down, alt, roll, fov}} → sets one direction and optionally the pose (Authorization: Bearer <ADMIN_TOKEN>)
+//   GET    /dirs                  → { dirs: { "<camera key>": { d: 0..359, at: <ms>, p?: {down, alt, roll, fov}, pos?: [lng, lat] } } }
+//   PUT    /dirs   {key, dir, pose?: {down, alt, roll, fov}, pos?: [lng, lat]} → sets one direction and optionally the pose and a moved position (Authorization: Bearer <ADMIN_TOKEN>)
 //   DELETE /dirs?key=<key>        → removes the correction        (Authorization: Bearer <ADMIN_TOKEN>)
 //
 // Prepared for suggestions by every visitor (later): POST /suggest would store into a separate KV key
@@ -93,6 +93,12 @@ export default {
       const pose = { down: num(p.down, -20, 80), alt: num(p.alt, 0.2, 200), roll: num(p.roll, -45, 45), fov: num(p.fov, 5, 120) };
       if (Object.values(pose).some((x) => x === null)) return json({ error: 'bad pose' }, 400, headers);
       entry.p = pose;
+    }
+    // optional corrected position of the camera (the key stays the one of the original position)
+    if (body.pos !== undefined) {
+      const [lng, lat] = Array.isArray(body.pos) ? body.pos.map(Number) : [NaN, NaN];
+      if (!(Math.abs(lng) <= 180 && Math.abs(lat) <= 90)) return json({ error: 'bad pos' }, 400, headers);
+      entry.pos = [Math.round(lng * 1e6) / 1e6, Math.round(lat * 1e6) / 1e6];
     }
     dirs[body.key] = entry;
     await env.CAMDIR.put(KEY, JSON.stringify(dirs));

@@ -270,9 +270,9 @@ eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen 
 <details>
 <summary><b>🧭 Kamera-Richtungen (eigener Cloudflare-Worker)</b></summary>
 
-Im Kamera-Panel rechts öffnet *Richtung bearbeiten* einen Dialog: links das Kamerabild, rechts eine Satellitenkarte mit dem Sichtkegel.
-Die Richtung lässt sich durch Klicken/Ziehen auf der Karte, per Regler, Gradfeld oder N/O/S/W einstellen; „Bild über die Karte legen“
-dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, damit Straßen und Gebäude zur Deckung kommen.
+Im Kamera-Panel rechts startet *Auf Karte bearbeiten* das Bearbeiten direkt auf der Hauptkarte: die Kamera (großer Punkt) lässt sich per
+Drag & Drop verschieben, der weiße Griff am Sichtkegel dreht die Blickrichtung. Im Panel stehen Richtung, Höhe, Neigung, Rollen,
+Sichtfeld und die Reichweite des projizierten Bildes (dahinter blendet die „Wand“ nach oben aus) als Regler und Zahlenfelder.
 *Speichern* schickt den Wert an einen eigenen Worker, den alle Besucher beim Laden der Webcams mitlesen.
 
 1. Cloudflare → *Workers & Pages → KV* → Namespace anlegen.
@@ -281,7 +281,7 @@ dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, 
 4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
 5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
 
-Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld – aus „Fluchtpunkt“, „Punkte abgleichen“ oder „Überlagerung“) speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für die Pose den Worker neu deployen.
+Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld) und verschobener Position speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für Pose und Position den Worker neu deployen.
 
 Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Moderation, Ratenbegrenzung) sind im Worker vorbereitet, aber noch nicht eingebaut.
 
