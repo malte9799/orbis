@@ -42,12 +42,9 @@
 .fp-field {
   position: relative;
 }
-.fp-field label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 0.75rem;
-  color: var(--muted);
+.fp-field input {
+  width: 100%;
+  box-sizing: border-box;
 }
 .fp-field input,
 .fp-opts select,
@@ -456,4 +453,115 @@
 }
 .fp-reset {
   align-self: flex-start;
+}
+
+.fp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-search.compact .fp-form,
+.fp-search.compact h2 {
+  display: none;
+}
+.fp-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-ce {
+  color: var(--accent);
+  font-size: 0.85rem;
+  flex: none;
+}
+.fp-cs {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .fahrplan-view {
+    padding: 60px 10px 32px;
+    gap: 10px;
+  }
+  .fp-card {
+    padding: 12px;
+    gap: 10px;
+    border-radius: 14px;
+  }
+  .fp-search h2,
+  .fp-stations > .fp-hint {
+    display: none;
+  }
+  .fp-ft {
+    position: relative;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .fp-ft .fp-swap {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    grid-column: auto;
+    grid-row: auto;
+    width: 34px;
+    height: 34px;
+    z-index: 2;
+  }
+  .fp-ft .fp-field input {
+    padding-right: 48px;
+  }
+  .fp-field input,
+  .fp-opts select,
+  .fp-opts input {
+    height: 38px;
+  }
+  .fp-opts {
+    gap: 6px;
+  }
+  .fp-opts select {
+    flex: none;
+    padding: 0 6px;
+  }
+  .fp-opts .fp-time {
+    flex: 1 1 150px;
+    padding: 0 4px;
+    font-size: 0.8rem;
+  }
+  .fp-opts .btn.small {
+    flex: none;
+    height: 38px;
+  }
+  .fp-itin > summary {
+    padding: 10px;
+  }
+  .fp-row,
+  .fp-ride,
+  .fp-gap {
+    grid-template-columns: 48px 20px 1fr;
+    padding: 0 8px;
+  }
+  .fp-dep {
+    padding: 8px 0;
+  }
+}
+.fp-opts .fp-go {
+  flex: 1 1 auto;
+  height: 38px;
+}
+.fp-search.compact .fp-route {
+  display: none;
 }

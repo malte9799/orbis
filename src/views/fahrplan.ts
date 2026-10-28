@@ -27,7 +27,7 @@ const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.
 function stopField(label: string, onPick: (s: Stop | null) => void) {
   const root = document.createElement('div');
   root.className = 'fp-field';
-  root.innerHTML = `<label><span>${esc(label)}</span><input type="text" autocomplete="off" spellcheck="false" placeholder="Haltestelle oder Ort" role="combobox" aria-expanded="false" aria-autocomplete="list"/></label><ul class="suggestions" role="listbox" hidden></ul>`;
+  root.innerHTML = `<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(label)}" aria-label="${esc(label)}" role="combobox" aria-expanded="false" aria-autocomplete="list"/><ul class="suggestions" role="listbox" hidden></ul>`;
   const input = root.querySelector('input')!;
   const list = root.querySelector('ul')!;
   let results: Stop[] = [];
@@ -97,6 +97,8 @@ export function createFahrplanView(): FahrplanView {
   el.innerHTML = `
     <section class="fp-card fp-search" aria-label="Verbindungssuche">
       <h2>Verbindung suchen</h2>
+      <button type="button" class="fp-compact" hidden aria-label="Suche ändern"><span class="fp-cs"></span><span class="fp-ce">Ändern</span></button>
+      <div class="fp-form">
       <div class="fp-ft">
         <div class="fp-from"></div>
         <button type="button" class="btn icon-btn fp-swap" title="Start und Ziel tauschen" aria-label="Start und Ziel tauschen"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></button>
@@ -107,6 +109,7 @@ export function createFahrplanView(): FahrplanView {
         <input type="datetime-local" class="fp-time" aria-label="Zeitpunkt"/>
         <button type="button" class="btn small fp-now">Jetzt</button>
         <button type="button" class="btn small fp-optbtn" aria-expanded="false">Optionen</button>
+        <button type="button" class="btn primary fp-go">Suchen</button>
       </div>
       <div class="fp-optpanel" hidden>
         <div class="fp-og"><span class="fp-oh">Verkehrsmittel</span><div class="fp-mchips">${MODE_GROUPS.map((g) => `<button type="button" class="fp-mchip on" data-g="${g.id}" aria-pressed="true">${g.label}</button>`).join('')}</div></div>
@@ -116,7 +119,7 @@ export function createFahrplanView(): FahrplanView {
         <label class="fp-chk"><input type="checkbox" class="fp-wc"/> Stufenfrei (Rollstuhl, Kinderwagen)</label>
         <button type="button" class="btn small fp-reset">Zurücksetzen</button>
       </div>
-      <button type="button" class="btn primary wide fp-go">Verbindungen suchen</button>
+      </div>
       <div class="fp-res" aria-live="polite"></div>
     </section>
     <section class="fp-card fp-stations" aria-label="Gemerkte Haltestellen">
@@ -200,11 +203,11 @@ export function createFahrplanView(): FahrplanView {
   let to: Stop | null = null;
   // the last chosen stops stay filled in (a cleared field keeps the stored one until a new stop is picked)
   const remember = (key: 'from' | 'to', s: Stop) => store.setLastRoute({ ...store.getLastRoute(), [key]: { id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area } });
-  const fromField = stopField('Von', (s) => {
+  const fromField = stopField('Von: Haltestelle oder Ort', (s) => {
     from = s;
     if (s) remember('from', s);
   });
-  const toField = stopField('Nach', (s) => {
+  const toField = stopField('Nach: Haltestelle oder Ort', (s) => {
     to = s;
     if (s) remember('to', s);
   });
@@ -311,6 +314,15 @@ export function createFahrplanView(): FahrplanView {
   let cursors: { prev?: string; next?: string } = {};
   let lastOpts: PlanOptions | null = null;
   let searchSeq = 0;
+  const section = q('.fp-search');
+  const compactBtn = q<HTMLButtonElement>('.fp-compact');
+  /** after a search the form folds into one summary line (tap to edit) – saves room on phones */
+  function setCompact(on: boolean) {
+    section.classList.toggle('compact', on);
+    compactBtn.hidden = !on;
+    if (on) q('.fp-cs').textContent = `${from?.name ?? ''} → ${to?.name ?? ''} · ${modeSel.value === 'arr' ? 'an ' : ''}${hm(lastOpts?.time ?? Date.now())}`;
+  }
+  compactBtn.addEventListener('click', () => setCompact(false));
 
   function renderResults() {
     if (!items.length) {
@@ -358,6 +370,7 @@ export function createFahrplanView(): FahrplanView {
       items = r.list;
       cursors = { prev: r.prev, next: r.next };
       renderResults();
+      setCompact(true);
     } catch {
       if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';
     } finally {
@@ -404,7 +417,7 @@ export function createFahrplanView(): FahrplanView {
   let boardSeq = 0;
   let timer: number | undefined;
 
-  const addField = stopField('Haltestelle merken', (s) => {
+  const addField = stopField('Haltestelle suchen und merken', (s) => {
     if (s) showStop(s);
   });
   q('.fp-add').append(addField.el);
