@@ -113,6 +113,10 @@ export const store = {
     return idx < 0;
   },
 
+  /** last connection search endpoints (Fahrplan) */
+  getLastRoute: (): { from?: SavedStop; to?: SavedStop } => read('wg.lastRoute', {}),
+  setLastRoute: (r: { from?: SavedStop; to?: SavedStop }) => write('wg.lastRoute', r),
+
   getGlobeState: <T>(fallback: T): T => read('wg.globe', fallback),
   setGlobeState: (s: unknown) => write('wg.globe', s),
 

@@ -130,10 +130,21 @@ export function createFahrplanView(): FahrplanView {
   // ---- connection search ----
   let from: Stop | null = null;
   let to: Stop | null = null;
-  const fromField = stopField('Von', (s) => (from = s));
-  const toField = stopField('Nach', (s) => (to = s));
+  // the last chosen stops stay filled in (a cleared field keeps the stored one until a new stop is picked)
+  const remember = (key: 'from' | 'to', s: Stop) => store.setLastRoute({ ...store.getLastRoute(), [key]: { id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area } });
+  const fromField = stopField('Von', (s) => {
+    from = s;
+    if (s) remember('from', s);
+  });
+  const toField = stopField('Nach', (s) => {
+    to = s;
+    if (s) remember('to', s);
+  });
   q('.fp-from').append(fromField.el);
   q('.fp-to').append(toField.el);
+  const last = store.getLastRoute();
+  if (last.from) fromField.set(last.from);
+  if (last.to) toField.set(last.to);
   q('.fp-swap').addEventListener('click', () => {
     const a = from;
     const b = to;
