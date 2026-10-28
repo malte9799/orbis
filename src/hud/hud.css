@@ -291,7 +291,7 @@
 .hud .gc .pin, .hud .gc .del, .hud-bar .kc .pin, .hud-bar .kc .del { position: absolute; top: 6px; width: 26px; height: 26px; border-radius: 8px; background: rgba(0,0,0,.55); display: grid; place-items: center; color: rgba(255,255,255,.7); border: 0; cursor: pointer; padding: 0; }
 .hud .gc .pin, .hud-bar .kc .pin { right: 6px; }
 .hud .gc .del, .hud-bar .kc .del { right: 36px; opacity: 0; }
-.hud .gc:hover .del, .hud .gc .del:focus-visible { opacity: 1; }
+.hud .gc:hover .del, .hud .gc .del:focus-visible, .hud-bar .kc:hover .del, .hud-bar .kc .del:focus-visible { opacity: 1; }
 .hud .gc .pin svg, .hud .gc .del svg, .hud-bar .kc .pin svg, .hud-bar .kc .del svg { width: 14px; height: 14px; }
 .hud .gc .pin.on, .hud-bar .kc .pin.on { color: #ffd166; }
 .hud .gc .pin.on svg path, .hud-bar .kc .pin.on svg path { fill: currentColor; }
@@ -600,23 +600,21 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud-bar .kc { cursor: pointer; }
 .hud-bar .kc-top { display: contents; }
 .hud-bar .kc-body { display: none; }
-.hud-bar.expanded { display: grid; gap: 12px; padding: 14px; box-sizing: border-box; width: min(600px, calc(100% - var(--hud-l) - 140px)); max-width: none; max-height: calc(100% - 76px); overflow-y: auto; align-items: start; border-radius: 16px; }
-.hud-bar.expanded > * { animation: bar-in .28s .1s ease both; }
+.hud-bar.expanded { display: grid; gap: 12px; padding: 14px; box-sizing: border-box; width: min(900px, calc(100% - var(--hud-l) - 140px)); max-width: none; max-height: calc(100% - 76px); overflow-y: auto; align-items: start; border-radius: 16px; }
 .hud-bar.expanded h4 { margin: 0; font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; flex: 1; }
 .hud-bar.expanded h4 small { font: 400 11.5px Inter, system-ui, sans-serif; letter-spacing: 0; text-transform: none; }
 .hud-bar.expanded .bg-head { display: flex; align-items: center; gap: 10px; }
-.hud-bar.expanded .kc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; animation: none; }
+.hud-bar.expanded .kc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
 .hud-bar.expanded .gc { color: var(--text); }
-.hud .hud-bar.expanded .kc { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; height: auto; padding: 0; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--card); color: var(--text); font-weight: 500; white-space: normal; animation: none; }
+.hud .hud-bar.expanded .kc { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0; height: auto; padding: 0; border: 1px solid var(--border); border-radius: 13px; overflow: hidden; background: var(--card); color: var(--text); font-weight: 500; white-space: normal; }
 .hud .hud-bar.expanded .kc:hover { border-color: var(--border-2); }
 .hud .hud-bar.expanded .kc.on { background: var(--card); border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.25); color: var(--text); }
 .hud .hud-bar.expanded .kc-top { display: flex; align-items: center; gap: 7px; padding: 8px 9px; min-width: 0; }
-.hud .hud-bar.expanded .kc .nm { font-size: 13px; font-weight: 600; max-width: none; flex: 1; min-width: 0; }
+.hud .hud-bar.expanded .kc .nm { font-size: 13px; font-weight: 600; max-width: none; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud .hud-bar.expanded .kc .mi { width: 22px; height: 22px; }
 .hud .hud-bar.expanded .kc.on .mi { background: color-mix(in srgb, var(--mc) 30%, transparent); color: var(--mc); }
 .hud .hud-bar.expanded .kc kbd { display: none; }
-.hud .hud-bar.expanded .kc-body { display: block; position: relative; animation: bar-in .28s .12s ease both; }
+.hud .hud-bar.expanded .kc-body { display: block; position: relative; }
 .hud .hud-bar.expanded .kc .th { height: 58px; }
 .hud .hud-bar.expanded .kc .gt { padding: 7px 9px 9px; display: grid; gap: 5px; }
-@keyframes bar-in { from { opacity: 0; transform: translateY(6px); } }
 .hud.gal-open .wxm { visibility: hidden; }

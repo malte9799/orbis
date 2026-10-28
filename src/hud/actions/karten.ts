@@ -54,6 +54,7 @@ export default (c: HudCore): Record<string, ActFn> => {
       const id = newId();
       Object.assign(d, { id, name: c.form.name.trim() || 'Neue Karte', icon: c.form.icon, color: c.form.color, savedAt: Date.now() });
       delete d.std;
+      delete d.menu;
       if (c.form.place) d.view = d.view ?? captureView();
       else delete d.view;
       const wantPin = c.form.pin && st.pinned.length < MAX_PINNED;
