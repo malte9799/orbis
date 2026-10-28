@@ -240,22 +240,94 @@ export function createHud(host: HudHost): Hud {
   const mglyph = (k: Karte, s = 34) => `<span class="mglyph" style="background:${esc(k.color)};width:${s}px;height:${s}px">${ico(k.icon, 2)}</span>`;
 
   // ----- regions -----------------------------------------------------------
+  /** desktop: the "Alle Karten" view lives inside the bar itself (the bar unfolds, no separate popup) */
+  const barExpanded = () => ui.gallery && layout === 'desktop';
+  /**
+   * One Karte in the bar: the same element is a pill (collapsed) and a card (unfolded) – only the layout
+   * differs, so the unfolding can move it (and its name) from one to the other. `i` = key number when pinned.
+   */
+  function kcard(k0: Karte, i: number | null): string {
+    const k = view(k0.id);
+    const folded = i !== null && k.id === cur && !!k.menu;
+    const { html, more } = iconList(k, 8);
+    const n = k.layers.length + (k.main ? 1 : 0);
+    const f = mainFam(k);
+    const pinnedK = st.pinned.includes(k.id);
+    return `<div class="kc ${k.id === cur ? 'on' : ''}" role="button" tabindex="0" data-act="go" data-id="${esc(k.id)}" aria-pressed="${k.id === cur}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
+      <div class="kc-top"><span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : i !== null ? `<kbd>${i + 1}</kbd>` : ''}</div>
+      <div class="kc-body">
+        <div class="th" style="background:radial-gradient(120% 120% at 20% 0%, ${esc(k.color)}55, transparent 60%), ${BASE_GRADIENT[k.base]}"><span class="thi">${ico(f ? f.icon : k.icon, 1.6)}</span></div>
+        ${isStd(k) ? '<span class="std">Standard</span>' : ''}${dirty(k.id) ? '<span class="chg">geändert</span>' : ''}
+        <div class="gt"><div class="icons">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
+          <small>${n} Ebenen${k.view ? ` · ${esc((k.view.name ?? 'Ausschnitt').split(',')[0])}` : ''}</small></div>
+        <button type="button" class="pin ${pinnedK ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${pinnedK ? 'Von der Leiste lösen' : 'An die Leiste heften'}" aria-pressed="${pinnedK}">${ico('starf')}</button>
+        ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="Karte löschen" aria-label="Karte löschen">${ico('x')}</button>`}
+      </div></div>`;
+  }
+  /** the unfolded bar: the pinned Karten as cards first, then every other Karte */
+  function barGallery(): string {
+    const others = [...STANDARD, ...st.own].filter((k) => !st.pinned.includes(k.id));
+    return `<div class="bg-head"><h4><span>Karten</span><small>★ = in der Leiste · Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)}</small></h4>
+        <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="Karten einklappen" title="Einklappen">${ico('x', 2)}</button></div>
+      <div class="ggrid kc-grid">${pins().map((k, i) => kcard(k, i)).join('')}</div>
+      ${others.length ? `<h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>` : ''}
+      <div class="ggrid kc-grid">${others.map((k) => kcard(k, null)).join('')}
+        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}Neue leere Karte<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>`;
+  }
+
   function renderBar() {
-    const scrollLeft = reg('bar').querySelector('.hud-bar')?.scrollLeft ?? 0;
-    reg('bar').innerHTML = `<div class="hud-bar hud-glass" role="tablist" aria-label="Karten">
-      ${pins()
-        .map((k0, i) => {
-          const k = view(k0.id);
-          const folded = k.id === cur && !!k.menu;
-          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
-            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}</button>`;
-        })
-        .join('')}
+    const prev = reg('bar').querySelector<HTMLElement>('.hud-bar');
+    const scrollLeft = prev?.scrollLeft ?? 0;
+    const was = prev?.classList.contains('expanded') ?? false;
+    const from = prev?.getBoundingClientRect();
+    // where every Karte (and its name) was, to carry them over to the new layout
+    const old = new Map<string, { kc: DOMRect; nm: DOMRect }>();
+    prev?.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
+      const nm = el.querySelector('.nm');
+      if (nm && !old.has(el.dataset.id!)) old.set(el.dataset.id!, { kc: el.getBoundingClientRect(), nm: nm.getBoundingClientRect() });
+    });
+    const expanded = barExpanded();
+    reg('bar').innerHTML = `<div class="hud-bar hud-glass${expanded ? ' expanded' : ''}" role="group" aria-label="Karten">
+      ${
+        expanded
+          ? barGallery()
+          : `${pins().map((k, i) => kcard(k, i)).join('')}
       <span class="sep"></span>
-      <button type="button" class="all ${ui.gallery ? 'open' : ''}" data-act="gallery" aria-expanded="${ui.gallery}">${ico('grid')}<span class="nm">${phone() ? 'Alle' : 'Alle Karten'}</span></button>
+      <button type="button" class="all" data-act="gallery" aria-expanded="false" aria-label="Alle Karten" title="Alle Karten">${ico('grid')}</button>`
+      }
     </div>`;
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
+    // unfolding / folding: the box grows (or shrinks) and each Karte moves from its old place to the new one
+    if (from && was !== expanded && layout === 'desktop' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const to = bar.getBoundingClientRect();
+      const timing = { duration: 340, easing: 'cubic-bezier(.3,.9,.3,1)' };
+      bar.style.overflow = 'hidden';
+      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], timing).onfinish = () => (bar.style.overflow = '');
+      bar.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
+        const o = old.get(el.dataset.id!);
+        const nm = el.querySelector<HTMLElement>('.nm');
+        if (!o || !nm) return;
+        const kc = el.getBoundingClientRect();
+        const nmr = nm.getBoundingClientRect();
+        el.style.overflow = 'hidden';
+        el.animate(
+          [
+            { transform: `translate(${o.kc.left - kc.left}px, ${o.kc.top - kc.top}px)`, width: `${o.kc.width}px`, height: `${o.kc.height}px` },
+            { transform: 'translate(0, 0)', width: `${kc.width}px`, height: `${kc.height}px` },
+          ],
+          timing,
+        ).onfinish = () => (el.style.overflow = '');
+        // the name keeps its place relative to the moving Karte, then slides to its new spot
+        nm.animate(
+          [
+            { transform: `translate(${o.nm.left - o.kc.left - (nmr.left - kc.left)}px, ${o.nm.top - o.kc.top - (nmr.top - kc.top)}px)` },
+            { transform: 'translate(0, 0)' },
+          ],
+          timing,
+        );
+      });
+    }
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
@@ -583,7 +655,7 @@ export function createHud(host: HudHost): Hud {
       ${st.own.length ? `<div class="ggrid">${st.own.map(galleryCard).join('')}</div>` : '<div class="muted gempty">Noch keine eigenen Karten. Ändere eine Karte und speichere sie als neue Karte.</div>'}
       ${phone() ? `<button type="button" class="setrow" data-act="settings">${ico('gear')}Einstellungen<span class="c">${ico('chev')}</span></button>` : `<div class="ghint"><span>Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)} wechseln die angehefteten Karten</span></div>`}`;
   function renderGallery() {
-    if (!ui.gallery || layout === 'portrait') {
+    if (!ui.gallery || layout === 'portrait' || layout === 'desktop') {
       reg('gallery').innerHTML = '';
       return;
     }
@@ -720,14 +792,9 @@ export function createHud(host: HudHost): Hud {
   const { renderSheet, detentOf, globeView, closeOverlay, tickerInner, syncSheetH } = sheet;
 
   // ----- phone landscape: Orbis menu -----------------------------------------
+  // the Orbis button (nav.ts) is the menu on every layout, this region stays empty
   function renderMenu() {
-    const r = reg('menu');
-    if (layout !== 'landscape') {
-      r.innerHTML = '';
-      return;
-    }
-    r.innerHTML = `<button type="button" class="hud-logo" data-act="menu" aria-label="Menü: Vorhersage, Karte, Weltall, Spiele" aria-expanded="${ui.menu}"><i></i></button>
-      ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/vorhersage">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a><a role="menuitem" data-act="menuclose" href="#/spiele">Spiele</a></div>` : ''}`;
+    reg('menu').innerHTML = '';
   }
 
   let lastShift = '';
@@ -743,6 +810,7 @@ export function createHud(host: HudHost): Hud {
     root.dataset.layout = layout;
     root.classList.toggle('is-edit', ui.edit);
     root.classList.toggle('searching', ui.search);
+    root.classList.toggle('gal-open', ui.gallery && layout === 'desktop');
     document.body.classList.toggle('hud-cover', layout === 'portrait' && detentOf() === 'full');
     if (layout !== 'portrait') placeNode = null;
     if (hadPlace && !placeNode) host.placeClosed();
@@ -1087,11 +1155,11 @@ export function createHud(host: HudHost): Hud {
     let changed = false;
     if (ui.basepick && !t.closest('.hud-bp, [data-act="basepick"]')) (ui.basepick = false), (changed = true);
     if (ui.menu && !t.closest('.hud-menu, [data-act="menu"]')) (ui.menu = false), (changed = true);
-    if (root.contains(t) && t.closest('.hud-sheet, .gallery, .addpop, [data-act="gallery"], [data-act="add"], .scrim, .dlg')) {
+    if (root.contains(t) && t.closest('.hud-sheet, .gallery, .hud-bar.expanded, .addpop, [data-act="gallery"], [data-act="add"], .scrim, .dlg')) {
       if (changed) render();
       return;
     }
-    if (ui.gallery && !t.closest('.gallery, [data-act="gallery"]')) (ui.gallery = false), (changed = true);
+    if (ui.gallery && !t.closest('.gallery, .hud-bar.expanded, [data-act="gallery"]')) (ui.gallery = false), (changed = true);
     if (ui.add && !t.closest('.addpop, [data-act="add"]')) (ui.add = false), (changed = true);
     if (changed) render();
   });
