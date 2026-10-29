@@ -2,6 +2,7 @@ import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type
 import { getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid } from '../api/model';
 import type { Forecast } from '../api/openmeteo';
 import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
+import { regionsGeoJSON } from '../globe/regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
 import { loadRadarFrames, radarForecastSteps } from '../api/events';
 import { LUT, rainviewerFrame } from '../globe/hdradar';
@@ -201,7 +202,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       style: {
         version: 8,
         glyphs: OFM_GLYPHS,
-        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), cities: empty },
+        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), cities: empty, regions: { type: 'geojson', data: regionsGeoJSON() } },
         layers: [
           { id: 'bg', type: 'background', paint: { 'background-color': '#0b1220' } },
           ...baseLayers('dark').map(visible),
