@@ -27,6 +27,8 @@ const REANCHOR_M = 1500;
 const RAD = Math.PI / 180;
 
 const SEL_KEY = 'orbis.tiles3d.sel';
+/** map source and layer of the coverage outline */
+const OUTLINE = 'tiles3d-outline';
 /** Google asks for its logo at the bottom left and the providers of the tiles in view at the right */
 const GOOGLE_LOGO = 'https://www.gstatic.com/images/branding/googlelogo/svg/googlelogo_clr_74x24px.svg';
 
@@ -41,12 +43,13 @@ function loadSelected(): string[] {
 }
 
 /** What the layer shows: the sources come from the debug bar at the bottom edge, keys and opacity from the settings. */
-const state = { selected: loadSelected(), keys: {} as Record<string, string | undefined>, opacity: 100 };
+const state = { selected: loadSelected(), keys: {} as Record<string, string | undefined>, opacity: 100, outline: true };
 
-/** Pushes the API keys and the opacity (percent) of the Karte's layer settings to the layer on `map`. */
-export function setTiles3dOptions(map: MlMap, keys: Record<string, string | undefined>, opacity: number) {
+/** Pushes the API keys, the opacity (percent) and the coverage outline switch of the Karte's layer settings to the layer on `map`. */
+export function setTiles3dOptions(map: MlMap, keys: Record<string, string | undefined>, opacity: number, outline = true) {
   state.keys = keys;
   state.opacity = opacity;
+  state.outline = outline;
   map.triggerRepaint();
 }
 
@@ -311,6 +314,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
   private attribution?: HTMLDivElement;
   private attributionRight?: HTMLDivElement;
   private attributionKey = '';
+  private outlineKey = '';
+  private outlineAt = 0;
   private attributionAt = 0;
   private bar?: HTMLDivElement;
   private draco?: DRACOLoader;
@@ -348,6 +353,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.attributionRight.style.cssText = 'position:absolute;right:8px;bottom:44px;z-index:2;max-width:45%;text-align:right;pointer-events:none;color:#fff;font:600 11px sans-serif;text-shadow:0 0 3px #000';
     map.getCanvasContainer().appendChild(this.attributionRight);
     if (this.opts.bar ?? import.meta.env.DEV) this.bar = mountSourceBar(map);
+    // the coverage of the shown sources: a pale outline of the root volume of every tileset
+    if (!map.getSource(OUTLINE)) map.addSource(OUTLINE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    if (!map.getLayer(OUTLINE)) map.addLayer({ id: OUTLINE, type: 'line', source: OUTLINE, layout: { 'line-join': 'round' }, paint: { 'line-color': '#ffd23f', 'line-width': 1.5, 'line-opacity': 0.4, 'line-dasharray': [3, 2] } });
   }
 
   onRemove() {
@@ -356,6 +364,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.renderer?.dispose();
     this.attribution?.remove();
     this.attributionRight?.remove();
+    if (this.map.getLayer(OUTLINE)) this.map.removeLayer(OUTLINE);
+    if (this.map.getSource(OUTLINE)) this.map.removeSource(OUTLINE);
     this.bar?.remove();
     this.renderer = undefined;
     this.synced = '';
@@ -534,12 +544,28 @@ export class Tiles3DLayer implements CustomLayerInterface {
       this.attributionKey = '';
     }
     this.paintAttribution();
+    this.paintOutline();
     for (const e of this.entries.values()) {
       if (e.opacity === state.opacity) continue;
       e.opacity = state.opacity;
       if (e.engine) e.engine.setOpacity(e.opacity);
       else e.tiles!.forEachLoadedModel((scene) => this.applyOpacity(scene, e.opacity));
     }
+  }
+
+  /** The coverage outline: the footprint of every tileset shown, unless the Karte switched it off. */
+  private paintOutline() {
+    const now = performance.now();
+    if (now - this.outlineAt < 700) return;
+    this.outlineAt = now;
+    const rings = state.outline ? this.debugInfo().flatMap((i) => (i.ring ? [i.ring] : [])) : [];
+    const key = JSON.stringify(rings);
+    if (key === this.outlineKey) return;
+    this.outlineKey = key;
+    (this.map.getSource(OUTLINE) as { setData(d: unknown): void } | undefined)?.setData({
+      type: 'FeatureCollection',
+      features: rings.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r } })),
+    });
   }
 
   /**

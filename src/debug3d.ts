@@ -81,7 +81,7 @@ map.on('style.load', () => {
   if (terrainOn()) map.setTerrain({ source: 'dem', exaggeration: 1 });
   map.addLayer(layer);
   map.addLayer({ id: 'outline', type: 'line', source: 'outline', paint: { 'line-color': '#ffd23f', 'line-width': 3 } });
-  setTiles3dOptions(map, store.getKeys(), 100);
+  setTiles3dOptions(map, store.getKeys(), 100, false); // the page draws its own, bolder outline
 });
 
 // a tick per source: "checked and signed off" (kept in the browser)
