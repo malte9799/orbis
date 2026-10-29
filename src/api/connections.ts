@@ -1,7 +1,7 @@
 import { store } from '../store';
 import { fetchJson } from '../util';
 import { modeStyle } from './transit';
-import { dbDepartures, dbNearbyStops, dbPlan, dbSearchStops } from './dbrest';
+import { dbDepartures, dbNearbyStops, dbPaused, dbPlan, dbSearchStops } from './dbrest';
 
 // Connection search and departure boards. Two sources, both without key:
 // • DB data (dbrest.ts, real-time delays like the DB Navigator) – tried first
@@ -243,11 +243,12 @@ export interface PlanResult {
 
 /** Connections from → to; with `cursor` (a previous result's prev/next) the page before / after it. */
 async function motisPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: string, count = 6): Promise<PlanResult> {
-  // ids of the other source are not known here: use the position
-  const place = (s: Stop) => (s.src === 'db' ? `${s.lat},${s.lon}` : s.id);
+  // DB stops: use their Transitous id (quick), the position only when that is unknown
+  const [fromId, toId] = await Promise.all([motisIdOf(from), motisIdOf(to)]);
+  const place = (s: Stop, id: string | null) => id ?? `${s.lat},${s.lon}`;
   const q = new URLSearchParams({
-    fromPlace: place(from),
-    toPlace: place(to),
+    fromPlace: place(from, fromId),
+    toPlace: place(to, toId),
     time: new Date(o.time).toISOString(),
     arriveBy: String(o.arriveBy),
     numItineraries: String(count),
@@ -335,7 +336,8 @@ export async function ensureSource<T extends Stop>(s: T): Promise<T> {
     upgraded.set(s.id, r);
     return { ...s, id: r.id, src: r.src };
   } catch {
-    return { ...s, src: 'motis' };
+    // DB unreachable right now: leave the source open so the stop is looked up again later
+    return s;
   }
 }
 
@@ -414,8 +416,7 @@ export async function planProgressive(fromStop: Stop, toStop: Stop, o: PlanOptio
     .then((r): PlanResult | null => took(r.list.length ? { list: r.list, prev: prefixed('db', r.prev), next: prefixed('db', r.next) } : null))
     .catch(() => null);
   // Transitous: by stop id when known (quick), by position otherwise; fewer connections are enough for the first look
-  const moP = Promise.all([motisIdOf(from), motisIdOf(to)])
-    .then(([a, b]) => motisPlan(a ? { ...from, id: a, src: 'motis' } : from, b ? { ...to, id: b, src: 'motis' } : to, o, undefined, 4))
+  const moP = motisPlan(from, to, o, undefined, 4)
     .then((r): PlanResult | null => took(r.list.length ? { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) } : null))
     .catch(() => null);
   const [first, r1] = await Promise.race([dbP.then((r) => ['db', r] as const), moP.then((r) => ['motis', r] as const)]);
@@ -449,7 +450,8 @@ export async function departures(given: Pick<Stop, 'id' | 'name' | 'lat' | 'lon'
 /** short note under results: which source answered */
 export const sourceTxt = (src?: Source, ms?: number) => {
   const t = ms != null ? ` · ${(ms / 1000).toFixed(1).replace('.', ',')} s` : '';
-  return src === 'db' ? `Quelle: DB (Echtzeit)${t}` : src === 'motis' ? `Quelle: Transitous – für manche Züge ohne Echtzeit-Verspätungen${t}` : '';
+  const down = src === 'motis' && dbPaused() ? ' · DB-Echtzeitdienst gerade nicht erreichbar' : '';
+  return src === 'db' ? `Quelle: DB (Echtzeit)${t}` : src === 'motis' ? `Quelle: Transitous – für manche Züge ohne Echtzeit-Verspätungen${t}${down}` : '';
 };
 
 // ---- helpers for the view --------------------------------------------------

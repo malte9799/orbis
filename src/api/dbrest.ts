@@ -1,4 +1,34 @@
 import { fetchJson } from '../util';
+
+// The public service is often overloaded (HTTP 503 without CORS headers) and then every request waits for
+// its timeout. After a failure DB requests pause for a while (1, 2, 4 … up to 30 minutes) so the app goes
+// straight to Transitous instead of making every search slow.
+let failures = 0;
+let pausedUntil = 0;
+export const dbPaused = () => Date.now() < pausedUntil;
+/** for tests */
+export const resetDbPause = () => {
+  failures = 0;
+  pausedUntil = 0;
+};
+
+async function dbGet<T>(url: string, timeoutMs: number): Promise<T> {
+  if (dbPaused()) throw new Error('DB service paused');
+  try {
+    const r = await fetchJson<T>(url, undefined, timeoutMs);
+    failures = 0;
+    pausedUntil = 0;
+    return r;
+  } catch (e) {
+    // a plain "not found" or bad request is the caller's problem; outages, throttling and network errors pause the service
+    const http = /HTTP (\d{3})/.exec(e instanceof Error ? e.message : '');
+    if (!http || +http[1] >= 500 || +http[1] === 429) {
+      failures++;
+      pausedUntil = Date.now() + Math.min(30, 2 ** (failures - 1)) * 60000;
+    }
+    throw e;
+  }
+}
 import type { Departure, Itinerary, Leg, PlanOptions, PlanResult, Stop } from './connections';
 
 // DB timetable data (incl. real-time delays like the DB Navigator) via the community-run
@@ -176,12 +206,12 @@ export function parseDbDepartures(list: DbDeparture[]): Departure[] {
 
 export async function dbSearchStops(text: string): Promise<Stop[]> {
   const q = new URLSearchParams({ query: text, results: '8', stops: 'true', addresses: 'false', poi: 'false', language: 'de' });
-  return parseDbStops(await fetchJson<DbStop[]>(`${BASE}/locations?${q}`, undefined, 12000));
+  return parseDbStops(await dbGet<DbStop[]>(`${BASE}/locations?${q}`, 8000));
 }
 
 export async function dbNearbyStops(lat: number, lon: number): Promise<Stop[]> {
   const q = new URLSearchParams({ latitude: lat.toFixed(5), longitude: lon.toFixed(5), results: '8', distance: '2000', stops: 'true', poi: 'false', language: 'de' });
-  return parseDbStops(await fetchJson<DbStop[]>(`${BASE}/locations/nearby?${q}`, undefined, 12000));
+  return parseDbStops(await dbGet<DbStop[]>(`${BASE}/locations/nearby?${q}`, 8000));
 }
 
 /** `cursor` is a previous result's prev/next (earlierRef / laterRef) */
@@ -196,12 +226,12 @@ export async function dbPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: stri
     for (const p of new Set(Object.values(MODE_PRODUCT))) q.set(p, String(on.has(p)));
   }
   if (cursor) q.set(cursor.startsWith('e:') ? 'earlierThan' : 'laterThan', cursor.slice(2));
-  const r = await fetchJson<{ journeys?: DbJourney[]; earlierRef?: string; laterRef?: string }>(`${BASE}/journeys?${q}`, undefined, 30000);
+  const r = await dbGet<{ journeys?: DbJourney[]; earlierRef?: string; laterRef?: string }>(`${BASE}/journeys?${q}`, 20000);
   return { list: parseDbJourneys(r.journeys ?? []), prev: r.earlierRef ? `e:${r.earlierRef}` : undefined, next: r.laterRef ? `l:${r.laterRef}` : undefined };
 }
 
 export async function dbDepartures(stopId: string, n: number, from: number): Promise<Departure[]> {
   const q = new URLSearchParams({ when: new Date(from).toISOString(), results: String(n), duration: '180', language: 'de', remarks: 'false' });
-  const r = await fetchJson<{ departures?: DbDeparture[] }>(`${BASE}/stops/${encodeURIComponent(stopId)}/departures?${q}`, undefined, 15000);
+  const r = await dbGet<{ departures?: DbDeparture[] }>(`${BASE}/stops/${encodeURIComponent(stopId)}/departures?${q}`, 10000);
   return parseDbDepartures(r.departures ?? []);
 }

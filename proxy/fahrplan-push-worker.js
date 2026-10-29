@@ -133,7 +133,7 @@ export function dueNotifications(trip, tz, now, sent) {
 // ---- live status ---------------------------------------------------------------
 
 async function getJson(url) {
-  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000) });
+  const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }

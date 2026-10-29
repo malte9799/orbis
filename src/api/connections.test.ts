@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { dbPaused, dbSearchStops, resetDbPause } from './dbrest';
 import { durationTxt, ensureSource, inTxt, planProgressive, plain, searchStopsProgressive, parseDepartures, parseItineraries, parseStops } from './connections';
 
 describe('parseStops', () => {
@@ -57,7 +58,10 @@ describe('texts', () => {
 describe('ensureSource', () => {
   const old = { id: 'de-DELFI_old', name: 'Bad Kleinen', lat: 53.7295, lon: 11.4035 };
   const reply = (list: unknown[]) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(list), { status: 200, headers: { 'Content-Type': 'application/json' } })));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetDbPause();
+  });
 
   it('leaves stops with a source alone', async () => {
     const s = { ...old, src: 'motis' as const };
@@ -71,7 +75,8 @@ describe('ensureSource', () => {
     reply([{ type: 'stop', id: '1', name: 'Bad Kleinen', location: { latitude: 48.1, longitude: 11.5 } }]);
     expect(await ensureSource({ ...old, id: 'other' })).toMatchObject({ id: 'other', src: 'motis' });
     vi.stubGlobal('fetch', vi.fn(async () => new Response('down', { status: 503 })));
-    expect(await ensureSource({ ...old, id: 'other2' })).toMatchObject({ id: 'other2', src: 'motis' });
+    // DB unreachable: the source stays open, so the stop is looked up again later
+    expect(await ensureSource({ ...old, id: 'other2' })).not.toHaveProperty('src');
   });
 });
 
@@ -88,7 +93,10 @@ describe('planProgressive', () => {
       if (db && !dbOk) return new Response('down', { status: 503 });
       return new Response(JSON.stringify(db ? dbBody : motisBody), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetDbPause();
+  });
   const o = { time: Date.parse(T(0)), arriveBy: false };
 
   it('shows Transitous at once and delivers the DB data later', async () => {
@@ -123,7 +131,10 @@ describe('planProgressive', () => {
 
 describe('quicker first answers', () => {
   const T = (m: number) => new Date(Date.UTC(2026, 9, 29, 6, m)).toISOString();
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetDbPause();
+  });
 
   it('plans Transitous by stop id, not by position', async () => {
     const urls: string[] = [];
@@ -160,5 +171,25 @@ describe('quicker first answers', () => {
     expect(early).toHaveLength(1);
     expect(early[0][0]).toMatchObject({ id: 'm1', src: undefined });
     expect(final[0]).toMatchObject({ id: '8010324', src: 'db' });
+  });
+});
+
+describe('DB pause after an outage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetDbPause();
+  });
+  it('pauses on 503 and then does not wait for the service again', async () => {
+    const f = vi.fn(async () => new Response('down', { status: 503 }));
+    vi.stubGlobal('fetch', f);
+    await expect(dbSearchStops('Schwerin')).rejects.toThrow();
+    expect(dbPaused()).toBe(true);
+    await expect(dbSearchStops('Schwerin')).rejects.toThrow('paused');
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+  it('does not pause on a plain 404', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 404 })));
+    await expect(dbSearchStops('x')).rejects.toThrow();
+    expect(dbPaused()).toBe(false);
   });
 });
