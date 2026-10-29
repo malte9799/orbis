@@ -164,6 +164,9 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
   const first = rides[0] ?? it.legs[0];
   const last = rides[rides.length - 1] ?? it.legs[it.legs.length - 1];
   const live = first?.delayMin != null || last?.arrDelayMin != null;
+  // white: the planned times (also for the duration), the real-time ones follow below in green / red
+  const planDep = first?.schedDep ?? it.dep;
+  const planArr = last?.schedArr ?? it.arr;
   const cls = (d: number | null | undefined) => (d == null || d <= 5 ? 'ok' : 'late');
   const total = Math.max(1, it.arr - it.dep);
   const bar = it.legs
@@ -176,11 +179,11 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
     .join('');
   return `<details class="fp-itin" data-k="${esc(stableKey(it))}">
     <summary>
-      <span class="fp-l1"><b>${hm(it.dep)} – ${hm(it.arr)}</b><span>| ${esc(durationTxt(it.arr - it.dep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
+      <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
     </summary>
-    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(it.arr - it.dep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
+    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
   </details>`;
 };
