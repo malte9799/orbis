@@ -7,6 +7,9 @@ import { debounce, escapeHtml as esc } from '../util';
 
 export const hm = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 export const dayTxt = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+/** "Freitag, 30.10.2026" – the day heading between connections */
+export const dayLong = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
+const dayHead = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 /** value of an <input type="datetime-local"> for a timestamp (local time) */
 export const localInput = (t: number) => {
   const d = new Date(t - new Date(t).getTimezoneOffset() * 60000);
@@ -113,7 +116,7 @@ const timeCell = (actual: number, sched: number, delay: number | null) => {
   return delay === 0 ? `<span class="fp-tm"><b class="${cls}">${hm(actual)}</b></span>` : `<span class="fp-tm"><b>${hm(sched)}</b><b class="${cls}">${hm(actual)}</b></span>`;
 };
 const stationRow = (name: string, track: string | undefined, actual: number, sched: number, delay: number | null, color: string) =>
-  `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small>Gleis ${esc(track)}</small>` : ''}</div></div>`;
+  `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small class="fp-gl-badge" title="Gleis ${esc(track)}">Gl. ${esc(track)}</small>` : ''}</div></div>`;
 const walkTxt = (legs: Leg[]) => {
   const w = legs.reduce((n, l) => n + (l.walkM ?? 0), 0);
   return `Fußweg${w ? ` · ${w} m` : ''} · ${durationTxt(legs.reduce((n, l) => n + (l.arr - l.dep), 0))}`;
@@ -195,7 +198,7 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
   const total = Math.max(1, it.arr - it.dep);
   const bar = it.legs
     .map((l) => {
-      const w = Math.max(6, ((l.arr - l.dep) / total) * 100);
+      const w = Math.max(l.mode === 'WALK' ? 2 : 6, ((l.arr - l.dep) / total) * 100);
       return l.mode === 'WALK'
         ? `<span class="fp-seg walk" style="flex:${w}" title="Fußweg"></span>`
         : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`;
@@ -208,6 +211,6 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
     </summary>
-    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
+    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayHead(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
   </details>`;
 };

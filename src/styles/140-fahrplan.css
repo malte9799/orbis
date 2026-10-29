@@ -588,11 +588,14 @@
 .fp-search {
   order: 1;
 }
-.fp-results {
+.fp-chiprow {
   order: 2;
 }
-.fp-stations {
+.fp-results {
   order: 3;
+}
+.fp-stations {
+  order: 4;
 }
 .fp-results.empty {
   display: none;
@@ -1181,5 +1184,394 @@
 @media (prefers-reduced-motion: reduce) {
   .fp-spin {
     animation-duration: 3s;
+  }
+}
+
+/* ---------- phone: pages like the DB Navigator (date / time, options, connection details) ---------- */
+.fp-when,
+.fp-sheet-head {
+  display: none;
+}
+.fp-day {
+  text-align: center;
+}
+.fp-pagerow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.fp-pagerow .fp-page {
+  align-self: auto;
+  flex: 0 0 auto;
+  min-width: 96px;
+}
+.fp-gl-badge {
+  flex: none;
+  align-self: flex-start;
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #1c3f94;
+  color: #fff !important;
+  font-size: 0.8rem !important;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.fp-st {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.fp-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  overflow-y: auto;
+  padding-bottom: var(--safe-bottom);
+}
+.fp-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + var(--safe-top)) 12px 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.fp-sheet > .fp-sheet-head {
+  display: grid;
+}
+.fp-sheet-head b {
+  font-size: 1.1rem;
+}
+.fp-sh-btn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.fp-sh-ok {
+  background: rgba(255, 255, 255, 0.12);
+}
+.fp-sh-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fp-sheet-body .fp-detail {
+  border-top: 0;
+}
+.fp-wtabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.fp-wtabs button {
+  flex: 1;
+  height: 48px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.fp-wtabs button.on {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.fp-wfields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 16px;
+}
+.fp-wfields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.fp-wfields input {
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+  padding: 0 12px;
+}
+.fp-quick {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px;
+}
+.fp-quick button {
+  flex: 1;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 899px) {
+  .fp-when {
+    display: flex;
+    align-items: center;
+    flex: 1 1 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .fp-opts .fp-mode,
+  .fp-opts .fp-time,
+  .fp-opts .fp-now {
+    display: none;
+  }
+
+  /* options: a full page of rows */
+  .fp-optpanel:not([hidden]) {
+    position: fixed;
+    inset: 0;
+    z-index: 1200;
+    gap: 0;
+    padding: 0 0 calc(24px + var(--safe-bottom));
+    border: 0;
+    border-radius: 0;
+    background: var(--bg);
+    overflow-y: auto;
+  }
+  .fp-optpanel > .fp-sheet-head {
+    display: grid;
+  }
+  .fp-optpanel .fp-og {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .fp-optpanel .fp-og:has(.fp-mchips) {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 16px;
+  }
+  .fp-optpanel .fp-oh {
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .fp-optpanel select {
+    max-width: 55%;
+    background: transparent;
+    border: 0;
+    color: var(--text-2);
+    text-align: right;
+  }
+  .fp-optpanel .fp-chk {
+    min-height: 56px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .fp-optpanel .fp-reset {
+    margin: 20px 16px 0;
+    height: 44px;
+  }
+
+  /* results: a plain list from edge to edge */
+  .fp-results {
+    margin: 0 -10px;
+    padding: 0;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .fp-results .fp-pagerow,
+  .fp-results .fp-route,
+  .fp-results .fp-hint {
+    padding: 8px 14px;
+  }
+  .fp-results .fp-itin {
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    background: transparent;
+  }
+  .fp-results .fp-itin > summary {
+    padding: 14px;
+  }
+  .fp-results .fp-day {
+    margin: 0;
+    padding: 12px 14px;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+  .fp-results .fp-itin[open] > .fp-detail {
+    display: none;
+  }
+}
+
+/* phone: page header, stacked search summary and chips of a finished search (like the DB Navigator) */
+.fp-pagehead,
+.fp-chiprow,
+.fp-cf,
+.fp-ct,
+.fp-cw {
+  display: none;
+}
+.fp-sh-t {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.fp-sh-t small {
+  color: var(--text-2);
+  font-size: 0.8rem;
+}
+.fp-sh-btn.fp-trip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+}
+.fp-sh-btn.fp-trip svg {
+  width: 22px;
+  height: 22px;
+}
+.fp-sh-btn.fp-trip.on {
+  color: var(--accent);
+}
+.fp-pdate {
+  margin-right: auto;
+  align-self: center;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+@media (max-width: 899px) {
+  .fahrplan-view.is-compact .fp-pagehead {
+    order: 0;
+    display: grid;
+    grid-template-columns: 44px 1fr 44px;
+    align-items: center;
+    gap: 8px;
+    margin: -8px 52px 0 -6px;
+  }
+  .fp-pagehead .fp-sh-t b {
+    font-size: 1.1rem;
+  }
+  .fp-pagehead svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .fp-ph-star.on {
+    color: var(--accent);
+  }
+  .fp-ph-star.on svg {
+    fill: currentColor;
+  }
+  .fp-sh-t b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fp-search.compact {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .fp-search.compact .fp-compact {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--card-solid);
+    text-align: left;
+    font: inherit;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .fp-search.compact .fp-cs,
+  .fp-search.compact .fp-ce {
+    display: none;
+  }
+  .fp-search.compact .fp-cf,
+  .fp-search.compact .fp-ct,
+  .fp-search.compact .fp-cw {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fp-search.compact .fp-cf,
+  .fp-search.compact .fp-ct {
+    padding: 9px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .fp-search.compact .fp-cw {
+    padding: 2px 4px 0;
+    color: var(--text-2);
+  }
+  .fp-chiprow:not([hidden]) {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -10px;
+    padding: 0 10px;
+  }
+  .fp-chip {
+    flex: none;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .fp-chip.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .fahrplan-view.is-compact .fp-results .fp-route {
+    display: none;
   }
 }
