@@ -12,12 +12,17 @@
 //   • cron trigger "* * * * *"
 //   • optional variable ALLOWED_ORIGINS (comma separated), like the data proxy
 //
+// Real-time delays: the official DB "Timetables" API (DB API Marketplace, free key, XML) is queried here, so the
+// key stays in the worker and serves all users. Needs secrets DB_CLIENT_ID and DB_API_KEY. Without them the
+// delay endpoint answers 501 and the push check falls back to Transitous. Data: Deutsche Bahn AG, CC BY 4.0.
+//
 // Routes:  GET /key          → { key }  public VAPID key (applicationServerKey)
+//          POST /db/delays   → real-time delay / platform / cancellation of rail departures and arrivals
 //          POST /sync        → store the subscription with its trips
 //          POST /unsubscribe → forget a subscription
 //          POST /test        → send a test notification to one subscription
 
-const DB = 'https://v6.db.transport.rest';
+const DB_BASE = 'https://apis.deutschebahn.com/db-api-marketplace/apis/timetables/v1';
 const MOTIS = 'https://api.transitous.org/api';
 const GRACE_MS = 4 * 60000; // a missed cron minute is made up for within this window
 const MAX_SUBS = 500;
@@ -139,22 +144,18 @@ async function getJson(url) {
 }
 
 /** status of the trip's ride around `dep`: { cancelled, delayMin | null, dep, track } or null when it was not found */
-export async function liveStatus(trip, dep) {
+export async function liveStatus(trip, dep, env) {
   const near = (ts) => Math.abs(ts - dep) <= 90000;
-  if (trip.from.src === 'db' && trip.to.src === 'db') {
+  // 1) the official DB data: exact delays for rail
+  if (env?.DB_CLIENT_ID && env?.DB_API_KEY) {
     try {
-      const q = new URLSearchParams({ from: trip.from.id, to: trip.to.id, departure: new Date(dep - 15 * 60000).toISOString(), results: '6', stopovers: 'false', polylines: 'false', remarks: 'false', language: 'de' });
-      const r = await getJson(`${DB}/journeys?${q}`);
-      for (const j of r.journeys ?? []) {
-        const ride = (j.legs ?? []).find((l) => !l.walking && !l.transfer);
-        if (ride && ride.line?.name === trip.line && near(Date.parse(ride.plannedDeparture ?? ride.departure))) {
-          return { cancelled: !!ride.cancelled, delayMin: typeof ride.departureDelay === 'number' ? Math.round(ride.departureDelay / 60) : null, dep: Date.parse(ride.departure ?? ride.plannedDeparture), track: ride.departurePlatform ?? ride.plannedDeparturePlatform };
-        }
-      }
+      const [r] = await dbDelays(env, [{ station: trip.from.name, ts: dep, kind: 'dep', line: trip.line }]);
+      if (r) return { cancelled: !!r.cancelled, delayMin: r.delayMin, dep: dep + (r.delayMin ?? 0) * 60000, track: r.track };
     } catch {
       /* fall back to Transitous */
     }
   }
+  // 2) Transitous: planned times, real time only where the operator feeds it
   const place = (s) => (s.src === 'db' ? `${s.lat},${s.lon}` : s.id);
   const q = new URLSearchParams({ fromPlace: place(trip.from), toPlace: place(trip.to), time: new Date(dep - 15 * 60000).toISOString(), arriveBy: 'false', numItineraries: '6', language: 'de' });
   const r = await getJson(`${MOTIS}/v5/plan?${q}`);
@@ -167,6 +168,133 @@ export async function liveStatus(trip, dep) {
     return { cancelled: !!ride.cancelled, delayMin: ride.realTime ? Math.round((actual - sched) / 60000) : null, dep: actual, track: ride.from?.track ?? ride.from?.scheduledTrack };
   }
   return null;
+}
+
+// ---- official DB Timetables API (XML) ---------------------------------------------------
+
+const decodeXml = (v) => v.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+function attrsOf(text) {
+  const o = {};
+  for (const m of text.matchAll(/([\w:-]+)="([^"]*)"/g)) o[m[1]] = decodeXml(m[2]);
+  return o;
+}
+function tagOf(body, name) {
+  const m = new RegExp(`<${name}(?:\\s([^>]*?))?/?>`).exec(body);
+  return m ? attrsOf(m[1] ?? '') : null;
+}
+
+/** <station name eva …/> entries of a station search */
+export function parseStations(xml) {
+  return [...xml.matchAll(/<station\s([^>]*?)\/?>/g)].map((m) => attrsOf(m[1])).filter((a) => a.eva && a.name);
+}
+
+/** stops of a timetable (planned: pt/pp, changes: ct/cp/cs): [{ id, tl, ar, dp }] */
+export function parseTimetable(xml) {
+  const out = [];
+  for (const m of xml.matchAll(/<s\s([^>]*?)(?:\/>|>([\s\S]*?)<\/s>)/g)) {
+    const body = m[2] ?? '';
+    out.push({ id: attrsOf(m[1]).id, tl: tagOf(body, 'tl'), ar: tagOf(body, 'ar'), dp: tagOf(body, 'dp') });
+  }
+  return out;
+}
+
+const normName = (n) => n.toLowerCase().replace(/ß/g, 'ss').replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+const stripStation = (n) => normName(n).replace(/\b(bahnhof|bf|hbf|hauptbahnhof|haltepunkt|hp)\b/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** the station of `list` that is meant by `name` (exact, then without "Bahnhof"/"Hbf", then a prefix match) or null */
+export function pickStation(name, list) {
+  const n = normName(name);
+  const base = stripStation(name);
+  return list.find((x) => normName(x.name) === n) ?? list.find((x) => stripStation(x.name) === base) ?? list.find((x) => stripStation(x.name).startsWith(base) && base.length >= 4) ?? null;
+}
+
+/** wall clock of `ts` in Germany as the API writes it: YYMMddHHmm */
+export function dbStamp(ts) {
+  const z = zoned(ts, 'Europe/Berlin');
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(z.y % 100)}${p(z.m)}${p(z.d)}${p(z.h)}${p(z.mi)}`;
+}
+const stampMs = (st) => Date.UTC(2000 + +st.slice(0, 2), +st.slice(2, 4) - 1, +st.slice(4, 6), +st.slice(6, 8), +st.slice(8, 10));
+
+const normLine = (l) => String(l ?? '').toUpperCase().replace(/[\s-]+/g, '');
+
+/**
+ * Real-time info for a query { ts, kind: 'dep' | 'arr', line } from the planned and the changed timetable of the
+ * station: the stop planned at that minute (with the matching line), its delay, platform and cancellation.
+ */
+export function matchDelay(planned, changes, q) {
+  const key = q.kind === 'arr' ? 'ar' : 'dp';
+  const stamp = dbStamp(q.ts);
+  const cands = planned.filter((s) => s[key]?.pt === stamp);
+  const label = (s) => [`${s.tl?.c ?? ''}${s[key]?.l ?? ''}`, `${s.tl?.c ?? ''}${s.tl?.n ?? ''}`].map(normLine);
+  const wanted = normLine(q.line);
+  const exact = wanted ? cands.filter((s) => label(s).includes(wanted) || normLine(s.tl?.n) === wanted) : cands;
+  const hit = exact.length === 1 ? exact[0] : exact.length === 0 && cands.length === 1 && !wanted ? cands[0] : null;
+  if (!hit) return null;
+  const ch = changes.find((c) => c.id === hit.id)?.[key];
+  const cancelled = ch?.cs === 'c' || hit[key]?.cs === 'c';
+  const delayMin = ch?.ct ? Math.round((stampMs(ch.ct) - stampMs(stamp)) / 60000) : 0;
+  return { delayMin, cancelled, track: ch?.cp ?? hit[key]?.pp };
+}
+
+// small caches per worker instance: the free key allows 60 calls a minute for all users together
+const mem = new Map();
+async function cached(key, ttlMs, load) {
+  const hit = mem.get(key);
+  if (hit && hit.t > Date.now()) return hit.v;
+  const v = await load();
+  mem.set(key, { v, t: Date.now() + ttlMs });
+  if (mem.size > 300) mem.delete(mem.keys().next().value);
+  return v;
+}
+
+async function dbGet(env, path) {
+  const res = await fetch(`${env.DB_TIMETABLES_BASE || DB_BASE}${path}`, {
+    headers: { 'DB-Client-Id': env.DB_CLIENT_ID, 'DB-Api-Key': env.DB_API_KEY, Accept: 'application/xml' },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`DB ${res.status}`);
+  return res.text();
+}
+
+async function evaOf(env, name) {
+  const variants = [...new Set([name, name.replace(/\s*\(.*\)\s*$/, ''), name.replace(/,.*$/, ''), name.replace(/\s+(Bahnhof|Bf|Hbf)$/i, '')].map((v) => v.trim()).filter(Boolean))];
+  for (const v of variants) {
+    const eva = await cached(`eva|${normName(v)}`, 7 * 86400000, async () => {
+      const list = parseStations(await dbGet(env, `/station/${encodeURIComponent(v)}`));
+      return pickStation(name, list)?.eva ?? '';
+    }).catch(() => '');
+    if (eva) return eva;
+  }
+  return null;
+}
+
+/**
+ * Looks up queries [{ station, ts, kind, line }] (planned instants) and returns, aligned, null or
+ * { delayMin, cancelled, track }. Stations are resolved once, timetables are cached.
+ */
+export async function dbDelays(env, queries) {
+  const evas = new Map();
+  for (const n of new Set(queries.map((x) => x.station))) evas.set(n, await evaOf(env, n));
+  const out = [];
+  for (const q of queries) {
+    const eva = evas.get(q.station);
+    if (!eva) {
+      out.push(null);
+      continue;
+    }
+    const stamp = dbStamp(q.ts);
+    try {
+      const [planned, changes] = await Promise.all([
+        cached(`plan|${eva}|${stamp.slice(0, 8)}`, 3600000, async () => parseTimetable(await dbGet(env, `/plan/${eva}/${stamp.slice(0, 6)}/${stamp.slice(6, 8)}`))),
+        cached(`fchg|${eva}`, 45000, async () => parseTimetable(await dbGet(env, `/fchg/${eva}`))),
+      ]);
+      out.push(matchDelay(planned, changes, q));
+    } catch {
+      out.push(null);
+    }
+  }
+  return out;
 }
 
 // ---- message ---------------------------------------------------------------------
@@ -235,7 +363,7 @@ export async function runDue(env, now = Date.now()) {
         const ck = `${trip.from.id}|${trip.to.id}|${trip.line}|${due.dep}`;
         if (!cache.has(ck)) {
           actions++;
-          cache.set(ck, liveStatus(trip, due.dep).catch(() => null));
+          cache.set(ck, liveStatus(trip, due.dep, env).catch(() => null));
         }
         const status = await cache.get(ck);
         if (!status) continue; // not found / service down: try again next minute (inside the grace window)
@@ -274,9 +402,28 @@ const validTz = (tz) => {
   }
 };
 
+async function delaysRoute(req, env) {
+  if (!env.DB_CLIENT_ID || !env.DB_API_KEY) return 501;
+  const raw = await req.text();
+  if (raw.length > 20000) return 413;
+  let body;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return 400;
+  }
+  const queries = (Array.isArray(body?.queries) ? body.queries : [])
+    .slice(0, 40)
+    .filter((q) => typeof q?.station === 'string' && q.station.length <= 100 && Number.isFinite(q.ts) && (q.kind === 'dep' || q.kind === 'arr'))
+    .map((q) => ({ station: q.station, ts: q.ts, kind: q.kind, line: typeof q.line === 'string' ? q.line.slice(0, 40) : '' }));
+  if (!queries.length) return 400;
+  return { results: await dbDelays(env, queries) };
+}
+
 async function handle(req, env, url) {
   if (url.pathname === '/key' && req.method === 'GET') return { key: env.VAPID_PUBLIC };
   if (req.method !== 'POST') return 404;
+  if (url.pathname === '/db/delays') return delaysRoute(req, env);
   const raw = await req.text();
   if (raw.length > 30000) return 413;
   let body;

@@ -1,4 +1,5 @@
-import { departures, nearbyStops, planConnections, sourceTxt, type Itinerary, type Stop } from '../api/connections';
+import { departures, nearbyStops, planConnections, sourceTxt, type Departure, type Itinerary, type Stop } from '../api/connections';
+import { delaysConfigured, departuresWithDelays, plannedDeps, withDelays } from '../api/dbdelays';
 import { modeStyle } from '../api/transit';
 import { LEADS, enablePush, pushState, syncPush, testPush } from '../api/pushnotify';
 import { locate } from '../search';
@@ -113,6 +114,8 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
           cursor = res.next;
           if (!cursor) break;
         }
+        // the exact delay comes from the DB timetable data (when our worker is set up)
+        if (r.it) r = { run, it: (await withDelays([r.it]))[0] };
       } catch {
         r = { run, it: null, failed: true };
       }
@@ -179,7 +182,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
   // ---- push notifications of a trip ----
   const NOTIFY_MSG: Record<string, string> = {
     unsupported: 'Dieser Browser kann keine Push-Nachrichten. Auf dem iPhone muss Orbis erst zum Home-Bildschirm hinzugefügt werden.',
-    unconfigured: 'Der Push-Dienst ist noch nicht eingerichtet (README „Fahrplan-Benachrichtigungen“).',
+    unconfigured: 'Der Push-Dienst ist noch nicht eingerichtet (README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“).',
     denied: 'Benachrichtigungen sind im Browser blockiert – in den Seiteneinstellungen erlauben.',
   };
 
@@ -227,7 +230,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     const day = `<p class="fp-day">${r.run.today ? 'Heute' : 'Nächste Fahrt'}, ${esc(dayTxt(r.run.dep))}</p>`;
     if (r.failed) return `${day}<p class="fp-hint">Fahrplan gerade nicht erreichbar.</p>`;
     if (!r.it) return `${day}<p class="fp-hint">Die Fahrt wurde im Fahrplan nicht gefunden (kein Verkehr an dem Tag oder die Linie hat sich geändert).</p>`;
-    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.src))}</p>`;
+    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.delaySrc))}</p>`;
   }
 
   // ---- detail: stop board ----
@@ -249,7 +252,19 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     try {
       const list = await departures(s, 25);
       if (my !== boardSeq || current?.id !== s.id) return;
-      bodyEl.innerHTML = headHtml(s) + (list.length ? `<ul class="fp-deps">${list.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(list[0].src))}</p>` : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
+      const render = (l: Departure[], loading: boolean) => {
+        bodyEl.innerHTML =
+          headHtml(s) +
+          (l.length
+            ? `${loading ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<ul class="fp-deps">${l.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(l.some((d) => d.delaySrc) ? 'db' : undefined))}</p>`
+            : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
+      };
+      // Transitous first, the exact rail delays follow (a refresh renders once, with them)
+      const wait = delaysConfigured();
+      if (initial && wait) render(plannedDeps(list), true);
+      const merged = wait ? await departuresWithDelays(s.name, list) : list;
+      if (my !== boardSeq || current?.id !== s.id) return;
+      render(merged, false);
     } catch {
       if (my === boardSeq && initial) bodyEl.innerHTML = headHtml(s) + '<p class="fp-hint">Abfahrten nicht erreichbar – bitte später erneut versuchen.</p>';
     }

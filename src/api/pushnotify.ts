@@ -1,4 +1,4 @@
-import { ensureSource } from './connections';
+import { toMotis } from './connections';
 import { store, type SavedTrip } from '../store';
 import { fetchJson } from '../util';
 
@@ -74,8 +74,8 @@ export async function syncPush(): Promise<boolean> {
     return true;
   }
   const stop = (s: SavedTrip['from']) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, src: s.src });
-  // old saved stops get their DB id first, the worker has no way to look it up
-  const upgraded = await Promise.all(trips.map(async (t) => ({ ...t, from: await ensureSource(t.from), to: await ensureSource(t.to) })));
+  // stops saved while a DB source was in use carry its id: the worker plans with Transitous ids
+  const upgraded = await Promise.all(trips.map(async (t) => ({ ...t, from: await toMotis(t.from), to: await toMotis(t.to) })));
   await post('/sync', {
     subscription: sub.toJSON(),
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,

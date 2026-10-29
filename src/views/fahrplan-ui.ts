@@ -1,5 +1,6 @@
-import { durationTxt, inTxt, legColor, searchStopsProgressive, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
+import { durationTxt, inTxt, legColor, searchStops, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
+import { store } from '../store';
 import { debounce, escapeHtml as esc } from '../util';
 
 // Building blocks of the Fahrplan view that are shared between the search and the saved tab.
@@ -15,6 +16,16 @@ export const localInput = (t: number) => {
 export const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.6-9.3-9.2C1.2 8.6 3 5 6.5 5c2 0 3.7 1.2 5.5 3.2C13.8 6.2 15.5 5 17.5 5 21 5 22.8 8.6 21.3 11.8 19 16.4 12 21 12 21z"/></svg>';
 export const BOOKMARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
 
+/** suggestions found earlier (kept in the browser for a year): read with a text, written with a text and a list */
+function stopMemory(q: string, list?: Stop[]): Stop[] | null {
+  const key = q.trim().toLowerCase();
+  const all = store.cacheGet<Record<string, Stop[]>>('fpstops', 365 * 86400000) ?? {};
+  if (!list) return all[key] ?? null;
+  const next = { ...Object.fromEntries(Object.entries(all).slice(-79)), [key]: list.slice(0, 8) };
+  store.cacheSet('fpstops', next);
+  return list;
+}
+
 /** stop picker: text box with suggestions; `pick` is called with the chosen stop */
 export function stopField(label: string, onPick: (s: Stop | null) => void) {
   const root = document.createElement('div');
@@ -29,6 +40,7 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
     input.setAttribute('aria-expanded', 'false');
   };
   const choose = (s: Stop) => {
+    store.pushRecentStop({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src });
     input.value = s.name;
     close();
     onPick(s);
@@ -43,14 +55,15 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
   };
   const run = debounce(async (q: string) => {
     const my = ++seq;
+    // what was found for this text before is shown at once, the fresh answer replaces it
+    const known = stopMemory(q);
+    if (known) show(known);
     try {
-      // the quicker source is shown at once, the other one replaces it when it arrives
-      const r = await searchStopsProgressive(q, (early) => {
-        if (my === seq) show(early);
-      });
+      const r = await searchStops(q);
+      stopMemory(q, r);
       if (my === seq) show(r);
     } catch {
-      if (my === seq) {
+      if (my === seq && !known) {
         list.innerHTML = '<li class="empty">Suche nicht verfügbar</li>';
         list.hidden = false;
       }
@@ -76,6 +89,12 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
       e.preventDefault();
       choose(results[Number(li.dataset.i)]);
     }
+  });
+  // an empty field offers the stops used lately
+  input.addEventListener('focus', () => {
+    if (input.value.trim() || !store.getRecentStops().length) return;
+    seq++;
+    show(store.getRecentStops());
   });
   input.addEventListener('blur', () => setTimeout(close, 150));
   return {

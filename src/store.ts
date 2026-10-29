@@ -148,6 +148,13 @@ export const store = {
   getFpOptions: (): Record<string, unknown> => read('wg.fpOptions', {}),
   setFpOptions: (o: Record<string, unknown>) => write('wg.fpOptions', o),
 
+  /** stops used in the Fahrplan search lately (newest first), offered when a field is focused */
+  getRecentStops: (): SavedStop[] => read('wg.recentStops', []),
+  pushRecentStop(s: SavedStop) {
+    const list = [s, ...store.getRecentStops().filter((x) => x.id !== s.id)].slice(0, 8);
+    write('wg.recentStops', list);
+  },
+
   getRoutes: (): SavedRoute[] => read('wg.routes', []),
   isRoute: (from: SavedStop, to: SavedStop) => store.getRoutes().some((r) => r.id === routeId(from, to)),
   toggleRoute(from: SavedStop, to: SavedStop): boolean {

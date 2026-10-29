@@ -1,4 +1,5 @@
-import { MODE_GROUPS, planConnections, planProgressive, sourceTxt, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { MODE_GROUPS, planConnections, sourceTxt, stableKey, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { delaysConfigured, planned, withDelays } from '../api/dbdelays';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
 import { syncPush } from '../api/pushnotify';
@@ -158,13 +159,19 @@ export function createFahrplanView(): FahrplanView {
   });
   q('.fp-now').addEventListener('click', () => (timeIn.value = localInput(Date.now())));
 
-  // all connections found so far (earlier / later pages are merged into it) and the paging cursors
-  let items: Itinerary[] = [];
+  // all connections found so far (earlier / later pages are added): `raw` as Transitous has them, `shown`
+  // with the DB real-time data merged in once it has arrived
+  interface Entry {
+    raw: Itinerary;
+    shown: Itinerary;
+  }
+  let entries: Entry[] = [];
+  const shownList = () => entries.map((e) => e.shown);
   let cursors: { prev?: string; next?: string } = {};
   let lastOpts: PlanOptions | null = null;
-  /** the list shows Transitous data (planned times only); the DB real-time data is still loading */
-  let preliminary = false;
-  /** how long the answering source took (ms) */
+  /** the DB real-time data of rail is still being loaded */
+  let loadingDelays = false;
+  /** how long Transitous took (ms) */
   let resMs: number | undefined;
   let searchSeq = 0;
   const section = q('.fp-search');
@@ -178,7 +185,11 @@ export function createFahrplanView(): FahrplanView {
   }
   compactBtn.addEventListener('click', () => setCompact(false));
 
-  const itKey = (it: Itinerary) => `${it.dep}-${it.arr}`;
+  /** identifies a connection before and after the real-time data came in */
+  const itKey = (it: Itinerary) => {
+    const rides = it.legs.filter((l) => l.mode !== 'WALK');
+    return `${stableKey(it)}|${rides.length ? Math.round(rides[rides.length - 1].schedArr / 60000) : ''}`;
+  };
   /** the commuter trip a connection stands for: its first ride at its scheduled time */
   function tripOf(it: Itinerary) {
     const rides = it.legs.filter((l) => l.mode !== 'WALK');
@@ -192,12 +203,12 @@ export function createFahrplanView(): FahrplanView {
   }
 
   function renderResults() {
-    if (!items.length) {
+    if (!entries.length) {
       res.innerHTML = '<p class="fp-hint">Keine Verbindung gefunden.</p>';
       return;
     }
     let day = '';
-    const rows = items
+    const rows = shownList()
       .map((it) => {
         const d = dayTxt(it.dep);
         const head = d !== day ? `<p class="fp-day">${esc(d)}</p>` : '';
@@ -207,9 +218,9 @@ export function createFahrplanView(): FahrplanView {
       })
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
-    res.innerHTML = `${preliminary ? `<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Echtzeit-Daten der DB werden geladen …${resMs != null ? ` (Transitous nach ${(resMs / 1000).toFixed(1).replace('.', ',')} s)` : ''}</p>` : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
+    res.innerHTML = `${loadingDelays ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
       ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}
-      <p class="fp-hint fp-src">${esc(sourceTxt(items[0]?.src, resMs))}</p>`;
+      <p class="fp-hint fp-src">${esc(sourceTxt(entries.some((e) => e.shown.delaySrc) ? 'db' : undefined, resMs))}</p>`;
   }
 
   /** the filters of the options panel as API options */
@@ -224,6 +235,19 @@ export function createFahrplanView(): FahrplanView {
     };
   }
 
+  /** merges the DB real-time data into the shown connections (they keep their place; opened ones stay open) */
+  async function mergeDelays(list: Entry[], my: number) {
+    const merged = await withDelays(list.map((e) => e.raw)).catch(() => list.map((e) => e.raw));
+    if (my !== searchSeq) return;
+    list.forEach((e, i) => (e.shown = merged[i]));
+    loadingDelays = false;
+    const open = new Set([...res.querySelectorAll<HTMLElement>('details.fp-itin[open]')].map((d) => d.dataset.k!));
+    renderResults();
+    res.querySelectorAll<HTMLDetailsElement>('details.fp-itin').forEach((d) => {
+      if (open.has(d.dataset.k!)) d.open = true;
+    });
+  }
+
   async function search() {
     if (!from || !to) {
       toast('Bitte Start und Ziel aus der Vorschlagsliste wählen.', 'error');
@@ -233,33 +257,22 @@ export function createFahrplanView(): FahrplanView {
     const my = ++searchSeq;
     goBtn.disabled = true;
     resSection.classList.remove('empty');
-    preliminary = false;
+    loadingDelays = false;
     resMs = undefined;
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
       lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
-      const r = await planProgressive(from, to, lastOpts, (partial) => {
-        if (my !== searchSeq) return;
-        items = partial.list;
-        cursors = {};
-        resMs = partial.ms;
-        preliminary = true;
-        goBtn.disabled = false;
-        renderResults();
-        setCompact(true);
-      });
+      const r = await planConnections(from, to, lastOpts);
       if (my !== searchSeq) return;
-      // connections the user opened stay open when the exact data replaces the preliminary list
-      const open = new Set([...res.querySelectorAll<HTMLElement>('details.fp-itin[open]')].map((d) => d.dataset.k!));
-      items = r.list;
+      // Transitous is shown at once; rail times stay planned times until the DB delays have arrived
+      const wait = delaysConfigured();
+      entries = r.list.map((raw) => ({ raw, shown: wait ? planned(raw) : raw }));
       cursors = { prev: r.prev, next: r.next };
       resMs = r.ms;
-      preliminary = false;
+      loadingDelays = wait && entries.length > 0;
       renderResults();
-      res.querySelectorAll<HTMLDetailsElement>('details.fp-itin').forEach((d) => {
-        if (open.has(d.dataset.k!)) d.open = true;
-      });
       setCompact(true);
+      if (loadingDelays) void mergeDelays(entries, my);
     } catch {
       if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';
     } finally {
@@ -280,7 +293,7 @@ export function createFahrplanView(): FahrplanView {
       return;
     }
     if (act?.dataset.act === 'savetrip') {
-      const it = items.find((i) => itKey(i) === act.dataset.key);
+      const it = shownList().find((i) => itKey(i) === act.dataset.key);
       const t = it && tripOf(it);
       if (!t) return;
       const now = store.toggleTrip(t);
@@ -301,17 +314,19 @@ export function createFahrplanView(): FahrplanView {
     try {
       const r: PlanResult = await planConnections(from, to, lastOpts, cursor);
       if (my !== searchSeq) return;
-      const key = (i: Itinerary) => `${i.dep}-${i.arr}`;
-      const seen = new Set(items.map(key));
-      const fresh = r.list.filter((i) => !seen.has(key(i)));
+      const seen = new Set(entries.map((e) => itKey(e.raw)));
+      const wait = delaysConfigured();
+      const fresh = r.list.filter((i) => !seen.has(itKey(i))).map((raw): Entry => ({ raw, shown: wait ? planned(raw) : raw }));
       if (dir === 'prev') {
-        items = [...fresh, ...items];
+        entries = [...fresh, ...entries];
         cursors.prev = r.prev;
       } else {
-        items = [...items, ...fresh];
+        entries = [...entries, ...fresh];
         cursors.next = r.next;
       }
+      loadingDelays = wait && fresh.length > 0;
       renderResults();
+      if (loadingDelays) void mergeDelays(fresh, my);
     } catch {
       btn.disabled = false;
       toast('Weitere Verbindungen konnten nicht geladen werden.', 'error');
