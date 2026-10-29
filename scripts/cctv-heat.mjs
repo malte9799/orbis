@@ -1,5 +1,5 @@
 // Surveillance camera density for the CCTV layer's overview heatmap.
-// Streams a Geofabrik regional extract through `osmium tags-filter` (nothing big is stored),
+// Streams a Geofabrik regional extract through `osmium tags-filter -R` (stdin needs -R; nothing big is stored),
 // counts man_made=surveillance nodes per ~1 km cell and writes <out>/cctv-<region>.json as
 // [[lon, lat, count], …]. Run by .github/workflows/cctv-heat.yml:
 //   node scripts/cctv-heat.mjs <outDir> [region]
@@ -42,7 +42,7 @@ export function parseOpl(line) {
 
 async function heat(region) {
   const url = `https://download.geofabrik.de/${REGIONS[region]}-latest.osm.pbf`;
-  const cmd = `curl -sSfL -A "Orbis-data/1.0 (+https://github.com/malte9799/orbis)" "${url}" | osmium tags-filter --input-format=pbf --output-format=opl --overwrite -o - - n/man_made=surveillance`;
+  const cmd = `curl -sSfL -A "Orbis-data/1.0 (+https://github.com/malte9799/orbis)" "${url}" | osmium tags-filter -R --input-format=pbf --output-format=opl --overwrite -o - - n/man_made=surveillance`;
   const proc = spawn('bash', ['-c', `set -o pipefail; ${cmd}`], { stdio: ['ignore', 'pipe', 'inherit'] });
   const cells = new Map();
   let n = 0;
