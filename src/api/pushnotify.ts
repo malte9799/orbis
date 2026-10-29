@@ -70,16 +70,18 @@ export async function syncPush(): Promise<boolean> {
   if (!sub) return false;
   const trips = watched();
   if (!trips.length) {
-    await post('/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+    await post('/unsubscribe', { endpoint: sub.endpoint });
     return true;
   }
   const stop = (s: SavedTrip['from']) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, src: s.src });
   // stops saved while a DB source was in use carry its id: the worker plans with Transitous ids
-  const upgraded = await Promise.all(trips.map(async (t) => ({ ...t, from: await toMotis(t.from), to: await toMotis(t.to) })));
+  // one stop that cannot be looked up must not keep the other trips from syncing: it goes out as it is
+  const upgrade = (s: SavedTrip['from']) => toMotis(s).catch(() => s);
+  const upgraded = await Promise.all(trips.map(async (t) => ({ ...t, from: await upgrade(t.from), to: await upgrade(t.to) })));
   await post('/sync', {
     subscription: sub.toJSON(),
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    trips: upgraded.map((t) => ({ id: t.id, from: stop(t.from), to: stop(t.to), line: t.line, hm: t.hm, days: t.days, leads: t.notify!.leads, onlyDelay: t.notify!.onlyDelay })),
+    trips: upgraded.map((t) => ({ id: t.id, from: stop(t.from), to: stop(t.to), line: t.line, hm: t.hm, tz: t.tz, days: t.days, leads: t.notify!.leads, onlyDelay: t.notify!.onlyDelay })),
   });
   return true;
 }

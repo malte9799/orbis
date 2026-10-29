@@ -24,9 +24,11 @@ interface Hit {
 export const delaysConfigured = (): boolean => !!pushBase();
 
 let pausedUntil = 0;
+let failures = 0;
 /** for tests */
 export const resetDelaysPause = () => {
   pausedUntil = 0;
+  failures = 0;
 };
 
 async function lookup(queries: Query[]): Promise<(Hit | null)[]> {
@@ -38,10 +40,12 @@ async function lookup(queries: Query[]): Promise<(Hit | null)[]> {
     const parts = await Promise.all(
       chunks.map((queries) => fetchJson<{ results: (Hit | null)[] }>(`${pushBase()}/db/delays`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ queries }) }, 15000).then((r) => r.results)),
     );
+    failures = 0;
     return parts.flat();
   } catch {
-    // not set up (501), down or unreachable: do not make every search wait for it
-    pausedUntil = Date.now() + 5 * 60000;
+    // not set up (501), down or unreachable: do not make every search wait for it. A single hiccup
+    // (a dropout on the train) only costs 30 s; the pause doubles with every failure in a row, up to 5 min.
+    pausedUntil = Date.now() + Math.min(30000 * 2 ** failures++, 5 * 60000);
     return none;
   }
 }

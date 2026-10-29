@@ -10,7 +10,8 @@
 //   • secrets VAPID_PUBLIC and VAPID_PRIVATE (node scripts/vapid-keys.mjs), variable VAPID_SUBJECT
 //     ("mailto:you@example.org")
 //   • cron trigger "* * * * *"
-//   • optional variable ALLOWED_ORIGINS (comma separated), like the data proxy
+//   • variable ALLOWED_ORIGINS (comma separated, like the data proxy) – recommended: without it any website may use the worker.
+//     Requests are also limited per IP and only the push services of the browsers are accepted as endpoints.
 //
 // Real-time delays: the official DB "Timetables" API (DB API Marketplace, free key, XML) is queried here, so the
 // key stays in the worker and serves all users. Needs secrets DB_CLIENT_ID and DB_API_KEY. Without them the
@@ -27,10 +28,29 @@ const MOTIS = 'https://api.transitous.org/api';
 const GRACE_MS = 4 * 60000; // a missed cron minute is made up for within this window
 const MAX_SUBS = 500;
 const MAX_TRIPS = 10;
-const MAX_ACTIONS_PER_RUN = 40; // free plan: 50 subrequests per invocation
+const SUBREQUESTS = 45; // free plan: 50 subrequests per invocation – everything that calls out spends from one budget
+const KNOWN_AHEAD_MS = 60 * 60000; // DB real time is only known shortly before a stop; further out "no change" means "unknown"
 const KEEP_SENT_MS = 3 * 86400000;
 
 // ---- small helpers ----------------------------------------------------------
+
+/** subrequest budget of one invocation: spend() before every outgoing fetch, throws when it is used up */
+const newBudget = (left = SUBREQUESTS) => ({ left });
+function spend(budget) {
+  if (budget && --budget.left < 0) throw new Error('subrequest budget used up');
+}
+
+/** best-effort limit per key in this worker instance (the free plan has no rate limiting) */
+const hits = new Map();
+export function limited(key, max, windowMs, now = Date.now()) {
+  const h = hits.get(key);
+  if (!h || h.until <= now) {
+    hits.set(key, { n: 1, until: now + windowMs });
+    if (hits.size > 2000) hits.delete(hits.keys().next().value);
+    return false;
+  }
+  return ++h.n > max;
+}
 
 const te = new TextEncoder();
 const concat = (...parts) => {
@@ -75,16 +95,25 @@ export async function encryptPush(sub, payload) {
 }
 
 /** `Authorization` header value for a push to `endpoint` */
+const jwts = new Map(); // one signed token per push service, valid for 12 h – reused while 1 h or more is left
 export async function vapidAuth(env, endpoint, now = Date.now()) {
+  const aud = new URL(endpoint).origin;
+  const ck = `${aud}|${env.VAPID_SUBJECT}|${env.VAPID_PUBLIC}`;
+  const hit = jwts.get(ck);
+  if (hit && hit.exp * 1000 - now > 3600000 && hit.exp * 1000 - now <= 12 * 3600000) return hit.auth;
+  const exp = Math.floor(now / 1000) + 12 * 3600;
   const header = b64uEnc(te.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
-  const claims = b64uEnc(te.encode(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: env.VAPID_SUBJECT || 'mailto:admin@example.org' })));
+  const claims = b64uEnc(te.encode(JSON.stringify({ aud, exp, sub: env.VAPID_SUBJECT || 'mailto:admin@example.org' })));
   const key = await crypto.subtle.importKey('jwk', JSON.parse(env.VAPID_PRIVATE), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
   const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, te.encode(`${header}.${claims}`)));
-  return `vapid t=${header}.${claims}.${b64uEnc(sig)}, k=${env.VAPID_PUBLIC}`;
+  const auth = `vapid t=${header}.${claims}.${b64uEnc(sig)}, k=${env.VAPID_PUBLIC}`;
+  jwts.set(ck, { exp, auth });
+  return auth;
 }
 
 /** Sends a notification; resolves with the HTTP status of the push service (404/410 = subscription gone). */
-async function sendPush(env, sub, message) {
+async function sendPush(env, sub, message, budget) {
+  spend(budget);
   const body = await encryptPush(sub, te.encode(JSON.stringify(message)));
   const res = await fetch(sub.endpoint, {
     method: 'POST',
@@ -137,19 +166,20 @@ export function dueNotifications(trip, tz, now, sent) {
 
 // ---- live status ---------------------------------------------------------------
 
-async function getJson(url) {
+async function getJson(url, budget) {
+  spend(budget);
   const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }
 
 /** status of the trip's ride around `dep`: { cancelled, delayMin | null, dep, track } or null when it was not found */
-export async function liveStatus(trip, dep, env) {
+export async function liveStatus(trip, dep, env, budget = newBudget()) {
   const near = (ts) => Math.abs(ts - dep) <= 90000;
   // 1) the official DB data: exact delays for rail
   if (env?.DB_CLIENT_ID && env?.DB_API_KEY) {
     try {
-      const [r] = await dbDelays(env, [{ station: trip.from.name, ts: dep, kind: 'dep', line: trip.line }]);
+      const [r] = await dbDelays(env, [{ station: trip.from.name, ts: dep, kind: 'dep', line: trip.line }], budget);
       if (r) return { cancelled: !!r.cancelled, delayMin: r.delayMin, dep: dep + (r.delayMin ?? 0) * 60000, track: r.track };
     } catch {
       /* fall back to Transitous */
@@ -158,7 +188,7 @@ export async function liveStatus(trip, dep, env) {
   // 2) Transitous: planned times, real time only where the operator feeds it
   const place = (s) => (s.src === 'db' ? `${s.lat},${s.lon}` : s.id);
   const q = new URLSearchParams({ fromPlace: place(trip.from), toPlace: place(trip.to), time: new Date(dep - 15 * 60000).toISOString(), arriveBy: 'false', numItineraries: '6', language: 'de' });
-  const r = await getJson(`${MOTIS}/v5/plan?${q}`);
+  const r = await getJson(`${MOTIS}/v5/plan?${q}`, budget);
   for (const it of r.itineraries ?? []) {
     const ride = (it.legs ?? []).find((l) => l.mode !== 'WALK' && l.mode !== 'BIKE' && l.mode !== 'CAR');
     if (!ride || (ride.displayName ?? ride.routeShortName ?? '').trim() !== trip.line) continue;
@@ -233,22 +263,27 @@ export function matchDelay(planned, changes, q) {
   if (!hit) return null;
   const ch = changes.find((c) => c.id === hit.id)?.[key];
   const cancelled = ch?.cs === 'c' || hit[key]?.cs === 'c';
-  const delayMin = ch?.ct ? Math.round((stampMs(ch.ct) - stampMs(stamp)) / 60000) : 0;
+  // no entry in the changes: on time if it is soon, otherwise the real time just is not known yet
+  const unknown = !ch?.ct && q.ts - (q.now ?? Date.now()) > KNOWN_AHEAD_MS;
+  const delayMin = ch?.ct ? Math.round((stampMs(ch.ct) - stampMs(stamp)) / 60000) : unknown ? null : 0;
   return { delayMin, cancelled, track: ch?.cp ?? hit[key]?.pp };
 }
 
 // small caches per worker instance: the free key allows 60 calls a minute for all users together
 const mem = new Map();
-async function cached(key, ttlMs, load) {
+function cached(key, ttlMs, load) {
   const hit = mem.get(key);
   if (hit && hit.t > Date.now()) return hit.v;
-  const v = await load();
+  // the promise is stored, so parallel callers share one request; a failure is not kept
+  const v = load();
   mem.set(key, { v, t: Date.now() + ttlMs });
+  v.catch(() => mem.get(key)?.v === v && mem.delete(key));
   if (mem.size > 300) mem.delete(mem.keys().next().value);
   return v;
 }
 
-async function dbGet(env, path) {
+async function dbGet(env, path, budget) {
+  spend(budget);
   const res = await fetch(`${env.DB_TIMETABLES_BASE || DB_BASE}${path}`, {
     headers: { 'DB-Client-Id': env.DB_CLIENT_ID, 'DB-Api-Key': env.DB_API_KEY, Accept: 'application/xml' },
     signal: AbortSignal.timeout(8000),
@@ -257,11 +292,11 @@ async function dbGet(env, path) {
   return res.text();
 }
 
-async function evaOf(env, name) {
+async function evaOf(env, name, budget) {
   const variants = [...new Set([name, name.replace(/\s*\(.*\)\s*$/, ''), name.replace(/,.*$/, ''), name.replace(/\s+(Bahnhof|Bf|Hbf)$/i, '')].map((v) => v.trim()).filter(Boolean))];
   for (const v of variants) {
     const eva = await cached(`eva|${normName(v)}`, 7 * 86400000, async () => {
-      const list = parseStations(await dbGet(env, `/station/${encodeURIComponent(v)}`));
+      const list = parseStations(await dbGet(env, `/station/${encodeURIComponent(v)}`, budget));
       return pickStation(name, list)?.eva ?? '';
     }).catch(() => '');
     if (eva) return eva;
@@ -273,28 +308,27 @@ async function evaOf(env, name) {
  * Looks up queries [{ station, ts, kind, line }] (planned instants) and returns, aligned, null or
  * { delayMin, cancelled, track }. Stations are resolved once, timetables are cached.
  */
-export async function dbDelays(env, queries) {
-  const evas = new Map();
-  for (const n of new Set(queries.map((x) => x.station))) evas.set(n, await evaOf(env, n));
-  const out = [];
-  for (const q of queries) {
-    const eva = evas.get(q.station);
-    if (!eva) {
-      out.push(null);
-      continue;
-    }
-    const stamp = dbStamp(q.ts);
-    try {
-      const [planned, changes] = await Promise.all([
-        cached(`plan|${eva}|${stamp.slice(0, 8)}`, 3600000, async () => parseTimetable(await dbGet(env, `/plan/${eva}/${stamp.slice(0, 6)}/${stamp.slice(6, 8)}`))),
-        cached(`fchg|${eva}`, 45000, async () => parseTimetable(await dbGet(env, `/fchg/${eva}`))),
-      ]);
-      out.push(matchDelay(planned, changes, q));
-    } catch {
-      out.push(null);
-    }
-  }
-  return out;
+export async function dbDelays(env, queries, budget = newBudget()) {
+  const names = [...new Set(queries.map((x) => x.station))];
+  const found = await Promise.all(names.map((n) => evaOf(env, n, budget)));
+  const evas = new Map(names.map((n, i) => [n, found[i]]));
+  // a query that runs out of subrequests answers null (unknown) like any other miss
+  return Promise.all(
+    queries.map(async (q) => {
+      const eva = evas.get(q.station);
+      if (!eva) return null;
+      const stamp = dbStamp(q.ts);
+      try {
+        const [planned, changes] = await Promise.all([
+          cached(`plan|${eva}|${stamp.slice(0, 8)}`, 3600000, async () => parseTimetable(await dbGet(env, `/plan/${eva}/${stamp.slice(0, 6)}/${stamp.slice(6, 8)}`, budget))),
+          cached(`fchg|${eva}`, 45000, async () => parseTimetable(await dbGet(env, `/fchg/${eva}`, budget))),
+        ]);
+        return matchDelay(planned, changes, q);
+      } catch {
+        return null;
+      }
+    }),
+  );
 }
 
 // ---- message ---------------------------------------------------------------------
@@ -330,57 +364,82 @@ export function cleanTrips(list) {
     const hmTxt = typeof t.hm === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t.hm) ? t.hm : null;
     const days = Array.isArray(t.days) ? [...new Set(t.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))] : [];
     const leads = Array.isArray(t.leads) ? [...new Set(t.leads.filter((n) => Number.isInteger(n) && n >= 1 && n <= 120))].slice(0, 5) : [];
-    if (from && to && id && line && hmTxt && days.length && leads.length) out.push({ id, from, to, line, hm: hmTxt, days, leads, onlyDelay: !!t.onlyDelay });
+    // the zone the time was saved in (the device may be somewhere else when it syncs later)
+    const tz = validTz(t.tz) ? t.tz : undefined;
+    if (from && to && id && line && hmTxt && days.length && leads.length) out.push({ id, from, to, line, hm: hmTxt, days, leads, onlyDelay: !!t.onlyDelay, ...(tz ? { tz } : {}) });
   }
   return out;
 }
 
 // ---- storage ---------------------------------------------------------------------------
+// 'subs' holds every subscription with its trips (written only by the HTTP routes). What the cron has sent
+// lives in one key per subscription, so a cron run never overwrites a subscription that changed meanwhile.
 
 const load = async (env) => (await env.PUSH_KV.get('subs', 'json')) ?? {};
 const save = (env, doc) => env.PUSH_KV.put('subs', JSON.stringify(doc));
+const loadSent = async (env, id) => (await env.PUSH_KV.get(`sent:${id}`, 'json')) ?? {};
 async function subId(endpoint) {
   return b64uEnc(new Uint8Array(await crypto.subtle.digest('SHA-256', te.encode(endpoint)))).slice(0, 22);
+}
+/** forgets a subscription (re-read right before writing, so concurrent changes of others survive) */
+async function forget(env, id) {
+  const doc = await load(env);
+  if (doc[id]) {
+    delete doc[id];
+    await save(env, doc);
+  }
+  await env.PUSH_KV.delete(`sent:${id}`);
 }
 
 // ---- cron -----------------------------------------------------------------------------------
 
 export async function runDue(env, now = Date.now()) {
   const doc = await load(env);
+  const budget = newBudget();
   const cache = new Map();
-  let actions = 0;
-  let dirty = false;
+  const gone = [];
   run: for (const [id, s] of Object.entries(doc)) {
-    for (const [k, t] of Object.entries(s.sent)) {
-      if (now - t > KEEP_SENT_MS) {
-        delete s.sent[k];
-        dirty = true;
-      }
-    }
+    let sent = null; // loaded only when something is due at all
+    let dirty = false;
     for (const trip of s.trips) {
-      for (const due of dueNotifications(trip, s.tz, now, s.sent)) {
-        if (actions >= MAX_ACTIONS_PER_RUN) break run;
+      for (const due of dueNotifications(trip, trip.tz || s.tz, now, {})) {
+        sent ??= await loadSent(env, id);
+        if (sent[due.key]) continue;
+        if (budget.left <= 0) break run; // the rest is tried again next minute (inside the grace window)
         const ck = `${trip.from.id}|${trip.to.id}|${trip.line}|${due.dep}`;
-        if (!cache.has(ck)) {
-          actions++;
-          cache.set(ck, liveStatus(trip, due.dep, env).catch(() => null));
-        }
+        if (!cache.has(ck)) cache.set(ck, liveStatus(trip, due.dep, env, budget).catch(() => null));
         const status = await cache.get(ck);
-        if (!status) continue; // not found / service down: try again next minute (inside the grace window)
-        s.sent[due.key] = now;
-        dirty = true;
-        const msg = buildMessage(trip, status, s.tz);
-        if (!msg) continue;
-        actions++;
-        const code = await sendPush(env, s.sub, msg).catch(() => 0);
+        if (!status) continue; // not found / service down: try again next minute
+        const msg = buildMessage(trip, status, trip.tz || s.tz);
+        if (!msg) continue; // on time and only delays wanted: keep looking until the grace window ends
+        let code = 0;
+        try {
+          code = await sendPush(env, s.sub, msg, budget);
+        } catch {
+          /* budget used up or network error: counts as not sent */
+        }
         if (code === 404 || code === 410) {
-          delete doc[id]; // the user revoked the permission or uninstalled the app
+          gone.push(id); // the user revoked the permission or uninstalled the app
+          dirty = false;
           continue run;
         }
+        if (code >= 200 && code < 300) {
+          sent[due.key] = now;
+          dirty = true;
+        }
       }
     }
+    if (sent) {
+      for (const [k, t] of Object.entries(sent)) {
+        if (now - t > KEEP_SENT_MS) {
+          delete sent[k];
+          dirty = true;
+        }
+      }
+      if (dirty) await env.PUSH_KV.put(`sent:${id}`, JSON.stringify(sent));
+    }
   }
-  if (dirty) await save(env, doc);
+  for (const id of gone) await forget(env, id);
 }
 
 // ---- HTTP ---------------------------------------------------------------------------------------
@@ -392,7 +451,17 @@ function corsFor(req, env) {
   return { 'Access-Control-Allow-Origin': origin || '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '86400', Vary: 'Origin' };
 }
 
-const validSub = (s) => typeof s?.endpoint === 'string' && /^https:\/\//.test(s.endpoint) && s.endpoint.length < 600 && typeof s.keys?.p256dh === 'string' && typeof s.keys?.auth === 'string';
+// only the push services of the browsers: a made-up endpoint would make this worker POST to any address
+const PUSH_HOSTS = /(^|\.)(googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com|push\.microsoft\.com)$/;
+export const pushEndpoint = (e) => {
+  try {
+    const u = new URL(e);
+    return u.protocol === 'https:' && PUSH_HOSTS.test(u.hostname) && e.length < 600;
+  } catch {
+    return false;
+  }
+};
+const validSub = (s) => typeof s?.endpoint === 'string' && pushEndpoint(s.endpoint) && typeof s.keys?.p256dh === 'string' && typeof s.keys?.auth === 'string';
 const validTz = (tz) => {
   try {
     new Intl.DateTimeFormat('en', { timeZone: tz });
@@ -404,6 +473,7 @@ const validTz = (tz) => {
 
 async function delaysRoute(req, env) {
   if (!env.DB_CLIENT_ID || !env.DB_API_KEY) return 501;
+  if (limited(`delays|${req.headers.get('CF-Connecting-IP') || ''}`, 20, 60000)) return 429; // the key allows ~60 calls a minute for everybody
   const raw = await req.text();
   if (raw.length > 20000) return 413;
   let body;
@@ -421,6 +491,7 @@ async function delaysRoute(req, env) {
 }
 
 async function handle(req, env, url) {
+  const ip = req.headers.get('CF-Connecting-IP') || '';
   if (url.pathname === '/key' && req.method === 'GET') return { key: env.VAPID_PUBLIC };
   if (req.method !== 'POST') return 404;
   if (url.pathname === '/db/delays') return delaysRoute(req, env);
@@ -433,17 +504,20 @@ async function handle(req, env, url) {
     return 400;
   }
   const endpoint = typeof body?.endpoint === 'string' ? body.endpoint : body?.subscription?.endpoint;
-  if (typeof endpoint !== 'string' || !/^https:\/\//.test(endpoint) || endpoint.length > 600) return 400;
+  if (typeof endpoint !== 'string' || !pushEndpoint(endpoint)) return 400;
+  if (limited(`write|${ip}`, 30, 60000)) return 429;
   const id = await subId(endpoint);
   const doc = await load(env);
   if (url.pathname === '/sync') {
     const sub = body.subscription;
     if (!validSub(sub) || !validTz(body.tz)) return 400;
     const trips = cleanTrips(body.trips);
-    if (!trips.length) delete doc[id];
-    else {
+    if (!trips.length) {
+      delete doc[id];
+      await env.PUSH_KV.delete(`sent:${id}`);
+    } else {
       if (!doc[id] && Object.keys(doc).length >= MAX_SUBS) return 507;
-      doc[id] = { sub: { endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } }, tz: body.tz, trips, sent: doc[id]?.sent ?? {}, t: Date.now() };
+      doc[id] = { sub: { endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } }, tz: body.tz, trips, t: Date.now() };
     }
     await save(env, doc);
     return { ok: true, trips: trips.length };
@@ -451,16 +525,15 @@ async function handle(req, env, url) {
   if (url.pathname === '/unsubscribe') {
     delete doc[id];
     await save(env, doc);
+    await env.PUSH_KV.delete(`sent:${id}`);
     return { ok: true };
   }
   if (url.pathname === '/test') {
     const s = doc[id];
     if (!s) return 404;
+    if (limited(`test|${id}`, 1, 10000)) return 429;
     const code = await sendPush(env, s.sub, { title: 'Orbis Fahrplan', body: 'Benachrichtigungen funktionieren.', tag: 'test', url: './#/fahrplan' }).catch(() => 0);
-    if (code === 404 || code === 410) {
-      delete doc[id];
-      await save(env, doc);
-    }
+    if (code === 404 || code === 410) await forget(env, id);
     return code >= 200 && code < 300 ? { ok: true } : 502;
   }
   return 404;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 // @ts-expect-error – plain JS worker file, deployed on its own
-import { buildMessage, cleanTrips, dbDelays, dbStamp, dueNotifications, instantAt, matchDelay, parseStations, parseTimetable, pickStation, zoned } from '../../proxy/fahrplan-push-worker.js';
+import worker, { buildMessage, cleanTrips, dbDelays, dbStamp, dueNotifications, instantAt, limited, matchDelay, parseStations, parseTimetable, pickStation, pushEndpoint, runDue, vapidAuth, zoned } from '../../proxy/fahrplan-push-worker.js';
 
 const TZ = 'Europe/Berlin';
 const stop = (name: string) => ({ id: `id-${name}`, name, lat: 53.7, lon: 11.4, src: 'db' });
@@ -102,7 +102,7 @@ describe('DB timetable XML', () => {
     // RE 8 planned 07:12 CET, 15 min late, platform changed 2 → 1
     for (const line of ['RE8', 'RE 8', 'RE 4306']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toEqual({ delayMin: 15, cancelled: false, track: '1' });
     // the S-Bahn at the same minute has no change entry → on time, planned platform
-    expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line: 'S 9' })).toEqual({ delayMin: 0, cancelled: false, track: '3' });
+    expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line: 'S 9', now: at('06:00') })).toEqual({ delayMin: 0, cancelled: false, track: '3' });
   });
   it('does not guess when nothing or something else matches', () => {
     const planned = parseTimetable(PLAN);
@@ -141,5 +141,153 @@ describe('dbDelays (stubbed API)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 503 })));
     const r = await dbDelays({ DB_CLIENT_ID: 'c', DB_API_KEY: 'k' }, [{ station: 'Nirgendwo 1', ts: Date.now(), kind: 'dep', line: 'RE1' }]);
     expect(r).toEqual([null]);
+  });
+});
+
+describe('matchDelay: unknown real time', () => {
+  it('does not call a far-away stop without change entry on time', () => {
+    const planned = parseTimetable(PLAN);
+    const changes = parseTimetable(CHANGES);
+    const q = { ts: at('06:12'), kind: 'dep', line: 'S 9' };
+    expect(matchDelay(planned, changes, { ...q, now: at('03:00') })).toMatchObject({ delayMin: null });
+    expect(matchDelay(planned, changes, { ...q, now: at('05:30') })).toMatchObject({ delayMin: 0 });
+  });
+});
+
+describe('XML edge cases', () => {
+  it('reads attributes in any order and ignores child elements it does not know', () => {
+    const xml = '<timetable><s id="x"><ar l="9" pt="2610290712"><m id="1"/></ar><tl n="1" c="RE"/><dp pp="4" pt="2610290713" l="8"><m t="h"/></dp></s></timetable>';
+    const [s] = parseTimetable(xml);
+    expect(s.dp).toMatchObject({ pt: '2610290713', pp: '4', l: '8' });
+    expect(s.tl).toMatchObject({ c: 'RE', n: '1' });
+  });
+});
+
+describe('endpoints and limits', () => {
+  it('accepts only the push services of browsers', () => {
+    expect(pushEndpoint('https://fcm.googleapis.com/fcm/send/abc')).toBe(true);
+    expect(pushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc')).toBe(true);
+    expect(pushEndpoint('https://web.push.apple.com/abc')).toBe(true);
+    expect(pushEndpoint('https://evil.example/x')).toBe(false);
+    expect(pushEndpoint('https://evilgoogleapis.com/x')).toBe(false);
+    expect(pushEndpoint('http://fcm.googleapis.com/x')).toBe(false);
+    expect(pushEndpoint('nonsense')).toBe(false);
+  });
+  it('limits calls per key and window', () => {
+    const k = `k${Math.random()}`;
+    expect([1, 2, 3].map(() => limited(k, 2, 1000, 0))).toEqual([false, false, true]);
+    expect(limited(k, 2, 1000, 1001)).toBe(false);
+  });
+  it('keeps trips apart by their own time zone', () => {
+    const [t] = cleanTrips([{ ...trip(), tz: 'Europe/London' }, trip()]);
+    expect(t.tz).toBe('Europe/London');
+    expect(cleanTrips([{ ...trip(), tz: 'Mars/Base' }])[0].tz).toBeUndefined();
+  });
+});
+
+describe('subrequest budget', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('stops calling out when the budget is used up and answers null', async () => {
+    const f = vi.fn(async () => new Response('<stations/>', { status: 200 }));
+    vi.stubGlobal('fetch', f);
+    const qs = Array.from({ length: 30 }, (_, i) => ({ station: `Station ${i} Nord`, ts: Date.now(), kind: 'dep', line: 'RE1' }));
+    const r = await dbDelays({ DB_CLIENT_ID: 'c', DB_API_KEY: 'k' }, qs, { left: 5 });
+    expect(f).toHaveBeenCalledTimes(5);
+    expect(r.every((x: unknown) => x === null)).toBe(true);
+  });
+});
+
+describe('cron and routes (stubbed KV, push service and Transitous)', () => {
+  const NOW = Date.parse('2026-10-29T06:02:00Z'); // 10 min before 07:12 CET
+  const EP = 'https://fcm.googleapis.com/fcm/send/abc';
+  afterEach(() => vi.unstubAllGlobals());
+
+  const b64u = (b: Uint8Array) => btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  async function setup() {
+    const ecdh = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const p256dh = b64u(new Uint8Array(await crypto.subtle.exportKey('raw', ecdh.publicKey)));
+    const vk = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign']);
+    const kv = new Map<string, string>();
+    const env = {
+      VAPID_PUBLIC: 'pub',
+      VAPID_PRIVATE: JSON.stringify(await crypto.subtle.exportKey('jwk', vk.privateKey)),
+      PUSH_KV: {
+        get: async (k: string) => (kv.has(k) ? JSON.parse(kv.get(k)!) : null),
+        put: async (k: string, v: string) => void kv.set(k, v),
+        delete: async (k: string) => void kv.delete(k),
+      },
+    };
+    const sub = { endpoint: EP, keys: { p256dh, auth: b64u(new TextEncoder().encode('0123456789abcdef')) } };
+    const call = async (path: string, body: unknown) => {
+      const res = await worker.fetch(new Request(`https://w.example${path}`, { method: 'POST', body: JSON.stringify(body) }), env);
+      return res.status;
+    };
+    return { env, kv, sub, call };
+  }
+  const tripBody = (over = {}) => ({ ...trip({ leads: [10], from: { ...stop('A'), src: 'motis' }, to: { ...stop('B'), src: 'motis' } }), ...over });
+  const transitous = () =>
+    JSON.stringify({ itineraries: [{ legs: [{ mode: 'REGIONAL_RAIL', displayName: 'RE 8', scheduledStartTime: '2026-10-29T06:12:00Z', startTime: '2026-10-29T06:20:00Z', realTime: true, from: { track: '2' } }] }] });
+  const serve = (pushStatus: number[]) => {
+    const pushes: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/v5/plan')) return new Response(transitous(), { status: 200 });
+      pushes.push(url);
+      return new Response('', { status: pushStatus[Math.min(pushes.length - 1, pushStatus.length - 1)] });
+    }));
+    return pushes;
+  };
+
+  it('sends once, remembers it in its own key and does not touch the subscriptions', async () => {
+    const { env, kv, sub, call } = await setup();
+    expect(await call('/sync', { subscription: sub, tz: TZ, trips: [tripBody()] })).toBe(200);
+    const subsBefore = kv.get('subs');
+    const pushes = serve([201]);
+    await runDue(env, NOW);
+    await runDue(env, NOW + 60000);
+    expect(pushes).toHaveLength(1);
+    expect(kv.get('subs')).toBe(subsBefore);
+    expect(Object.keys(JSON.parse([...kv].find(([k]) => k.startsWith('sent:'))![1]))).toHaveLength(1);
+  });
+  it('tries again next minute when the push service fails', async () => {
+    const { env, sub, call } = await setup();
+    await call('/sync', { subscription: sub, tz: TZ, trips: [tripBody()] });
+    const pushes = serve([503, 201]);
+    await runDue(env, NOW);
+    await runDue(env, NOW + 60000);
+    await runDue(env, NOW + 120000);
+    expect(pushes).toHaveLength(2);
+  });
+  it('keeps looking when the train is on time and only delays are wanted', async () => {
+    const { env, sub, call } = await setup();
+    await call('/sync', { subscription: sub, tz: TZ, trips: [tripBody({ onlyDelay: true })] });
+    const pushes = serve([201]);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.includes('/v5/plan')) return new Response(transitous().replace('06:20:00Z', '06:12:00Z'), { status: 200 });
+      pushes.push(url);
+      return new Response('', { status: 201 });
+    }));
+    await runDue(env, NOW);
+    expect(pushes).toHaveLength(0);
+  });
+  it('forgets a subscription the push service reports as gone', async () => {
+    const { env, kv, sub, call } = await setup();
+    await call('/sync', { subscription: sub, tz: TZ, trips: [tripBody()] });
+    serve([410]);
+    await runDue(env, NOW);
+    expect(JSON.parse(kv.get('subs')!)).toEqual({});
+  });
+  it('rejects foreign endpoints and a too fast /test', async () => {
+    const { sub, call } = await setup();
+    expect(await call('/sync', { subscription: { ...sub, endpoint: 'https://evil.example/x' }, tz: TZ, trips: [tripBody()] })).toBe(400);
+    await call('/sync', { subscription: sub, tz: TZ, trips: [tripBody()] });
+    serve([201]);
+    expect(await call('/test', { endpoint: EP })).toBe(200);
+    expect(await call('/test', { endpoint: EP })).toBe(429);
+  });
+  it('reuses the signed VAPID token', async () => {
+    const { env } = await setup();
+    const a = await vapidAuth(env, EP, NOW);
+    expect(await vapidAuth(env, EP, NOW + 60000)).toBe(a);
+    expect(await vapidAuth(env, EP, NOW + 12 * 3600000)).not.toBe(a);
   });
 });

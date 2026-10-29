@@ -199,7 +199,7 @@ export function createFahrplanView(): FahrplanView {
     const f = asSaved(from);
     const t = asSaved(to);
     const hmTxt = hm(first.schedDep);
-    return { id: `${routeId(f, t)}|${first.line}|${hmTxt}`, from: f, to: t, hm: hmTxt, arrHm: hm(last.schedArr), line: first.line, days: [1, 2, 3, 4, 5] };
+    return { id: `${routeId(f, t)}|${first.line}|${hmTxt}`, from: f, to: t, hm: hmTxt, arrHm: hm(last.schedArr), line: first.line, days: [1, 2, 3, 4, 5], tz: Intl.DateTimeFormat().resolvedOptions().timeZone };
   }
 
   function renderResults() {
@@ -297,6 +297,7 @@ export function createFahrplanView(): FahrplanView {
       const t = it && tripOf(it);
       if (!t) return;
       const now = store.toggleTrip(t);
+      void syncPush().catch(() => {}); // a removed trip must stop its notifications
       act.classList.toggle('on', now);
       act.setAttribute('aria-pressed', String(now));
       act.querySelector('span')!.textContent = now ? 'Pendler-Verbindung gemerkt' : 'Als Pendler-Verbindung merken';

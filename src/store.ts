@@ -88,6 +88,8 @@ export interface SavedTrip {
   line: string;
   /** weekdays it runs on (0 = Sunday … 6 = Saturday) */
   days: number[];
+  /** time zone `hm` was read in (the device zone when saved) – the push worker needs it when the device is elsewhere later */
+  tz?: string;
   /** push notifications: minutes before departure, and whether on-time trains stay quiet */
   notify?: { leads: number[]; onlyDelay: boolean };
 }
