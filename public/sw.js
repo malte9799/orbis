@@ -56,3 +56,39 @@ self.addEventListener('fetch', (event) => {
     ),
   );
 });
+
+// Web Push (Fahrplan: saved commuter trips, see proxy/fahrplan-push-worker.js). The worker sends an
+// encrypted JSON { title, body, tag, url }; it arrives here even while the app is closed.
+self.addEventListener('push', (event) => {
+  let msg = {};
+  try {
+    msg = event.data ? event.data.json() : {};
+  } catch {
+    msg = { body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(msg.title || 'Orbis Fahrplan', {
+      body: msg.body || '',
+      tag: msg.tag || 'fahrplan',
+      renotify: true,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      data: { url: msg.url || './#/fahrplan' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './#/fahrplan', self.registration.scope).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (c.url.startsWith(self.registration.scope) && 'focus' in c) {
+          return c.focus().then(() => ('navigate' in c ? c.navigate(target) : undefined));
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
