@@ -48,23 +48,23 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: 'Status: Texturen & Modelle'
-        if: steps.n.outputs.dir != '.'
-        run: bash scripts/pr-status.sh "Texturen & Modelle"
+      # Heavy optional assets (Moon textures, detailed ISS model, Trek product lists) only on main: previews would
+      # each publish ~250 MB extra to gh-pages and the app falls back to the bundled assets / committed lists anyway.
       # Sharper Moon textures (NASA CGI Moon Kit, ~150 MB download), cached between deploys.
       # Optional: if NASA is unreachable the app keeps its bundled 2k map.
       - name: Cache Moon textures
+        if: github.ref == 'refs/heads/main'
         id: moon-cache
         uses: actions/cache@v4
         with:
           path: public/textures/moon
           key: moon-textures-${{ hashFiles('scripts/moon-textures.py') }}
       - uses: actions/setup-python@v5
-        if: steps.moon-cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.moon-cache.outputs.cache-hit != 'true'
         with:
           python-version: '3.12'
       - name: Moon textures
-        if: steps.moon-cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.moon-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         timeout-minutes: 15
         run: |
@@ -73,25 +73,28 @@ jobs:
       # Detailed ISS model (NASA 3D Resources, ~96 MB, hosted as release asset "models"). Optional: without it the app
       # keeps the small bundled ISS model.
       - name: Cache detailed ISS model
+        if: github.ref == 'refs/heads/main'
         id: iss-cache
         uses: actions/cache@v4
         with:
           path: public/models/iss-detail.glb
           key: iss-detail-${{ hashFiles('scripts/iss-model.sh') }}
       - name: Detailed ISS model
-        if: steps.iss-cache.outputs.cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.iss-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         timeout-minutes: 10
         run: bash scripts/iss-model.sh public/models/iss-detail.glb
       # Detailed Moon map products (LROC NAC site mosaics, Kaguya, geology … from NASA Moon Trek): the list is read from
       # Trek itself. Optional: on failure the committed src/space/moon-products.ts stays.
       - name: Moon Trek products
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         timeout-minutes: 10
         run: node scripts/moon-products.mjs
       # Tile products of the Trek portals without their own script (Venus, Io, Europa, Callisto, Phobos, Titan …):
       # Optional: on failure the committed src/space/trek-products.ts stays.
       - name: Trek portal products
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         timeout-minutes: 10
         run: node scripts/trek-products.mjs
