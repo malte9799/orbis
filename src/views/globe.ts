@@ -1336,7 +1336,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     });
 
     const interactive = ['ev-circle', 'quakes', 'firms', 'nws-fill', ...EXTRA_CLICK_LAYERS];
-    const areaLayers = ['nws-fill', 'dwd-warn-fill', 'cables'];
+    const areaLayers = ['nws-fill', 'dwd-warn-fill', 'cables', 'webcams-cone'];
     map.on('click', (e) => {
       if (longPressAt && performance.now() - longPressAt < 700) return;
       // the route planner owns the click while it picks a point / chooses an alternative / is open

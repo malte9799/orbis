@@ -213,14 +213,19 @@ function estimateMissing(ctx: ExtraCtx) {
 function updateFov(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (!ctx.isOn('webcams')) return;
+  // every sector carries the camera's properties, so a click on the cone selects the camera
+  type Cam = { c: [number, number, number]; p: Record<string, unknown> };
   const withDir = (features: Feature[] | undefined) => {
-    const out: [number, number, number][] = [];
+    const out: Cam[] = [];
     for (const f of features ?? []) {
       const dir = Number(f.properties?.dir ?? -1);
-      if (dir >= 0) out.push([(f.geometry as Point).coordinates[0], (f.geometry as Point).coordinates[1], dir]);
+      const [lon, lat] = (f.geometry as Point).coordinates;
+      if (dir >= 0) out.push({ c: [lon, lat, dir], p: { ...f.properties, clon: lon, clat: lat } });
     }
     return out;
   };
+  const sectors = (cams: Cam[], radius: number, angle: number, extra: Record<string, unknown> = {}) =>
+    cams.flatMap(({ c, p }) => fovSectors([c], radius, angle).map((f) => ({ ...f, properties: { ...p, ...extra } })));
   const zoomed = ctx.map.getZoom() >= ALPR_FOV_ZOOM;
   const cams = zoomed ? withDir(st.osmFc?.features) : [];
   // road cameras of the feeds: direction from the feed's direction text (estimated, drawn fainter);
@@ -229,13 +234,11 @@ function updateFov(ctx: ExtraCtx) {
   const road = zoomed ? withDir(roadCams.filter((f) => !f.properties?.dirset)) : [];
   if (zoomed) cams.push(...withDir(roadCams.filter((f) => f.properties?.dirset)));
   if (zoomed) estimateMissing(ctx);
-  const key = [...cams, ...road].map((c) => c.join(',')).sort().join('|');
+  const key = [...cams, ...road].map(({ c, p }) => `${c.join(',')}:${p.pdown},${p.palt},${p.proll},${p.pfov}`).sort().join('|');
   if (key === st.fovKey) return;
   st.fovKey = key;
-  const estimated = fovSectors(road, ROAD_CAM_FOV_RADIUS, ROAD_CAM_FOV_ANGLE).map((f) => ({ ...f, properties: { est: true } }));
-  ctx.setData('webcams-fov', { type: 'FeatureCollection', features: [...fovSectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE), ...estimated] });
+  ctx.setData('webcams-fov', { type: 'FeatureCollection', features: [...sectors(cams, CAM_FOV_RADIUS, CAM_FOV_ANGLE), ...sectors(road, ROAD_CAM_FOV_RADIUS, ROAD_CAM_FOV_ANGLE, { est: true })] });
 }
-
 
 export default defineExtra({
   id: 'webcams',
@@ -304,8 +307,10 @@ export default defineExtra({
   onMoveEnd: loadNow,
   click({ p, pt }) {
     // the camera panel on the right shows the picture and the 3D board (see campanel.ts)
-    return { type: 'cam', p, lng: pt[0], lat: pt[1] };
+    // a click on the view cone selects its camera (the cone's properties carry the camera's place)
+    const at = p.clon !== undefined ? [Number(p.clon), Number(p.clat)] : pt;
+    return { type: 'cam', p, lng: at[0], lat: at[1] };
   },
   layers: ['webcams-glow', 'webcams-heat', 'webcams-dots', 'webcams', 'webcams-osm', 'webcams-cone', 'webcams-cone-line'],
-  clickLayers: ['webcams', 'webcams-osm'],
+  clickLayers: ['webcams', 'webcams-osm', 'webcams-cone'],
 });
