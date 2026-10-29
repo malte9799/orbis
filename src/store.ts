@@ -65,6 +65,8 @@ export interface SavedStop {
   lat: number;
   lon: number;
   area?: string;
+  /** data source of the id: DB or Transitous */
+  src?: 'db' | 'motis';
 }
 
 function read<T>(key: string, fallback: T): T {

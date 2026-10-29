@@ -133,6 +133,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NGA World Port Index](https://msi.nga.mil/Publications/WPI) (Pub. 150) | Häfen: ~3.800 Häfen mit Größe, Tiefen, Schiffsgrenzen und Umschlag; Werk der US-Regierung (NGA), kein Urheberrecht beansprucht; vorab erzeugt in `public/data/ports.json` (`scripts/ports.mjs`) | 🟢 gemeinfrei, 📦 |
 | [Upply Seaports Locations Data](https://opendata.upply.com/seaports) (UN/LOCODE) | Häfen: ~12.000 weitere Seehäfen mit Koordinaten, die der World Port Index nicht führt | 🟢 CC BY 4.0, 📦 |
 | [Transitous (MOTIS)](https://transitous.org) | Züge Deutschland & Europa; Busse, Trams, U-Bahnen (ab Stadtzoom) | 🟢 |
+| [db-rest](https://v6.db.transport.rest) (inoffiziell, Community) | Fahrplan: Verbindungssuche und Abfahrten in Deutschland mit Echtzeit-Verspätungen; Transitous als Rückfall | 🟡 |
 | [Amtraker](https://amtraker.com) | Züge USA (Amtrak) | 🟢 |
 | [Entur](https://developer.entur.org) | Nahverkehr & Bahn Norwegen | 🟢 NLOD |
 | [MBTA](https://api-v3.mbta.com) | Boston | 🟢 |

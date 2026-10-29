@@ -202,7 +202,7 @@ export function createFahrplanView(): FahrplanView {
   let from: Stop | null = null;
   let to: Stop | null = null;
   // the last chosen stops stay filled in (a cleared field keeps the stored one until a new stop is picked)
-  const remember = (key: 'from' | 'to', s: Stop) => store.setLastRoute({ ...store.getLastRoute(), [key]: { id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area } });
+  const remember = (key: 'from' | 'to', s: Stop) => store.setLastRoute({ ...store.getLastRoute(), [key]: { id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src } });
   const fromField = stopField('Von: Haltestelle oder Ort', (s) => {
     from = s;
     if (s) remember('from', s);
@@ -445,7 +445,7 @@ export function createFahrplanView(): FahrplanView {
     const my = ++boardSeq;
     if (initial) board.innerHTML = '<p class="fp-hint">Lade Abfahrten …</p>';
     try {
-      const list = await departures(s.id, 25);
+      const list = await departures(s, 25);
       if (my !== boardSeq || current?.id !== s.id) return;
       board.innerHTML = headHtml(s) + (list.length ? `<ul class="fp-deps">${list.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute</p>` : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
     } catch {
@@ -473,7 +473,7 @@ export function createFahrplanView(): FahrplanView {
   board.addEventListener('click', (e) => {
     if (!(e.target as HTMLElement).closest('[data-act="save"]') || !current) return;
     const s = current;
-    const now = store.toggleStation({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area });
+    const now = store.toggleStation({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src });
     toast(now ? `„${s.name}“ gemerkt` : `„${s.name}“ entfernt`);
     renderChips();
     const head = board.querySelector('.fp-bh');

@@ -1,10 +1,11 @@
 import { fetchJson } from '../util';
 import { modeStyle } from './transit';
+import { dbDepartures, dbNearbyStops, dbPlan, dbSearchStops } from './dbrest';
 
-// Connection search and departure boards – Transitous (community-run MOTIS, v5 API, no key needed):
-// • /api/v1/geocode   stop search
-// • /api/v5/plan      connections A → B
-// • /api/v5/stoptimes departures at one stop
+// Connection search and departure boards. Two sources, both without key:
+// • DB data (dbrest.ts, real-time delays like the DB Navigator) – tried first
+// • Transitous (community-run MOTIS, v5 API; Europe and beyond) – fallback and for stops DB does not know:
+//   /api/v1/geocode stop search, /api/v5/plan connections A → B, /api/v5/stoptimes departures at one stop
 
 const BASE = 'https://api.transitous.org/api';
 
@@ -15,6 +16,8 @@ export interface Stop {
   lon: number;
   /** city / area the stop lies in */
   area?: string;
+  /** which source the id belongs to (default: Transitous) */
+  src?: 'db' | 'motis';
 }
 
 export interface Leg {
@@ -131,7 +134,7 @@ export function parseStops(list: GeocodeDto[]): Stop[] {
     .map((m) => {
       const areas = m.areas ?? [];
       const area = (areas.find((a) => a.default) ?? areas.filter((a) => a.adminLevel != null).sort((a, b) => (b.adminLevel ?? 0) - (a.adminLevel ?? 0))[0])?.name;
-      return { id: m.id, name: m.name, lat: m.lat, lon: m.lon, area };
+      return { id: m.id, name: m.name, lat: m.lat, lon: m.lon, area, src: 'motis' as const };
     });
 }
 
@@ -182,13 +185,13 @@ export function parseDepartures(list: StopTimeDto[]): Departure[] {
 
 // ---- requests --------------------------------------------------------------
 
-export async function searchStops(text: string): Promise<Stop[]> {
+async function motisSearchStops(text: string): Promise<Stop[]> {
   const q = new URLSearchParams({ text, type: 'STOP', language: 'de' });
   return parseStops(await fetchJson<GeocodeDto[]>(`${BASE}/v1/geocode?${q}`));
 }
 
 /** Stops around a position, nearest first. */
-export async function nearbyStops(lat: number, lon: number): Promise<Stop[]> {
+async function motisNearbyStops(lat: number, lon: number): Promise<Stop[]> {
   const q = new URLSearchParams({ place: `${lat.toFixed(5)},${lon.toFixed(5)}`, type: 'STOP', language: 'de' });
   return parseStops(await fetchJson<GeocodeDto[]>(`${BASE}/v1/reverse-geocode?${q}`));
 }
@@ -229,10 +232,12 @@ export interface PlanResult {
 }
 
 /** Connections from → to; with `cursor` (a previous result's prev/next) the page before / after it. */
-export async function planConnections(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+async function motisPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+  // ids of the other source are not known here: use the position
+  const place = (s: Stop) => (s.src === 'db' ? `${s.lat},${s.lon}` : s.id);
   const q = new URLSearchParams({
-    fromPlace: from.id,
-    toPlace: to.id,
+    fromPlace: place(from),
+    toPlace: place(to),
     time: new Date(o.time).toISOString(),
     arriveBy: String(o.arriveBy),
     numItineraries: '6',
@@ -252,10 +257,66 @@ export async function planConnections(from: Stop, to: Stop, o: PlanOptions, curs
 }
 
 /** The next `n` departures at a stop, starting at `from` (default: now). */
-export async function departures(stopId: string, n = 25, from = Date.now()): Promise<Departure[]> {
+async function motisDepartures(stopId: string, n: number, from: number): Promise<Departure[]> {
   const q = new URLSearchParams({ stopId, n: String(n), time: new Date(from).toISOString(), language: 'de' });
   const r = await fetchJson<{ stopTimes?: StopTimeDto[] }>(`${BASE}/v5/stoptimes?${q}`, undefined, 20000);
   return parseDepartures(r.stopTimes ?? []);
+}
+
+// ---- public API: DB first, Transitous as fallback --------------------------
+
+/** Stop search: DB stops (Germany, real-time delays); Transitous when DB finds nothing or fails. */
+export async function searchStops(text: string): Promise<Stop[]> {
+  try {
+    const r = await dbSearchStops(text);
+    if (r.length) return r;
+  } catch {
+    /* DB service down or throttled */
+  }
+  return motisSearchStops(text);
+}
+
+export async function nearbyStops(lat: number, lon: number): Promise<Stop[]> {
+  try {
+    const r = await dbNearbyStops(lat, lon);
+    if (r.length) return r;
+  } catch {
+    /* fall through */
+  }
+  return motisNearbyStops(lat, lon);
+}
+
+const prefixed = (src: string, c?: string) => (c ? `${src}|${c}` : undefined);
+
+/** A cursor continues with the source it came from; a fresh search tries DB first for two DB stops. */
+export async function planConnections(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+  const [src, raw] = cursor ? [cursor.slice(0, cursor.indexOf('|')), cursor.slice(cursor.indexOf('|') + 1)] : ['', undefined];
+  const useDb = cursor ? src === 'db' : from.src === 'db' && to.src === 'db';
+  if (useDb) {
+    try {
+      const r = await dbPlan(from, to, o, raw);
+      if (r.list.length || cursor) return { list: r.list, prev: prefixed('db', r.prev), next: prefixed('db', r.next) };
+    } catch (e) {
+      if (cursor) throw e;
+    }
+  }
+  const r = await motisPlan(from, to, o, cursor ? raw : undefined);
+  return { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) };
+}
+
+/** The next `n` departures at a stop, starting at `from` (default: now). */
+export async function departures(stop: Pick<Stop, 'id' | 'lat' | 'lon' | 'src'>, n = 25, from = Date.now()): Promise<Departure[]> {
+  if (stop.src === 'db') {
+    try {
+      const r = await dbDepartures(stop.id, n, from);
+      if (r.length) return r;
+    } catch {
+      /* fall back to Transitous with the nearest stop of its own */
+    }
+    const near = (await motisNearbyStops(stop.lat, stop.lon))[0];
+    return near ? motisDepartures(near.id, n, from) : [];
+  }
+  return motisDepartures(stop.id, n, from);
 }
 
 // ---- helpers for the view --------------------------------------------------

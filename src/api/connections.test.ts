@@ -7,7 +7,7 @@ describe('parseStops', () => {
       { type: 'STOP', id: 'de-DELFI_x', name: 'Hannover Hbf', lat: 52.37, lon: 9.74, areas: [{ name: 'Hannover', default: true }] },
       { type: 'ADDRESS', id: 'a', name: 'Straße 1', lat: 0, lon: 0 },
     ]);
-    expect(r).toEqual([{ id: 'de-DELFI_x', name: 'Hannover Hbf', lat: 52.37, lon: 9.74, area: 'Hannover' }]);
+    expect(r).toEqual([{ id: 'de-DELFI_x', name: 'Hannover Hbf', lat: 52.37, lon: 9.74, area: 'Hannover', src: 'motis' }]);
   });
 });
 
