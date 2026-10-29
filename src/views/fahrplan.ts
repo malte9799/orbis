@@ -95,6 +95,7 @@ export function createFahrplanView(): FahrplanView {
   el.className = 'view fahrplan-view';
   el.hidden = true;
   el.innerHTML = `
+    <div class="fp-side">
     <section class="fp-card fp-search" aria-label="Verbindungssuche">
       <h2>Verbindung suchen</h2>
       <button type="button" class="fp-compact" hidden aria-label="Suche ändern"><span class="fp-cs"></span><span class="fp-ce">Ändern</span></button>
@@ -120,7 +121,6 @@ export function createFahrplanView(): FahrplanView {
         <button type="button" class="btn small fp-reset">Zurücksetzen</button>
       </div>
       </div>
-      <div class="fp-res" aria-live="polite"></div>
     </section>
     <section class="fp-card fp-stations" aria-label="Gemerkte Haltestellen">
       <h2>Gemerkte Haltestellen</h2>
@@ -128,10 +128,16 @@ export function createFahrplanView(): FahrplanView {
       <div class="fp-add"></div>
       <div class="fp-chips" role="tablist"></div>
       <div class="fp-board" aria-live="polite"></div>
+    </section>
+    </div>
+    <section class="fp-card fp-results empty" aria-label="Verbindungen">
+      <div class="fp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3l2 3M7 17l-2 3M4 11h16M8 14h.01M16 14h.01M7 3a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10"/></svg><b>Wohin soll es gehen?</b><p>Start und Ziel eingeben, Zeit wählen und „Suchen“ – die Verbindungen erscheinen hier, mit Verspätungen, Gleisen und Umstiegen.</p></div>
+      <div class="fp-res" aria-live="polite"></div>
     </section>`;
 
   const q = <T extends HTMLElement>(s: string) => el.querySelector<T>(s)!;
   const res = q('.fp-res');
+  const resSection = q('.fp-results');
   const timeIn = q<HTMLInputElement>('.fp-time');
   const modeSel = q<HTMLSelectElement>('.fp-mode');
   const trSel = q<HTMLSelectElement>('.fp-tr');
@@ -319,6 +325,7 @@ export function createFahrplanView(): FahrplanView {
   /** after a search the form folds into one summary line (tap to edit) – saves room on phones */
   function setCompact(on: boolean) {
     section.classList.toggle('compact', on);
+    el.classList.toggle('is-compact', on);
     compactBtn.hidden = !on;
     if (on) q('.fp-cs').textContent = `${from?.name ?? ''} → ${to?.name ?? ''} · ${modeSel.value === 'arr' ? 'an ' : ''}${hm(lastOpts?.time ?? Date.now())}`;
   }
@@ -362,6 +369,7 @@ export function createFahrplanView(): FahrplanView {
     const t = timeIn.value ? new Date(timeIn.value).getTime() : Date.now();
     const my = ++searchSeq;
     goBtn.disabled = true;
+    resSection.classList.remove('empty');
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
       lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
