@@ -21,6 +21,32 @@ const map = new MlMap({
     layers: [{ id: 'sat', type: 'raster', source: 'sat' }],
   },
 });
+// Base maps to try the tiles against (a switch in the list): the layers sit below the 3D tiles, one is shown
+const BASEMAPS: { id: string; label: string; tiles?: string[]; maxzoom: number; attribution: string; background?: string }[] = [
+  { id: 'sat', label: 'Satellit (Esri)', maxzoom: 19, attribution: 'Esri', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] },
+  { id: 'dark', label: 'Dunkel (CARTO)', maxzoom: 20, attribution: '© CARTO, © OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png`) },
+  { id: 'dark-nolabels', label: 'Dunkel ohne Beschriftung', maxzoom: 20, attribution: '© CARTO, © OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png`) },
+  { id: 'light', label: 'Hell (CARTO)', maxzoom: 20, attribution: '© CARTO, © OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`) },
+  { id: 'osm', label: 'OpenStreetMap', maxzoom: 19, attribution: '© OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.tile.openstreetmap.org/{z}/{x}/{y}.png`) },
+  { id: 'plain-dark', label: 'Einfarbig dunkel', maxzoom: 0, attribution: '', background: '#14181f' },
+  { id: 'plain-light', label: 'Einfarbig hell', maxzoom: 0, attribution: '', background: '#e8e8e8' },
+];
+const BASEMAP_KEY = 'orbis.debug3d.basemap';
+let basemap = (() => {
+  try {
+    const v = localStorage.getItem(BASEMAP_KEY);
+    return BASEMAPS.some((b) => b.id === v) ? (v as string) : 'sat';
+  } catch {
+    return 'sat';
+  }
+})();
+const showBasemap = () => {
+  for (const b of BASEMAPS) {
+    const id = b.id === 'sat' ? 'sat' : `bm-${b.id}`;
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', b.id === basemap ? 'visible' : 'none');
+  }
+};
+
 const TERRAIN_KEY = 'orbis.debug3d.terrain';
 // 3D terrain is off by default: the tiles do not sit right on it yet
 function terrainOn(): boolean {
@@ -40,6 +66,15 @@ map.on('error', (e) => (notes = `Karte: ${String(e.error?.message ?? e)}`));
 
 map.on('style.load', () => {
   setTiles3dSelection(map, []);
+  for (const b of BASEMAPS) {
+    if (b.id === 'sat') continue; // the style's own layer
+    if (b.background) map.addLayer({ id: `bm-${b.id}`, type: 'background', paint: { 'background-color': b.background } });
+    else {
+      map.addSource(`bm-${b.id}`, { type: 'raster', tileSize: 256, maxzoom: b.maxzoom, tiles: b.tiles!, attribution: b.attribution });
+      map.addLayer({ id: `bm-${b.id}`, type: 'raster', source: `bm-${b.id}` });
+    }
+  }
+  showBasemap();
   map.addSource('outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   // 3D terrain (open elevation tiles, Terrarium encoding)
   map.addSource('dem', { type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14, tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], attribution: 'Mapzen / AWS Terrain Tiles' });
@@ -79,6 +114,25 @@ terrainBox.addEventListener('change', () => {
 terrainRow.append(terrainBox, document.createTextNode('3D-Gelände'));
 list.appendChild(terrainRow);
 
+const basemapRow = document.createElement('label');
+basemapRow.className = 'row';
+basemapRow.style.cssText = 'padding:0 2px 8px;gap:6px';
+const basemapSelect = document.createElement('select');
+basemapSelect.style.cssText = 'flex:1;min-width:0;background:rgba(255,255,255,.08);color:inherit;border:0;border-radius:6px;padding:3px 4px;font:inherit';
+for (const b of BASEMAPS) basemapSelect.add(new Option(b.label, b.id));
+basemapSelect.value = basemap;
+basemapSelect.addEventListener('change', () => {
+  basemap = basemapSelect.value;
+  try {
+    localStorage.setItem(BASEMAP_KEY, basemap);
+  } catch {
+    /* storage blocked */
+  }
+  showBasemap();
+});
+basemapRow.append(document.createTextNode('Grundkarte'), basemapSelect);
+list.appendChild(basemapRow);
+
 // Tags per source (own notes: speed, kind of map, quality …): picked from presets or typed, kept in the
 // browser. A click on a tag in the list filters the list by it.
 const TAGS_KEY = 'orbis.debug3d.tags';
@@ -104,10 +158,28 @@ const saveTags = () => {
   }
 };
 try {
-  if (!localStorage.getItem(SEEDED_KEY)) {
-    for (const src of TILES_SOURCES) if (!tags[src.id]) tags[src.id] = [src.kind];
+  // sources added later get their Typ tag too (ones that already have tags are left alone)
+  for (const src of TILES_SOURCES) if (!tags[src.id]) tags[src.id] = [src.kind];
+  saveTags();
+  localStorage.setItem(SEEDED_KEY, '1');
+} catch {
+  /* storage blocked */
+}
+// Geschwindigkeit measured once over all sources (time per tile and whether the view was complete after 18 s)
+const SPEED_SEED: Record<string, string> = {
+  basemap: 'mittel', reearth: 'mittel', strasbourg: 'schnell', lille: 'langsam', clermont: 'schnell', stetienne: 'schnell',
+  berlin: 'schnell', soest: 'schnell', stuttgart: 'schnell', munich: 'mittel', jena: 'schnell', osnabrueck: 'schnell',
+  utrecht: 'mittel', rotterdam: 'langsam', rotterdambgt: 'langsam', vienna: 'schnell', linz: 'schnell', zurich: 'mittel',
+  helsinki2017: 'schnell', alppila: 'langsam', uunisaari: 'schnell', sompasaari: 'schnell', aarhus: 'schnell',
+  frederiksberg: 'schnell', madrid: 'mittel', boston: 'schnell', cambridge: 'mittel', plateau: 'mittel',
+};
+const SPEED_SEEDED_KEY = 'orbis.debug3d.tags.speed.v1';
+try {
+  if (!localStorage.getItem(SPEED_SEEDED_KEY)) {
+    const speeds = TAG_PRESETS.find(([g]) => g === 'Geschwindigkeit')![1];
+    for (const [id, speed] of Object.entries(SPEED_SEED)) tags[id] = [...(tags[id] ?? []).filter((t) => !speeds.includes(t)), speed];
     saveTags();
-    localStorage.setItem(SEEDED_KEY, '1');
+    localStorage.setItem(SPEED_SEEDED_KEY, '1');
   }
 } catch {
   /* storage blocked */

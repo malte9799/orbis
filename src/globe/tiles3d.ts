@@ -141,6 +141,8 @@ interface Entry {
   checked: number;
   /** the ground height of engine v2 was measured at least once */
   groundSet?: boolean;
+  /** the offset was measured against the map's terrain at least once (see render) */
+  terrainSet?: boolean;
   /** lowest point (metres above the ellipsoid) and centre of every loaded tile */
   lows: Map<unknown, { centre: THREE.Vector3; low: number }>;
 }
@@ -335,7 +337,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.attribution = document.createElement('div');
     this.attribution.style.cssText = 'position:absolute;left:8px;bottom:44px;z-index:2;pointer-events:none;color:#fff;font:600 12px sans-serif;text-shadow:0 0 3px #000';
     map.getCanvasContainer().appendChild(this.attribution);
-    if (this.opts.bar !== false) this.bar = mountSourceBar(map);
+    if (this.opts.bar ?? import.meta.env.DEV) this.bar = mountSourceBar(map);
   }
 
   onRemove() {
@@ -590,15 +592,36 @@ export class Tiles3DLayer implements CustomLayerInterface {
         if (now - e.checked > 400) {
           e.checked = now;
           // the ground under the map centre; it follows slowly, so a change of the level of detail does not make the tiles jump
-          const gp = e.engine.groundAt(ecef(c.lng, c.lat, 0));
+          // not while tiles are still arriving (the level of detail under the centre is changing), and a change under
+          // 2 m is ignored: the layer must not rise and fall when one zooms or pans
+          const s = e.engine.stats;
+          const gp = e.groundSet && s.queued + s.downloading + s.parsing > 0 ? null : e.engine.groundAt(ecef(c.lng, c.lat, 0));
+          let measured: number | null = null;
           if (gp) {
             const g = heightOf(gp.x, gp.y, gp.z);
-            e.ground = !e.groundSet || Math.abs(g - e.ground) > 100 ? g : e.ground + (g - e.ground) * 0.3;
+            measured = g;
+            if (!e.groundSet || Math.abs(g - e.ground) > 100) e.ground = g;
+            else if (Math.abs(g - e.ground) > 2) e.ground += (g - e.ground) * 0.2;
             e.groundSet = true;
           }
-          const terrain = map.getTerrain() ? (map.queryTerrainElevation(c) ?? 0) : 0;
-          if (Math.abs(e.ground - terrain - e.offset) > 0.05) {
-            e.offset = e.ground - terrain;
+          let offset = e.ground;
+          if (map.getTerrain()) {
+            // On the map's 3D terrain the layer is aligned to it: the tiles' ground and the terrain are measured at the
+            // same spot and moment, and only their difference (about the geoid height, it hardly changes from place
+            // to place) is kept, slowly. Lowering by the terrain under the *moving* centre while the ground lags
+            // behind made the layer rise and fall when panning over a slope.
+            const t = measured === null ? null : map.queryTerrainElevation(c);
+            if (t !== null && t !== undefined && measured !== null) {
+              const raw = measured - t;
+              if (!e.terrainSet || Math.abs(raw - e.offset) > 30) e.offset = raw;
+              else if (Math.abs(raw - e.offset) > 1) e.offset += (raw - e.offset) * 0.15;
+              e.terrainSet = true;
+              this.place(e);
+            }
+            offset = e.offset;
+          } else e.terrainSet = false;
+          if (!e.terrainSet && Math.abs(offset - e.offset) > 0.05) {
+            e.offset = offset;
             this.place(e);
           }
         }
