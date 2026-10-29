@@ -152,7 +152,7 @@ export function parseDbJourneys(list: DbJourney[]): Itinerary[] {
         },
       );
       if (!legs.length) return null;
-      return { dep: legs[0].dep, arr: legs[legs.length - 1].arr, transfers: Math.max(0, legs.filter((l) => l.mode !== 'WALK').length - 1), legs };
+      return { src: 'db' as const, dep: legs[0].dep, arr: legs[legs.length - 1].arr, transfers: Math.max(0, legs.filter((l) => l.mode !== 'WALK').length - 1), legs };
     })
     .filter((j): j is Itinerary => !!j);
 }
@@ -160,6 +160,7 @@ export function parseDbJourneys(list: DbJourney[]): Itinerary[] {
 export function parseDbDepartures(list: DbDeparture[]): Departure[] {
   return list
     .map((d) => ({
+      src: 'db' as const,
       mode: modeOf(d.line),
       line: (d.line?.name ?? '').trim(),
       headsign: (d.direction ?? '').trim(),

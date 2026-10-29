@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { durationTxt, inTxt, parseDepartures, parseItineraries, parseStops } from './connections';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { durationTxt, ensureSource, inTxt, parseDepartures, parseItineraries, parseStops } from './connections';
 
 describe('parseStops', () => {
   it('keeps only stops and names the area', () => {
@@ -51,5 +51,26 @@ describe('texts', () => {
     expect(durationTxt(65 * 60000)).toBe('1 h 05 min');
     expect(inTxt(1000 + 5 * 60000, 1000)).toBe('5 min');
     expect(inTxt(1000, 1000)).toBe('jetzt');
+  });
+});
+
+describe('ensureSource', () => {
+  const old = { id: 'de-DELFI_old', name: 'Bad Kleinen', lat: 53.7295, lon: 11.4035 };
+  const reply = (list: unknown[]) => vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(list), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('leaves stops with a source alone', async () => {
+    const s = { ...old, src: 'motis' as const };
+    expect(await ensureSource(s)).toBe(s);
+  });
+  it('moves an old stop to the DB id found by name and position', async () => {
+    reply([{ type: 'stop', id: '8010046', name: 'Bad Kleinen', location: { latitude: 53.7296, longitude: 11.4033 } }]);
+    expect(await ensureSource(old)).toMatchObject({ id: '8010046', src: 'db', name: 'Bad Kleinen' });
+  });
+  it('stays at Transitous when DB only knows a far-away namesake or fails', async () => {
+    reply([{ type: 'stop', id: '1', name: 'Bad Kleinen', location: { latitude: 48.1, longitude: 11.5 } }]);
+    expect(await ensureSource({ ...old, id: 'other' })).toMatchObject({ id: 'other', src: 'motis' });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('down', { status: 503 })));
+    expect(await ensureSource({ ...old, id: 'other2' })).toMatchObject({ id: 'other2', src: 'motis' });
   });
 });

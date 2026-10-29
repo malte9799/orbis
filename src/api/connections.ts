@@ -44,11 +44,15 @@ export interface Leg {
   walkM?: number;
 }
 
+/** where timetable data came from: DB (real-time delays like the DB Navigator) or Transitous */
+export type Source = 'db' | 'motis';
+
 export interface Itinerary {
   dep: number;
   arr: number;
   transfers: number;
   legs: Leg[];
+  src?: Source;
 }
 
 export interface Departure {
@@ -60,6 +64,7 @@ export interface Departure {
   time: number;
   delayMin: number | null;
   cancelled: boolean;
+  src?: Source;
 }
 
 // ---- wire format (only the fields used here) -------------------------------
@@ -140,6 +145,7 @@ export function parseStops(list: GeocodeDto[]): Stop[] {
 
 export function parseItineraries(list: ItineraryDto[]): Itinerary[] {
   return list.map((it) => ({
+    src: 'motis' as const,
     dep: ms(it.startTime),
     arr: ms(it.endTime),
     transfers: it.transfers,
@@ -172,6 +178,7 @@ export function parseItineraries(list: ItineraryDto[]): Itinerary[] {
 export function parseDepartures(list: StopTimeDto[]): Departure[] {
   return list
     .map((s) => ({
+      src: 'motis' as const,
       mode: s.mode,
       line: (s.displayName ?? s.routeShortName ?? '').trim(),
       headsign: (s.headsign ?? '').trim(),
@@ -286,10 +293,36 @@ export async function nearbyStops(lat: number, lon: number): Promise<Stop[]> {
   return motisNearbyStops(lat, lon);
 }
 
+const upgraded = new Map<string, Stop>();
+const km = (a: Stop, b: Stop) => Math.hypot((a.lon - b.lon) * Math.cos((a.lat * Math.PI) / 180), a.lat - b.lat) * 111.3;
+
+/**
+ * Stops saved before the DB source existed carry no source and would keep using Transitous (no real-time
+ * delays for many trains): look them up at DB by name and position. Falls back to Transitous when DB does
+ * not know the stop or is unreachable (that is not remembered, the next call tries again).
+ */
+export async function ensureSource<T extends Stop>(s: T): Promise<T> {
+  if (s.src) return s;
+  const hit = upgraded.get(s.id);
+  if (hit) return { ...s, id: hit.id, src: hit.src };
+  try {
+    const best = (await dbSearchStops(s.name))
+      .map((x) => ({ x, d: km(x, s) }))
+      .filter((c) => c.d < 1.5)
+      .sort((a, b) => a.d - b.d)[0];
+    const r: Stop = best ? { ...s, id: best.x.id, src: 'db' } : { ...s, src: 'motis' };
+    upgraded.set(s.id, r);
+    return { ...s, id: r.id, src: r.src };
+  } catch {
+    return { ...s, src: 'motis' };
+  }
+}
+
 const prefixed = (src: string, c?: string) => (c ? `${src}|${c}` : undefined);
 
 /** A cursor continues with the source it came from; a fresh search tries DB first for two DB stops. */
-export async function planConnections(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+export async function planConnections(fromStop: Stop, toStop: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+  const [from, to] = await Promise.all([ensureSource(fromStop), ensureSource(toStop)]);
   const [src, raw] = cursor ? [cursor.slice(0, cursor.indexOf('|')), cursor.slice(cursor.indexOf('|') + 1)] : ['', undefined];
   const useDb = cursor ? src === 'db' : from.src === 'db' && to.src === 'db';
   if (useDb) {
@@ -305,7 +338,8 @@ export async function planConnections(from: Stop, to: Stop, o: PlanOptions, curs
 }
 
 /** The next `n` departures at a stop, starting at `from` (default: now). */
-export async function departures(stop: Pick<Stop, 'id' | 'lat' | 'lon' | 'src'>, n = 25, from = Date.now()): Promise<Departure[]> {
+export async function departures(given: Pick<Stop, 'id' | 'name' | 'lat' | 'lon' | 'src'>, n = 25, from = Date.now()): Promise<Departure[]> {
+  const stop = await ensureSource(given);
   if (stop.src === 'db') {
     try {
       const r = await dbDepartures(stop.id, n, from);
@@ -318,6 +352,9 @@ export async function departures(stop: Pick<Stop, 'id' | 'lat' | 'lon' | 'src'>,
   }
   return motisDepartures(stop.id, n, from);
 }
+
+/** short note under results: which source answered */
+export const sourceTxt = (src?: Source) => (src === 'db' ? 'Quelle: DB (Echtzeit)' : src === 'motis' ? 'Quelle: Transitous – für manche Züge ohne Echtzeit-Verspätungen' : '');
 
 // ---- helpers for the view --------------------------------------------------
 

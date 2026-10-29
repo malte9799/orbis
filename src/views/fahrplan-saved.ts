@@ -1,4 +1,4 @@
-import { departures, nearbyStops, planConnections, type Itinerary, type Stop } from '../api/connections';
+import { departures, nearbyStops, planConnections, sourceTxt, type Itinerary, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
 import { LEADS, enablePush, pushState, syncPush, testPush } from '../api/pushnotify';
 import { locate } from '../search';
@@ -227,7 +227,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     const day = `<p class="fp-day">${r.run.today ? 'Heute' : 'Nächste Fahrt'}, ${esc(dayTxt(r.run.dep))}</p>`;
     if (r.failed) return `${day}<p class="fp-hint">Fahrplan gerade nicht erreichbar.</p>`;
     if (!r.it) return `${day}<p class="fp-hint">Die Fahrt wurde im Fahrplan nicht gefunden (kein Verkehr an dem Tag oder die Linie hat sich geändert).</p>`;
-    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute</p>`;
+    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.src))}</p>`;
   }
 
   // ---- detail: stop board ----
@@ -249,7 +249,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     try {
       const list = await departures(s, 25);
       if (my !== boardSeq || current?.id !== s.id) return;
-      bodyEl.innerHTML = headHtml(s) + (list.length ? `<ul class="fp-deps">${list.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute</p>` : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
+      bodyEl.innerHTML = headHtml(s) + (list.length ? `<ul class="fp-deps">${list.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(list[0].src))}</p>` : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
     } catch {
       if (my === boardSeq && initial) bodyEl.innerHTML = headHtml(s) + '<p class="fp-hint">Abfahrten nicht erreichbar – bitte später erneut versuchen.</p>';
     }

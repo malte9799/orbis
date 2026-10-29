@@ -1,3 +1,4 @@
+import { ensureSource } from './connections';
 import { store, type SavedTrip } from '../store';
 import { fetchJson } from '../util';
 
@@ -73,10 +74,12 @@ export async function syncPush(): Promise<boolean> {
     return true;
   }
   const stop = (s: SavedTrip['from']) => ({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, src: s.src });
+  // old saved stops get their DB id first, the worker has no way to look it up
+  const upgraded = await Promise.all(trips.map(async (t) => ({ ...t, from: await ensureSource(t.from), to: await ensureSource(t.to) })));
   await post('/sync', {
     subscription: sub.toJSON(),
     tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    trips: trips.map((t) => ({ id: t.id, from: stop(t.from), to: stop(t.to), line: t.line, hm: t.hm, days: t.days, leads: t.notify!.leads, onlyDelay: t.notify!.onlyDelay })),
+    trips: upgraded.map((t) => ({ id: t.id, from: stop(t.from), to: stop(t.to), line: t.line, hm: t.hm, days: t.days, leads: t.notify!.leads, onlyDelay: t.notify!.onlyDelay })),
   });
   return true;
 }

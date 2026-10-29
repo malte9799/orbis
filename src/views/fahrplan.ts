@@ -1,4 +1,4 @@
-import { MODE_GROUPS, planConnections, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { MODE_GROUPS, planConnections, sourceTxt, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
 import { syncPush } from '../api/pushnotify';
@@ -204,7 +204,8 @@ export function createFahrplanView(): FahrplanView {
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
     res.innerHTML = `<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
-      ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
+      ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}
+      <p class="fp-hint fp-src">${esc(sourceTxt(items[0]?.src))}</p>`;
   }
 
   /** the filters of the options panel as API options */
