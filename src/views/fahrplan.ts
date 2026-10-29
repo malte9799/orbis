@@ -1,10 +1,11 @@
-import { MODE_GROUPS, departures, durationTxt, nearbyStops, inTxt, legColor, planConnections, searchStops, type PlanResult, type Departure, type Itinerary, type Leg, type PlanOptions, type Stop } from '../api/connections';
-import { modeStyle } from '../api/transit';
-import { locate } from '../search';
-import { store, type SavedStop } from '../store';
-import { debounce, escapeHtml as esc, toast } from '../util';
+import { MODE_GROUPS, planConnections, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { store, routeId, type SavedStop } from '../store';
+import { escapeHtml as esc, toast } from '../util';
+import { createSavedPanel, asSaved } from './fahrplan-saved';
+import { dayTxt, hm, itinHtml, localInput, stopField } from './fahrplan-ui';
 
-// Fahrplan – connection search (like the DB Navigator) and departure boards of saved stops.
+// Fahrplan – connection search (like the DB Navigator) and the "Gemerkt" tab: commuter trips,
+// saved routes and saved stops with their departure boards.
 
 export interface FahrplanView {
   el: HTMLElement;
@@ -12,89 +13,20 @@ export interface FahrplanView {
   deactivate(): void;
 }
 
-const BOARD_REFRESH_MS = 60000;
-const hm = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-const dayTxt = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
-/** value of an <input type="datetime-local"> for a timestamp (local time) */
-const localInput = (t: number) => {
-  const d = new Date(t - new Date(t).getTimezoneOffset() * 60000);
-  return d.toISOString().slice(0, 16);
-};
-
-const HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.6-9.3-9.2C1.2 8.6 3 5 6.5 5c2 0 3.7 1.2 5.5 3.2C13.8 6.2 15.5 5 17.5 5 21 5 22.8 8.6 21.3 11.8 19 16.400 12 21 12 21z"/></svg>';
-
-/** stop picker: text box with suggestions; `pick` is called with the chosen stop */
-function stopField(label: string, onPick: (s: Stop | null) => void) {
-  const root = document.createElement('div');
-  root.className = 'fp-field';
-  root.innerHTML = `<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(label)}" aria-label="${esc(label)}" role="combobox" aria-expanded="false" aria-autocomplete="list"/><ul class="suggestions" role="listbox" hidden></ul>`;
-  const input = root.querySelector('input')!;
-  const list = root.querySelector('ul')!;
-  let results: Stop[] = [];
-  let seq = 0;
-  const close = () => {
-    list.hidden = true;
-    input.setAttribute('aria-expanded', 'false');
-  };
-  const choose = (s: Stop) => {
-    input.value = s.name;
-    close();
-    onPick(s);
-  };
-  const run = debounce(async (q: string) => {
-    const my = ++seq;
-    try {
-      const r = await searchStops(q);
-      if (my !== seq) return;
-      results = r.slice(0, 8);
-      list.innerHTML = results.length
-        ? results.map((s, i) => `<li role="option" data-i="${i}"><span class="s-name">${esc(s.name)}</span><span class="s-meta">${esc(s.area ?? '')}</span></li>`).join('')
-        : '<li class="empty">Keine Haltestelle gefunden</li>';
-      list.hidden = false;
-      input.setAttribute('aria-expanded', 'true');
-    } catch {
-      if (my === seq) {
-        list.innerHTML = '<li class="empty">Suche nicht verfügbar</li>';
-        list.hidden = false;
-      }
-    }
-  }, 250);
-  input.addEventListener('input', () => {
-    onPick(null);
-    const q = input.value.trim();
-    if (q.length < 2) {
-      seq++;
-      close();
-    } else run(q);
-  });
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !list.hidden && results[0]) {
-      e.preventDefault();
-      choose(results[0]);
-    } else if (e.key === 'Escape') close();
-  });
-  list.addEventListener('pointerdown', (e) => {
-    const li = (e.target as HTMLElement).closest<HTMLLIElement>('li[data-i]');
-    if (li) {
-      e.preventDefault();
-      choose(results[Number(li.dataset.i)]);
-    }
-  });
-  input.addEventListener('blur', () => setTimeout(close, 150));
-  return {
-    el: root,
-    set(s: Stop) {
-      input.value = s.name;
-      onPick(s);
-    },
-  };
-}
+const ICON_SEARCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>';
+const ICON_SAVED = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
 
 export function createFahrplanView(): FahrplanView {
   const el = document.createElement('main');
   el.className = 'view fahrplan-view';
   el.hidden = true;
+  el.dataset.tab = 'search';
   el.innerHTML = `
+    <nav class="fp-tabs" role="tablist" aria-label="Fahrplan">
+      <button type="button" role="tab" class="fp-tab on" data-tab="search" aria-selected="true">${ICON_SEARCH}<span>Verbindungssuche</span></button>
+      <button type="button" role="tab" class="fp-tab" data-tab="saved" aria-selected="false">${ICON_SAVED}<span>Gemerkt</span><i class="fp-count" hidden></i></button>
+    </nav>
+    <div class="fp-pane fp-pane-search">
     <div class="fp-side">
     <section class="fp-card fp-search" aria-label="Verbindungssuche">
       <h2>Verbindung suchen</h2>
@@ -122,18 +54,13 @@ export function createFahrplanView(): FahrplanView {
       </div>
       </div>
     </section>
-    <section class="fp-card fp-stations" aria-label="Gemerkte Haltestellen">
-      <h2>Gemerkte Haltestellen</h2>
-      <p class="fp-hint">Haltestelle suchen und mit dem Herz merken – hier siehst du dann, was als Nächstes abfährt.</p>
-      <div class="fp-add"></div>
-      <div class="fp-chips" role="tablist"></div>
-      <div class="fp-board" aria-live="polite"></div>
-    </section>
     </div>
     <section class="fp-card fp-results empty" aria-label="Verbindungen">
       <div class="fp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3l2 3M7 17l-2 3M4 11h16M8 14h.01M16 14h.01M7 3a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10"/></svg><b>Wohin soll es gehen?</b><p>Start und Ziel eingeben, Zeit wählen und „Suchen“ – die Verbindungen erscheinen hier, mit Verspätungen, Gleisen und Umstiegen.</p></div>
       <div class="fp-res" aria-live="polite"></div>
-    </section>`;
+    </section>
+    </div>
+    <div class="fp-pane fp-pane-saved"></div>`;
 
   const q = <T extends HTMLElement>(s: string) => el.querySelector<T>(s)!;
   const res = q('.fp-res');
@@ -230,91 +157,6 @@ export function createFahrplanView(): FahrplanView {
   });
   q('.fp-now').addEventListener('click', () => (timeIn.value = localInput(Date.now())));
 
-  /** time cell: scheduled time, and the real-time one below it when it differs (green ≤ 5 min late, red beyond) */
-  const timeCell = (actual: number, sched: number, delay: number | null) => {
-    if (delay == null) return `<span class="fp-tm"><b>${hm(actual)}</b></span>`;
-    const cls = delay <= 5 ? 'ok' : 'late';
-    return delay === 0 ? `<span class="fp-tm"><b class="${cls}">${hm(actual)}</b></span>` : `<span class="fp-tm"><b>${hm(sched)}</b><b class="${cls}">${hm(actual)}</b></span>`;
-  };
-  const stationRow = (name: string, track: string | undefined, actual: number, sched: number, delay: number | null, color: string) =>
-    `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small>Gleis ${esc(track)}</small>` : ''}</div></div>`;
-  const walkTxt = (legs: Leg[]) => {
-    const w = legs.reduce((n, l) => n + (l.walkM ?? 0), 0);
-    return `Fußweg${w ? ` · ${w} m` : ''} · ${durationTxt(legs.reduce((n, l) => n + (l.arr - l.dep), 0))}`;
-  };
-  const gap = (cls: string, color: string, label: string, mins: string, icon: string) =>
-    `<div class="fp-gap ${cls}" style="--c:${color}"><span class="fp-gm">${esc(mins)}</span><span class="fp-gl"></span><div class="fp-gb"><span class="fp-gi">${icon}</span>${esc(label)}</div></div>`;
-  const ICON_WALK = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.8"/><path d="M9 21l2-6 3 2v4M11 15l1-5-3 1-1 3M12 10l2 2h3"/></svg>';
-  const ICON_SWAP = '<svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>';
-
-  const legBody = (l: Leg) => {
-    const stops = l.via.length
-      ? `<details class="fp-stops"><summary>${l.via.length} Haltestelle${l.via.length > 1 ? 'n' : ''}</summary><ul>${l.via
-          .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
-          .join('')}</ul></details>`
-      : '';
-    return `<div class="fp-body${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge">${esc(l.line || modeStyle(l.mode).label)}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
-  };
-
-  /** the connection as a timeline: station rows, the ride between them and the transfers */
-  const timeline = (it: Itinerary) => {
-    const out: string[] = [];
-    const rides = it.legs.filter((l) => l.mode !== 'WALK');
-    let walks: Leg[] = [];
-    let prev: Leg | null = null;
-    if (!rides.length) {
-      const l = it.legs[0];
-      if (l) out.push(stationRow(l.from, undefined, l.dep, l.schedDep, null, '#8a93a8'), gap('walk', '#8a93a8', walkTxt(it.legs), '', ICON_WALK), stationRow(it.legs[it.legs.length - 1].to, undefined, it.arr, it.arr, null, '#8a93a8'));
-      return out.join('');
-    }
-    for (const l of it.legs) {
-      if (l.mode === 'WALK') {
-        walks.push(l);
-        continue;
-      }
-      const c = legColor(l);
-      if (prev) {
-        const wait = Math.max(0, l.dep - prev.arr);
-        out.push(gap('swap', '#8a93a8', walks.length ? walkTxt(walks) : 'Umstieg', durationTxt(wait), walks.length ? ICON_WALK : ICON_SWAP));
-      } else if (walks.length) {
-        out.push(stationRow(walks[0].from, undefined, walks[0].dep, walks[0].schedDep, null, '#8a93a8'), gap('walk', '#8a93a8', walkTxt(walks), '', ICON_WALK));
-      }
-      walks = [];
-      out.push(stationRow(l.from, l.track, l.dep, l.schedDep, l.delayMin, c));
-      out.push(`<div class="fp-ride" style="--c:${c}"><span class="fp-gm">${esc(durationTxt(l.arr - l.dep))}</span><span class="fp-gl"></span>${legBody(l)}</div>`);
-      out.push(stationRow(l.to, l.toTrack, l.arr, l.schedArr, l.arrDelayMin, c));
-      prev = l;
-    }
-    if (walks.length) out.push(gap('walk', '#8a93a8', walkTxt(walks), '', ICON_WALK), stationRow(walks[walks.length - 1].to, undefined, it.arr, it.arr, null, '#8a93a8'));
-    return out.join('');
-  };
-
-  const itinHtml = (it: Itinerary) => {
-    const rides = it.legs.filter((l) => l.mode !== 'WALK');
-    const first = rides[0] ?? it.legs[0];
-    const last = rides[rides.length - 1] ?? it.legs[it.legs.length - 1];
-    const live = first?.delayMin != null || last?.arrDelayMin != null;
-    const cls = (d: number | null | undefined) => (d == null || d <= 5 ? 'ok' : 'late');
-    const total = Math.max(1, it.arr - it.dep);
-    const bar = it.legs
-      .map((l) => {
-        const w = Math.max(6, ((l.arr - l.dep) / total) * 100);
-        return l.mode === 'WALK'
-          ? `<span class="fp-seg walk" style="flex:${w}" title="Fußweg"></span>`
-          : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`;
-      })
-      .join('');
-    return `<details class="fp-itin">
-      <summary>
-        <span class="fp-l1"><b>${hm(it.dep)} – ${hm(it.arr)}</b><span>| ${esc(durationTxt(it.arr - it.dep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
-        ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
-        <span class="fp-bar">${bar}</span>
-        <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
-      </summary>
-      <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(it.arr - it.dep))}</span></div>${timeline(it)}</div>
-    </details>`;
-  };
-
   // all connections found so far (earlier / later pages are merged into it) and the paging cursors
   let items: Itinerary[] = [];
   let cursors: { prev?: string; next?: string } = {};
@@ -331,6 +173,19 @@ export function createFahrplanView(): FahrplanView {
   }
   compactBtn.addEventListener('click', () => setCompact(false));
 
+  const itKey = (it: Itinerary) => `${it.dep}-${it.arr}`;
+  /** the commuter trip a connection stands for: its first ride at its scheduled time */
+  function tripOf(it: Itinerary) {
+    const rides = it.legs.filter((l) => l.mode !== 'WALK');
+    if (!rides.length || !from || !to) return null;
+    const first = rides[0];
+    const last = rides[rides.length - 1];
+    const f = asSaved(from);
+    const t = asSaved(to);
+    const hmTxt = hm(first.schedDep);
+    return { id: `${routeId(f, t)}|${first.line}|${hmTxt}`, from: f, to: t, hm: hmTxt, arrHm: hm(last.schedArr), line: first.line, days: [1, 2, 3, 4, 5] };
+  }
+
   function renderResults() {
     if (!items.length) {
       res.innerHTML = '<p class="fp-hint">Keine Verbindung gefunden.</p>';
@@ -342,10 +197,12 @@ export function createFahrplanView(): FahrplanView {
         const d = dayTxt(it.dep);
         const head = d !== day ? `<p class="fp-day">${esc(d)}</p>` : '';
         day = d;
-        return head + itinHtml(it);
+        const t = tripOf(it);
+        return head + itinHtml(it, t ? { key: itKey(it), saved: store.hasTrip(t.id) } : undefined);
       })
       .join('');
-    res.innerHTML = `<div class="fp-route">${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</div>
+    const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
+    res.innerHTML = `<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
       ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
   }
 
@@ -387,7 +244,30 @@ export function createFahrplanView(): FahrplanView {
   }
 
   res.addEventListener('click', async (e) => {
-    const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.fp-page');
+    const target = e.target as HTMLElement;
+    const act = target.closest<HTMLButtonElement>('[data-act]');
+    if (act?.dataset.act === 'saveroute' && from && to) {
+      const now = store.toggleRoute(asSaved(from), asSaved(to));
+      act.classList.toggle('on', now);
+      act.setAttribute('aria-pressed', String(now));
+      act.querySelector('span')!.textContent = now ? 'Route gemerkt' : 'Route merken';
+      toast(now ? 'Route gemerkt' : 'Route entfernt');
+      updateCount();
+      return;
+    }
+    if (act?.dataset.act === 'savetrip') {
+      const it = items.find((i) => itKey(i) === act.dataset.key);
+      const t = it && tripOf(it);
+      if (!t) return;
+      const now = store.toggleTrip(t);
+      act.classList.toggle('on', now);
+      act.setAttribute('aria-pressed', String(now));
+      act.querySelector('span')!.textContent = now ? 'Pendler-Verbindung gemerkt' : 'Als Pendler-Verbindung merken';
+      toast(now ? `${t.line} um ${t.hm} gemerkt (Mo–Fr) – unter „Gemerkt“ anpassen` : 'Pendler-Verbindung entfernt');
+      updateCount();
+      return;
+    }
+    const btn = target.closest<HTMLButtonElement>('.fp-page');
     if (!btn || !from || !to || !lastOpts) return;
     const dir = btn.dataset.page as 'prev' | 'next';
     const cursor = cursors[dir];
@@ -418,119 +298,50 @@ export function createFahrplanView(): FahrplanView {
     if (e.key === 'Enter' && (e.target as HTMLElement).closest('.fp-search') && (e.target as HTMLElement).tagName === 'INPUT' && from && to) search();
   });
 
-  // ---- saved stops + departure board ----
-  const chips = q('.fp-chips');
-  const board = q('.fp-board');
-  let current: SavedStop | null = null;
-  let boardSeq = 0;
-  let timer: number | undefined;
-
-  const addField = stopField('Haltestelle suchen und merken', (s) => {
-    if (s) showStop(s);
+  // ---- tabs: search / saved ----
+  const tabBtns = [...el.querySelectorAll<HTMLButtonElement>('.fp-tab')];
+  const countEl = q('.fp-count');
+  const saved = createSavedPanel({
+    openRoute(f: SavedStop, t: SavedStop) {
+      fromField.set(f);
+      toField.set(t);
+      timeIn.value = localInput(Date.now());
+      modeSel.value = 'dep';
+      setTab('search');
+      void search();
+    },
+    onChange: () => updateCount(),
   });
-  q('.fp-add').append(addField.el);
+  q('.fp-pane-saved').append(saved.el);
 
-  function renderChips() {
-    const all = store.getStations();
-    chips.innerHTML = all.length
-      ? all.map((s) => `<button type="button" role="tab" class="fp-chip${current?.id === s.id ? ' on' : ''}" data-id="${esc(s.id)}" aria-selected="${current?.id === s.id}">${esc(s.name)}</button>`).join('')
-      : '';
+  function updateCount() {
+    const n = saved.count();
+    countEl.textContent = String(n);
+    countEl.hidden = n === 0;
   }
-
-  const depRow = (d: Departure) => {
-    const late = d.delayMin != null && d.delayMin > 0 ? `<span class="fp-late">+${d.delayMin}</span>` : d.delayMin === 0 ? '<span class="fp-ok">pünktlich</span>' : '';
-    return `<li class="fp-dep${d.cancelled ? ' cancelled' : ''}" style="--c:${modeStyle(d.mode).color}">
-      <span class="fp-in">${d.cancelled ? '–' : esc(inTxt(d.time))}</span>
-      <span class="fp-badge">${esc(d.line || modeStyle(d.mode).label)}</span>
-      <span class="fp-to-txt">${esc(d.headsign)}${d.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}</span>
-      <span class="fp-at">${hm(d.time)} ${late}${d.track ? `<small>Gl. ${esc(d.track)}</small>` : ''}</span>
-    </li>`;
-  };
-
-  async function loadBoard(initial: boolean) {
-    const s = current;
-    if (!s) return;
-    const my = ++boardSeq;
-    if (initial) board.innerHTML = '<p class="fp-hint">Lade Abfahrten …</p>';
-    try {
-      const list = await departures(s, 25);
-      if (my !== boardSeq || current?.id !== s.id) return;
-      board.innerHTML = headHtml(s) + (list.length ? `<ul class="fp-deps">${list.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute</p>` : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
-    } catch {
-      if (my === boardSeq && initial) board.innerHTML = headHtml(s) + '<p class="fp-hint">Abfahrten nicht erreichbar – bitte später erneut versuchen.</p>';
-    }
+  function setTab(tab: 'search' | 'saved') {
+    el.dataset.tab = tab;
+    tabBtns.forEach((b) => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+    if (tab === 'saved') saved.activate();
+    else saved.deactivate();
+    window.scrollTo({ top: 0 });
   }
-
-  function headHtml(s: SavedStop) {
-    const saved = store.isStation(s.id);
-    return `<div class="fp-bh"><div><b>${esc(s.name)}</b>${s.area ? `<small>${esc(s.area)}</small>` : ''}</div>
-      <button type="button" class="btn icon-btn fp-save${saved ? ' on' : ''}" data-act="save" title="${saved ? 'Nicht mehr merken' : 'Haltestelle merken'}" aria-pressed="${saved}" aria-label="${saved ? 'Nicht mehr merken' : 'Haltestelle merken'}">${HEART}</button></div>`;
-  }
-
-  function showStop(s: SavedStop) {
-    current = s;
-    renderChips();
-    loadBoard(true);
-  }
-
-  chips.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('.fp-chip');
-    const s = b && store.getStations().find((x) => x.id === b.dataset.id);
-    if (s) showStop(s);
-  });
-  board.addEventListener('click', (e) => {
-    if (!(e.target as HTMLElement).closest('[data-act="save"]') || !current) return;
-    const s = current;
-    const now = store.toggleStation({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src });
-    toast(now ? `„${s.name}“ gemerkt` : `„${s.name}“ entfernt`);
-    renderChips();
-    const head = board.querySelector('.fp-bh');
-    if (head) head.outerHTML = headHtml(s);
-  });
-
-  // nearest stop to the user as a shortcut
-  const nearBtn = document.createElement('button');
-  nearBtn.type = 'button';
-  nearBtn.className = 'btn small fp-near';
-  nearBtn.textContent = 'Haltestellen in meiner Nähe';
-  q('.fp-add').append(nearBtn);
-  nearBtn.addEventListener('click', async () => {
-    try {
-      const p = await locate();
-      const r = await nearbyStops(p.lat, p.lon);
-      if (r[0]) {
-        addField.set(r[0]);
-        showStop(r[0]);
-      } else toast('Keine Haltestelle in der Nähe gefunden.', 'error');
-    } catch {
-      toast('Standort nicht verfügbar.', 'error');
-    }
-  });
-
-  function startTimer() {
-    stopTimer();
-    timer = window.setInterval(() => {
-      if (!document.hidden && current) loadBoard(false);
-    }, BOARD_REFRESH_MS);
-  }
-  function stopTimer() {
-    if (timer != null) clearInterval(timer);
-    timer = undefined;
-  }
+  tabBtns.forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab as 'search' | 'saved')));
+  updateCount();
 
   return {
     el,
     activate() {
       el.hidden = false;
-      const saved = store.getStations();
-      if (!current && saved.length) current = saved[0];
-      renderChips();
-      if (current) loadBoard(true);
-      else board.innerHTML = '';
-      startTimer();
+      updateCount();
+      if (el.dataset.tab === 'saved') saved.activate();
     },
     deactivate() {
-      stopTimer();
+      saved.deactivate();
     },
   };
 }

@@ -69,6 +69,29 @@ export interface SavedStop {
   src?: 'db' | 'motis';
 }
 
+/** a saved route: start and destination, the time is picked on every search */
+export interface SavedRoute {
+  id: string;
+  from: SavedStop;
+  to: SavedStop;
+}
+
+/** a saved connection for commuters: the same ride on chosen weekdays */
+export interface SavedTrip {
+  id: string;
+  from: SavedStop;
+  to: SavedStop;
+  /** scheduled departure of the first ride / arrival at the destination, "07:12" */
+  hm: string;
+  arrHm: string;
+  /** line of the first ride, e.g. "RE 8" */
+  line: string;
+  /** weekdays it runs on (0 = Sunday … 6 = Saturday) */
+  days: number[];
+}
+
+export const routeId = (from: SavedStop, to: SavedStop) => `${from.id}>${to.id}`;
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -122,6 +145,33 @@ export const store = {
   /** connection search options (Fahrplan), see FpOptions */
   getFpOptions: (): Record<string, unknown> => read('wg.fpOptions', {}),
   setFpOptions: (o: Record<string, unknown>) => write('wg.fpOptions', o),
+
+  getRoutes: (): SavedRoute[] => read('wg.routes', []),
+  isRoute: (from: SavedStop, to: SavedStop) => store.getRoutes().some((r) => r.id === routeId(from, to)),
+  toggleRoute(from: SavedStop, to: SavedStop): boolean {
+    const all = store.getRoutes();
+    const id = routeId(from, to);
+    const idx = all.findIndex((r) => r.id === id);
+    if (idx >= 0) all.splice(idx, 1);
+    else all.push({ id, from, to });
+    write('wg.routes', all);
+    return idx < 0;
+  },
+
+  getTrips: (): SavedTrip[] => read('wg.trips', []),
+  hasTrip: (id: string) => store.getTrips().some((t) => t.id === id),
+  /** saves the trip, or removes it when it is saved already; returns whether it is saved now */
+  toggleTrip(t: SavedTrip): boolean {
+    const all = store.getTrips();
+    const idx = all.findIndex((x) => x.id === t.id);
+    if (idx >= 0) all.splice(idx, 1);
+    else all.push(t);
+    write('wg.trips', all);
+    return idx < 0;
+  },
+  updateTrip(id: string, patch: Partial<SavedTrip>) {
+    write('wg.trips', store.getTrips().map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  },
 
   getGlobeState: <T>(fallback: T): T => read('wg.globe', fallback),
   setGlobeState: (s: unknown) => write('wg.globe', s),

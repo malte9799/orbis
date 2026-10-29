@@ -171,7 +171,7 @@
   color: #66bb6a;
   font-size: 0.75rem;
 }
-.fp-body.cancelled,
+.fp-legbody.cancelled,
 .fp-dep.cancelled {
   opacity: 0.55;
   text-decoration: line-through;
@@ -335,7 +335,7 @@
   background: none;
   border-radius: 0;
 }
-.fp-ride > .fp-body {
+.fp-ride > .fp-legbody {
   padding: 8px 0 12px;
 }
 .fp-gap {
@@ -360,7 +360,7 @@
   stroke-linejoin: round;
   display: block;
 }
-.fp-body .fp-badge {
+.fp-legbody .fp-badge {
   display: inline-block;
   font-size: 0.9rem;
   padding: 6px 9px;
@@ -573,8 +573,14 @@
   flex: 1 1 auto;
   height: 38px;
 }
-.fahrplan-view.is-compact .fp-route {
-  display: none;
+@media (max-width: 899px) {
+  /* the folded search bar already names the route: keep only the save button */
+  .fahrplan-view.is-compact .fp-route > span {
+    display: none;
+  }
+  .fahrplan-view.is-compact .fp-route {
+    justify-content: flex-end;
+  }
 }
 .fp-side {
   display: contents;
@@ -599,11 +605,14 @@
 @media (min-width: 900px) {
   .fahrplan-view {
     max-width: 1220px;
+    padding: 76px 24px 56px;
+  }
+  .fahrplan-view .fp-pane-search,
+  .fahrplan-view .fp-saved {
     display: grid;
     grid-template-columns: 400px minmax(0, 1fr);
     gap: 20px;
     align-items: start;
-    padding: 76px 24px 56px;
   }
   .fp-side {
     display: flex;
@@ -701,5 +710,403 @@
   .fp-page {
     align-self: center;
     min-width: 200px;
+  }
+}
+
+/* tabs: segmented control on top (desktop), bottom bar on phones */
+.fahrplan-view[data-tab='search'] .fp-pane-saved,
+.fahrplan-view[data-tab='saved'] .fp-pane-search {
+  display: none;
+}
+.fp-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-solid);
+}
+.fp-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-tab svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fp-tab.on {
+  background: var(--accent-2);
+  color: #fff;
+}
+.fp-count {
+  font-style: normal;
+  font-size: 0.72rem;
+  line-height: 1;
+  min-width: 18px;
+  padding: 3px 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.18);
+  text-align: center;
+}
+.fp-tab.on .fp-count {
+  background: rgba(255, 255, 255, 0.3);
+}
+@media (max-width: 899px) {
+  .fahrplan-view {
+    padding-bottom: calc(86px + var(--safe-bottom));
+  }
+  .fp-tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 6px 8px calc(6px + var(--safe-bottom));
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--card-solid);
+  }
+  .fp-tab {
+    flex-direction: column;
+    gap: 2px;
+    height: 52px;
+    padding: 0;
+    font-size: 0.72rem;
+    background: transparent !important;
+    color: var(--muted);
+  }
+  .fp-tab.on {
+    color: var(--accent);
+  }
+  .fp-tab svg {
+    width: 24px;
+    height: 24px;
+  }
+  .fp-count {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 8px);
+    background: var(--danger) !important;
+    color: #fff;
+  }
+}
+
+/* save buttons in the results */
+.fp-route {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.fp-rtbtn,
+.fp-trip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.fp-rtbtn svg,
+.fp-trip svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.fp-rtbtn.on,
+.fp-trip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.fp-rtbtn.on svg,
+.fp-trip.on svg {
+  fill: currentColor;
+}
+.fp-dact {
+  padding: 10px 12px 0;
+}
+
+/* Gemerkt */
+.fp-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-sl,
+.fp-sd {
+  min-width: 0;
+}
+.fp-subs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-gsub {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-gsub.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-gsub i {
+  font-style: normal;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.fp-sadd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fp-sadd:empty {
+  display: none;
+}
+.fp-sitems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fp-sr {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.fp-sr .fp-si {
+  flex: 1;
+  min-width: 0;
+}
+.fp-si {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-si:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.fp-si.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.12);
+}
+.fp-sit {
+  display: flex;
+  flex-direction: column;
+  min-width: 46px;
+  font-size: 1.05rem;
+}
+.fp-sit small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.fp-sim {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.fp-sim b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-sim small {
+  color: var(--muted);
+}
+.fp-sim .fp-badge {
+  align-self: flex-start;
+  background: var(--c);
+}
+.fp-sis {
+  flex: none;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.fp-sis small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+.fp-del {
+  height: auto;
+  min-height: 56px;
+  width: 44px;
+  flex: none;
+}
+.fp-del svg {
+  width: 18px;
+  height: 18px;
+}
+.fp-sempty {
+  padding: 8px 2px;
+  line-height: 1.5;
+}
+.fp-back {
+  display: none;
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  padding: 0 0 8px;
+  cursor: pointer;
+}
+.fp-sdbody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fp-sdhint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 12px;
+  text-align: center;
+  color: var(--text-2);
+}
+.fp-sdhint p {
+  margin: 0;
+}
+.fp-th {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fp-th b {
+  font-size: 1.1rem;
+}
+.fp-th small {
+  display: block;
+  color: var(--text-2);
+}
+.fp-days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-day-btn {
+  width: 40px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-day-btn.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-saved .fp-detail {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-rm {
+  align-self: flex-start;
+  color: var(--danger);
+}
+@media (max-width: 899px) {
+  .fp-saved .fp-sd {
+    display: none;
+  }
+  .fp-saved.has-detail .fp-sd {
+    display: flex;
+    flex-direction: column;
+  }
+  .fp-saved.has-detail .fp-sl {
+    display: none;
+  }
+  .fp-back {
+    display: block;
+  }
+}
+@media (min-width: 900px) {
+  .fp-tabs {
+    margin-bottom: 20px;
+  }
+  .fp-sd {
+    min-height: 320px;
+    padding: 20px;
+  }
+  .fp-sd .fp-sdbody {
+    max-width: 680px;
+  }
+}
+.fp-dact {
+  padding-bottom: 8px;
+}
+/* the toast must not cover the bottom tab bar on phones */
+@media (max-width: 899px) {
+  body:has(.fahrplan-view:not([hidden])) .toast {
+    bottom: calc(80px + var(--safe-bottom));
   }
 }
