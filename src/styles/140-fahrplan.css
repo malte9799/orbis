@@ -1554,3 +1554,20 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+@media (max-width: 899px) {
+  /* room between the light header bar of an opened connection and its first station */
+  .fp-dh {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* a walk / transfer strip gets the same room above and below (8 px to the station texts) */
+  .fp-row:has(+ .fp-gap) {
+    padding-bottom: 2px;
+  }
+  .fp-gap + .fp-row {
+    padding-top: 8px;
+  }
+}
