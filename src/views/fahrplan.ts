@@ -4,7 +4,7 @@ import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
 import { syncPush } from '../api/pushnotify';
 import { createSavedPanel, asSaved } from './fahrplan-saved';
-import { dayLong, hm, itinHtml, localInput, stopField } from './fahrplan-ui';
+import { cdTxt, dayTxt, hm, itinHtml, localInput, stopField } from './fahrplan-ui';
 
 // Fahrplan – connection search (like the DB Navigator) and the "Gemerkt" tab: commuter trips,
 // saved routes and saved stops with their departure boards.
@@ -16,8 +16,6 @@ export interface FahrplanView {
 }
 
 const ICON_SEARCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>';
-const ICON_BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
-const ICON_OK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const ICON_STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8 6.6 19.7l1.1-6.1L3.2 9.4l6.1-.8z"/></svg>';
 const ICON_SAVED = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
 
@@ -33,10 +31,9 @@ export function createFahrplanView(): FahrplanView {
     </nav>
     <div class="fp-pane fp-pane-search">
     <div class="fp-side">
-    <header class="fp-pagehead"><button type="button" class="fp-sh-btn fp-ph-back" aria-label="Suche ändern">${ICON_BACK}</button><div class="fp-sh-t"><b>Verbindungen</b><small class="fp-ph-sub"></small></div><button type="button" class="fp-sh-btn fp-ph-star" aria-label="Route merken" aria-pressed="false">${ICON_STAR}</button></header>
     <section class="fp-card fp-search" aria-label="Verbindungssuche">
       <h2>Verbindung suchen</h2>
-      <button type="button" class="fp-compact" hidden aria-label="Suche ändern"><span class="fp-cs"></span><span class="fp-ce">Ändern</span><span class="fp-cf"></span><span class="fp-ct"></span><span class="fp-cw"></span></button>
+      <div class="fp-cbar" hidden><button type="button" class="fp-compact" aria-label="Suche ändern"><span class="fp-cs"></span><span class="fp-ce">Ändern</span></button><button type="button" class="fp-ph-star" aria-label="Route merken" aria-pressed="false">${ICON_STAR}</button></div>
       <div class="fp-form">
       <div class="fp-ft">
         <div class="fp-from"></div>
@@ -44,7 +41,6 @@ export function createFahrplanView(): FahrplanView {
         <div class="fp-to"></div>
       </div>
       <div class="fp-opts">
-        <button type="button" class="fp-when" aria-label="Zeitpunkt ändern"></button>
         <select class="fp-mode" aria-label="Abfahrt oder Ankunft"><option value="dep">Abfahrt</option><option value="arr">Ankunft</option></select>
         <input type="datetime-local" class="fp-time" aria-label="Zeitpunkt"/>
         <button type="button" class="btn small fp-now">Jetzt</button>
@@ -52,7 +48,6 @@ export function createFahrplanView(): FahrplanView {
         <button type="button" class="btn primary fp-go">Suchen</button>
       </div>
       <div class="fp-optpanel" hidden>
-        <div class="fp-sheet-head"><button type="button" class="fp-sh-btn fp-sh-back" aria-label="Zurück">${ICON_BACK}</button><b>Optionen</b><button type="button" class="fp-sh-btn fp-sh-ok" aria-label="Fertig">${ICON_OK}</button></div>
         <div class="fp-og"><span class="fp-oh">Verkehrsmittel</span><div class="fp-mchips">${MODE_GROUPS.map((g) => `<button type="button" class="fp-mchip on" data-g="${g.id}" aria-pressed="true">${g.label}</button>`).join('')}</div></div>
         <label class="fp-og"><span class="fp-oh">Umstiege</span><select class="fp-tr"><option value="">Beliebig viele</option><option value="0">Direkt</option><option value="1">Max. 1 Umstieg</option><option value="2">Max. 2 Umstiege</option></select></label>
         <label class="fp-og"><span class="fp-oh">Umstiegszeit</span><select class="fp-xt"><option value="0">Normal</option><option value="5">+5 min</option><option value="10">+10 min</option></select></label>
@@ -62,7 +57,6 @@ export function createFahrplanView(): FahrplanView {
       </div>
       </div>
     </section>
-    <div class="fp-chiprow" hidden><button type="button" class="fp-chip fp-chip-opt">Optionen</button><button type="button" class="fp-chip fp-chip-modes">Verkehrsmittel</button></div>
     </div>
     <section class="fp-card fp-results empty" aria-label="Verbindungen">
       <div class="fp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3l2 3M7 17l-2 3M4 11h16M8 14h.01M16 14h.01M7 3a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10"/></svg><b>Wohin soll es gehen?</b><p>Start und Ziel eingeben, Zeit wählen und „Suchen“ – die Verbindungen erscheinen hier, mit Verspätungen, Gleisen und Umstiegen.</p></div>
@@ -82,8 +76,6 @@ export function createFahrplanView(): FahrplanView {
   const wcChk = q<HTMLInputElement>('.fp-wc');
   const optBtn = q<HTMLButtonElement>('.fp-optbtn');
   const optPanel = q('.fp-optpanel');
-  const chipOpt = q<HTMLButtonElement>('.fp-chip-opt');
-  const chipModes = q<HTMLButtonElement>('.fp-chip-modes');
   const chipsOf = () => [...el.querySelectorAll<HTMLButtonElement>('.fp-mchip')];
 
   // options (persisted): modes switched off, transfers, extra transfer time, walking limit, step-free
@@ -102,9 +94,6 @@ export function createFahrplanView(): FahrplanView {
     const n = activeOptions();
     optBtn.textContent = n ? `Optionen (${n})` : 'Optionen';
     optBtn.classList.toggle('on', n > 0);
-    chipOpt.textContent = optBtn.textContent;
-    chipOpt.classList.toggle('on', n > 0);
-    chipModes.classList.toggle('on', optsState().off.length > 0);
   };
   const applyOptions = (o: Partial<ReturnType<typeof optsState>>) => {
     const off = new Set(o.off ?? []);
@@ -128,29 +117,7 @@ export function createFahrplanView(): FahrplanView {
     optPanel.hidden = !optPanel.hidden;
     optBtn.setAttribute('aria-expanded', String(!optPanel.hidden));
   });
-  /** the options were opened from the chips under a finished search: confirming searches again, going back folds the search up again */
-  let optsFromChips = false;
-  const closeOpts = (confirmed = false) => {
-    optPanel.hidden = true;
-    optBtn.setAttribute('aria-expanded', 'false');
-    if (!optsFromChips) return;
-    optsFromChips = false;
-    if (confirmed && from && to) void search();
-    else if (entries.length) setCompact(true);
-  };
-  const openFromChip = () => {
-    optsFromChips = true;
-    setCompact(false);
-    optBtn.click();
-  };
-  chipOpt.addEventListener('click', openFromChip);
-  chipModes.addEventListener('click', openFromChip);
   optPanel.addEventListener('click', (e) => {
-    const sh = (e.target as HTMLElement).closest('.fp-sh-btn');
-    if (sh) {
-      closeOpts(sh.classList.contains('fp-sh-ok'));
-      return;
-    }
     const c = (e.target as HTMLElement).closest<HTMLButtonElement>('.fp-mchip');
     if (c) {
       // the last remaining mode stays on
@@ -191,79 +158,7 @@ export function createFahrplanView(): FahrplanView {
     if (b) fromField.set(b);
     if (a) toField.set(a);
   });
-  q('.fp-now').addEventListener('click', () => {
-    timeIn.value = localInput(Date.now());
-    syncWhen();
-  });
-
-  // phone: one line with the chosen time ("Heute, 20:50") that opens the date / time page
-  const whenBtn = q<HTMLButtonElement>('.fp-when');
-  function syncWhen() {
-    const t = timeIn.value ? new Date(timeIn.value) : new Date();
-    const day = new Date(t).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0);
-    const d = day === 0 ? 'Heute' : day === 86400000 ? 'Morgen' : t.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
-    whenBtn.textContent = `${modeSel.value === 'arr' ? 'Ankunft ' : ''}${d}, ${hm(t.getTime())}`;
-  }
-  timeIn.addEventListener('change', syncWhen);
-  modeSel.addEventListener('change', syncWhen);
-  syncWhen();
-
-  const phone = () => window.matchMedia('(max-width: 899px)').matches;
-  const sheets: HTMLElement[] = [];
-  /** full-screen page on top of the view (phone): header with back / title / confirm; returns its close function */
-  function openSheet(title: string, body: HTMLElement, onOk?: () => void, onClick?: (e: MouseEvent) => void, head: { sub?: string; right?: string } = {}) {
-    const sheet = document.createElement('div');
-    sheet.className = 'fp-sheet';
-    const right = head.right ?? (onOk ? `<button type="button" class="fp-sh-btn fp-sh-ok" aria-label="Fertig">${ICON_OK}</button>` : '<span></span>');
-    sheet.innerHTML = `<div class="fp-sheet-head"><button type="button" class="fp-sh-btn fp-sh-back" aria-label="Zurück">${ICON_BACK}</button><div class="fp-sh-t"><b>${esc(title)}</b>${head.sub ? `<small>${esc(head.sub)}</small>` : ''}</div>${right}</div>`;
-    body.classList.add('fp-sheet-body');
-    sheet.append(body);
-    const close = () => {
-      sheet.remove();
-      sheets.splice(sheets.indexOf(sheet), 1);
-    };
-    sheet.querySelector('.fp-sh-back')!.addEventListener('click', close);
-    sheet.querySelector('.fp-sh-ok')?.addEventListener('click', () => {
-      onOk?.();
-      close();
-    });
-    if (onClick) sheet.addEventListener('click', onClick);
-    document.body.append(sheet);
-    sheets.push(sheet);
-    return close;
-  }
-  const closeSheets = () => [...sheets].forEach((x) => x.querySelector<HTMLButtonElement>('.fp-sh-back')?.click());
-
-  whenBtn.addEventListener('click', () => {
-    const cur = timeIn.value ? new Date(timeIn.value) : new Date();
-    const body = document.createElement('div');
-    body.innerHTML = `<div class="fp-wtabs" role="tablist"><button type="button" role="tab" data-m="dep">Abfahrt</button><button type="button" role="tab" data-m="arr">Ankunft</button></div>
-      <div class="fp-wfields"><label>Datum<input type="date" class="fp-wd"/></label><label>Uhrzeit<input type="time" class="fp-wt"/></label></div>
-      <div class="fp-quick"><button type="button" data-in="0">Jetzt</button><button type="button" data-in="15">in 15 min</button><button type="button" data-in="60">in 1 h</button></div>`;
-    const d = body.querySelector<HTMLInputElement>('.fp-wd')!;
-    const t = body.querySelector<HTMLInputElement>('.fp-wt')!;
-    let mode = modeSel.value;
-    const setAt = (ts: number) => {
-      const v = localInput(ts);
-      d.value = v.slice(0, 10);
-      t.value = v.slice(11);
-    };
-    const showMode = () => body.querySelectorAll<HTMLButtonElement>('.fp-wtabs button').forEach((b) => b.classList.toggle('on', b.dataset.m === mode));
-    setAt(cur.getTime());
-    showMode();
-    body.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
-      if (b?.dataset.m) {
-        mode = b.dataset.m;
-        showMode();
-      } else if (b?.dataset.in) setAt(Date.now() + Number(b.dataset.in) * 60000);
-    });
-    openSheet('Datum / Zeit', body, () => {
-      if (d.value && t.value) timeIn.value = `${d.value}T${t.value}`;
-      modeSel.value = mode;
-      syncWhen();
-    });
-  });
+  q('.fp-now').addEventListener('click', () => (timeIn.value = localInput(Date.now())));
 
   // all connections found so far (earlier / later pages are added): `raw` as Transitous has them, `shown`
   // with the DB real-time data merged in once it has arrived
@@ -281,27 +176,21 @@ export function createFahrplanView(): FahrplanView {
   let searchSeq = 0;
   const section = q('.fp-search');
   const compactBtn = q<HTMLButtonElement>('.fp-compact');
+  const cbar = q('.fp-cbar');
+  const star = q<HTMLButtonElement>('.fp-ph-star');
   /** after a search the form folds into one summary line (tap to edit) – saves room on phones */
   function setCompact(on: boolean) {
     section.classList.toggle('compact', on);
     el.classList.toggle('is-compact', on);
-    compactBtn.hidden = !on;
-    chipRow.hidden = !on;
+    cbar.hidden = !on;
     if (on) {
       q('.fp-cs').textContent = `${from?.name ?? ''} → ${to?.name ?? ''} · ${modeSel.value === 'arr' ? 'an ' : ''}${hm(lastOpts?.time ?? Date.now())}`;
-      q('.fp-cf').textContent = from?.name ?? '';
-      q('.fp-ct').textContent = to?.name ?? '';
-      q('.fp-cw').textContent = whenBtn.textContent;
-      q('.fp-ph-sub').textContent = `Stand ${hm(Date.now())}`;
       syncStar();
     }
   }
   compactBtn.addEventListener('click', () => setCompact(false));
-  q('.fp-ph-back').addEventListener('click', () => setCompact(false));
-  const chipRow = q('.fp-chiprow');
-  const star = q<HTMLButtonElement>('.fp-ph-star');
   star.addEventListener('click', toggleRoute);
-  /** the star in the page header and the button in the list show whether the route is saved */
+  /** the star next to the route shows whether it is saved (the button in the list follows) */
   function syncStar() {
     const on = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
     star.classList.toggle('on', on);
@@ -345,18 +234,22 @@ export function createFahrplanView(): FahrplanView {
       return;
     }
     let day = '';
+    // the first connection that has not left yet is the big "next" card
+    const nowT = Date.now();
+    const heroAt = shownList().findIndex((it) => it.dep >= nowT - 60000 && !it.legs.some((l) => l.cancelled));
     const rows = shownList()
-      .map((it) => {
-        const d = dayLong(it.dep);
+      .map((it, i) => {
+        const d = dayTxt(it.dep);
         const head = d !== day ? `<p class="fp-day">${esc(d)}</p>` : '';
         day = d;
         const t = tripOf(it);
-        return head + itinHtml(it, t ? { key: itKey(it), saved: store.hasTrip(t.id) } : undefined);
+        return head + itinHtml(it, t ? { key: itKey(it), saved: store.hasTrip(t.id) } : undefined, i === heroAt);
       })
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
     res.innerHTML = `${loadingDelays ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
-      <div class="fp-pagerow"><span class="fp-pdate">${esc(new Date(lastOpts?.time ?? Date.now()).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }))}</span><button type="button" class="btn small fp-page" data-page="now">Jetzt</button>${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}</div>${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
+      ${cursors.prev ? '<button type="button" class="btn small fp-page fp-pg" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page fp-pg" data-page="next">Später</button>' : ''}
+      <div class="fp-actbar"><button type="button" class="fp-chip" data-act="edit">Ändern</button><button type="button" class="fp-chip" data-act="opts">Optionen${activeOptions() ? ` (${activeOptions()})` : ''}</button>${cursors.prev ? '<button type="button" class="fp-chip fp-page" data-page="prev">Früher</button>' : ''}${cursors.next ? '<button type="button" class="fp-chip fp-page" data-page="next">Später</button>' : ''}</div>`;
   }
 
   /** the filters of the options panel as API options */
@@ -414,24 +307,18 @@ export function createFahrplanView(): FahrplanView {
     }
   }
 
-  async function onResClick(e: MouseEvent) {
+  res.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
-    // phone: a connection opens as its own page instead of unfolding in the list
-    const sum = target.closest<HTMLElement>('.fp-itin > summary');
-    if (sum && phone()) {
-      e.preventDefault();
-      const body = document.createElement('div');
-      body.innerHTML = sum.parentElement!.querySelector('.fp-detail')!.innerHTML;
-      // the commuter button moves into the page header (bookmark), like the DB Navigator
-      const tb = body.querySelector<HTMLButtonElement>('.fp-trip');
-      const right = tb ? `<button type="button" class="fp-sh-btn fp-trip${tb.classList.contains('on') ? ' on' : ''}" data-act="savetrip" data-key="${esc(tb.dataset.key ?? '')}" aria-pressed="${tb.getAttribute('aria-pressed')}" aria-label="Als Pendler-Verbindung merken">${ICON_SAVED}<span hidden></span></button>` : undefined;
-      body.querySelector('.fp-dact')?.remove();
-      openSheet('Verbindungsdetails', body, undefined, onResClick, { sub: `Stand ${hm(Date.now())}`, right });
-      return;
-    }
     const act = target.closest<HTMLButtonElement>('[data-act]');
     if (act?.dataset.act === 'saveroute') {
       toggleRoute();
+      return;
+    }
+    // phone action bar: change the search, or open its options
+    if (act?.dataset.act === 'edit' || act?.dataset.act === 'opts') {
+      setCompact(false);
+      if (act.dataset.act === 'opts' && optPanel.hidden) optBtn.click();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (act?.dataset.act === 'savetrip') {
@@ -448,13 +335,6 @@ export function createFahrplanView(): FahrplanView {
       return;
     }
     const btn = target.closest<HTMLButtonElement>('.fp-page');
-    if (btn?.dataset.page === 'now') {
-      timeIn.value = localInput(Date.now());
-      modeSel.value = 'dep';
-      syncWhen();
-      void search();
-      return;
-    }
     if (!btn || !from || !to || !lastOpts) return;
     const dir = btn.dataset.page as 'prev' | 'next';
     const cursor = cursors[dir];
@@ -481,8 +361,7 @@ export function createFahrplanView(): FahrplanView {
       btn.disabled = false;
       toast('Weitere Verbindungen konnten nicht geladen werden.', 'error');
     }
-  }
-  res.addEventListener('click', onResClick);
+  });
   goBtn.addEventListener('click', search);
   el.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.target as HTMLElement).closest('.fp-search') && (e.target as HTMLElement).tagName === 'INPUT' && from && to) search();
@@ -497,7 +376,6 @@ export function createFahrplanView(): FahrplanView {
       toField.set(t);
       timeIn.value = localInput(Date.now());
       modeSel.value = 'dep';
-      syncWhen();
       setTab('search');
       void search();
     },
@@ -524,16 +402,23 @@ export function createFahrplanView(): FahrplanView {
   tabBtns.forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab as 'search' | 'saved')));
   updateCount();
 
+  // the "in 12 min" countdowns tick along while the view is open
+  let tick = 0;
+  const updateCountdowns = () => res.querySelectorAll<HTMLElement>('.fp-cd[data-t]').forEach((c) => (c.textContent = cdTxt(Number(c.dataset.t))));
+
   return {
     el,
     activate() {
       el.hidden = false;
       updateCount();
+      updateCountdowns();
+      window.clearInterval(tick);
+      tick = window.setInterval(updateCountdowns, 20000);
       void syncPush().catch(() => {});
       if (el.dataset.tab === 'saved') saved.activate();
     },
     deactivate() {
-      closeSheets();
+      window.clearInterval(tick);
       saved.deactivate();
     },
   };

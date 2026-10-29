@@ -7,9 +7,6 @@ import { debounce, escapeHtml as esc } from '../util';
 
 export const hm = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 export const dayTxt = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
-/** "Freitag, 30.10.2026" – the day heading between connections */
-export const dayLong = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' });
-const dayHead = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 /** value of an <input type="datetime-local"> for a timestamp (local time) */
 export const localInput = (t: number) => {
   const d = new Date(t - new Date(t).getTimezoneOffset() * 60000);
@@ -123,7 +120,7 @@ const walkTxt = (legs: Leg[]) => {
 };
 const gap = (cls: string, color: string, label: string, mins: string, icon: string) =>
   `<div class="fp-gap ${cls}" style="--c:${color}"><span class="fp-gm">${esc(mins)}</span><span class="fp-gl"></span><div class="fp-gb"><span class="fp-gi">${icon}</span>${esc(label)}</div></div>`;
-const ICON_WALK = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="1.8"/><path d="M9 21l2-6 3 2v4M11 15l1-5-3 1-1 3M12 10l2 2h3"/></svg>';
+const ICON_WALK = '<svg viewBox="0 0 24 24"><circle cx="13" cy="4.5" r="2" fill="currentColor" stroke="none"/><path d="M9 21l2-6 3 2v4M11 15l1-5-3 1-1 3M12 10l2 2h3"/></svg>';
 const ICON_SWAP = '<svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>';
 
 const legBody = (l: Leg) => {
@@ -185,8 +182,21 @@ export const depRow = (d: Departure) => {
 export const tripBtn = (key: string, saved: boolean) =>
   `<button type="button" class="fp-trip${saved ? ' on' : ''}" data-act="savetrip" data-key="${esc(key)}" aria-pressed="${saved}">${BOOKMARK}<span>${saved ? 'Pendler-Verbindung gemerkt' : 'Als Pendler-Verbindung merken'}</span></button>`;
 
-/** one connection as an expandable card; `trip` adds the commuter button inside */
-export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) => {
+/** bar label: "RE8 (13188)" → the train number wraps to a clipped second line when it does not fit, so it disappears instead of ending in "…" */
+const segLabel = (line: string) => {
+  const m = /^(.*?)\s*(\(\d+\))$/.exec(line);
+  return m && m[1] ? `<span class="fp-sn">${esc(m[1])}</span><span class="fp-sn">${esc(m[2])}</span>` : `<span class="fp-sn">${esc(line)}</span>`;
+};
+
+/** "in 12 min" / "in 1 h 05" / "jetzt" / "abgefahren" for an instant */
+export const cdTxt = (t: number, now = Date.now()) => {
+  if (Math.round((t - now) / 60000) < -1) return 'abgefahren';
+  const x = inTxt(t, now);
+  return x === 'jetzt' ? x : `in ${x}`;
+};
+
+/** one connection as an expandable card; `trip` adds the commuter button inside, `hero` makes it the big "next connection" card (phone) */
+export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, hero = false) => {
   const rides = it.legs.filter((l) => l.mode !== 'WALK');
   const first = rides[0] ?? it.legs[0];
   const last = rides[rides.length - 1] ?? it.legs[it.legs.length - 1];
@@ -198,19 +208,27 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
   const total = Math.max(1, it.arr - it.dep);
   const bar = it.legs
     .map((l) => {
-      const w = Math.max(l.mode === 'WALK' ? 2 : 6, ((l.arr - l.dep) / total) * 100);
+      const w = Math.max(6, ((l.arr - l.dep) / total) * 100);
       return l.mode === 'WALK'
-        ? `<span class="fp-seg walk" style="flex:${w}" title="Fußweg"></span>`
-        : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`;
+        ? `<span class="fp-seg walk" title="Fußweg" aria-label="Fußweg">${ICON_WALK}</span>`
+        : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${segLabel(l.line || modeStyle(l.mode).label)}</span>`;
     })
     .join('');
-  return `<details class="fp-itin" data-k="${esc(stableKey(it))}">
+  const cancelled = it.legs.some((l) => l.cancelled);
+  const dl = first?.delayMin;
+  const tag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
+  const lines = rides.map((l) => `<span class="fp-badge" style="--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`).join('');
+  const startT = first?.dep ?? it.dep;
+  return `<details class="fp-itin${hero ? ' fp-hero' : ''}" data-k="${esc(stableKey(it))}">
     <summary>
+      ${hero ? '<span class="fp-hero-lbl">Nächste Verbindung</span>' : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
+      <span class="fp-rt">${esc(hm(startT))} ${esc(first?.from ?? '')}${first?.track ? ` · Gl. ${esc(first.track)}` : ''} → ${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span>
+      <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
     </summary>
-    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayHead(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
+    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
   </details>`;
 };
