@@ -104,6 +104,8 @@ jobs:
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}
           # worker with corrected camera viewing directions (proxy/camdir-worker.js) – same place, Variables
           VITE_CAMDIR_URL: ${{ vars.CAMDIR_URL }}
+          # worker for Fahrplan push notifications (proxy/fahrplan-push-worker.js) – same place, Variables
+          VITE_PUSH_URL: ${{ vars.PUSH_URL }}
           # optional Mapillary client token for the street game (public by nature, it ends up in the bundle) – same place, Variables
           VITE_MAPILLARY_TOKEN: ${{ vars.MAPILLARY_TOKEN }}
       # Preview-Tab-Titel „Orbis – #prN <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten

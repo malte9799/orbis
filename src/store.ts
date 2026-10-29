@@ -88,6 +88,8 @@ export interface SavedTrip {
   line: string;
   /** weekdays it runs on (0 = Sunday … 6 = Saturday) */
   days: number[];
+  /** push notifications: minutes before departure, and whether on-time trains stay quiet */
+  notify?: { leads: number[]; onlyDelay: boolean };
 }
 
 export const routeId = (from: SavedStop, to: SavedStop) => `${from.id}>${to.id}`;

@@ -287,6 +287,36 @@ Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Modera
 </details>
 
 <details>
+<summary><b>🔔 Fahrplan-Benachrichtigungen (eigener Cloudflare-Worker)</b></summary>
+
+<br>
+
+Unter *Fahrplan → Gemerkt → Verbindungen* lässt sich für jede Pendler-Verbindung „Vor der Abfahrt benachrichtigen“ einschalten
+(30 / 20 / 10 / 5 Minuten vorher, optional nur bei Verspätung oder Ausfall). Die Nachricht lautet z. B. „Dein Zug ist pünktlich
+(Abfahrt: 07:12 Uhr, Gleis 2)“ oder „Dein Zug hat 14 min Verspätung (Abfahrt: 07:26 Uhr)“ und kommt **auch bei geschlossener App**.
+
+Das geht nur mit einem kleinen Server: Eine PWA kann im Hintergrund nicht minutengenau nachsehen. `proxy/fahrplan-push-worker.js`
+bekommt die Verbindungen von der App, schaut per Cron jede Minute in den Fahrplan und schickt eine verschlüsselte Web-Push-Nachricht
+(VAPID). Es braucht nur den kostenlosen Cloudflare-Tarif.
+
+1. Schlüssel erzeugen: `node scripts/vapid-keys.mjs` – gibt `VAPID_PUBLIC` und `VAPID_PRIVATE` aus.
+2. Cloudflare → *Workers & Pages → KV* → Namespace anlegen (z. B. `orbis-push`).
+3. Neuen Worker mit dem Inhalt von `proxy/fahrplan-push-worker.js` erstellen. Unter *Bindings* den Namespace als `PUSH_KV` einbinden.
+4. *Settings → Variables and Secrets*: Secrets `VAPID_PUBLIC` und `VAPID_PRIVATE` (aus Schritt 1), Text `VAPID_SUBJECT` (z. B.
+   `mailto:du@example.org`), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
+5. *Settings → Trigger Events → Cron Triggers*: `* * * * *` (jede Minute) hinzufügen.
+6. Repository-Variable `PUSH_URL` = Worker-Adresse, danach den Deploy neu starten. Alternativ trägt jeder Nutzer die Adresse unter
+   *Einstellungen → Verkehr & Nahverkehr → Fahrplan-Benachrichtigungen* selbst ein.
+7. In der App die Benachrichtigung einschalten, die Erlaubnis bestätigen und mit „Test-Nachricht senden“ prüfen.
+
+Hinweise: Auf dem iPhone funktioniert Web-Push nur, wenn Orbis zum Home-Bildschirm hinzugefügt wurde (iOS 16.4+). Der Worker
+speichert pro Gerät nur die Push-Adresse, die Verbindungen und die Zeitzone. Die Grenzen des Gratis-Tarifs (Cron jede Minute,
+ein KV-Eintrag, höchstens 500 Geräte und 10 Verbindungen pro Gerät) reichen für den privaten Gebrauch; bei sehr vielen Nutzern
+müsste der Speicher umgebaut werden.
+
+</details>
+
+<details>
 <summary><b>📷 Mapillary-Token für den Straßen-Rater einbauen</b></summary>
 
 <br>

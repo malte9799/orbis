@@ -1110,3 +1110,49 @@
     bottom: calc(80px + var(--safe-bottom));
   }
 }
+
+/* push notifications of a trip */
+.fp-notify {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-notify .fp-hint {
+  margin: 0;
+}
+.fp-chk {
+  cursor: pointer;
+}
+.fp-chk input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-2);
+}
+.fp-leads {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-lead {
+  min-width: 64px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-lead.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-nrow {
+  display: flex;
+}

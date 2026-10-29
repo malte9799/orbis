@@ -1,5 +1,6 @@
 import { departures, nearbyStops, planConnections, type Itinerary, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
+import { LEADS, enablePush, pushState, syncPush, testPush } from '../api/pushnotify';
 import { locate } from '../search';
 import { store, type SavedRoute, type SavedStop, type SavedTrip } from '../store';
 import { escapeHtml as esc, toast } from '../util';
@@ -139,7 +140,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
 
   const tripItem = (t: SavedTrip) => `<li><button type="button" class="fp-si${selected === t.id ? ' on' : ''}" data-id="${esc(t.id)}">
       <span class="fp-sit"><b>${esc(t.hm)}</b><small>${esc(t.arrHm)}</small></span>
-      <span class="fp-sim"><span class="fp-badge" style="--c:${modeStyle('RAIL').color}">${esc(t.line || 'Fahrt')}</span><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(daysTxt(t.days))}</small></span>
+      <span class="fp-sim"><span class="fp-badge" style="--c:${modeStyle('RAIL').color}">${esc(t.line || 'Fahrt')}</span><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(daysTxt(t.days))}${t.notify ? ` · Nachricht ${esc(t.notify.leads.join('/'))} min vorher` : ''}</small></span>
       <span class="fp-sis" data-status="${esc(t.id)}">${tripStatus(cache.get(t.id)?.r)}</span></button></li>`;
 
   const routeItem = (r: SavedRoute) => `<li class="fp-sr"><button type="button" class="fp-si" data-id="${esc(r.id)}"><span class="fp-sim"><b>${esc(r.from.name)} → ${esc(r.to.name)}</b><small>Jetzt suchen</small></span></button>
@@ -175,6 +176,34 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     return [...t.content.childNodes];
   };
 
+  // ---- push notifications of a trip ----
+  const NOTIFY_MSG: Record<string, string> = {
+    unsupported: 'Dieser Browser kann keine Push-Nachrichten. Auf dem iPhone muss Orbis erst zum Home-Bildschirm hinzugefügt werden.',
+    unconfigured: 'Der Push-Dienst ist noch nicht eingerichtet (README „Fahrplan-Benachrichtigungen“).',
+    denied: 'Benachrichtigungen sind im Browser blockiert – in den Seiteneinstellungen erlauben.',
+  };
+
+  const notifyHtml = (t: SavedTrip) => {
+    const st = pushState();
+    const n = t.notify;
+    return `<div class="fp-notify"><label class="fp-chk"><input type="checkbox" data-act="notify"${n ? ' checked' : ''}${st === 'ready' || n ? '' : ' disabled'}/> Vor der Abfahrt benachrichtigen</label>
+      ${st !== 'ready' ? `<p class="fp-hint">${NOTIFY_MSG[st]}</p>` : ''}
+      ${
+        n
+          ? `<div class="fp-leads" role="group" aria-label="Minuten vor Abfahrt">${LEADS.map((m) => `<button type="button" class="fp-lead${n.leads.includes(m) ? ' on' : ''}" data-lead="${m}" aria-pressed="${n.leads.includes(m)}">${m} min</button>`).join('')}</div>
+        <label class="fp-chk"><input type="checkbox" data-act="onlydelay"${n.onlyDelay ? ' checked' : ''}/> Nur bei Verspätung oder Ausfall</label>
+        <div class="fp-nrow"><button type="button" class="btn small" data-act="testpush">Test-Nachricht senden</button></div>
+        <p class="fp-hint">Die Nachrichten kommen auch, wenn die App geschlossen ist.</p>`
+          : ''
+      }</div>`;
+  };
+
+  /** tells the push worker what to watch; errors only matter when the user is looking */
+  const pushSync = (loud = false) =>
+    syncPush().catch(() => {
+      if (loud) toast('Der Push-Dienst ist gerade nicht erreichbar.', 'error');
+    });
+
   // ---- detail: trip ----
   async function showTrip(id: string, force = false) {
     const t = store.getTrips().find((x) => x.id === id);
@@ -183,7 +212,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     el.classList.add('has-detail');
     const days = `<div class="fp-days" role="group" aria-label="Wochentage">${WEEK.map(([d, n]) => `<button type="button" class="fp-day-btn${t.days.includes(d) ? ' on' : ''}" data-d="${d}" aria-pressed="${t.days.includes(d)}">${n}</button>`).join('')}</div>`;
     const head = `<div class="fp-th"><div><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(t.line)} · ${esc(t.hm)} → ${esc(t.arrHm)}</small></div>
-      <button type="button" class="btn small" data-act="openroute">In Suche öffnen</button></div>${days}`;
+      <button type="button" class="btn small" data-act="openroute">In Suche öffnen</button></div>${days}${notifyHtml(t)}`;
     const foot = '<button type="button" class="btn small fp-rm" data-act="rmtrip">Pendler-Verbindung entfernen</button>';
     const cached = cache.get(id)?.r;
     bodyEl.innerHTML = head + (cached ? tripBody(cached) : '<p class="fp-hint">Lade Verbindung …</p>') + foot;
@@ -334,16 +363,37 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     const t = e.target as HTMLElement;
     const day = t.closest<HTMLElement>('.fp-day-btn');
     const trip = sub === 'trips' ? store.getTrips().find((x) => x.id === selected) : undefined;
-    if (day && trip) {
+    const lead = t.closest<HTMLElement>('.fp-lead');
+    if (lead && trip?.notify) {
+      const m = Number(lead.dataset.lead);
+      const has = trip.notify.leads.includes(m);
+      if (has && trip.notify.leads.length === 1) return; // at least one time stays
+      const leads = (has ? trip.notify.leads.filter((x) => x !== m) : [...trip.notify.leads, m]).sort((a, b) => b - a);
+      store.updateTrip(trip.id, { notify: { ...trip.notify, leads } });
+      void pushSync(true);
+      void showTrip(trip.id).then(renderList);
+    } else if (t.closest('[data-act="testpush"]') && trip?.notify) {
+      void (async () => {
+        try {
+          await syncPush();
+          await testPush();
+          toast('Test-Nachricht ist unterwegs.');
+        } catch {
+          toast('Test fehlgeschlagen – ist der Push-Dienst erreichbar?', 'error');
+        }
+      })();
+    } else if (day && trip) {
       const d = Number(day.dataset.d);
       const days = trip.days.includes(d) ? trip.days.filter((x) => x !== d) : [...trip.days, d];
       store.updateTrip(trip.id, { days });
       cache.delete(trip.id);
+      void pushSync();
       void showTrip(trip.id, true).then(renderList);
       renderList();
     } else if (t.closest('[data-act="rmtrip"]') && trip) {
       store.toggleTrip(trip);
       cache.delete(trip.id);
+      void pushSync();
       hint('<b>Pendler-Verbindungen</b><p>Wähle links eine Verbindung – hier siehst du den aktuellen Stand deines Zuges.</p>');
       renderList();
       deps.onChange();
@@ -358,6 +408,33 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       if (head) head.outerHTML = headHtml(s);
       renderList();
       deps.onChange();
+    }
+  });
+
+  bodyEl.addEventListener('change', (e) => {
+    const box = e.target as HTMLInputElement;
+    const trip = sub === 'trips' ? store.getTrips().find((x) => x.id === selected) : undefined;
+    if (!trip || !box.dataset.act) return;
+    if (box.dataset.act === 'notify') {
+      void (async () => {
+        if (box.checked) {
+          try {
+            await enablePush();
+            store.updateTrip(trip.id, { notify: { leads: [30, 10], onlyDelay: false } });
+            await syncPush();
+            toast('Benachrichtigung ist an – du bekommst eine Nachricht 30 und 10 min vor Abfahrt.');
+          } catch (err) {
+            toast(err instanceof Error ? err.message : 'Benachrichtigung konnte nicht eingerichtet werden.', 'error');
+          }
+        } else {
+          store.updateTrip(trip.id, { notify: undefined });
+          void pushSync();
+        }
+        void showTrip(trip.id).then(renderList);
+      })();
+    } else if (box.dataset.act === 'onlydelay' && trip.notify) {
+      store.updateTrip(trip.id, { notify: { ...trip.notify, onlyDelay: box.checked } });
+      void pushSync(true);
     }
   });
 
@@ -383,6 +460,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     count: total,
     activate() {
       active = true;
+      void pushSync();
       // start on the part that has something in it
       if (!store.getTrips().length) sub = store.getStations().length ? 'stops' : store.getRoutes().length ? 'routes' : 'trips';
       setSub(sub);

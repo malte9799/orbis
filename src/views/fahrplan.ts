@@ -1,6 +1,7 @@
 import { MODE_GROUPS, planConnections, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
+import { syncPush } from '../api/pushnotify';
 import { createSavedPanel, asSaved } from './fahrplan-saved';
 import { dayTxt, hm, itinHtml, localInput, stopField } from './fahrplan-ui';
 
@@ -338,6 +339,7 @@ export function createFahrplanView(): FahrplanView {
     activate() {
       el.hidden = false;
       updateCount();
+      void syncPush().catch(() => {});
       if (el.dataset.tab === 'saved') saved.activate();
     },
     deactivate() {
