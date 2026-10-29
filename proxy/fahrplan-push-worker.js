@@ -180,7 +180,7 @@ export async function liveStatus(trip, dep, env, budget = newBudget()) {
   if (env?.DB_CLIENT_ID && env?.DB_API_KEY) {
     try {
       const [r] = await dbDelays(env, [{ station: trip.from.name, ts: dep, kind: 'dep', line: trip.line }], budget);
-      if (r) return { cancelled: !!r.cancelled, delayMin: r.delayMin, dep: dep + (r.delayMin ?? 0) * 60000, track: r.track };
+      if (r) return { cancelled: !!r.cancelled, delayMin: r.delayMin, dep: dep + (r.delayMin ?? 0) * 60000, track: r.track, trackChanged: !!r.trackChanged };
     } catch {
       /* fall back to Transitous */
     }
@@ -266,7 +266,9 @@ export function matchDelay(planned, changes, q) {
   // no entry in the changes: on time if it is soon, otherwise the real time just is not known yet
   const unknown = !ch?.ct && q.ts - (q.now ?? Date.now()) > KNOWN_AHEAD_MS;
   const delayMin = ch?.ct ? Math.round((stampMs(ch.ct) - stampMs(stamp)) / 60000) : unknown ? null : 0;
-  return { delayMin, cancelled, track: ch?.cp ?? hit[key]?.pp };
+  const plannedTrack = hit[key]?.pp;
+  // DB: cp = changed platform, pp = planned platform
+  return { delayMin, cancelled, track: ch?.cp ?? plannedTrack, trackChanged: !!ch?.cp && !!plannedTrack && ch.cp !== plannedTrack };
 }
 
 // small caches per worker instance: the free key allows 60 calls a minute for all users together
@@ -336,7 +338,7 @@ export async function dbDelays(env, queries, budget = newBudget()) {
 /** the notification for a status, or null when nothing should be sent (trip is on time and only delays are wanted) */
 export function buildMessage(trip, status, tz) {
   const title = `${trip.line} · ${trip.from.name} → ${trip.to.name}`;
-  const gl = status.track ? `, Gleis ${status.track}` : '';
+  const gl = status.track ? `, Gleis ${status.track}${status.trackChanged ? ' (Gleiswechsel)' : ''}` : '';
   const tag = `trip-${trip.id}`;
   if (status.cancelled) return { title, body: `Dein Zug entfällt (planmäßige Abfahrt: ${trip.hm} Uhr).`, tag, url: './#/fahrplan' };
   if (status.delayMin != null && status.delayMin > 0) return { title, body: `Dein Zug hat ${status.delayMin} min Verspätung (Abfahrt: ${clock(status.dep, tz)} Uhr${gl}).`, tag, url: './#/fahrplan' };

@@ -27,6 +27,12 @@ export interface Leg {
   to: string;
   track?: string;
   toTrack?: string;
+  /** the platform differs from the planned one (a platform change) */
+  trackChanged?: boolean;
+  toTrackChanged?: boolean;
+  /** operator and booking requirement (on-demand buses: "COMPULSORY" = has to be booked) */
+  agency?: string;
+  reservation?: string;
   dep: number;
   arr: number;
   /** scheduled times (equal to dep/arr without real-time data) */
@@ -59,6 +65,7 @@ export interface Departure {
   line: string;
   headsign: string;
   track?: string;
+  trackChanged?: boolean;
   /** actual (real-time) departure */
   time: number;
   delayMin: number | null;
@@ -93,6 +100,8 @@ interface LegDto {
   headsign?: string;
   routeShortName?: string;
   displayName?: string;
+  agencyName?: string;
+  reservation?: string;
   cancelled?: boolean;
   distance?: number;
   intermediateStops?: PlaceDto[];
@@ -159,6 +168,10 @@ export function parseItineraries(list: ItineraryDto[]): Itinerary[] {
         to: l.to.name ?? '',
         track: l.from.track ?? l.from.scheduledTrack,
         toTrack: l.to.track ?? l.to.scheduledTrack,
+        agency: l.agencyName,
+        reservation: l.reservation,
+        trackChanged: changedTrack(l.from),
+        toTrackChanged: changedTrack(l.to),
         dep: ms(l.startTime),
         arr: ms(l.endTime),
         schedDep: ms(l.scheduledStartTime ?? l.from.scheduledDeparture ?? l.startTime),
@@ -175,6 +188,9 @@ export function parseItineraries(list: ItineraryDto[]): Itinerary[] {
   }));
 }
 
+/** Transitous gives the current and the planned platform: they differ on a platform change */
+const changedTrack = (p: { track?: string; scheduledTrack?: string }) => !!p.track && !!p.scheduledTrack && p.track !== p.scheduledTrack;
+
 export function parseDepartures(list: StopTimeDto[]): Departure[] {
   return list
     .map((s) => ({
@@ -182,6 +198,7 @@ export function parseDepartures(list: StopTimeDto[]): Departure[] {
       line: (s.displayName ?? s.routeShortName ?? '').trim(),
       headsign: (s.headsign ?? '').trim(),
       track: s.place.track ?? s.place.scheduledTrack,
+      trackChanged: changedTrack(s.place),
       time: ms(s.place.departure ?? s.place.arrival),
       sched: ms(s.place.scheduledDeparture ?? s.place.scheduledArrival ?? s.place.departure ?? s.place.arrival),
       delayMin: delayOf(s.place.departure ?? s.place.arrival, s.place.scheduledDeparture ?? s.place.scheduledArrival, s.realTime),
@@ -246,7 +263,7 @@ export const MODE_GROUPS: { id: string; label: string; modes: string[] }[] = [
   { id: 'sbahn', label: 'S-Bahn', modes: ['SUBURBAN'] },
   { id: 'ubahn', label: 'U-Bahn', modes: ['SUBWAY'] },
   { id: 'tram', label: 'Straßenbahn', modes: ['TRAM'] },
-  { id: 'bus', label: 'Bus', modes: ['BUS'] },
+  { id: 'bus', label: 'Bus', modes: ['BUS', 'ODM', 'FLEX'] },
   { id: 'fernbus', label: 'Fernbus', modes: ['COACH'] },
   { id: 'faehre', label: 'Fähre', modes: ['FERRY'] },
 ];

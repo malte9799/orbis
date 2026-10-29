@@ -18,6 +18,7 @@ interface Hit {
   delayMin: number | null;
   cancelled: boolean;
   track?: string;
+  trackChanged?: boolean;
 }
 
 /** the worker is set up (user setting or built in) */
@@ -85,8 +86,8 @@ export async function withDelays(list: Itinerary[]): Promise<Itinerary[]> {
       matched = true;
       return {
         ...l,
-        ...(d ? { delayMin: d.delayMin, dep: l.schedDep + (d.delayMin ?? 0) * 60000, track: d.track ?? l.track, cancelled: l.cancelled || d.cancelled } : {}),
-        ...(a ? { arrDelayMin: a.delayMin, arr: l.schedArr + (a.delayMin ?? 0) * 60000, toTrack: a.track ?? l.toTrack, cancelled: l.cancelled || a.cancelled } : {}),
+        ...(d ? { delayMin: d.delayMin, dep: l.schedDep + (d.delayMin ?? 0) * 60000, track: d.track ?? l.track, trackChanged: d.trackChanged || l.trackChanged, cancelled: l.cancelled || d.cancelled } : {}),
+        ...(a ? { arrDelayMin: a.delayMin, arr: l.schedArr + (a.delayMin ?? 0) * 60000, toTrack: a.track ?? l.toTrack, toTrackChanged: a.trackChanged || l.toTrackChanged, cancelled: l.cancelled || a.cancelled } : {}),
       };
     });
     return matched ? { ...it, legs, dep: legs[0].dep, arr: legs[legs.length - 1].arr, delaySrc: 'db' } : it;
@@ -101,6 +102,6 @@ export async function departuresWithDelays(station: string, list: Departure[]): 
   if (![...byKey.values()].some(Boolean)) return list;
   return list.map((d) => {
     const h = isRail(d.mode) && d.line ? byKey.get(keyOf({ station, ts: d.sched, kind: 'dep', line: d.line })) : null;
-    return h ? { ...d, time: d.sched + (h.delayMin ?? 0) * 60000, delayMin: h.delayMin, track: h.track ?? d.track, cancelled: d.cancelled || h.cancelled, delaySrc: 'db' } : d;
+    return h ? { ...d, time: d.sched + (h.delayMin ?? 0) * 60000, delayMin: h.delayMin, track: h.track ?? d.track, trackChanged: h.trackChanged || d.trackChanged, cancelled: d.cancelled || h.cancelled, delaySrc: 'db' } : d;
   });
 }

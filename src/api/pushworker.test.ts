@@ -100,9 +100,9 @@ describe('DB timetable XML', () => {
     const planned = parseTimetable(PLAN);
     const changes = parseTimetable(CHANGES);
     // RE 8 planned 07:12 CET, 15 min late, platform changed 2 → 1
-    for (const line of ['RE8', 'RE 8', 'RE 4306']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toEqual({ delayMin: 15, cancelled: false, track: '1' });
+    for (const line of ['RE8', 'RE 8', 'RE 4306']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toEqual({ delayMin: 15, cancelled: false, track: '1', trackChanged: true });
     // the S-Bahn at the same minute has no change entry → on time, planned platform
-    expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line: 'S 9', now: at('06:00') })).toEqual({ delayMin: 0, cancelled: false, track: '3' });
+    expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line: 'S 9', now: at('06:00') })).toEqual({ delayMin: 0, cancelled: false, track: '3', trackChanged: false });
   });
   it('does not guess when nothing or something else matches', () => {
     const planned = parseTimetable(PLAN);
@@ -115,7 +115,7 @@ describe('DB timetable XML', () => {
     const planned = parseTimetable(PLAN);
     const changes = parseTimetable(CHANGES);
     expect(matchDelay(planned, changes, { ts: at('09:10'), kind: 'dep', line: 'RE8' })).toMatchObject({ cancelled: true });
-    expect(matchDelay(planned, changes, { ts: at('05:59'), kind: 'arr', line: 'RE 1' })).toEqual({ delayMin: 0, cancelled: false, track: '1' });
+    expect(matchDelay(planned, changes, { ts: at('05:59'), kind: 'arr', line: 'RE 1' })).toEqual({ delayMin: 0, cancelled: false, track: '1', trackChanged: false });
   });
 });
 
