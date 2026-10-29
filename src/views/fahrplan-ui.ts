@@ -6,6 +6,8 @@ import { debounce, escapeHtml as esc } from '../util';
 // Building blocks of the Fahrplan view that are shared between the search and the saved tab.
 
 export const hm = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+/** "Donnerstag, 29.10." – the weekday written out, for the day headings of the connections */
+export const dayLong = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'numeric' });
 export const dayTxt = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
 /** value of an <input type="datetime-local"> for a timestamp (local time) */
 export const localInput = (t: number) => {
@@ -179,8 +181,10 @@ export const depRow = (d: Departure) => {
 };
 
 /** button that saves / removes a connection as a commuter trip (state is toggled in place by the caller) */
+/** label of the save button: the long text where there is room, the short one otherwise (see .fp-dh) */
+export const tripTxt = (saved: boolean) => `<span class="fp-lg">${saved ? 'Verbindung gemerkt' : 'Verbindung merken'}</span><span class="fp-shrt">${saved ? 'Gemerkt' : 'Merken'}</span>`;
 export const tripBtn = (key: string, saved: boolean) =>
-  `<button type="button" class="fp-trip${saved ? ' on' : ''}" data-act="savetrip" data-key="${esc(key)}" aria-pressed="${saved}">${BOOKMARK}<span>${saved ? 'Pendler-Verbindung gemerkt' : 'Als Pendler-Verbindung merken'}</span></button>`;
+  `<button type="button" class="fp-trip${saved ? ' on' : ''}" data-act="savetrip" data-key="${esc(key)}" aria-pressed="${saved}">${BOOKMARK}${tripTxt(saved)}</button>`;
 
 /** bar label: "RE8 (13188)" → the train number wraps to a clipped second line when it does not fit, so it disappears instead of ending in "…" */
 const segLabel = (line: string) => {
@@ -222,13 +226,13 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
   return `<details class="fp-itin${hero ? ' fp-hero' : ''}" data-k="${esc(stableKey(it))}">
     <summary>
       ${hero ? '<span class="fp-hero-lbl">Nächste Verbindung</span>' : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
-      <span class="fp-rt">${esc(hm(startT))} ${esc(first?.from ?? '')}${first?.track ? ` · Gl. ${esc(first.track)}` : ''} → ${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span>
+      <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}${first?.track ? ` · Gl. ${esc(first.track)}` : ''}</span><span class="fp-rt-to">${esc(last?.to ?? '')} ${esc(hm(last?.arr ?? it.arr))}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · Gleis ${esc(first.track)}` : ''}</span>
     </summary>
-    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayTxt(it.dep))}</span><span>Dauer: ${esc(durationTxt(planArr - planDep))}</span></div>${trip ? `<div class="fp-dact">${tripBtn(trip.key, trip.saved)}</div>` : ''}${timeline(it)}</div>
+    <div class="fp-detail"><div class="fp-dh"><span>${esc(dayLong(it.dep))}</span><span><span class="fp-dl">Dauer: </span>${esc(durationTxt(planArr - planDep))}</span>${trip ? tripBtn(trip.key, trip.saved) : ''}</div>${timeline(it)}</div>
   </details>`;
 };

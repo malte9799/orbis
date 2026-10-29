@@ -279,8 +279,10 @@
 }
 .fp-dh {
   display: flex;
-  justify-content: space-between;
-  padding: 10px 12px;
+  align-items: center;
+  gap: 12px;
+  container-type: inline-size;
+  padding: 8px 12px;
   color: var(--text-2);
   font-size: 0.9rem;
   background: rgba(255, 255, 255, 0.03);
@@ -1208,7 +1210,7 @@
 .fp-lines,
 .fp-cd,
 .fp-dtag,
-.fp-actbar {
+.fp-cchips {
   display: none;
 }
 .fp-chip {
@@ -1260,7 +1262,7 @@
     fill: currentColor;
   }
   .fahrplan-view.is-compact .fp-route,
-  .fp-results .fp-pg {
+  .fp-results .fp-pg-top {
     display: none;
   }
   .fp-results {
@@ -1363,35 +1365,33 @@
     display: flex;
     grid-column: 1 / -1;
   }
-  .fp-hero .fp-hero-lbl,
-  .fp-hero .fp-cd,
-  .fp-hero .fp-rt,
-  .fp-hero .fp-bar,
-  .fp-hero .fp-lines,
-  .fp-hero .fp-dtag {
-    grid-row: auto;
-  }
+  /* the bar already names the trains: no badge row in the big card, the status sits next to the countdown */
   .fp-hero .fp-lines {
+    display: none;
+  }
+  .fp-hero .fp-hero-lbl {
+    grid-row: 1;
+  }
+  .fp-hero .fp-cd {
     grid-column: 1;
+    grid-row: 2;
   }
   .fp-hero .fp-dtag {
     grid-column: 2;
+    grid-row: 2;
+    align-self: end;
   }
-
-  /* sticky action bar above the tab bar, within thumb reach */
-  .fp-actbar {
-    position: sticky;
-    bottom: calc(72px + var(--safe-bottom));
-    z-index: 5;
+  .fp-hero .fp-rt {
+    grid-row: 3;
     display: flex;
-    gap: 8px;
-    justify-content: center;
-    padding: 8px 0;
+    justify-content: space-between;
+    gap: 12px;
   }
-  .fp-actbar .fp-chip {
-    flex: 1;
-    padding: 0 6px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  .fp-hero .fp-rt-to {
+    text-align: right;
+  }
+  .fp-hero .fp-bar {
+    grid-row: 4;
   }
 }
 
@@ -1440,4 +1440,64 @@
   font-size: 0.8rem;
   font-weight: 700;
   line-height: 1.3;
+}
+
+@media (max-width: 899px) {
+  /* options, "Jetzt" and "Früher" sit in the same box as the folded search */
+  .fp-cchips:not([hidden]) {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .fp-cchips > .fp-chip {
+    flex: none;
+  }
+  /* "Jetzt" and "Früher" share the right half */
+  .fp-cgrp {
+    display: flex;
+    gap: 8px;
+    width: 50%;
+  }
+  .fp-cchips .fp-chip {
+    padding: 0 8px;
+  }
+  .fp-cgrp .fp-chip {
+    flex: 1;
+  }
+  .fp-cchips .fp-chip[hidden] {
+    display: none;
+  }
+  .fp-search.compact {
+    padding: 12px;
+    gap: 10px;
+    border: 1px solid var(--border);
+    background: var(--card-solid);
+  }
+}
+
+/* detail header: day, duration and the save button on one line; the button shrinks its text when the line is narrow */
+.fp-dh {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.fp-dh > span {
+  white-space: nowrap;
+}
+.fp-dh > span:first-child {
+  margin-right: auto;
+}
+.fp-dh .fp-trip {
+  padding: 4px 10px;
+}
+.fp-dh .fp-shrt {
+  display: none;
+}
+@container (max-width: 520px) {
+  .fp-dh .fp-dl,
+  .fp-dh .fp-lg {
+    display: none;
+  }
+  .fp-dh .fp-shrt {
+    display: inline;
+  }
 }

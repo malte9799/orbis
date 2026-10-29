@@ -153,7 +153,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       <button type="button" class="btn icon-btn fp-del" data-del="${esc(s.id)}" aria-label="Haltestelle entfernen" title="Haltestelle entfernen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
 
   const EMPTY: Record<Sub, string> = {
-    trips: 'Noch keine Pendler-Verbindung. Suche eine Verbindung, öffne sie und tippe auf „Als Pendler-Verbindung merken“ – hier siehst du dann täglich auf einen Blick, ob dein Zug pünktlich ist.',
+    trips: 'Noch keine Pendler-Verbindung. Suche eine Verbindung, öffne sie und tippe auf „Merken“ – hier siehst du dann täglich auf einen Blick, ob dein Zug pünktlich ist.',
     routes: 'Noch keine Route. Nach einer Suche kannst du Start und Ziel mit „Route merken“ speichern – die Uhrzeit wählst du jedes Mal neu.',
     stops: 'Noch keine Haltestelle. Such oben eine Haltestelle und tippe auf das Herz.',
   };
