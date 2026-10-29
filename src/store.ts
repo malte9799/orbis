@@ -157,6 +157,18 @@ export const store = {
     write('wg.recentStops', list);
   },
 
+  /** last seen run of saved trips that run soon or now, for offline use (see api/triprun.ts) */
+  getRuns: (): Record<string, { at: number; dep: number; today: boolean; it: unknown }> => read('wg.runs', {}),
+  setRun(id: string, run: { at: number; dep: number; today: boolean; it: unknown }) {
+    write('wg.runs', { ...store.getRuns(), [id]: run });
+  },
+  /** drops the runs of trips that are not saved any more and those `useful` says are over */
+  pruneRuns(keep: string[], useful: (r: { at: number; dep: number; today: boolean; it: unknown }) => boolean) {
+    const all = store.getRuns();
+    const next = Object.fromEntries(Object.entries(all).filter(([id, r]) => keep.includes(id) && useful(r)));
+    if (Object.keys(next).length !== Object.keys(all).length) write('wg.runs', next);
+  },
+
   getRoutes: (): SavedRoute[] => read('wg.routes', []),
   isRoute: (from: SavedStop, to: SavedStop) => store.getRoutes().some((r) => r.id === routeId(from, to)),
   toggleRoute(from: SavedStop, to: SavedStop): boolean {

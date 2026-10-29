@@ -1,6 +1,7 @@
 import { departures, nearbyStops, planConnections, sourceTxt, type Departure, type Itinerary, type Stop } from '../api/connections';
 import { delaysConfigured, departuresWithDelays, plannedDeps, withDelays } from '../api/dbdelays';
 import { modeStyle } from '../api/transit';
+import { matchesRun, stillUseful, worthKeeping, type StoredRun } from '../api/triprun';
 import { LEADS, enablePush, pushState, syncPush, testPush } from '../api/pushnotify';
 import { locate } from '../search';
 import { store, type SavedRoute, type SavedStop, type SavedTrip } from '../store';
@@ -69,6 +70,8 @@ interface Resolved {
   run: { dep: number; today: boolean } | null;
   it: Itinerary | null;
   failed?: boolean;
+  /** shown from the copy kept in the browser (offline): when it was seen */
+  stale?: number;
 }
 
 export function createSavedPanel(deps: SavedDeps): SavedPanel {
@@ -105,6 +108,13 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     if (!force && hit && Date.now() - hit.at < REFRESH_MS) return hit.r;
     const run = nextRun(t);
     let r: Resolved = { run, it: null };
+    const kept = run ? (store.getRuns()[t.id] as StoredRun | undefined) : undefined;
+    // without network: straight to the copy kept in the browser
+    if (run && typeof navigator !== 'undefined' && navigator.onLine === false && matchesRun(kept, run)) {
+      r = { run, it: kept.it, stale: kept.at };
+      cache.set(t.id, { at: Date.now(), r });
+      return r;
+    }
     if (run) {
       try {
         let cursor: string | undefined;
@@ -116,8 +126,10 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
         }
         // the exact delay comes from the DB timetable data (when our worker is set up)
         if (r.it) r = { run, it: (await withDelays([r.it]))[0] };
+        // keep what runs soon or now, so it is there offline
+        if (r.it && worthKeeping(run, r.it)) store.setRun(t.id, { at: Date.now(), dep: run.dep, today: run.today, it: r.it });
       } catch {
-        r = { run, it: null, failed: true };
+        r = matchesRun(kept, run) ? { run, it: kept.it, stale: kept.at } : { run, it: null, failed: true };
       }
     }
     cache.set(t.id, { at: Date.now(), r });
@@ -131,8 +143,9 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     if (res.failed) return `${when}<span class="fp-hint">nicht erreichbar</span>`;
     if (!res.it) return `${when}<span class="fp-hint">nicht gefunden</span>`;
     const ride = res.it.legs.find((l) => l.mode !== 'WALK');
-    if (ride?.cancelled) return `${when}<span class="fp-late">entfällt</span>`;
-    return `${when}${delayTxt(ride?.arrDelayMin ?? ride?.delayMin) || '<span class="fp-hint">planmäßig</span>'}`;
+    const off = res.stale ? ` <small class="fp-hint" title="Gespeichert um ${esc(hm(res.stale))}">offline</small>` : '';
+    if (ride?.cancelled) return `${when}<span class="fp-late">entfällt</span>${off}`;
+    return `${when}${delayTxt(ride?.arrDelayMin ?? ride?.delayMin) || '<span class="fp-hint">planmäßig</span>'}${off}`;
   };
 
   // ---- rendering ----
@@ -230,7 +243,8 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     const day = `<p class="fp-day">${r.run.today ? 'Heute' : 'Nächste Fahrt'}, ${esc(dayTxt(r.run.dep))}</p>`;
     if (r.failed) return `${day}<p class="fp-hint">Fahrplan gerade nicht erreichbar.</p>`;
     if (!r.it) return `${day}<p class="fp-hint">Die Fahrt wurde im Fahrplan nicht gefunden (kein Verkehr an dem Tag oder die Linie hat sich geändert).</p>`;
-    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.delaySrc))}</p>`;
+    const stand = r.stale ? `Offline – gespeichert um ${hm(r.stale)}` : `Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.delaySrc))}`;
+    return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">${stand}</p>`;
   }
 
   // ---- detail: stop board ----
@@ -475,6 +489,8 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     count: total,
     activate() {
       active = true;
+      // forget the kept runs of removed trips and of runs that are over
+      store.pruneRuns(store.getTrips().map((t) => t.id), (r) => stillUseful(r as StoredRun));
       void pushSync();
       // start on the part that has something in it
       if (!store.getTrips().length) sub = store.getStations().length ? 'stops' : store.getRoutes().length ? 'routes' : 'trips';
