@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { durationTxt, ensureSource, inTxt, parseDepartures, parseItineraries, parseStops } from './connections';
+import { durationTxt, ensureSource, inTxt, planProgressive, plain, parseDepartures, parseItineraries, parseStops } from './connections';
 
 describe('parseStops', () => {
   it('keeps only stops and names the area', () => {
@@ -72,5 +72,51 @@ describe('ensureSource', () => {
     expect(await ensureSource({ ...old, id: 'other' })).toMatchObject({ id: 'other', src: 'motis' });
     vi.stubGlobal('fetch', vi.fn(async () => new Response('down', { status: 503 })));
     expect(await ensureSource({ ...old, id: 'other2' })).toMatchObject({ id: 'other2', src: 'motis' });
+  });
+});
+
+describe('planProgressive', () => {
+  const A = { id: 'a', name: 'Bad Kleinen', lat: 53.7, lon: 11.4, src: 'db' as const };
+  const B = { id: 'b', name: 'Wismar', lat: 53.9, lon: 11.46, src: 'db' as const };
+  const T = (m: number) => new Date(Date.UTC(2026, 9, 29, 6, m)).toISOString();
+  const dbBody = { journeys: [{ legs: [{ origin: { name: 'Bad Kleinen' }, destination: { name: 'Wismar' }, plannedDeparture: T(12), departure: T(27), departureDelay: 900, plannedArrival: T(27), arrival: T(42), arrivalDelay: 900, line: { name: 'RE 8', product: 'regionalExpress' } }] }] };
+  const motisBody = { itineraries: [{ startTime: T(12), endTime: T(27), transfers: 0, legs: [{ mode: 'REGIONAL_FAST_RAIL', from: { name: 'Bad Kleinen' }, to: { name: 'Wismar' }, startTime: T(12), endTime: T(27), realTime: true, displayName: 'RE 8' }] }] };
+  const serve = (dbMs: number, motisMs: number, dbOk = true) =>
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const db = String(url).includes('transport.rest');
+      await new Promise((r) => setTimeout(r, db ? dbMs : motisMs));
+      if (db && !dbOk) return new Response('down', { status: 503 });
+      return new Response(JSON.stringify(db ? dbBody : motisBody), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+  afterEach(() => vi.unstubAllGlobals());
+  const o = { time: Date.parse(T(0)), arriveBy: false };
+
+  it('shows Transitous at once and delivers the DB data later', async () => {
+    serve(80, 5);
+    const partial: unknown[] = [];
+    const r = await planProgressive(A, B, o, (p) => partial.push(p));
+    expect(partial).toHaveLength(1);
+    expect((partial[0] as { list: { legs: { delayMin: number | null }[] }[] }).list[0].legs[0].delayMin).toBeNull();
+    expect(r.list[0].src).toBe('db');
+    expect(r.list[0].legs[0].delayMin).toBe(15);
+  });
+  it('skips the preliminary list when DB is quicker', async () => {
+    serve(5, 80);
+    const partial: unknown[] = [];
+    const r = await planProgressive(A, B, o, (p) => partial.push(p));
+    expect(partial).toHaveLength(0);
+    expect(r.list[0].src).toBe('db');
+  });
+  it('keeps the Transitous result when DB fails', async () => {
+    serve(20, 5, false);
+    const r = await planProgressive(A, B, o, () => {});
+    expect(r.list[0].src).toBe('motis');
+  });
+  it('plain() drops delays and uses planned times', () => {
+    const it = { dep: 2, arr: 9, transfers: 0, legs: [{ mode: 'RAIL', line: 'RE 8', headsign: '', from: 'A', to: 'B', dep: 2, arr: 9, schedDep: 1, schedArr: 8, delayMin: 1, arrDelayMin: 1, cancelled: false, via: [{ name: 'X', time: 5, delayMin: 1 }] }] };
+    const p = plain(it);
+    expect(p).toMatchObject({ dep: 1, arr: 8 });
+    expect(p.legs[0]).toMatchObject({ delayMin: null, arrDelayMin: null });
+    expect(p.legs[0].via[0].delayMin).toBeNull();
   });
 });

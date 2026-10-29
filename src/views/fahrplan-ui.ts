@@ -1,4 +1,4 @@
-import { durationTxt, inTxt, legColor, searchStops, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
+import { durationTxt, inTxt, legColor, searchStops, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
 import { debounce, escapeHtml as esc } from '../util';
 
@@ -174,7 +174,7 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }) 
         : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)}">${esc(l.line || modeStyle(l.mode).label)}</span>`;
     })
     .join('');
-  return `<details class="fp-itin">
+  return `<details class="fp-itin" data-k="${esc(stableKey(it))}">
     <summary>
       <span class="fp-l1"><b>${hm(it.dep)} – ${hm(it.arr)}</b><span>| ${esc(durationTxt(it.arr - it.dep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}

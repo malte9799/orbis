@@ -1,4 +1,4 @@
-import { MODE_GROUPS, planConnections, sourceTxt, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { MODE_GROUPS, planConnections, planProgressive, sourceTxt, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
 import { syncPush } from '../api/pushnotify';
@@ -162,6 +162,8 @@ export function createFahrplanView(): FahrplanView {
   let items: Itinerary[] = [];
   let cursors: { prev?: string; next?: string } = {};
   let lastOpts: PlanOptions | null = null;
+  /** the list shows Transitous data (planned times only); the DB real-time data is still loading */
+  let preliminary = false;
   let searchSeq = 0;
   const section = q('.fp-search');
   const compactBtn = q<HTMLButtonElement>('.fp-compact');
@@ -203,7 +205,7 @@ export function createFahrplanView(): FahrplanView {
       })
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
-    res.innerHTML = `<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
+    res.innerHTML = `${preliminary ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Echtzeit-Daten der DB werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
       ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}
       <p class="fp-hint fp-src">${esc(sourceTxt(items[0]?.src))}</p>`;
   }
@@ -229,14 +231,29 @@ export function createFahrplanView(): FahrplanView {
     const my = ++searchSeq;
     goBtn.disabled = true;
     resSection.classList.remove('empty');
+    preliminary = false;
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
       lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
-      const r = await planConnections(from, to, lastOpts);
+      const r = await planProgressive(from, to, lastOpts, (partial) => {
+        if (my !== searchSeq) return;
+        items = partial.list;
+        cursors = {};
+        preliminary = true;
+        goBtn.disabled = false;
+        renderResults();
+        setCompact(true);
+      });
       if (my !== searchSeq) return;
+      // connections the user opened stay open when the exact data replaces the preliminary list
+      const open = new Set([...res.querySelectorAll<HTMLElement>('details.fp-itin[open]')].map((d) => d.dataset.k!));
       items = r.list;
       cursors = { prev: r.prev, next: r.next };
+      preliminary = false;
       renderResults();
+      res.querySelectorAll<HTMLDetailsElement>('details.fp-itin').forEach((d) => {
+        if (open.has(d.dataset.k!)) d.open = true;
+      });
       setCompact(true);
     } catch {
       if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';

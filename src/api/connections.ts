@@ -337,6 +337,48 @@ export async function planConnections(fromStop: Stop, toStop: Stop, o: PlanOptio
   return { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) };
 }
 
+/** A connection without its real-time information: planned times only (used while better data is still loading). */
+export function plain(it: Itinerary): Itinerary {
+  return {
+    ...it,
+    dep: it.legs[0]?.schedDep ?? it.dep,
+    arr: it.legs[it.legs.length - 1]?.schedArr ?? it.arr,
+    legs: it.legs.map((l) => ({ ...l, dep: l.schedDep, arr: l.schedArr, delayMin: null, arrDelayMin: null, via: l.via.map((v) => ({ ...v, delayMin: null })) })),
+  };
+}
+
+/** Same ride in the DB and the Transitous answer: first ride and its planned times. */
+export const stableKey = (it: Itinerary): string => {
+  const ride = it.legs.find((l) => l.mode !== 'WALK') ?? it.legs[0];
+  return `${ride?.line ?? ''}|${ride ? Math.round(ride.schedDep / 60000) : ''}`;
+};
+
+/**
+ * Fresh search that does not make the user wait for the slow DB service: for two DB stops both sources are asked
+ * at once. When Transitous answers first, `onPartial` gets its connections (planned times, no delays) right away and
+ * the returned promise resolves with the DB result later (or with Transitous when DB has nothing).
+ */
+export async function planProgressive(fromStop: Stop, toStop: Stop, o: PlanOptions, onPartial: (r: PlanResult) => void): Promise<PlanResult> {
+  const [from, to] = await Promise.all([ensureSource(fromStop), ensureSource(toStop)]);
+  if (from.src !== 'db' || to.src !== 'db') return planConnections(from, to, o);
+  const dbP = dbPlan(from, to, o)
+    .then((r): PlanResult | null => (r.list.length ? { list: r.list, prev: prefixed('db', r.prev), next: prefixed('db', r.next) } : null))
+    .catch(() => null);
+  const moP = motisPlan(from, to, o)
+    .then((r): PlanResult | null => (r.list.length ? { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) } : null))
+    .catch(() => null);
+  const [first, r1] = await Promise.race([dbP.then((r) => ['db', r] as const), moP.then((r) => ['motis', r] as const)]);
+  if (first === 'db' && r1) return r1;
+  if (first === 'motis' && r1) {
+    onPartial({ ...r1, list: r1.list.map(plain), prev: undefined, next: undefined });
+    return (await dbP) ?? r1;
+  }
+  // the quicker one had nothing: the other one decides
+  const other = await (first === 'db' ? moP : dbP);
+  if (other) return other;
+  return { list: [] };
+}
+
 /** The next `n` departures at a stop, starting at `from` (default: now). */
 export async function departures(given: Pick<Stop, 'id' | 'name' | 'lat' | 'lon' | 'src'>, n = 25, from = Date.now()): Promise<Departure[]> {
   const stop = await ensureSource(given);

@@ -1156,3 +1156,30 @@
 .fp-nrow {
   display: flex;
 }
+
+/* preliminary list while the DB data loads */
+.fp-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--accent);
+}
+.fp-spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: fp-rot 0.8s linear infinite;
+}
+@keyframes fp-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-spin {
+    animation-duration: 3s;
+  }
+}
