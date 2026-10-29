@@ -256,7 +256,19 @@ export function createFahrplanView(): FahrplanView {
     res.innerHTML = `${loadingDelays ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
       ${cursors.prev ? '<button type="button" class="btn small fp-page fp-pg-top" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
     chipPrev.hidden = !cursors.prev;
+    fitLabels();
   }
+
+  /** a name in the bar that does not fit completely is hidden, not cut off with "…" */
+  function fitLabels() {
+    res.querySelectorAll<HTMLElement>('.fp-seg:not(.walk)').forEach((seg) => {
+      const names = [...seg.querySelectorAll<HTMLElement>('.fp-sn')];
+      names.forEach((n) => (n.style.visibility = ''));
+      const room = seg.clientWidth - 8; // minus the side padding
+      if (room > 0 && names[0] && names[0].scrollWidth > room) names.forEach((n) => (n.style.visibility = 'hidden'));
+    });
+  }
+  window.addEventListener('resize', fitLabels);
 
   /** the filters of the options panel as API options */
   function planExtras(): Partial<PlanOptions> {
@@ -427,6 +439,7 @@ export function createFahrplanView(): FahrplanView {
       el.hidden = false;
       updateCount();
       updateCountdowns();
+      fitLabels();
       window.clearInterval(tick);
       tick = window.setInterval(updateCountdowns, 20000);
       void syncPush().catch(() => {});

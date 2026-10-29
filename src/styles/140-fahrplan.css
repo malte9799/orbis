@@ -696,9 +696,10 @@
   .fp-itin:hover {
     border-color: rgba(255, 255, 255, 0.22);
   }
+  /* times and duration on one line, delay below, platform top right, the timetable bar right under that over the whole width */
   .fp-itin > summary {
     display: grid;
-    grid-template-columns: 250px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     column-gap: 24px;
     row-gap: 2px;
     align-items: center;
@@ -707,20 +708,26 @@
   .fp-itin > summary .fp-l1 {
     grid-column: 1;
     grid-row: 1;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .fp-itin > summary .fp-sum-gl {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
   }
   .fp-itin > summary .fp-l2 {
     grid-column: 1;
     grid-row: 2;
   }
   .fp-itin > summary .fp-bar {
-    grid-column: 2;
-    grid-row: 1;
-    margin-top: 0;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 6px;
   }
   .fp-itin > summary .fp-von {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 1 / -1;
+    grid-row: 4;
   }
   .fp-itin[open] > summary {
     background: rgba(255, 255, 255, 0.04);
@@ -1428,7 +1435,7 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 /* platform as a blue badge on the right of the station row */
@@ -1569,5 +1576,45 @@
   }
   .fp-gap + .fp-row {
     padding-top: 8px;
+  }
+}
+
+/* a station with a delay has two times, so its row is one line taller than the name: the line that follows starts right under the dot
+   again instead of leaving room for the second time */
+.fp-row:has(.fp-tm b + b) + .fp-ride > .fp-gl,
+.fp-row:has(.fp-tm b + b) + .fp-gap > .fp-gl {
+  margin-top: -18px;
+}
+
+/* phone: the rows have no vertical padding there, so the line of a ride ran into the dot below it. Same gaps to the dots as on the desktop (about 3 px at the top and at the bottom) */
+@media (max-width: 600px) {
+  .fp-ride > .fp-gl {
+    margin-top: -2px;
+    margin-bottom: 0;
+  }
+}
+
+/* desktop / tablet: the rows keep their padding, so the line of a ride ended about 9 px above the dot below it; same gap as on the phone (about 3.5 px) */
+@media (min-width: 601px) {
+  .fp-ride > .fp-gl {
+    margin-bottom: -9.5px;
+  }
+}
+
+/* on the phone only the "next connection" card shows the platform up in its corner */
+@media (max-width: 899px) {
+  .fp-itin:not(.fp-hero) .fp-sum-gl {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  /* many rides: the bar shrinks to the width of its column instead of running out of the card (names that no longer fit are hidden) */
+  .fp-itin > summary .fp-bar {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fp-seg:not(.walk) {
+    min-width: 0;
   }
 }

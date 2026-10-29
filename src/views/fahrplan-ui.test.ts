@@ -7,7 +7,7 @@ const mem = new Map<string, string>();
   setItem: (k: string, v: string) => void mem.set(k, v),
   removeItem: (k: string) => void mem.delete(k),
 };
-const { timeline, lineName } = await import('./fahrplan-ui');
+const { timeline, lineName, itinHtml } = await import('./fahrplan-ui');
 
 const leg = (over: Partial<Leg>): Leg => ({ mode: 'BUS', line: '32', headsign: 'Moorbrink', from: 'A', to: 'B', dep: 1000, arr: 61000, schedDep: 1000, schedArr: 61000, delayMin: null, arrDelayMin: null, cancelled: false, via: [], ...over });
 const itin = (l: Leg): Itinerary => ({ dep: l.dep, arr: l.arr, transfers: 0, legs: [l] });
@@ -36,5 +36,17 @@ describe('on-demand bus in the timeline', () => {
   });
   it('shows nothing for a normal bus', () => {
     expect(timeline(itin(leg({ agency: 'Nordwestmecklenburg' })))).not.toContain('tel:');
+  });
+});
+
+describe('bar labels', () => {
+  it('splits "Bus 235" and "RE8 (13188)" so the number can drop out on its own', () => {
+    const bus = itinHtml(itin(leg({ line: '235' })));
+    expect(bus).toContain('<span class="fp-sn">Bus</span><span class="fp-sn">235</span>');
+    const rail = itinHtml(itin(leg({ mode: 'REGIONAL_RAIL', line: 'RE8 (13188)' })));
+    expect(rail).toContain('<span class="fp-sn">RE8</span><span class="fp-sn">(13188)</span>');
+    const ice = itinHtml(itin(leg({ mode: 'HIGHSPEED_RAIL', line: 'ICE 581' })));
+    expect(ice).toContain('<span class="fp-sn">ICE</span><span class="fp-sn">581</span>');
+    expect(itinHtml(itin(leg({ mode: 'REGIONAL_RAIL', line: 'RE1' })))).toContain('<span class="fp-sn">RE1</span></span>');
   });
 });

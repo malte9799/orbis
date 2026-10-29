@@ -208,7 +208,8 @@ export const lineName = (mode: string, line: string) => {
 
 /** bar label: "RE8 (13188)" → the train number wraps to a clipped second line when it does not fit, so it disappears instead of ending in "…" */
 const segLabel = (line: string) => {
-  const m = /^(.*?)\s*(\(\d+\))$/.exec(line);
+  // "RE8 (13188)", "ICE 581", "Bus 235": the number goes after the name and is the first part to be dropped
+  const m = /^(.*?)\s*(\(\d+\))$/.exec(line) ?? /^(\S+)\s+(\S.*)$/.exec(line);
   return m && m[1] ? `<span class="fp-sn">${esc(m[1])}</span><span class="fp-sn">${esc(m[2])}</span>` : `<span class="fp-sn">${esc(line)}</span>`;
 };
 
@@ -245,13 +246,13 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
   const startT = first?.dep ?? it.dep;
   return `<details class="fp-itin${hero ? ' fp-hero' : ''}" data-k="${esc(stableKey(it))}">
     <summary>
-      ${hero ? `<span class="fp-hero-lbl">Nächste Verbindung</span>${first?.track ? `<small class="fp-gl-badge fp-hero-gl${first.trackChanged ? ' changed' : ''}" title="Gleis ${esc(first.track)}${first.trackChanged ? ' (Gleiswechsel)' : ''}">Gl. ${esc(first.track)}</small>` : ''}` : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
-      <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(last?.to ?? '')} ${esc(hm(last?.arr ?? it.arr))}</span></span>
+      ${hero ? '<span class="fp-hero-lbl">Nächste Verbindung</span>' : ''}${first?.track ? `<small class="fp-gl-badge fp-sum-gl${hero ? ' fp-hero-gl' : ''}${first.trackChanged ? ' changed' : ''}" title="Gleis ${esc(first.track)}${first.trackChanged ? ' (Gleiswechsel)' : ''}">Gl. ${esc(first.track)}</small>` : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
+      <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
       <span class="fp-bar">${bar}</span>
-      <span class="fp-von">von ${esc(first?.from ?? '')}${first?.track ? ` · <span class="${first.trackChanged ? 'fp-gl-chg' : ''}">Gleis ${esc(first.track)}</span>` : ''}</span>
+      <span class="fp-von">von ${esc(first?.from ?? '')}</span>
     </summary>
     <div class="fp-detail"><div class="fp-dh"><span>${esc(dayLong(it.dep))}</span><span><span class="fp-dl">Dauer: </span>${esc(durationTxt(planArr - planDep))}</span>${trip ? tripBtn(trip.key, trip.saved) : ''}</div>${timeline(it)}</div>
   </details>`;
