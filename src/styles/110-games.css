@@ -1590,3 +1590,677 @@
   display: block;
   background: #000;
 }
+
+/* ===== Apple HIG redesign: hub (cards) + settings as a sheet with grouped lists =====
+   Flow: hub → tap a card → sheet slides up over the dimmed hub (Esc / X / tap outside to close) → "Spielen".
+   Last in the file on purpose: overrides the older rules above. */
+.games-view {
+  --gm-fill: rgba(255, 255, 255, 0.07);
+  --gm-sep: rgba(255, 255, 255, 0.09);
+  --gm-sheet: rgba(21, 28, 52, 0.9);
+  --gm-ease: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.games-view :is(button, select, input):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 75%, white);
+  outline-offset: 2px;
+}
+
+/* ---------- hub ---------- */
+.gm-hub {
+  padding: calc(clamp(20px, 4vw, 48px) + var(--safe-top)) clamp(16px, 4vw, 40px) 56px;
+  background: radial-gradient(1000px 480px at 50% -15%, rgba(91, 157, 255, 0.14), transparent 70%), var(--bg);
+}
+.gm-hub-in {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.gm-hub-head {
+  max-width: none;
+  margin: 0 0 24px;
+}
+.gm-hub-head h1 {
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.gm-hub-head p {
+  margin: 4px 0 0;
+  font-size: 1.15rem;
+  color: var(--text-2);
+}
+.gm-cards {
+  max-width: none;
+  margin: 0;
+  grid-template-columns: repeat(6, 1fr);
+  gap: clamp(12px, 1.6vw, 18px);
+}
+.gm-card,
+.gm-card-quiz,
+.gm-card-flags {
+  grid-column: span 2;
+  border-radius: 28px;
+  border: 0;
+  background: var(--gm-fill);
+  box-shadow: 0 0 0 1px var(--gm-sep) inset;
+  transition: transform 0.35s var(--gm-ease), box-shadow 0.35s var(--gm-ease);
+}
+.gm-card-size,
+.gm-card-street {
+  grid-column: span 3;
+}
+.gm-card:hover {
+  transform: translateY(-3px);
+  border: 0;
+  box-shadow: 0 0 0 1px var(--gm-sep) inset, 0 20px 44px rgba(0, 0, 0, 0.4);
+}
+.gm-card:active {
+  transform: scale(0.985);
+  transition-duration: 0.12s;
+}
+.gm-card:focus-visible {
+  transform: none;
+  outline: 3px solid color-mix(in srgb, var(--accent) 75%, white);
+  outline-offset: 3px;
+}
+.gm-card .gm-pv,
+.gm-card-flags .gm-pv,
+.gm-card-quiz .gm-pv {
+  aspect-ratio: 4 / 3;
+  flex: none;
+  min-height: 0;
+}
+.gm-card-size .gm-pv,
+.gm-card-street .gm-pv {
+  aspect-ratio: 16 / 9;
+}
+.gm-card-flags .gm-pvflag {
+  width: 40%;
+}
+.gm-card-body {
+  position: relative;
+  gap: 3px;
+  padding: 16px 20px 20px;
+}
+.gm-card-tag {
+  position: static;
+  padding: 0;
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--accent);
+}
+.gm-card-body b,
+.gm-card-quiz .gm-card-body b {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.gm-card-blurb {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gm-card-go {
+  display: none;
+}
+
+/* the featured game: full row, text on the picture */
+.gm-card-quiz {
+  grid-column: 1 / -1;
+  display: block;
+  min-height: clamp(280px, 38vw, 420px);
+  order: -1;
+}
+.gm-card-quiz .gm-pv {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+}
+.gm-card-quiz::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(8, 12, 26, 0.92) 0%, rgba(8, 12, 26, 0.5) 38%, transparent 70%);
+  pointer-events: none;
+}
+.gm-card-quiz .gm-card-body {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: clamp(20px, 3vw, 36px);
+  gap: 6px;
+}
+.gm-card-quiz .gm-card-tag {
+  color: rgba(255, 255, 255, 0.78);
+}
+.gm-card-quiz .gm-card-body b {
+  font-size: clamp(1.9rem, 4vw, 2.8rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+.gm-card-quiz .gm-card-blurb {
+  max-width: 52ch;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.05rem;
+  -webkit-line-clamp: 2;
+}
+.gm-card-quiz .gm-card-go {
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 0 22px;
+  height: 44px;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+@media (max-width: 860px) {
+  .gm-card,
+  .gm-card-flags {
+    grid-column: span 3;
+  }
+  .gm-card-size,
+  .gm-card-street {
+    grid-column: span 3;
+  }
+  .gm-card-street {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 560px) {
+  .gm-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+  .gm-card,
+  .gm-card-flags,
+  .gm-card-size {
+    grid-column: span 1;
+  }
+  .gm-card .gm-pv,
+  .gm-card-size .gm-pv,
+  .gm-card-street .gm-pv {
+    aspect-ratio: 1;
+  }
+  .gm-card-body {
+    padding: 12px 14px 16px;
+  }
+  .gm-card-body b {
+    font-size: 1.1rem;
+  }
+  .gm-card-blurb {
+    display: none;
+  }
+  .gm-card-quiz {
+    min-height: 300px;
+  }
+}
+
+/* ---------- settings: sheet over the dimmed hub ---------- */
+.games-view .gm-panel {
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  background: rgba(4, 7, 16, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: gm-fade 0.25s ease both;
+}
+.games-view .gm-panel[hidden] {
+  display: none;
+}
+.gm-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 32px;
+  background: var(--gm-sheet);
+  backdrop-filter: blur(40px) saturate(1.6);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset, 0 40px 100px rgba(0, 0, 0, 0.6);
+  animation: gm-sheet-in 0.42s var(--gm-ease) both;
+}
+@keyframes gm-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes gm-sheet-in {
+  from {
+    transform: translateY(40px) scale(0.97);
+    opacity: 0;
+  }
+}
+.gm-sheet .gm-hero {
+  flex: none;
+  height: clamp(130px, 22vh, 190px);
+  min-height: 0;
+  overflow: hidden;
+}
+.gm-sheet .gm-hero::after {
+  background: linear-gradient(to top, var(--gm-sheet) 0%, transparent 70%);
+}
+.gm-sheet .gm-backhub {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  left: auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text);
+  background: rgba(30, 38, 66, 0.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.gm-sheet .gm-backhub::before {
+  display: none;
+}
+.gm-sheet .gm-backhub:hover {
+  background: rgba(50, 60, 96, 0.8);
+}
+.gm-sheet .gm-head {
+  flex: none;
+  padding: 0 28px 4px;
+  margin-top: -18px;
+  position: relative;
+  z-index: 1;
+}
+.gm-sheet .gm-head h2 {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+.gm-sheet .gm-head .gm-lead {
+  margin: 6px 0 0;
+  font-size: 0.98rem;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+.gm-sheet .gm-opts {
+  flex: none;
+  min-height: auto;
+}
+.gm-sheet .gm-stage {
+  flex: none;
+  overflow: visible;
+  gap: 22px;
+  padding: 22px 28px 8px;
+}
+.gm-sheet .gm-field {
+  max-width: none;
+  margin: 0;
+  gap: 8px;
+}
+.gm-sheet .gm-field::before {
+  padding: 0 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.gm-sheet .gm-field:has(.gm-regpick:not([hidden])) {
+  min-height: 0;
+  flex: none;
+}
+
+/* grouped list: one rounded block, rows with hairlines */
+.gm-sheet .gm-seg,
+.gm-sheet .gm-scopes-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--gm-fill);
+}
+.gm-sheet .gm-seg button,
+.gm-sheet .gm-scopes-main button,
+.gm-sheet .gm-regs button {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 10px 52px 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none !important;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.15s;
+}
+.gm-sheet .gm-seg button + button,
+.gm-sheet .gm-scopes-main button + button,
+.gm-sheet .gm-regs button + button {
+  border-top: 1px solid var(--gm-sep);
+}
+.gm-sheet .gm-seg button:hover,
+.gm-sheet .gm-scopes-main button:hover,
+.gm-sheet .gm-regs button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--gm-sep);
+}
+.gm-sheet .gm-seg button:active,
+.gm-sheet .gm-scopes-main button:active,
+.gm-sheet .gm-regs button:active {
+  background: rgba(255, 255, 255, 0.1);
+  transform: none;
+}
+.gm-sheet .gm-seg button.on,
+.gm-sheet .gm-scopes-main button.on,
+.gm-sheet .gm-regs button.on {
+  background: none;
+  border-color: var(--gm-sep);
+}
+/* thumbnail tile */
+.gm-sheet .gm-opt-pv,
+.gm-sheet .gm-seg button .gm-opt-pv,
+.gm-sheet .gm-scopes-main button .gm-opt-pv,
+.gm-sheet .gm-regs button .gm-opt-pv {
+  flex: none;
+  width: 68px;
+  height: 46px !important;
+  min-height: 0;
+  aspect-ratio: auto !important;
+  margin: 0;
+  border-radius: 10px;
+  box-shadow: none !important;
+}
+.gm-sheet .gm-opt-tx,
+.gm-sheet .gm-seg button .gm-opt-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.gm-sheet .gm-seg button small,
+.gm-sheet .gm-regs button small {
+  padding: 0;
+  font-size: 0.82rem;
+  font-weight: 400;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+.gm-sheet .gm-scopes-main button b,
+.gm-sheet .gm-regs button b {
+  padding: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+/* selection: accent check on the right, nothing else changes */
+.gm-sheet .gm-seg button::before,
+.gm-sheet .gm-scopes-main button::before,
+.gm-sheet .gm-regs button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 18px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  transform: translateY(-50%);
+  transition: background 0.2s, border-color 0.2s;
+}
+.gm-sheet .gm-seg button.on::before,
+.gm-sheet .gm-scopes-main button.on::before,
+.gm-sheet .gm-regs button.on::before {
+  top: 50%;
+  right: 18px;
+  border-color: var(--accent);
+  background: var(--accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Cpath d='M6 11.5l3.5 3.5L16 8' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 100% no-repeat;
+  box-shadow: none;
+}
+.gm-sheet .sz-metric .gm-opt-pv {
+  display: none;
+}
+.gm-sheet .sz-metric .gm-seg button {
+  min-height: 52px;
+}
+.gm-sheet .gm-seg button:not(:has(.gm-opt-pv)) {
+  padding-left: 18px;
+}
+
+/* continents: toggle chips */
+.gm-sheet .gm-scope-pick {
+  gap: 12px;
+}
+.gm-sheet .gm-scopes-conts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding-top: 0;
+}
+.gm-sheet .gm-scopes-conts.open {
+  max-height: 200px;
+}
+.gm-sheet .gm-scopes-conts button {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px !important;
+  border: 0;
+  border-radius: 999px;
+  background: var(--gm-fill);
+  opacity: 1 !important;
+  color: var(--text-2);
+  transition: background 0.2s, color 0.2s;
+}
+.gm-sheet .gm-scopes-conts button .gm-opt-pv {
+  display: none;
+}
+.gm-sheet .gm-scopes-conts button b {
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.gm-sheet .gm-scopes-conts button.on {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+}
+.gm-sheet .gm-scope-pick .gm-all {
+  position: static;
+  align-self: flex-end;
+  order: 3;
+  height: 32px;
+  font-size: 0.9rem;
+}
+
+/* region list */
+.gm-sheet .gm-regpick {
+  gap: 10px;
+}
+.gm-sheet .gm-regsearch {
+  height: 44px;
+  border-radius: 14px;
+  background: var(--gm-fill);
+  border: 0;
+}
+.gm-sheet .gm-regs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  max-height: 340px;
+  overflow: auto;
+  border-radius: 20px;
+  background: var(--gm-fill);
+}
+.gm-sheet .gm-regs button {
+  flex: none;
+  min-height: 58px;
+}
+.gm-sheet .gm-regs button b {
+  display: block;
+}
+
+/* selects + text fields: rows in the same grouped style */
+.gm-sheet select,
+.gm-sheet .gm-input {
+  width: 100%;
+  max-width: none;
+  height: 52px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 20px;
+  background-color: var(--gm-fill);
+  font-size: 1rem;
+}
+.gm-sheet select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 44px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23aab4c8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 12px;
+}
+
+/* footer: the one prominent action, on a material strip */
+.gm-sheet .gm-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  max-width: none;
+  margin: 12px 0 0;
+  padding: 14px 28px calc(20px + var(--safe-bottom));
+  gap: 8px;
+  background: linear-gradient(to bottom, transparent, var(--gm-sheet) 30%);
+}
+.gm-sheet .gm-foot .btn-primary {
+  height: 54px;
+  border-radius: 999px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  transition: transform 0.15s var(--gm-ease), filter 0.2s;
+}
+.gm-sheet .gm-foot .btn-primary:hover {
+  filter: brightness(1.08);
+}
+.gm-sheet .gm-foot .btn-primary:active {
+  transform: scale(0.985);
+}
+.gm-sheet .gm-foot .gm-note {
+  text-align: center;
+}
+.gm-sheet .gm-err:not(:empty) {
+  color: #ff9a9e;
+}
+
+/* phone: the sheet fills the screen from the bottom */
+@media (max-width: 640px) {
+  .games-view .gm-panel {
+    align-items: flex-end;
+    padding: var(--safe-top) 0 0;
+  }
+  .gm-sheet {
+    width: 100%;
+    max-height: calc(100% - 12px);
+    border-radius: 28px 28px 0 0;
+    animation-name: gm-sheet-up;
+  }
+  .gm-sheet .gm-hero {
+    height: 120px;
+  }
+  .gm-sheet .gm-head,
+  .gm-sheet .gm-foot {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .gm-sheet .gm-stage {
+    padding: 20px 18px 8px;
+  }
+}
+@keyframes gm-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* ---------- in-game chrome: material pills ---------- */
+.gm-stats,
+.gm-ask,
+.gm-feedback {
+  background: rgba(24, 32, 58, 0.7);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.gm-ask {
+  border-radius: 22px;
+}
+.gm-actions .btn {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  background: rgba(24, 32, 58, 0.7);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .games-view *,
+  .games-view *::before,
+  .games-view *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .gm-card:hover {
+    transform: none;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .gm-sheet,
+  .games-view .gm-panel,
+  .gm-stats,
+  .gm-ask,
+  .gm-feedback,
+  .gm-actions .btn,
+  .gm-sheet .gm-backhub {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .gm-sheet {
+    background: var(--card-solid);
+  }
+}

@@ -71,22 +71,24 @@ export function createGamesView(): GamesView {
     </div>
 
     <div class="gm-hub" data-game="hub">
-      <header class="gm-hub-head">
-        <h1>Spiele</h1>
-        <p>Teste dein Weltwissen – such dir einen Modus aus.</p>
-      </header>
-      <div class="gm-cards">${GAME_CARDS.map(
-        (g) => `
-        <button type="button" class="gm-card gm-card-${g.id}" data-g="${g.id}">
-          ${previewHtml(g.id)}
-          <span class="gm-card-tag">${g.tag}</span>
-          <span class="gm-card-body">
-            <b>${g.label}</b>
-            <span>${g.blurb}</span>
-            <span class="gm-card-foot"><span class="gm-chips">${g.chips.map((c) => `<i>${c}</i>`).join('')}</span><em>Spielen →</em></span>
-          </span>
-        </button>`,
-      ).join('')}
+      <div class="gm-hub-in">
+        <header class="gm-hub-head">
+          <h1>Spiele</h1>
+          <p>Teste dein Weltwissen.</p>
+        </header>
+        <div class="gm-cards">${GAME_CARDS.map(
+          (g) => `
+          <button type="button" class="gm-card gm-card-${g.id}" data-g="${g.id}">
+            ${previewHtml(g.id)}
+            <span class="gm-card-body">
+              <small class="gm-card-tag">${g.tag}</small>
+              <b>${g.label}</b>
+              <span class="gm-card-blurb">${g.blurb}</span>
+              <span class="gm-card-go" aria-hidden="true">Spielen</span>
+            </span>
+          </button>`,
+        ).join('')}
+        </div>
       </div>
     </div>
 
@@ -233,8 +235,9 @@ export function createGamesView(): GamesView {
   const panels = new Map<string, HTMLElement>();
   el.querySelectorAll<HTMLElement>('.gm-panel, .gm-hub').forEach((p) => panels.set(p.dataset.game!, p));
   const showPanel = (id: string) => {
-    panels.forEach((p, k) => (p.hidden = k !== id));
-    panels.get(id)?.scrollTo({ top: 0 });
+    // a settings panel is a sheet: the hub stays visible behind it
+    panels.forEach((p, k) => (p.hidden = k !== id && !(k === 'hub' && id !== 'none' && panels.has(id))));
+    panels.get(id)?.querySelector('.gm-sheet')?.scrollTo({ top: 0 });
   };
   // settings panel = hero (preview, title, lead) + options (stage with every field, foot with start button)
   function buildOpts(p: HTMLElement): HTMLElement {
@@ -265,11 +268,23 @@ export function createGamesView(): GamesView {
     const hero = document.createElement('div');
     hero.className = 'gm-hero';
     hero.innerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}
-      <div class="gm-hero-txt"><button type="button" class="gm-backhub">← Alle Spiele</button><span class="gm-card-tag">${card.tag}</span></div>`;
-    hero.querySelector('.gm-hero-txt')!.append(h2, lead);
-    p.append(hero, buildOpts(p));
+      <button type="button" class="gm-backhub" aria-label="Schließen"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3.5 3.5l9 9m0-9l-9 9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
+    const head = document.createElement('div');
+    head.className = 'gm-head';
+    head.append(h2, lead);
+    const sheet = document.createElement('div');
+    sheet.className = 'gm-sheet';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-label', card.label);
+    sheet.append(hero, head, buildOpts(p));
+    p.append(sheet);
     hero.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
+    p.addEventListener('click', (e) => e.target === p && showPanel('hub'));
   }
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || el.hidden || el.querySelector('.gm-panel:not([hidden])') === null) return;
+    showPanel('hub');
+  });
   el.querySelectorAll<HTMLElement>('.gm-card').forEach((c) => c.addEventListener('click', () => showPanel(c.dataset.g!)));
 
   const segVal: Record<string, string> = {};
