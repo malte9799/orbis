@@ -27,6 +27,8 @@ const REANCHOR_M = 1500;
 const RAD = Math.PI / 180;
 
 const SEL_KEY = 'orbis.tiles3d.sel';
+/** Google asks for its logo at the bottom left and the providers of the tiles in view at the right */
+const GOOGLE_LOGO = 'https://www.gstatic.com/images/branding/googlelogo/svg/googlelogo_clr_74x24px.svg';
 
 function loadSelected(): string[] {
   try {
@@ -129,6 +131,8 @@ interface Entry {
   /** … or our own engine (v2, see tiles/engine.ts) */
   engine?: TileEngine;
   attribution: string;
+  links?: TilesSourceDef['links'];
+  logos?: TilesSourceDef['logos'];
   opacity: number;
   /** height of the ground above the ellipsoid (metres): the tiles are lowered by it, see groundHeight */
   ground: number;
@@ -305,6 +309,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
   private proj = new THREE.Matrix4();
   private anchor: { lon: number; lat: number; mc: MercatorCoordinate } | null = null;
   private attribution?: HTMLDivElement;
+  private attributionRight?: HTMLDivElement;
+  private attributionKey = '';
+  private attributionAt = 0;
   private bar?: HTMLDivElement;
   private draco?: DRACOLoader;
   private synced = '';
@@ -337,6 +344,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.attribution = document.createElement('div');
     this.attribution.style.cssText = 'position:absolute;left:8px;bottom:44px;z-index:2;pointer-events:none;color:#fff;font:600 12px sans-serif;text-shadow:0 0 3px #000';
     map.getCanvasContainer().appendChild(this.attribution);
+    this.attributionRight = document.createElement('div');
+    this.attributionRight.style.cssText = 'position:absolute;right:8px;bottom:44px;z-index:2;max-width:45%;text-align:right;pointer-events:none;color:#fff;font:600 11px sans-serif;text-shadow:0 0 3px #000';
+    map.getCanvasContainer().appendChild(this.attributionRight);
     if (this.opts.bar ?? import.meta.env.DEV) this.bar = mountSourceBar(map);
   }
 
@@ -345,6 +355,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.draco?.dispose();
     this.renderer?.dispose();
     this.attribution?.remove();
+    this.attributionRight?.remove();
     this.bar?.remove();
     this.renderer = undefined;
     this.synced = '';
@@ -377,7 +388,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
       fetchData: (u: string, opts: RequestInit) =>
         /\.(b3dm|glb)(\?|$)/.test(u) ? fetch(u, opts).then(async (r) => (r.ok ? new Response(fixTile(await r.arrayBuffer()), { status: 200 }) : r)) : null,
     });
-    if (id === 'google') tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: token!, autoRefreshToken: true }));
+    if (id === 'google') tiles.registerPlugin(new GoogleCloudAuthPlugin({ apiToken: token!, autoRefreshToken: true, logoUrl: GOOGLE_LOGO }));
     if (id === 'ion') tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: token!, assetId: '96188', autoRefreshToken: true }));
     tiles.group.matrixAutoUpdate = false;
     tiles.errorTarget = 6;
@@ -392,7 +403,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
     tiles.lruCache.maxBytesSize = budget;
     tiles.lruCache.minBytesSize = budget * 0.75;
     tiles.setCamera(this.lod);
-    const entry: Entry = { tiles, attribution: src.attribution, opacity: 100, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
+    const entry: Entry = { tiles, attribution: src.attribution, links: src.links, logos: src.logos, opacity: 100, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
     // Loading order: what is needed and lies around the map centre first. By default the tiles with the
     // largest error come first wherever they are, so the surroundings load while the view stays empty.
     // A coarse tile is swapped for its children only when all of them are there, so each level has to come
@@ -433,7 +444,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
   private createV2(src: TilesSourceDef): Entry {
     const engine = new TileEngine(src.url!, { repaint: () => this.map.triggerRepaint(), note: (m) => this.hooks.note(`${src.label}: ${m}`), upload: (t) => this.renderer?.initTexture(t) });
     engine.setOpacity(state.opacity);
-    const entry: Entry = { engine, attribution: src.attribution, opacity: state.opacity, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
+    const entry: Entry = { engine, attribution: src.attribution, links: src.links, logos: src.logos, opacity: state.opacity, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
     this.world.add(engine.group);
     if (this.anchor) this.place(entry);
     return entry;
@@ -479,6 +490,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
     for (const id of state.selected) {
       const src = TILES_SOURCES.find((x) => x.id === id);
       if (!src) continue;
+      // only sources with a checked licence in the public app (the others: dev server, see TilesSourceDef.open)
+      if (!import.meta.env.DEV && !src.open) continue;
       if (!src.dynamic) out.push([id, src]);
       else if (id === 'plateau') for (const p of this.plateau) out.push([`plateau:${p.url}`, { ...src, id: `plateau:${p.url}`, label: `PLATEAU ${p.name}`, url: p.url }]);
     }
@@ -518,14 +531,70 @@ export class Tiles3DLayer implements CustomLayerInterface {
         const e = this.create(id, src);
         if (e) this.entries.set(id, e);
       }
-      this.attribution!.textContent = [...new Set([...this.entries.values()].map((e) => e.attribution))].join(' · ');
+      this.attributionKey = '';
     }
+    this.paintAttribution();
     for (const e of this.entries.values()) {
       if (e.opacity === state.opacity) continue;
       e.opacity = state.opacity;
       if (e.engine) e.engine.setOpacity(e.opacity);
       else e.tiles!.forEachLoadedModel((scene) => this.applyOpacity(scene, e.opacity));
     }
+  }
+
+  /**
+   * Attribution: the text, links and logos of every source shown, and what the renderer collects from the tiles in
+   * view (Google: the logo and the providers of the imagery; Cesium ion: its logo and credits).
+   */
+  private paintAttribution() {
+    const now = performance.now();
+    if (now - this.attributionAt < 500 && this.attributionKey) return;
+    this.attributionAt = now;
+    type Dyn = { type: string; value: string };
+    const dyn: Dyn[] = [];
+    for (const e of this.entries.values()) {
+      const got = (e.tiles as unknown as { getAttributions?(t: Dyn[]): Dyn[] } | undefined)?.getAttributions?.([]) ?? [];
+      for (const d of got) if (typeof d.value === 'string' && d.value) dyn.push({ type: d.type, value: d.value });
+    }
+    const list = [...this.entries.values()].map((e) => ({ t: e.attribution, l: e.links, g: e.logos }));
+    const key = JSON.stringify([list, dyn]);
+    if (key === this.attributionKey) return;
+    this.attributionKey = key;
+    const left = this.attribution!;
+    const right = this.attributionRight!;
+    left.replaceChildren();
+    right.replaceChildren();
+    const logo = (src: string, alt: string, href?: string) => {
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = alt;
+      img.style.cssText = 'height:18px;vertical-align:middle;margin-right:6px;background:#fff;border-radius:3px;padding:1px 4px';
+      if (!href) return img;
+      const a = document.createElement('a');
+      a.href = href;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.style.pointerEvents = 'auto';
+      a.appendChild(img);
+      return a;
+    };
+    for (const d of dyn) if (d.type === 'image') left.appendChild(logo(d.value, 'Logo'));
+    for (const e of list) for (const g of e.g ?? []) left.appendChild(logo(g.src, g.alt, g.href));
+    const text = [...new Set(list.map((e) => e.t).filter(Boolean))].join(' · ');
+    if (text) left.appendChild(document.createTextNode(text));
+    for (const e of list)
+      for (const l of e.l ?? []) {
+        const a = document.createElement('a');
+        a.href = l.href;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = l.text;
+        a.style.cssText = 'color:inherit;pointer-events:auto;margin-left:6px;text-decoration:underline';
+        left.appendChild(a);
+      }
+    // strings and html credits of the tiles (the html is reduced to its text)
+    const credits = [...new Set(dyn.filter((d) => d.type !== 'image').map((d) => (d.type === 'html' ? (new DOMParser().parseFromString(d.value, 'text/html').body.textContent ?? '') : d.value).trim()).filter(Boolean))];
+    if (credits.length) right.textContent = credits.join(' · ');
   }
 
   /** ENU anchor at the map centre; each `tiles.group` carries the ECEF → ENU transform */
