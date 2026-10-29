@@ -1,3 +1,4 @@
+import { store } from '../store';
 import { fetchJson } from '../util';
 import { modeStyle } from './transit';
 import { dbDepartures, dbNearbyStops, dbPlan, dbSearchStops } from './dbrest';
@@ -236,10 +237,12 @@ export interface PlanResult {
   /** cursors for the earlier / later connections */
   prev?: string;
   next?: string;
+  /** how long the answering source took (ms) */
+  ms?: number;
 }
 
 /** Connections from → to; with `cursor` (a previous result's prev/next) the page before / after it. */
-async function motisPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: string): Promise<PlanResult> {
+async function motisPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: string, count = 6): Promise<PlanResult> {
   // ids of the other source are not known here: use the position
   const place = (s: Stop) => (s.src === 'db' ? `${s.lat},${s.lon}` : s.id);
   const q = new URLSearchParams({
@@ -247,7 +250,7 @@ async function motisPlan(from: Stop, to: Stop, o: PlanOptions, cursor?: string):
     toPlace: place(to),
     time: new Date(o.time).toISOString(),
     arriveBy: String(o.arriveBy),
-    numItineraries: '6',
+    numItineraries: String(count),
     language: 'de',
   });
   if (o.maxTransfers != null) q.set('maxTransfers', String(o.maxTransfers));
@@ -283,6 +286,24 @@ export async function searchStops(text: string): Promise<Stop[]> {
   return motisSearchStops(text);
 }
 
+/**
+ * Suggestions while typing: DB and Transitous are asked at once. When Transitous is quicker its stops are
+ * shown first (`onPartial`, without a source: they are looked up at DB when one is picked) and the DB
+ * stops replace them when they arrive.
+ */
+export async function searchStopsProgressive(text: string, onPartial: (list: Stop[]) => void): Promise<Stop[]> {
+  const dbP = dbSearchStops(text).catch((): Stop[] => []);
+  const moP = motisSearchStops(text).catch((): Stop[] => []);
+  const [first, r1] = await Promise.race([dbP.then((r) => ['db', r] as const), moP.then((r) => ['motis', r] as const)]);
+  if (first === 'db' && r1.length) return r1;
+  if (first === 'motis' && r1.length) {
+    onPartial(r1.map((x) => ({ ...x, src: undefined })));
+    const d = await dbP;
+    return d.length ? d : r1;
+  }
+  return (await (first === 'db' ? moP : dbP)) ?? [];
+}
+
 export async function nearbyStops(lat: number, lon: number): Promise<Stop[]> {
   try {
     const r = await dbNearbyStops(lat, lon);
@@ -315,6 +336,32 @@ export async function ensureSource<T extends Stop>(s: T): Promise<T> {
     return { ...s, id: r.id, src: r.src };
   } catch {
     return { ...s, src: 'motis' };
+  }
+}
+
+const MOTIS_IDS = 'fpmotis';
+const motisIds = new Map<string, string | null>();
+
+/**
+ * Transitous id of a DB stop (looked up by name and position, kept in the browser). Planning with ids is
+ * much quicker than with coordinates, which make the server route the way to the nearest stops.
+ */
+async function motisIdOf(s: Stop): Promise<string | null> {
+  if (s.src !== 'db') return s.id;
+  if (motisIds.has(s.id)) return motisIds.get(s.id)!;
+  const saved = store.cacheGet<Record<string, string>>(MOTIS_IDS, 30 * 86400000) ?? {};
+  if (saved[s.id]) {
+    motisIds.set(s.id, saved[s.id]);
+    return saved[s.id];
+  }
+  try {
+    const best = (await motisSearchStops(s.name)).map((x) => ({ x, d: km(x, s) })).filter((c) => c.d < 1.5).sort((a, b) => a.d - b.d)[0];
+    if (!best) return null;
+    motisIds.set(s.id, best.x.id);
+    store.cacheSet(MOTIS_IDS, { ...Object.fromEntries(Object.entries(saved).slice(-80)), [s.id]: best.x.id });
+    return best.x.id;
+  } catch {
+    return null;
   }
 }
 
@@ -361,11 +408,15 @@ export const stableKey = (it: Itinerary): string => {
 export async function planProgressive(fromStop: Stop, toStop: Stop, o: PlanOptions, onPartial: (r: PlanResult) => void): Promise<PlanResult> {
   const [from, to] = await Promise.all([ensureSource(fromStop), ensureSource(toStop)]);
   if (from.src !== 'db' || to.src !== 'db') return planConnections(from, to, o);
+  const t0 = performance.now();
+  const took = (r: PlanResult | null): PlanResult | null => (r ? { ...r, ms: Math.round(performance.now() - t0) } : null);
   const dbP = dbPlan(from, to, o)
-    .then((r): PlanResult | null => (r.list.length ? { list: r.list, prev: prefixed('db', r.prev), next: prefixed('db', r.next) } : null))
+    .then((r): PlanResult | null => took(r.list.length ? { list: r.list, prev: prefixed('db', r.prev), next: prefixed('db', r.next) } : null))
     .catch(() => null);
-  const moP = motisPlan(from, to, o)
-    .then((r): PlanResult | null => (r.list.length ? { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) } : null))
+  // Transitous: by stop id when known (quick), by position otherwise; fewer connections are enough for the first look
+  const moP = Promise.all([motisIdOf(from), motisIdOf(to)])
+    .then(([a, b]) => motisPlan(a ? { ...from, id: a, src: 'motis' } : from, b ? { ...to, id: b, src: 'motis' } : to, o, undefined, 4))
+    .then((r): PlanResult | null => took(r.list.length ? { list: r.list, prev: prefixed('motis', r.prev), next: prefixed('motis', r.next) } : null))
     .catch(() => null);
   const [first, r1] = await Promise.race([dbP.then((r) => ['db', r] as const), moP.then((r) => ['motis', r] as const)]);
   if (first === 'db' && r1) return r1;
@@ -396,7 +447,10 @@ export async function departures(given: Pick<Stop, 'id' | 'name' | 'lat' | 'lon'
 }
 
 /** short note under results: which source answered */
-export const sourceTxt = (src?: Source) => (src === 'db' ? 'Quelle: DB (Echtzeit)' : src === 'motis' ? 'Quelle: Transitous – für manche Züge ohne Echtzeit-Verspätungen' : '');
+export const sourceTxt = (src?: Source, ms?: number) => {
+  const t = ms != null ? ` · ${(ms / 1000).toFixed(1).replace('.', ',')} s` : '';
+  return src === 'db' ? `Quelle: DB (Echtzeit)${t}` : src === 'motis' ? `Quelle: Transitous – für manche Züge ohne Echtzeit-Verspätungen${t}` : '';
+};
 
 // ---- helpers for the view --------------------------------------------------
 

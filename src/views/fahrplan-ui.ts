@@ -1,4 +1,4 @@
-import { durationTxt, inTxt, legColor, searchStops, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
+import { durationTxt, inTxt, legColor, searchStopsProgressive, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { modeStyle } from '../api/transit';
 import { debounce, escapeHtml as esc } from '../util';
 
@@ -33,17 +33,22 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
     close();
     onPick(s);
   };
+  const show = (r: Stop[]) => {
+    results = r.slice(0, 8);
+    list.innerHTML = results.length
+      ? results.map((s, i) => `<li role="option" data-i="${i}"><span class="s-name">${esc(s.name)}</span><span class="s-meta">${esc(s.area ?? '')}</span></li>`).join('')
+      : '<li class="empty">Keine Haltestelle gefunden</li>';
+    list.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
+  };
   const run = debounce(async (q: string) => {
     const my = ++seq;
     try {
-      const r = await searchStops(q);
-      if (my !== seq) return;
-      results = r.slice(0, 8);
-      list.innerHTML = results.length
-        ? results.map((s, i) => `<li role="option" data-i="${i}"><span class="s-name">${esc(s.name)}</span><span class="s-meta">${esc(s.area ?? '')}</span></li>`).join('')
-        : '<li class="empty">Keine Haltestelle gefunden</li>';
-      list.hidden = false;
-      input.setAttribute('aria-expanded', 'true');
+      // the quicker source is shown at once, the other one replaces it when it arrives
+      const r = await searchStopsProgressive(q, (early) => {
+        if (my === seq) show(early);
+      });
+      if (my === seq) show(r);
     } catch {
       if (my === seq) {
         list.innerHTML = '<li class="empty">Suche nicht verfügbar</li>';

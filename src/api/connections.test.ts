@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { durationTxt, ensureSource, inTxt, planProgressive, plain, parseDepartures, parseItineraries, parseStops } from './connections';
+import { durationTxt, ensureSource, inTxt, planProgressive, plain, searchStopsProgressive, parseDepartures, parseItineraries, parseStops } from './connections';
 
 describe('parseStops', () => {
   it('keeps only stops and names the area', () => {
@@ -118,5 +118,47 @@ describe('planProgressive', () => {
     expect(p).toMatchObject({ dep: 1, arr: 8 });
     expect(p.legs[0]).toMatchObject({ delayMin: null, arrDelayMin: null });
     expect(p.legs[0].via[0].delayMin).toBeNull();
+  });
+});
+
+describe('quicker first answers', () => {
+  const T = (m: number) => new Date(Date.UTC(2026, 9, 29, 6, m)).toISOString();
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('plans Transitous by stop id, not by position', async () => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url));
+      const u = String(url);
+      const json = u.includes('transport.rest')
+        ? { journeys: [] }
+        : u.includes('/geocode')
+          ? [{ type: 'STOP', id: u.includes('Schwerin') ? 'M-SCH' : 'M-WIS', name: u.includes('Schwerin') ? 'Schwerin Hbf' : 'Wismar', lat: 53.6, lon: 11.4 }]
+          : { itineraries: [{ startTime: T(0), endTime: T(30), transfers: 0, legs: [{ mode: 'RAIL', from: { name: 'A' }, to: { name: 'B' }, startTime: T(0), endTime: T(30), displayName: 'RE 4' }] }] };
+      return new Response(JSON.stringify(json), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const A = { id: 'd1', name: 'Schwerin Hbf', lat: 53.6, lon: 11.4, src: 'db' as const };
+    const B = { id: 'd2', name: 'Wismar', lat: 53.6, lon: 11.4, src: 'db' as const };
+    const r = await planProgressive(A, B, { time: Date.parse(T(0)), arriveBy: false }, () => {});
+    expect(r.list[0].src).toBe('motis');
+    expect(r.ms).toBeGreaterThanOrEqual(0);
+    const plan = urls.find((u) => u.includes('/v5/plan'))!;
+    expect(plan).toContain('fromPlace=M-SCH');
+    expect(plan).toContain('toPlace=M-WIS');
+    expect(plan).toContain('numItineraries=4');
+  });
+
+  it('shows Transitous suggestions first and the DB ones when they come', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const db = String(url).includes('transport.rest');
+      await new Promise((r) => setTimeout(r, db ? 60 : 5));
+      const json = db ? [{ type: 'stop', id: '8010324', name: 'Schwerin Hbf', location: { latitude: 53.6, longitude: 11.4 } }] : [{ type: 'STOP', id: 'm1', name: 'Schwerin Hbf', lat: 53.6, lon: 11.4 }];
+      return new Response(JSON.stringify(json), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const early: unknown[][] = [];
+    const final = await searchStopsProgressive('Schwerin', (l) => early.push(l));
+    expect(early).toHaveLength(1);
+    expect(early[0][0]).toMatchObject({ id: 'm1', src: undefined });
+    expect(final[0]).toMatchObject({ id: '8010324', src: 'db' });
   });
 });
