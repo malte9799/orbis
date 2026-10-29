@@ -1,4 +1,4 @@
-import { MODE_GROUPS, planConnections, sourceTxt, stableKey, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
+import { MODE_GROUPS, planConnections, stableKey, type Itinerary, type PlanOptions, type PlanResult, type Stop } from '../api/connections';
 import { delaysConfigured, planned, withDelays } from '../api/dbdelays';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
@@ -172,7 +172,6 @@ export function createFahrplanView(): FahrplanView {
   /** the DB real-time data of rail is still being loaded */
   let loadingDelays = false;
   /** how long Transitous took (ms) */
-  let resMs: number | undefined;
   let searchSeq = 0;
   const section = q('.fp-search');
   const compactBtn = q<HTMLButtonElement>('.fp-compact');
@@ -219,8 +218,7 @@ export function createFahrplanView(): FahrplanView {
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
     res.innerHTML = `${loadingDelays ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
-      ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}
-      <p class="fp-hint fp-src">${esc(sourceTxt(entries.some((e) => e.shown.delaySrc) ? 'db' : undefined, resMs))}</p>`;
+      ${cursors.prev ? '<button type="button" class="btn small fp-page" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
   }
 
   /** the filters of the options panel as API options */
@@ -258,7 +256,6 @@ export function createFahrplanView(): FahrplanView {
     goBtn.disabled = true;
     resSection.classList.remove('empty');
     loadingDelays = false;
-    resMs = undefined;
     res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
     try {
       lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
@@ -268,7 +265,6 @@ export function createFahrplanView(): FahrplanView {
       const wait = delaysConfigured();
       entries = r.list.map((raw) => ({ raw, shown: wait ? planned(raw) : raw }));
       cursors = { prev: r.prev, next: r.next };
-      resMs = r.ms;
       loadingDelays = wait && entries.length > 0;
       renderResults();
       setCompact(true);
