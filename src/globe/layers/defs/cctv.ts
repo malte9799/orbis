@@ -8,6 +8,8 @@ import { escapeHtml } from '../../../util';
 import { isSuperseded } from '../../../api/overpass';
 import { coordsTxt } from '../../../units';
 
+/** dense cities hold thousands of cameras, so a smaller area keeps the query fast */
+const CCTV_ZOOM = CAM_DETAIL_ZOOM + 3;
 const CCTV_COLOR = '#a78bfa';
 const CTYPE: Record<string, string> = { fixed: 'fest', dome: 'Kuppel', panning: 'Schwenkkamera', ptz: 'PTZ' };
 const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'außen (privat)', indoor: 'innen' };
@@ -32,12 +34,12 @@ function updateCones(ctx: ExtraCtx) {
 
 function loadNow(ctx: ExtraCtx) {
   const st = getState(ctx);
-  if (ctx.map.getZoom() < CAM_DETAIL_ZOOM + 2) {
+  if (ctx.map.getZoom() < CCTV_ZOOM) {
     ctx.setData('cctv', empty());
     st.key = '';
     st.fc = null;
     updateCones(ctx);
-    ctx.set('cctv', { note: `Überwachungskameras ab Zoomstufe ${CAM_DETAIL_ZOOM + 2} (Städte haben tausende)` });
+    ctx.set('cctv', { note: `Überwachungskameras ab Zoomstufe ${CCTV_ZOOM} (Städte haben tausende)` });
     return;
   }
   const b = ctx.viewBounds();
@@ -72,7 +74,7 @@ export default defineExtra({
   section: 'cams',
   cat: 'medien',
   label: 'Überwachungskameras',
-  hint: 'CCTV-Kameras aus OpenStreetMap (ab Zoom 11) – ohne Kennzeichenleser und Webcams',
+  hint: 'CCTV-Kameras aus OpenStreetMap (ab Zoom 12) – ohne Kennzeichenleser und Webcams',
   glyph: 'cctv',
   icon: 'cam',
   color: CCTV_COLOR,
@@ -88,9 +90,9 @@ export default defineExtra({
         layout: hidden,
         paint: {
           'circle-color': CCTV_COLOR,
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 2.5, 14, 5.5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 14, 5.5],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0, 14, 1.3],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1.3],
         },
       },
       'marker',

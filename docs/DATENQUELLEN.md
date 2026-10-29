@@ -198,7 +198,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [QLDTraffic](https://qldtraffic.qld.gov.au/more/Developers-and-Data/) | Queensland – Webcams (GeoJSON, Pfad `/v1/webcams`, Felder ungetestet) | 🔑 `QLDTRAFFIC_KEY`, 📦 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
 | [DeFlock](https://deflock.org) · [deflock-data](https://github.com/flockhopper3/deflock-data) · [Tiles](https://tiles.dontgetflocked.com) | Kennzeichen-Kameras (ALPR) mit Blickrichtung | 🟢 OSM-basiert |
-| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Overpass) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), ab Zoom 11 | 🟢 ODbL |
+| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Overpass) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), ab Zoom 12 | 🟢 ODbL |
 | [Radio Browser](https://www.radio-browser.info) | Über 50.000 Radiosender, eingebauter Player | 🟢 📦 |
 
 ## 9. Infrastruktur
