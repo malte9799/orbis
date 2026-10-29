@@ -183,6 +183,48 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
 }
 
 // ---------------------------------------------------------------------------
+// General surveillance cameras (CCTV) as mapped in OpenStreetMap: man_made=surveillance with
+// surveillance:type=camera|guard. Plate readers (ALPR) and webcams with a public link are
+// separate layers and are left out here. Live from Overpass when zoomed in; dense cities
+// have thousands of them, so the result is capped.
+
+export const CCTV_LIMIT = 3000;
+
+export async function loadCctv(b: Bounds): Promise<FeatureCollection<Point>> {
+  const bb = bboxStr(b);
+  const { elements: els } = await overpass<{ elements: OsmElement[] }>(
+    `[out:json][timeout:25];node["man_made"="surveillance"](${bb});out tags center ${CCTV_LIMIT};`,
+    'cctv',
+    50000, // a bit above the proxy's own Overpass timeout (45 s), so its answer still arrives
+  );
+  const features: Feature<Point>[] = [];
+  for (const el of els) {
+    const lat = el.lat ?? el.center?.lat;
+    const lon = el.lon ?? el.center?.lon;
+    if (lat == null || lon == null) continue;
+    const t = el.tags ?? {};
+    // negative tag filters make Overpass several times slower, so ALPR and webcams are dropped here
+    if (t['surveillance:type'] === 'ALPR' || t.webcam || t['contact:webcam']) continue;
+    const dir = parseFloat((t['camera:direction'] ?? t.direction ?? '').split(';')[0]);
+    features.push(
+      point(lon, lat, {
+        title: t['surveillance:type'] === 'guard' ? 'Wachpersonal / Sicherheitsdienst' : 'Überwachungskamera',
+        subtitle: [t['camera:type'], t.operator].filter(Boolean).join(' · '),
+        dir: Number.isFinite(dir) ? dir : -1,
+        kind: t.surveillance ?? '',
+        ctype: t['camera:type'] ?? '',
+        mount: t['camera:mount'] ?? '',
+        operator: t.operator ?? '',
+        since: t.start_date ?? '',
+        ref: t.ref ?? '',
+        url: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+      }),
+    );
+  }
+  return { type: 'FeatureCollection', features };
+}
+
+// ---------------------------------------------------------------------------
 // Speed and red-light cameras as mapped in OpenStreetMap: nodes with
 // highway=speed_camera plus type=enforcement relations (the zone a device
 // governs – a monitored stretch or an intersection). Locations live from
