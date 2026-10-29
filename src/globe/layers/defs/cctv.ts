@@ -1,6 +1,8 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import type { FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
+import { DATA_BASE } from '../../../api/data';
+import { fetchJson } from '../../../util';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
 import { CCTV_LIMIT, loadCctv } from '../../../api/cams';
 import { cardHtml } from '../../popup';
@@ -14,8 +16,30 @@ const CCTV_COLOR = '#a78bfa';
 const CTYPE: Record<string, string> = { fixed: 'fest', dome: 'Kuppel', panning: 'Schwenkkamera', ptz: 'PTZ' };
 const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'außen (privat)', indoor: 'innen' };
 
-type St = { key: string; fc: FeatureCollection<Point> | null; fovKey: string };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '' }));
+type St = { key: string; fc: FeatureCollection<Point> | null; fovKey: string; heat: 'idle' | 'loading' | 'done' };
+const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '', heat: 'idle' }));
+
+/** monthly density files per region (scripts/cctv-heat.mjs), on their own branch next to `data` */
+const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
+const HEAT_REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
+
+async function loadHeat(ctx: ExtraCtx) {
+  const st = getState(ctx);
+  if (st.heat !== 'idle') return;
+  st.heat = 'loading';
+  const parts = await Promise.allSettled(HEAT_REGIONS.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
+  const cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
+  if (!cells.length) {
+    st.heat = 'idle';
+    return;
+  }
+  st.heat = 'done';
+  if (ctx.map.getZoom() < CCTV_ZOOM) ctx.set('cctv', { note: `Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` });
+  ctx.setData('cctv-world', {
+    type: 'FeatureCollection',
+    features: cells.map(([lon, lat, n]) => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lon, lat] }, properties: { n } })),
+  });
+}
 
 function updateCones(ctx: ExtraCtx) {
   const st = getState(ctx);
@@ -39,7 +63,7 @@ function loadNow(ctx: ExtraCtx) {
     st.key = '';
     st.fc = null;
     updateCones(ctx);
-    ctx.set('cctv', { note: `Überwachungskameras ab Zoomstufe ${CCTV_ZOOM} (Städte haben tausende)` });
+    ctx.set('cctv', { note: st.heat === 'done' ? `Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` : `Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` });
     return;
   }
   const b = ctx.viewBounds();
@@ -74,12 +98,30 @@ export default defineExtra({
   section: 'cams',
   cat: 'medien',
   label: 'Überwachungskameras',
-  hint: 'CCTV-Kameras aus OpenStreetMap (ab Zoom 12) – ohne Kennzeichenleser und Webcams',
+  hint: 'CCTV-Kameras aus OpenStreetMap: Dichte-Übersicht (Monatsauszug), Einzelkameras ab Zoom 12 – ohne Kennzeichenleser und Webcams',
   glyph: 'cctv',
   icon: 'cam',
   color: CCTV_COLOR,
-  sources: { cctv: 'Überwachungskameras: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)', 'cctv-fov': '' },
+  sources: { 'cctv-world': 'Kameradichte: © OpenStreetMap-Mitwirkende (ODbL), Auszüge von Geofabrik', cctv: 'Überwachungskameras: © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap-Mitwirkende</a> (ODbL)', 'cctv-fov': '' },
   addLayers({ add, hidden }) {
+    // overview: density of the monthly extracts, fades out where the single cameras take over
+    add(
+      {
+        id: 'cctv-heat',
+        type: 'heatmap',
+        source: 'cctv-world',
+        layout: hidden,
+        maxzoom: CCTV_ZOOM + 1,
+        paint: {
+          'heatmap-weight': ['interpolate', ['linear'], ['get', 'n'], 1, 0.15, 10, 0.5, 100, 1],
+          'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 2, 4, 8, 14, 11, 22],
+          'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 2, 0.35, 8, 1],
+          'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 7, 0.85, CCTV_ZOOM - 1, 0.6, CCTV_ZOOM + 1, 0],
+          'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'], 0, 'rgba(167,139,250,0)', 0.2, 'rgba(167,139,250,0.45)', 0.5, '#c4b5fd', 0.8, '#ede9fe', 1, '#ffffff'],
+        },
+      },
+      'marker',
+    );
     add({ id: 'cctv-cone', type: 'fill', source: 'cctv-fov', layout: hidden, paint: { 'fill-color': CCTV_COLOR, 'fill-opacity': 0.25 } }, 'marker');
     add({ id: 'cctv-cone-line', type: 'line', source: 'cctv-fov', layout: hidden, paint: { 'line-color': CCTV_COLOR, 'line-width': 1.1, 'line-opacity': 0.8 } }, 'marker');
     add(
@@ -99,6 +141,7 @@ export default defineExtra({
     );
   },
   enable(ctx) {
+    void loadHeat(ctx);
     loadNow(ctx);
   },
   onMoveEnd: loadNow,
@@ -118,6 +161,6 @@ export default defineExtra({
     const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : '';
     return { type: 'html', html: cardHtml({ glyph: 'cctv', color: CCTV_COLOR, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
   },
-  layers: ['cctv-cone', 'cctv-cone-line', 'cctv'],
+  layers: ['cctv-heat', 'cctv-cone', 'cctv-cone-line', 'cctv'],
   clickLayers: ['cctv'],
 });

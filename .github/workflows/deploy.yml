@@ -7,8 +7,8 @@ name: Deploy (main + branch previews)
 
 on:
   push:
-    # `data` only holds snapshots, `gh-pages` is the output
-    branches-ignore: [data, gh-pages]
+    # `data` and `data-cctv` only hold snapshots, `gh-pages` is the output
+    branches-ignore: [data, data-cctv, gh-pages]
   workflow_dispatch:
 
 permissions:
