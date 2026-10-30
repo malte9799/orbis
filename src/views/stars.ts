@@ -19,8 +19,9 @@ export interface StarsView {
 }
 
 const TEX_URL = `${import.meta.env.BASE_URL}textures/starmap_2020_4k.jpg`;
-// Deep Star Map vorerst ausgeblendet (nur DSS2-HiPS); true schaltet die Basiskarte (nur Modus „himmel“) wieder ein
-const SHOW_BASE_MAP = false;
+// NASA Deep Star Map als Basis-Himmel im Modus „himmel“: sofort sichtbar, bevor die DSS2-Kacheln
+// geladen sind, und Rückfall, wenn CDS nicht erreichbar ist. DSS2 liegt als HiPS-Ebene darüber.
+const SHOW_BASE_MAP = true;
 const FOV_MIN = 0.005; // absolute Untergrenzen; die Kachelauflösung der Karte begrenzt früher (siehe zoomRange)
 const FOV_MAX = 100;
 const GLOBE_FOV = 35;
@@ -163,17 +164,28 @@ export function createStarsView(): StarsView {
   let survey: SurveyId = 'dss';
   function loadSurvey(id: SurveyId): Promise<void> {
     const sv = SURVEYS.find((x) => x.id === id)!;
-    if (!loading.has(id)) {
-      loading.set(id, createHiPSLayer(sv.url, sv.maxOrder)
-        .then((l) => {
-          l.renderBase = sv.id === 'dss' ? 10 : 30;
-          layers.set(id, l);
-          scene.add(l.group);
-          applyMode(mode, true);
-        })
-        .catch(() => { /* Ebene fehlt: übrige Ebenen bleiben */ }));
-    }
-    return loading.get(id)!;
+    const pending = loading.get(id);
+    if (pending) return pending;
+    const p = createHiPSLayer(sv.url, sv.maxOrder)
+      .then((l) => {
+        l.renderBase = sv.id === 'dss' ? 10 : 30;
+        layers.set(id, l);
+        scene.add(l.group);
+        applyMode(mode, true);
+      })
+      .catch((err) => {
+        // Ebene fehlt (Netzwerk/CDS/CORS): die übrigen Ebenen bleiben, aber nicht stumm scheitern.
+        loading.delete(id); // nächster Klick versucht es erneut
+        if (survey === id) {
+          survey = 'dss';
+          applySurvey();
+        }
+        hint.textContent = `${sv.label}: Kacheln nicht erreichbar (Netzwerk oder CDS) – DSS2 bleibt sichtbar.`;
+        showHint();
+        console.warn(`HiPS-Ebene ${sv.label} konnte nicht geladen werden`, err);
+      });
+    loading.set(id, p);
+    return p;
   }
   function applySurvey() {
     for (const [id, l] of layers) {
@@ -223,9 +235,10 @@ export function createStarsView(): StarsView {
   const aspect = () => viewW() / viewH();
   const tanHalf = (fovDeg: number) => Math.tan((fovDeg * D2R) / 2);
 
-  // Maximal 2× über die Kachelauflösung der gewählten Karte hinaus zoomen (HiPS-Kachel = 512 px je 58,6°/2^k)
+  // Maximal 2× über die Kachelauflösung der gewählten Karte hinaus zoomen (HiPS-Kachel = 512 px je 58,6°/2^k).
+  // Maßgeblich ist die tatsächlich genutzte Ordnung (kann unter der Tabellenangabe liegen).
   function minZoom(abs: number): number {
-    const order = SURVEYS.find((x) => x.id === survey)!.maxOrder;
+    const order = layers.get(survey)?.maxUseOrder ?? SURVEYS.find((x) => x.id === survey)!.maxOrder;
     const pprMax = 2 * (512 * 2 ** order) / (58.6 * D2R);
     return Math.max(abs, spanToZoom(mode, viewH() / pprMax));
   }
@@ -478,6 +491,7 @@ export function createStarsView(): StarsView {
   }
 
   canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return; // nur linke Maustaste bzw. Touch dreht, nicht die rechte Taste
     dragging = true;
     anchor = null;
     lastX = e.clientX;
@@ -519,9 +533,6 @@ export function createStarsView(): StarsView {
     else if (b.dataset.survey) setSurvey(b.dataset.survey as SurveyId);
     else if (b.hasAttribute('data-grid')) toggleGrid();
   });
-  // Knopfleiste darf das Ziehen auf der Karte nicht auslösen
-  el.querySelector('.stars-panel')!.addEventListener('pointerdown', (e) => e.stopPropagation());
-
   function toggleGrid() {
     gridOn = !gridOn;
     grid.visible = gridOn;
@@ -550,7 +561,7 @@ export function createStarsView(): StarsView {
   }
   window.addEventListener('keydown', onKey);
 
-  let texLoaded = false;
+  let baseMapTried = false;
   function loadTexture() {
     new THREE.TextureLoader().load(
       TEX_URL,
@@ -586,14 +597,17 @@ export function createStarsView(): StarsView {
       const fovGiven = Number.isFinite(opts?.fov);
       // ohne fov: Kugel ganz, Karten komplett sichtbar
       zoom = targetZoom = clampZoom(fovGiven || mode === 'himmel' ? spanToZoom(mode, fovDeg * D2R) : mode === 'kugel' ? 3 : Infinity);
-      if (mode === 'himmel') zoom = 70; // bisheriges Verhalten: aus dem Standard-FOV auf Ziel zoomen
+      // Himmel beginnt immer bei 70° und animiert zum gewünschten ?fov= (targetZoom bleibt der Zielwert)
+      if (mode === 'himmel') zoom = 70;
       applyMode(mode, true);
       setCenter(ra, dec);
-      if (!texLoaded) {
-        texLoaded = true;
+      if (!baseMapTried) {
+        baseMapTried = true;
         if (SHOW_BASE_MAP) loadTexture();
-        setSurvey((SURVEYS.find((x) => x.id === opts?.survey)?.id ?? survey));
       }
+      // Quelle bei jedem Aktivieren anwenden: ein Deep-Link #/sterne?quelle=sdss darf auch dann
+      // greifen, wenn die Ansicht vorher schon einmal offen war (setSurvey ist idempotent).
+      setSurvey(SURVEYS.find((x) => x.id === opts?.survey)?.id ?? survey);
       applyCamera();
       renderer.render(scene, camera);
       lastT = performance.now();
@@ -605,6 +619,8 @@ export function createStarsView(): StarsView {
       cancelAnimationFrame(raf);
       el.hidden = true;
       clearTimeout(hintTimer);
+      // Wartende Kachel-Downloads verwerfen; die Ansicht ist unsichtbar
+      for (const l of layers.values()) l.cancelPending();
     },
   };
 }

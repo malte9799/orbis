@@ -6,16 +6,6 @@ import { sphereProjection, type Projection, type Vec3 } from './projections';
 // auf die Himmelskugel (innen/außen) oder in eine flache Kartenprojektion.
 // Kinder-Kacheln ersetzen ihre Eltern, sobald alle geladen sind (kein Pop-in).
 
-export interface HiPSConfig {
-  url: string; // Basis-URL (laut properties, mit Spiegel-Fallbacks)
-  maxOrder: number;
-  tileWidth: number;
-  orderMin: number;
-  frame: string; // 'equatorial' | 'galactic'
-  label: string;
-  credit: string;
-}
-
 const CONCURRENCY = 4;
 const TEX_CAP = 160; // LRU-Obergrenze für Kachel-Texturen
 
@@ -26,12 +16,11 @@ interface HiPSProps {
   tileWidth: number;
   tileExt: string; // 'jpg' | 'png'
   frame: string;
-  title: string;
-  ack: string;
 }
 
 async function fetchProps(base: string): Promise<HiPSProps> {
-  const res = await fetch(`${base.replace(/\/+$/, '')}/properties`);
+  // Timeout, damit ein hängender CDS-Server nicht ewig den Ladezustand offen lässt
+  const res = await fetch(`${base.replace(/\/+$/, '')}/properties`, { signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`HiPS properties nicht ladebar (${res.status})`);
   const text = await res.text();
   const pick = (k: string): string[] => {
@@ -52,17 +41,20 @@ async function fetchProps(base: string): Promise<HiPSProps> {
     order: num('hips_order', 0),
     orderMin: num('hips_order_min', 0),
     tileWidth: num('hips_tile_width', 512),
-    // jpeg bevorzugen (kleiner); reine PNG-Pakete tragen Transparenz außerhalb der Abdeckung
-    tileExt: /jpe?g/i.test(pick('hips_tile_format')[0] ?? '') ? 'jpg' : 'png',
+    // PNG bevorzugen: bei Teilabdeckung (SDSS, Pan-STARRS, GALEX …) tragen nur PNG-Kacheln
+    // Transparenz außerhalb des überdeckten Himmels – sonst deckt Schwarz die DSS2-Unterlage ab.
+    // Pakete ohne PNG (z. B. DSS2 color) liefern ohnehin nur JPEG.
+    tileExt: pick('hips_tile_format').join(' ').toLowerCase().split(/[\s,]+/).includes('png') ? 'png' : 'jpg',
     frame: pick('hips_frame')[0] ?? 'equatorial',
-    title: pick('obs_title')[0] ?? base,
-    ack: (pick('obs_copyright')[0] ?? pick('obs_ack')[0] ?? '').replace(/^["']|["']$/g, ''),
   };
 }
 
 export async function createHiPSLayer(base: string, maxUseOrder?: number): Promise<HiPSLayer> {
   const p = await fetchProps(base);
-  if (!p.order) throw new Error(`hips_order fehlt in ${base}`);
+  // Ordnung 0 ist gültig (12 Kacheln) – nur ein fehlender/ungültiger Wert ist ein Fehler
+  if (!Number.isFinite(p.order) || p.order < 0) throw new Error(`hips_order fehlt in ${base}`);
+  // Das Raster ist äquatorial; galaktische Pakete müssten erst gedreht werden
+  if (p.frame !== 'equatorial') throw new Error(`HiPS-Rahmen ${p.frame} wird nicht unterstützt (${base})`);
   const l = new HiPSLayer(p, maxUseOrder);
   return l;
 }
@@ -92,7 +84,6 @@ export class HiPSLayer {
   private props: HiPSProps;
   maxUseOrder: number;
   renderBase = 10; // Zeichenreihenfolge der Ebene (Überlagerungen höher)
-  private urlIdx = 0;
   private texLoader: THREE.TextureLoader;
   private busy = 0;
   private queue: Cell[] = [];
@@ -110,13 +101,6 @@ export class HiPSLayer {
     this.texLoader = new THREE.TextureLoader();
     this.texLoader.setCrossOrigin('anonymous');
     this.group.visible = false;
-  }
-
-  get credit(): string {
-    return this.props.ack;
-  }
-  get label(): string {
-    return this.props.title;
   }
 
   setMaxOrder(n: number) {
@@ -185,7 +169,9 @@ export class HiPSLayer {
   private visibleIpix(view: HiPSView, k: number): number[] {
     const nside = 1 << k;
     const cellRad = (58.6 * Math.PI / 180) / 2 ** k;
-    const n = Math.min(48, Math.max(4, Math.ceil(view.span / cellRad * 4)));
+    // ~4 Proben je Zelle; der Deckel darf nicht unter der Zellzahl liegen, sonst fallen bei
+    // hoher order_min (z. B. 3) Zellen zwischen den Proben durch und der Himmel bekommt Löcher.
+    const n = Math.min(128, Math.max(4, Math.ceil((view.span / cellRad) * 4)));
     const found = new Set<number>();
     for (let iy = 0; iy <= n; iy++) {
       for (let ix = 0; ix <= n; ix++) {
@@ -220,16 +206,34 @@ export class HiPSLayer {
     // (Eltern bleiben stehen, bis die Kinder da sind – keine Löcher, kein Pop-in)
     const show = new Set<string>();
     for (const ipix of want) {
-      // feinste fertige Kachel + nächstgröbere darunter: die Eltern bleiben stehen,
-      // solange die Kinder einblenden (sonst kurz schwarz)
-      let found = 0;
-      for (let lvl = k; lvl >= 0 && found < 2; lvl--) {
-        const key = `${lvl}/${Math.floor(ipix / 4 ** (k - lvl))}`;
-        if (this.cells.get(key)?.ready) { show.add(key); found++; }
+      // feinste fertige Kachel zeigen; die nächstgröbere nur, solange die feine noch einblendet
+      // (sonst kurz schwarz). Ist die feine voll sichtbar, wird der Elternteil ausgeblendet.
+      let shown = 0;
+      for (let lvl = k; lvl >= 0; lvl--) {
+        const cell = this.cells.get(`${lvl}/${Math.floor(ipix / 4 ** (k - lvl))}`);
+        if (!cell?.ready) continue;
+        show.add(`${lvl}/${Math.floor(ipix / 4 ** (k - lvl))}`);
+        shown++;
+        if (cell.mat.opacity >= this.opacity * 0.999 || shown >= 2) break;
       }
     }
     for (const [key, cell] of this.cells) cell.mesh.visible = this.active && show.has(key);
-    this.evictStale(want);
+    this.evictStale(show);
+  }
+
+  // Offene, noch nicht gestartete Anfragen verwerfen (z. B. beim Verlassen der Ansicht).
+  // Laufende Downloads können nicht abgebrochen werden; ihr Ergebnis wird beim Eintreffen verworfen.
+  cancelPending() {
+    for (const cell of this.queue) {
+      const key = `${cell.order}/${cell.ipix}`;
+      this.cells.delete(key);
+      const i = this.lru.indexOf(key);
+      if (i >= 0) this.lru.splice(i, 1);
+      this.group.remove(cell.mesh);
+      cell.mat.dispose();
+      cell.mesh.geometry.dispose();
+    }
+    this.queue = [];
   }
 
   private ensureChain(k: number, ipix: number) {
@@ -279,7 +283,7 @@ export class HiPSLayer {
     while (this.busy < CONCURRENCY && this.queue.length) {
       const cell = this.queue.shift()!;
       this.busy++;
-      this.loadTile(cell, this.urlIdx);
+      this.loadTile(cell, 0);
     }
   }
 
@@ -306,13 +310,13 @@ export class HiPSLayer {
       },
       undefined,
       () => {
-        this.busy--;
-        // Nächster Spiegel, falls vorhanden
+        // Nächster Spiegel, falls vorhanden (busy bleibt belegt, der Versuch läuft weiter)
         if (urlIdx + 1 < this.props.serviceUrls.length) {
           this.loadTile(cell, urlIdx + 1);
-          this.pump();
           return;
         }
+        this.busy--;
+        if (this.busy < 0) this.busy = 0;
         // dauerhaft fehlend: Zelle unsichtbar lassen (Eltern/Base zeigt durch)
         cell.ready = false;
         cell.mesh.visible = false;
@@ -327,18 +331,26 @@ export class HiPSLayer {
     const tick = () => {
       const el = Math.min(1, (performance.now() - start) / 350);
       cell.mat.opacity = this.opacity * el * el;
-      if (el < 1 && cell.ready) cell.animId = requestAnimationFrame(tick);
-      else cell.mat.opacity = this.opacity;
+      if (el < 1 && cell.ready) {
+        cell.animId = requestAnimationFrame(tick);
+      } else {
+        cell.mat.opacity = this.opacity;
+        this.dirty = true; // fertig eingeblendet -> Elternteil darf ausgeblendet werden
+      }
     };
     cell.animId = requestAnimationFrame(tick);
   }
 
-  // Entfernte Zellen disposen (nur tiefere Ordnungen + außerhalb des letzten Blickfelds)
-  private evictStale(want: number[]) {
-    while (this.lru.length > TEX_CAP + want.length) {
-      const key = this.lru.shift()!;
+  // Texturen über dem Deckel disposen (LRU). Sichtbare und noch ladende Zellen bleiben, sonst
+  // würden gerade angeforderte Kacheln vor dem Eintreffen verworfen (Löcher im Himmel).
+  private evictStale(visible: Set<string>) {
+    let i = 0;
+    while (this.lru.length > TEX_CAP && i < this.lru.length) {
+      const key = this.lru[i];
       const cell = this.cells.get(key);
-      if (!cell) continue;
+      if (!cell) { this.lru.splice(i, 1); continue; }
+      if (visible.has(key) || !cell.ready) { i++; continue; }
+      this.lru.splice(i, 1);
       if (cell.animId) cancelAnimationFrame(cell.animId);
       this.cells.delete(key);
       this.group.remove(cell.mesh);
@@ -368,42 +380,106 @@ function touchLru(lru: string[], key: string) {
   lru.push(key);
 }
 
+interface GridVert {
+  p: [number, number, number];
+  u: number;
+  v: number;
+  seam?: boolean; // beim Teilen an der Naht entstanden (z = 0, Meridian ±180°)
+}
+
 // Zelle als Gitter exakt auf der Kugel bzw. in der Kartenprojektion. Kachelbild: Spalte ↔ iy,
 // Zeile (von oben) ↔ ix (per Abgleich mit der Basiskarte ermittelt), daher u = t, v = 1 − s.
-function cellGeometry(nside: number, ipix: number, proj: Projection): THREE.BufferGeometry {
+export function cellGeometry(nside: number, ipix: number, proj: Projection): THREE.BufferGeometry {
   const seg = 8;
-  const pos: number[] = [];
-  const uvs: number[] = [];
-  const idx: number[] = [];
+  const grid: GridVert[][] = [];
   for (let j = 0; j <= seg; j++) {
+    const row: GridVert[] = [];
     for (let i = 0; i <= seg; i++) {
       const s = i / seg;
       const t = j / seg;
-      const [x, y, z] = proj.project(cellPointDir(nside, ipix, s, t));
-      pos.push(x, y, z);
-      uvs.push(t, 1 - s);
+      row.push({ p: cellPointDir(nside, ipix, s, t), u: t, v: 1 - s });
     }
+    grid.push(row);
   }
-  const crosses = (a: number, b: number, c: number) => {
+  const pos: number[] = [];
+  const uvs: number[] = [];
+  const projX = (q: GridVert) => proj.project(q.p)[0];
+  const crosses = (a: GridVert, b: GridVert, c: GridVert) => {
     if (!isFinite(proj.seam)) return false;
-    const xs = [pos[a * 3], pos[b * 3], pos[c * 3]];
+    const xs = [projX(a), projX(b), projX(c)];
     return Math.max(...xs) - Math.min(...xs) > proj.seam;
   };
-  const tri = (a: number, b: number, c: number) => {
-    if (!crosses(a, b, c)) idx.push(a, b, c);
+  // Ein Dreieck als Streifen in die Puffer schreiben; flache Projektionen brauchen die
+  // sichtbare Windung (+z), die Kugel behält die nach außen zeigende.
+  const emit = (poly: GridVert[], mirror = false) => {
+    for (let k = 1; k + 1 < poly.length; k++) {
+      const tri = [poly[0], poly[k], poly[k + 1]];
+      const p = tri.map((q) => {
+        const v = proj.project(q.p);
+        if (mirror && q.seam) v[0] = -v[0]; // Nahtpunkt auf die andere Kartenseite spiegeln
+        return v;
+      });
+      let order = [0, 1, 2];
+      if (proj.flat) {
+        const area = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
+        if (area < 0) order = [0, 2, 1];
+      }
+      for (const o of order) {
+        pos.push(p[o][0], p[o][1], p[o][2]);
+        uvs.push(tri[o].u, tri[o].v);
+      }
+    }
+  };
+  // Zellen, die über ±180° laufen, an der Meridian-Ebene z = 0 teilen und beide Hälften auf der
+  // jeweils richtigen Kartenseite zeichnen – nicht verwerfen (sonst Lücken am Kartenrand).
+  const tri = (a: GridVert, b: GridVert, c: GridVert) => {
+    if (!crosses(a, b, c)) {
+      emit([a, b, c]);
+      return;
+    }
+    // z ≤ 0 entspricht RA 0…180° (linke Kartenhälfte), z ≥ 0 RA 180…360° (rechte Hälfte).
+    // Die Schnittpunkte bei z = 0 projizieren wegen atan2(−0, −1) immer auf x = +π (rechter Rand);
+    // die linke Hälfte muss deshalb gespiegelt werden, die rechte bleibt wie sie ist.
+    const low = clipHalf([a, b, c], -1);
+    const high = clipHalf([a, b, c], 1);
+    if (low.length >= 3) emit(low, true);
+    if (high.length >= 3) emit(high);
   };
   for (let j = 0; j < seg; j++) {
     for (let i = 0; i < seg; i++) {
-      const a = j * (seg + 1) + i;
-      const b = a + 1;
-      const c = a + (seg + 1);
-      const d = c + 1;
-      tri(a, b, c); tri(b, d, c); tri(a, c, b); tri(b, c, d);
+      const a = grid[j][i];
+      const b = grid[j][i + 1];
+      const c = grid[j + 1][i];
+      const d = grid[j + 1][i + 1];
+      tri(a, b, c);
+      tri(b, d, c);
     }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geo.setIndex(idx);
   return geo;
+}
+
+// Sutherland-Hodgman gegen die Halbebene side*z ≥ 0, mit UV-Interpolation.
+function clipHalf(poly: GridVert[], side: 1 | -1): GridVert[] {
+  const inside = (q: GridVert) => side * q.p[2] >= 0;
+  const out: GridVert[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ia = inside(a);
+    const ib = inside(b);
+    if (ia) out.push(a);
+    if (ia !== ib) {
+      const t = a.p[2] / (a.p[2] - b.p[2]);
+      out.push({
+        p: [a.p[0] + (b.p[0] - a.p[0]) * t, a.p[1] + (b.p[1] - a.p[1]) * t, 0],
+        u: a.u + (b.u - a.u) * t,
+        v: a.v + (b.v - a.v) * t,
+        seam: true,
+      });
+    }
+  }
+  return out;
 }
