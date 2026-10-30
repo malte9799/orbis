@@ -549,6 +549,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderLegend();
   }
 
+  /** ICON fields load in the background: the map shows the Open-Meteo data first and switches over when they arrive. */
+  let wxLoading = false;
+  function loadWx() {
+    if (wxLayer?.expired) wxLayer = null;
+    if (!wxEnabled() || wxLayer || wxLoading) return;
+    wxLoading = true;
+    void WxLayer.load(WX_VARS)
+      .then((l) => {
+        wxLoading = false;
+        if (!l) return;
+        wxLayer = l;
+        if (globalModel && needsModel()) {
+          updateSampler();
+          refreshDetail();
+        }
+      })
+      .catch(() => {
+        wxLoading = false;
+      });
+  }
+
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
     if (modelLoading) {
@@ -566,7 +587,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         detailModel = null;
         detailKey = '';
       }
-      if (wxEnabled() && !wxLayer) wxLayer = await WxLayer.load(WX_VARS);
+      loadWx();
       return true;
     } catch (e) {
       modelError(e);
