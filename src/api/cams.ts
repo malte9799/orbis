@@ -2,7 +2,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
-import { DATA_BASE } from './data';
+import { snapshotOrNull } from './osmtiles';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -75,6 +75,22 @@ export function loadDigitrafficCams(): Promise<FeatureCollection<Point>> {
 
 /** Webcams mapped in OpenStreetMap inside the bounds (needs a zoomed-in view). */
 export async function loadOsmWebcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  const snap = await snapshotOrNull<[number, number, number, string, string, number, string, number]>('webcam', b);
+  if (snap) {
+    return {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, name, operator, panning, link, id]) => {
+        const cam: Webcam = {
+          id: `osm-node-${id}`,
+          title: name || 'Webcam',
+          subtitle: [operator, panning ? 'Schwenkkamera' : ''].filter(Boolean).join(' · ') || 'Webcam (OpenStreetMap)',
+          url: link,
+          source: 'OpenStreetMap',
+        };
+        return point(lon, lat, { ...cam, kind: 'osm', dir });
+      }),
+    };
+  }
   const bb = bboxStr(b);
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(
     `[out:json][timeout:25];(nwr["webcam"](${bb});nwr["contact:webcam"](${bb});nwr["surveillance"="webcam"](${bb}););out center tags 1500;`,
@@ -152,6 +168,28 @@ export const ALPR_TILES_CA = 'https://tiles.dontgetflocked.com/cameras-ca-hourly
 export const ALPR_SOURCE_LAYER = 'cameras';
 
 export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
+  const snap = await snapshotOrNull<[number, number, number, string, number, string, string, string, string, string, number]>('alpr', b);
+  if (snap) {
+    return {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, brand, flock, mount, operator, zone, since, ref, id]) =>
+        point(lon, lat, {
+          title: flock ? 'Flock-Kamera (ALPR)' : 'Kennzeichenerfassung (ALPR)',
+          subtitle: [brand, operator].filter(Boolean).join(' · '),
+          flock: !!flock,
+          dir,
+          mount,
+          operator,
+          zone,
+          since,
+          ref,
+          brand,
+          url: `https://www.openstreetmap.org/node/${id}`,
+          deflock: `https://maps.deflock.org/?lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&zoom=17`,
+        }),
+      ),
+    };
+  }
   const bb = bboxStr(b);
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(`[out:json][timeout:25];nwr["surveillance:type"="ALPR"](${bb});out center tags 5000;`, 'alpr', 30000);
   const features: Feature<Point>[] = [];
@@ -191,62 +229,11 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
 // locations, not a warning system – in Germany using one while driving is
 // illegal (§ 23 StVO).
 
-// Snapshot: the monthly CCTV extract run (scripts/cctv-heat.mjs, branch `data-cctv`) also writes the
-// speed/red-light cameras in 0.5° tiles. Record layout: see `speedRecord` in the script.
-const SNAP_BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
-const SNAP_REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
-type SpeedRec = [number, number, number, string, string, string, string, number];
-let snapIndex: Promise<Map<string, Set<string>>> | null = null;
-const snapTiles = new Map<string, Promise<SpeedRec[]>>();
-
 const SNAP_TITLE: Record<string, [string, string]> = {
   cam: ['Ortsfester Blitzer', 'Geschwindigkeit'],
   section: ['Abschnittskontrolle', 'Durchschnittsgeschwindigkeit'],
   signals: ['Rotlicht-Blitzer', 'Geschwindigkeit & Ampel'],
 };
-
-/**
- * Speed/red-light cameras from the snapshot tiles. `complete` is false when a region's index is
- * missing (not built yet / unreachable) – the caller may then ask Overpass instead; null when the
- * snapshot is not reachable at all.
- */
-export async function loadSpeedcamSnapshot(b: Bounds): Promise<{ fc: FeatureCollection<Point>; complete: boolean } | null> {
-  snapIndex ??= Promise.allSettled(SNAP_REGIONS.map((r) => fetchJson<string[]>(`${SNAP_BASE}blitzer-${r}-tiles.json`, undefined, 30000))).then((res) => {
-    const index = new Map<string, Set<string>>();
-    res.forEach((p, i) => {
-      if (p.status === 'fulfilled') index.set(SNAP_REGIONS[i], new Set(p.value));
-    });
-    if (!index.size) snapIndex = null; // try again next time
-    return index;
-  });
-  const index = await snapIndex;
-  if (!index.size) return null;
-  const jobs: Promise<SpeedRec[]>[] = [];
-  for (let x = Math.floor(b.west * 2); x <= Math.floor(b.east * 2); x++) {
-    for (let y = Math.floor(b.south * 2); y <= Math.floor(b.north * 2); y++) {
-      for (const [region, tiles] of index) {
-        if (!tiles.has(`${x}_${y}`)) continue;
-        const key = `${region}/${x}_${y}`;
-        let p = snapTiles.get(key);
-        if (!p) {
-          p = fetchJson<SpeedRec[]>(`${SNAP_BASE}blitzer-${key}.json`, undefined, 30000).catch((e) => {
-            snapTiles.delete(key);
-            throw e;
-          });
-          snapTiles.set(key, p);
-        }
-        jobs.push(p);
-      }
-    }
-  }
-  const loaded = await Promise.allSettled(jobs);
-  const failed = loaded.some((r) => r.status === 'rejected');
-  const features = loaded
-    .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
-    .filter(([lon, lat]) => lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north)
-    .map(([lon, lat, dir, kind, speed, operator, ref, id]) => point(lon, lat, { kind, title: SNAP_TITLE[kind]?.[0] ?? SNAP_TITLE.cam[0], subtitle: SNAP_TITLE[kind]?.[1] ?? SNAP_TITLE.cam[1], dir, speed, operator, ref, url: `https://www.openstreetmap.org/node/${id}` }));
-  return { fc: { type: 'FeatureCollection', features }, complete: !failed && index.size === SNAP_REGIONS.length };
-}
 
 const speedcamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
 
@@ -254,6 +241,18 @@ export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>
   const bb = bboxStr(b);
   const hit = speedcamCache.get(bb);
   if (hit && Date.now() - hit.at < 10 * 60000) return hit.fc;
+  // monthly extract (same run as the CCTV tiles); Overpass only when it is unavailable
+  const snap = await snapshotOrNull<[number, number, number, string, string, string, string, number]>('blitzer', b);
+  if (snap) {
+    const fc: FeatureCollection<Point> = {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, kind, speed, operator, ref, id]) =>
+        point(lon, lat, { kind, title: SNAP_TITLE[kind]?.[0] ?? SNAP_TITLE.cam[0], subtitle: SNAP_TITLE[kind]?.[1] ?? SNAP_TITLE.cam[1], dir, speed, operator, ref, url: `https://www.openstreetmap.org/node/${id}` }),
+      ),
+    };
+    speedcamCache.set(bb, { at: Date.now(), fc });
+    return fc;
+  }
   // `rel` statt `nwr`: type=enforcement gibt es nur als Relation – nwr würde alle Knoten und Wege danach durchsuchen (viel langsamer)
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(
     `[out:json][timeout:25];(node["highway"="speed_camera"](${bb});rel["type"="enforcement"](${bb}););out center tags 4000;`,

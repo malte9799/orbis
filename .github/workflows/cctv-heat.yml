@@ -1,6 +1,6 @@
 name: Update CCTV heatmap
 
-# Camera density per region for the CCTV layer's overview (scripts/cctv-heat.mjs): streams a
+# Camera density per region for the CCTV layer's overview (and further OSM point tiles, see the script) (scripts/cctv-heat.mjs): streams a
 # Geofabrik extract through osmium, one region per run. Runs daily, but a region is only
 # refreshed when its file is older than 30 days – so the regions stagger over the month.
 # Published on the `data-cctv` branch (kept apart from `data`, whose live feeds must not wait
