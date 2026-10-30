@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
+import { DATA_BASE } from './data';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -189,6 +190,63 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
 // Overpass when zoomed in; coverage depends on the OSM community. A map of
 // locations, not a warning system – in Germany using one while driving is
 // illegal (§ 23 StVO).
+
+// Snapshot: the monthly CCTV extract run (scripts/cctv-heat.mjs, branch `data-cctv`) also writes the
+// speed/red-light cameras in 0.5° tiles. Record layout: see `speedRecord` in the script.
+const SNAP_BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
+const SNAP_REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
+type SpeedRec = [number, number, number, string, string, string, string, number];
+let snapIndex: Promise<Map<string, Set<string>>> | null = null;
+const snapTiles = new Map<string, Promise<SpeedRec[]>>();
+
+const SNAP_TITLE: Record<string, [string, string]> = {
+  cam: ['Ortsfester Blitzer', 'Geschwindigkeit'],
+  section: ['Abschnittskontrolle', 'Durchschnittsgeschwindigkeit'],
+  signals: ['Rotlicht-Blitzer', 'Geschwindigkeit & Ampel'],
+};
+
+/**
+ * Speed/red-light cameras from the snapshot tiles. `complete` is false when a region's index is
+ * missing (not built yet / unreachable) – the caller may then ask Overpass instead; null when the
+ * snapshot is not reachable at all.
+ */
+export async function loadSpeedcamSnapshot(b: Bounds): Promise<{ fc: FeatureCollection<Point>; complete: boolean } | null> {
+  snapIndex ??= Promise.allSettled(SNAP_REGIONS.map((r) => fetchJson<string[]>(`${SNAP_BASE}blitzer-${r}-tiles.json`, undefined, 30000))).then((res) => {
+    const index = new Map<string, Set<string>>();
+    res.forEach((p, i) => {
+      if (p.status === 'fulfilled') index.set(SNAP_REGIONS[i], new Set(p.value));
+    });
+    if (!index.size) snapIndex = null; // try again next time
+    return index;
+  });
+  const index = await snapIndex;
+  if (!index.size) return null;
+  const jobs: Promise<SpeedRec[]>[] = [];
+  for (let x = Math.floor(b.west * 2); x <= Math.floor(b.east * 2); x++) {
+    for (let y = Math.floor(b.south * 2); y <= Math.floor(b.north * 2); y++) {
+      for (const [region, tiles] of index) {
+        if (!tiles.has(`${x}_${y}`)) continue;
+        const key = `${region}/${x}_${y}`;
+        let p = snapTiles.get(key);
+        if (!p) {
+          p = fetchJson<SpeedRec[]>(`${SNAP_BASE}blitzer-${key}.json`, undefined, 30000).catch((e) => {
+            snapTiles.delete(key);
+            throw e;
+          });
+          snapTiles.set(key, p);
+        }
+        jobs.push(p);
+      }
+    }
+  }
+  const loaded = await Promise.allSettled(jobs);
+  const failed = loaded.some((r) => r.status === 'rejected');
+  const features = loaded
+    .flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+    .filter(([lon, lat]) => lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north)
+    .map(([lon, lat, dir, kind, speed, operator, ref, id]) => point(lon, lat, { kind, title: SNAP_TITLE[kind]?.[0] ?? SNAP_TITLE.cam[0], subtitle: SNAP_TITLE[kind]?.[1] ?? SNAP_TITLE.cam[1], dir, speed, operator, ref, url: `https://www.openstreetmap.org/node/${id}` }));
+  return { fc: { type: 'FeatureCollection', features }, complete: !failed && index.size === SNAP_REGIONS.length };
+}
 
 const speedcamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
 

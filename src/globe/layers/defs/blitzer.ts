@@ -4,7 +4,7 @@ import { ALPR_FOV_ZOOM, CAM_DETAIL_ZOOM, CAM_ZOOM_RED, CARDINAL, fovSectors } fr
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { isSuperseded } from '../../../api/overpass';
-import { loadSpeedcams } from '../../../api/cams';
+import { loadSpeedcams, loadSpeedcamSnapshot } from '../../../api/cams';
 import type { FeatureCollection, Point } from 'geojson';
 import { speedTxt, coordsTxt } from '../../../units';
 
@@ -47,7 +47,10 @@ function loadNow(ctx: ExtraCtx) {
   if (key === st.key) return;
   st.key = key;
   ctx.set('blitzer', { loading: true, note: undefined });
-  loadSpeedcams(b)
+  // Monatsauszug (gleicher Lauf wie die CCTV-Kacheln); Overpass nur, wenn er nicht erreichbar/unvollständig ist
+  loadSpeedcamSnapshot(b)
+    .catch(() => null)
+    .then(async (snap) => (snap && (snap.complete || snap.fc.features.length) ? snap.fc : loadSpeedcams(b)))
     .then((fc) => {
       if (st.key !== key) return;
       ctx.setData('blitzer', fc);
@@ -71,7 +74,7 @@ export default defineExtra({
   section: 'infra',
   cat: 'verkehr',
   label: 'Blitzer & Rotlicht',
-  hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap; Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)',
+  hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap (Monatsauszug, Overpass als Fallback); Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)',
   glyph: 'blitzer',
   icon: 'blitzer',
   color: '#e53935',
