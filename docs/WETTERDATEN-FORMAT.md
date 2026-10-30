@@ -13,7 +13,20 @@ v1/<YYYYMMDDHH>/<variable>/t<c>_<r>.owx   Kachel: 45° × 45°, 0,125° (c = 0�
 ```
 
 Läufe sind unveränderlich (`Cache-Control: immutable`, 1 Jahr). Es bleiben die zwei neuesten Läufe liegen.
-Die Variablennamen sind die `ModelVar`-Namen aus `src/api/model.ts` (derzeit nur `temperature_2m`).
+Die Variablennamen sind die `ModelVar`-Namen aus `src/api/model.ts` (derzeit `temperature_2m`) sowie `hsurf`.
+
+## Gelände (Temperaturkorrektur)
+
+Die ICON-Temperatur gilt für die geglättete Modelloberfläche (13 km). Für Täler und Gipfel rechnet der Client pro Pixel
+`ΔT = 0,0065 K/m · (Höhe_Modell − Höhe_Gelände)`, begrenzt auf ±15 K, mit weichem Auslauf (2°) am Rand des geladenen Gebiets.
+
+- **`hsurf`** (Höhe der Modelloberfläche, m): zeitinvariante ICON-Variable `HSURF`, wie die anderen Variablen unter
+  `v1/<lauf>/hsurf/` (ein Zeitschritt, `static: true` in `latest.json`). Gleiches Gitter wie die Temperatur.
+- **`dem`** (Geländehöhe, m): `scripts/wx-dem.py` baut sie aus den Terrarium-Kacheln (Mapzen/AWS Open Data, Zoom 5) auf ein
+  Lat/Lon-Gitter mit 0,0439° (≈ 4,9 km), 1025 × 1025 Punkte je 45°-Kachel, unter `v1/static/dem/t<c>_<r>.owx`. Meer = 0 m,
+  jenseits ±85,05° fehlt der Wert. Gesamt ~7 MB. Auslösen: Workflow `wx.yml` mit Eingabe `dem = true`.
+- Fehlt `hsurf` oder `dem`, bleibt die Temperatur unkorrigiert.
+- Hinweis zur Höhenquelle: [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 
 ## Auslieferung
 

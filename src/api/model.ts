@@ -40,7 +40,7 @@ export interface ModelGrid {
   data: Record<ModelVar, Float32Array>;
 }
 
-/** One variable of the ICON fields (src/api/wxmodel.ts): same layout as ModelGrid.data, [(t * ny + y) * nx + x]. */
+/** One variable of the ICON fields (src/api/wxmodel.ts) on a regular grid. */
 export interface WxGrid {
   lat0: number;
   lon0: number;
@@ -49,8 +49,8 @@ export interface WxGrid {
   nx: number;
   ny: number;
   wrap: boolean;
-  times: number[];
-  data: Float32Array;
+  /** values of one time step, [y * nx + x]; a grid with a single step answers every t with it */
+  step(t: number): Float32Array;
 }
 
 type Geo = Pick<ModelGrid, 'lat0' | 'lon0' | 'dx' | 'dy' | 'nx' | 'ny' | 'wrap'>;
@@ -395,6 +395,18 @@ function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number):
   return smoothArr(g, fieldArray(g, v), t, lat, lon);
 }
 
+const LAPSE_K_PER_M = 0.0065;
+const MAX_LAPSE_DELTA = 15;
+
+/** 1 inside a grid, fading to 0 over `deg` degrees towards its edge */
+function edgeWeight(g: Geo, lat: number, lon: number, deg: number): number {
+  const x = (lon - g.lon0) / g.dx;
+  const y = (g.lat0 - lat) / g.dy;
+  if (x < 0 || y < 0 || x > g.nx - 1 || y > g.ny - 1) return 0;
+  const f = Math.min(1, Math.min(x * g.dx, y * g.dy, (g.nx - 1 - x) * g.dx, (g.ny - 1 - y) * g.dy) / deg);
+  return f * f * (3 - 2 * f);
+}
+
 /** Weight of a detail grid at this point (0 outside, 1 well inside), feathered so resolutions blend without a frame. */
 function featherWeight(d: Geo, lat: number, lon: number): number {
   const x = (lon - d.lon0) / d.dx;
@@ -469,9 +481,9 @@ export class ModelSampler {
     const detail = wx.detail.get(v);
     const w = detail ? featherWeight(detail, lat, lon) : 0;
     const at = (t: number) => {
-      let r = smoothArr(base, transformArray(base.data, v), t, lat, lon);
+      let r = smoothArr(base, transformArray(base.step(t), v), 0, lat, lon);
       if (w > 0) {
-        const dv = smoothArr(detail!, transformArray(detail!.data, v), t, lat, lon);
+        const dv = smoothArr(detail!, transformArray(detail!.step(t), v), 0, lat, lon);
         if (!Number.isNaN(dv)) r = Number.isNaN(r) ? dv : dv * w + r * (1 - w);
       }
       return r;
@@ -485,10 +497,31 @@ export class ModelSampler {
     return tf && !Number.isNaN(r) ? tf[1](r) : r;
   }
 
-  sample(v: ModelVar, lat: number, lon: number): number {
+  /** true while terrain heights are loaded for the view (the temperature gets the terrain correction) */
+  hasTerrain(): boolean {
+    return !!this.wx?.terrain;
+  }
+
+  /**
+   * Temperature correction [K] for the difference between the model's smoothed surface and the real terrain
+   * (standard lapse rate): colder on peaks, warmer in valleys. Fades out over 2° at the edge of the loaded area.
+   */
+  terrainDelta(lat: number, lon: number): number {
+    const t = this.wx?.terrain;
+    if (!t) return 0;
+    const w = edgeWeight(t.dem, lat, lon, 2);
+    if (w <= 0) return 0;
+    const hs = bilinear(t.hs, t.hs.step(0), 0, lat, lon);
+    const dem = bilinear(t.dem, t.dem.step(0), 0, lat, lon);
+    if (Number.isNaN(hs) || Number.isNaN(dem)) return 0;
+    return w * Math.max(-MAX_LAPSE_DELTA, Math.min(MAX_LAPSE_DELTA, LAPSE_K_PER_M * (hs - dem)));
+  }
+
+  /** @param terrain add the terrain correction (readouts); tile rendering applies it per pixel itself */
+  sample(v: ModelVar, lat: number, lon: number, terrain = true): number {
     if (this.wx?.has(v)) {
       const r = this.sampleWx(v, lat, lon);
-      if (!Number.isNaN(r)) return r;
+      if (!Number.isNaN(r)) return terrain && v === 'temperature_2m' ? r + this.terrainDelta(lat, lon) : r;
     }
     const w = this.detailWeight(lat, lon);
     const i = Math.min(Math.floor(this.t), this.global.times.length - 1);

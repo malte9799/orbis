@@ -22,6 +22,10 @@ on:
         description: 'Auch hochladen, wenn der Lauf schon veröffentlicht ist'
         type: boolean
         default: false
+      dem:
+        description: 'Geländehöhen (scripts/wx-dem.py) neu bauen und hochladen – einmalig bzw. bei Änderung der Quelle'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -65,17 +69,25 @@ jobs:
         run: |
           python scripts/wx-icon.py --out ../wx-out --work ../wx-work \
             --run "${{ github.event.inputs.run || 'latest' }}" --wait 40 --published ../wx-prev/latest.json --selftest
+      - name: Build terrain heights
+        if: github.event.inputs.dem == 'true'
+        run: python scripts/wx-dem.py --out ../wx-dem
       - name: Upload to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          [ -f ../wx-out/v1/latest.json ] || { echo 'Kein neuer Lauf – nichts hochzuladen'; exit 0; }
+          [ -f ../wx-out/v1/latest.json ] || [ -d ../wx-dem/v1 ] || { echo 'Kein neuer Lauf – nichts hochzuladen'; exit 0; }
           if [ -z "$R2_BUCKET" ] || [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
             echo "::warning::R2 nicht konfiguriert – Upload übersprungen"; exit 0
           fi
           EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          if [ -d ../wx-dem/v1/static ]; then
+            aws s3 sync ../wx-dem/v1/static "s3://$R2_BUCKET/v1/static" --endpoint-url "$EP" \
+              --cache-control "public, max-age=86400" --content-type application/octet-stream --only-show-errors
+          fi
+          [ -f ../wx-out/v1/latest.json ] || exit 0
           RUN=$(python -c "import json;print(json.load(open('../wx-out/v1/latest.json'))['run'])")
           # Läufe sind unveränderlich (Pfad enthält den Lauf) → lange cachen; latest.json zuletzt und kurz
           aws s3 sync "../wx-out/v1/$RUN" "s3://$R2_BUCKET/v1/$RUN" --endpoint-url "$EP" \

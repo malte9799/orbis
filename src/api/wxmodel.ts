@@ -9,9 +9,9 @@ export const WX_BASE = 'https://orbis-wx.malte9799.workers.dev';
 const MAX_AGE_MS = 30 * 3600 * 1000;
 const META_TTL_MS = 5 * 60 * 1000;
 const TILE = 45;
-const TILE_CELLS = 360;
-/** a detail mosaic of more tiles than this would use too much memory (≈13 MB per tile and variable) */
-const MAX_DETAIL_TILES = 6;
+/** a detail mosaic is held as 16-bit numbers (≈6.5 MB per tile and variable); more tiles than this are too much */
+const MAX_DETAIL_TILES = 12;
+const DEM_PATH = 'static/dem';
 const META_TIMEOUT_MS = 15_000;
 const FILE_TIMEOUT_MS = 40_000;
 
@@ -21,7 +21,7 @@ export interface WxMeta {
   issued: number;
   times: number[];
   attribution: string;
-  vars: Record<string, { scale: number; offset: number; unit: string }>;
+  vars: Record<string, { scale: number; offset: number; unit: string; static?: boolean }>;
 }
 
 /** Switched on with ?wx=1 (off: ?wx=0); the choice is remembered. */
@@ -58,20 +58,20 @@ async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Inverse of encode() in scripts/wx-icon.py; values come out as Float32 with NaN for "missing". */
-export async function decodeOwx(buf: ArrayBuffer): Promise<{ header: OwxHeader; values: Float32Array }> {
+/** Inverse of encode() in scripts/wx-icon.py: the quantised 16-bit numbers as they are stored. */
+export async function decodeOwxRaw(buf: ArrayBuffer): Promise<RawTile> {
   const bytes = new Uint8Array(buf);
   if (bytes[0] !== 0x4f || bytes[1] !== 0x57 || bytes[2] !== 0x58 || bytes[3] !== 0x31) throw new Error('kein OWX-Format');
   const hl = new DataView(buf).getUint32(4, true);
   const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + hl))) as OwxHeader;
-  const { nt, ny, nx, scale, offset, nodata } = header;
+  const { nt, ny, nx } = header;
   const planes = await gunzip(bytes.subarray(8 + hl));
   const n = ny * nx;
   const total = nt * n;
   if (planes.length !== total * 2) throw new Error('OWX: unerwartete Länge');
-  const values = new Float32Array(total);
+  const q = new Int16Array(total);
   const s = new Int16Array(n); // spatial residual plane of the current step (int16 wraps like the encoder)
-  const q = new Int16Array(n); // running sum over time
+  const run = new Int16Array(n); // running sum over time
   for (let t = 0; t < nt; t++) {
     const o = t * n;
     for (let y = 0; y < ny; y++) {
@@ -83,11 +83,81 @@ export async function decodeOwx(buf: ArrayBuffer): Promise<{ header: OwxHeader; 
       }
     }
     for (let i = 0; i < n; i++) {
-      q[i] = t === 0 ? s[i] : q[i] + s[i];
-      values[o + i] = q[i] === nodata ? NaN : q[i] * scale + offset;
+      run[i] = t === 0 ? s[i] : run[i] + s[i];
+      q[o + i] = run[i];
     }
   }
-  return { header, values };
+  return { header, q };
+}
+
+/** Quantised numbers → values (NaN for "missing"). */
+function dequantize(h: OwxHeader, q: Int16Array, from = 0, count = q.length): Float32Array {
+  const out = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const v = q[from + i];
+    out[i] = v === h.nodata ? NaN : v * h.scale + h.offset;
+  }
+  return out;
+}
+
+/** Decoded values as Float32 (all time steps). */
+export async function decodeOwx(buf: ArrayBuffer): Promise<{ header: OwxHeader; values: Float32Array }> {
+  const { header, q } = await decodeOwxRaw(buf);
+  return { header, values: dequantize(header, q) };
+}
+
+export interface RawTile {
+  header: OwxHeader;
+  q: Int16Array;
+}
+
+/** All steps in memory as Float32 (the small world overview). */
+class FloatGrid implements WxGrid {
+  private views: Float32Array[] = [];
+  readonly lat0: number;
+  readonly lon0: number;
+  readonly dx: number;
+  readonly dy: number;
+  readonly nx: number;
+  readonly ny: number;
+  readonly wrap: boolean;
+  constructor(h: OwxHeader, values: Float32Array) {
+    ({ lat0: this.lat0, lon0: this.lon0, dx: this.dx, dy: this.dy, nx: this.nx, ny: this.ny, wrap: this.wrap } = h);
+    const n = h.nx * h.ny;
+    for (let t = 0; t < h.nt; t++) this.views.push(values.subarray(t * n, (t + 1) * n));
+  }
+  step(t: number): Float32Array {
+    return this.views[Math.max(0, Math.min(this.views.length - 1, t))];
+  }
+}
+
+/** Detail mosaic held as 16-bit numbers; a time step is expanded to Float32 when it is needed (small LRU). */
+class QuantGrid implements WxGrid {
+  private cache = new Map<number, Float32Array>();
+  readonly lat0: number;
+  readonly lon0: number;
+  readonly dx: number;
+  readonly dy: number;
+  readonly nx: number;
+  readonly ny: number;
+  readonly wrap = false;
+  readonly nt: number;
+  constructor(private h: OwxHeader, private q: Int16Array) {
+    ({ lat0: this.lat0, lon0: this.lon0, dx: this.dx, dy: this.dy, nx: this.nx, ny: this.ny, nt: this.nt } = h);
+  }
+  step(t: number): Float32Array {
+    const i = Math.max(0, Math.min(this.nt - 1, t));
+    let a = this.cache.get(i);
+    if (a) {
+      this.cache.delete(i);
+    } else {
+      const n = this.nx * this.ny;
+      a = dequantize(this.h, this.q, i * n, n);
+      if (this.cache.size >= 6) this.cache.delete(this.cache.keys().next().value!);
+    }
+    this.cache.set(i, a);
+    return a;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -127,23 +197,21 @@ export function getWxMeta(): Promise<WxMeta> {
   return metaCache.promise;
 }
 
-type Decoded = { header: OwxHeader; values: Float32Array };
-
-async function loadFile(run: string, variable: string, key: string): Promise<Decoded> {
-  const res = await fetchOk(`${WX_BASE}/v1/${run}/${variable}/${key}.owx`, FILE_TIMEOUT_MS);
-  return decodeOwx(await res.arrayBuffer());
+async function loadRaw(path: string): Promise<RawTile> {
+  const res = await fetchOk(`${WX_BASE}/v1/${path}.owx`, FILE_TIMEOUT_MS);
+  return decodeOwxRaw(await res.arrayBuffer());
 }
 
 // Only the (small) overviews stay in memory. Decoded tiles are copied into the detail mosaic and then
 // dropped – the browser's HTTP cache keeps the compressed files (immutable), so panning back is cheap
 // and the memory use is bounded by MAX_DETAIL_TILES.
-const overviewCache = new Map<string, Promise<Decoded>>();
+const overviewCache = new Map<string, Promise<WxGrid>>();
 
-function getOverview(run: string, variable: string): Promise<Decoded> {
+function getOverview(run: string, variable: string): Promise<WxGrid> {
   const id = `${run}/${variable}`;
   let p = overviewCache.get(id);
   if (!p) {
-    p = loadFile(run, variable, 'o');
+    p = loadRaw(`${run}/${variable}/o`).then(({ header, q }) => new FloatGrid(header, dequantize(header, q)));
     p.catch(() => overviewCache.delete(id));
     overviewCache.set(id, p);
     while (overviewCache.size > 24) overviewCache.delete(overviewCache.keys().next().value!);
@@ -165,28 +233,29 @@ export function tilesFor(b: Bounds): { c0: number; c1: number; r0: number; r1: n
   return (t.c1 - t.c0 + 1) * (t.r1 - t.r0 + 1) > MAX_DETAIL_TILES ? null : t;
 }
 
-/** Stitches 361×361 tiles (one cell of overlap) into one rectangular grid. */
-export function mosaic(tiles: Decoded[][], times: number[]): WxGrid {
+/** Stitches tiles (one cell of overlap) into one rectangular grid held as 16-bit numbers. */
+export function mosaic(tiles: RawTile[][]): WxGrid {
   const rows = tiles.length;
   const cols = tiles[0].length;
-  const nt = tiles[0][0].header.nt;
-  const nx = cols * TILE_CELLS + 1;
-  const ny = rows * TILE_CELLS + 1;
-  const data = new Float32Array(nt * ny * nx);
-  const tn = TILE_CELLS + 1;
+  const h0 = tiles[0][0].header;
+  const nt = h0.nt;
+  const cells = h0.nx - 1;
+  const tn = cells + 1;
+  const nx = cols * cells + 1;
+  const ny = rows * cells + 1;
+  const q = new Int16Array(nt * ny * nx);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const src = tiles[r][c].values;
+      const src = tiles[r][c].q;
       for (let t = 0; t < nt; t++) {
         for (let y = 0; y < tn; y++) {
           const from = (t * tn + y) * tn;
-          data.set(src.subarray(from, from + tn), (t * ny + r * TILE_CELLS + y) * nx + c * TILE_CELLS);
+          q.set(src.subarray(from, from + tn), (t * ny + r * cells + y) * nx + c * cells);
         }
       }
     }
   }
-  const h = tiles[0][0].header;
-  return { lat0: h.lat0, lon0: h.lon0, dx: h.dx, dy: h.dy, nx, ny, wrap: false, times, data };
+  return new QuantGrid({ ...h0, nx, ny }, q);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +263,10 @@ export function mosaic(tiles: Decoded[][], times: number[]): WxGrid {
 /** Fields of one model run: world overview per variable plus an optional detail mosaic for the view. */
 export class WxLayer {
   private overview = new Map<ModelVar, WxGrid>();
-  readonly detail = new Map<ModelVar, WxGrid>();
+  /** detail mosaics for the view: the variables plus the model surface height ('hsurf') */
+  readonly detail = new Map<string, WxGrid>();
+  /** terrain heights for the view (src/api/wxmodel.ts: DEM_PATH), null while not loaded */
+  private dem: WxGrid | null = null;
   private detailKey = '';
   private viewToken = 0;
 
@@ -226,6 +298,12 @@ export class WxLayer {
     return this.overview.get(v);
   }
 
+  /** model surface height and terrain height of the view – for the temperature correction; null if either is missing */
+  get terrain(): { hs: WxGrid; dem: WxGrid } | null {
+    const hs = this.detail.get('hsurf');
+    return hs && this.dem ? { hs, dem: this.dem } : null;
+  }
+
   /** null when the service is unavailable, outdated or has none of the variables */
   static async load(vars: ModelVar[]): Promise<WxLayer | null> {
     try {
@@ -235,9 +313,7 @@ export class WxLayer {
         vars
           .filter((v) => v in meta.vars)
           .map(async (v) => {
-            const f = await getOverview(meta.run, v);
-            const h = f.header;
-            layer.overview.set(v, { lat0: h.lat0, lon0: h.lon0, dx: h.dx, dy: h.dy, nx: h.nx, ny: h.ny, wrap: h.wrap, times: meta.times, data: f.values });
+            layer.overview.set(v, await getOverview(meta.run, v));
           }),
       );
       return layer.overview.size ? layer : null;
@@ -247,30 +323,42 @@ export class WxLayer {
     }
   }
 
-  /** Loads the 0.125° detail for the view (null: none). Resolves true when the detail grids changed. */
+  private async loadMosaic(sel: { c0: number; c1: number; r0: number; r1: number }, path: (c: number, r: number) => string): Promise<WxGrid> {
+    const rows: RawTile[][] = [];
+    for (let r = sel.r0; r <= sel.r1; r++) {
+      rows.push(await Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadRaw(path(sel.c0 + i, r)))));
+    }
+    return mosaic(rows);
+  }
+
+  /** Loads the 0.125° detail (and the terrain for the temperature) for the view; true when something changed. */
   async setView(b: Bounds | null, vars: ModelVar[]): Promise<boolean> {
     const token = ++this.viewToken;
     const sel = b ? tilesFor(b) : null;
     const wanted = vars.filter((v) => this.overview.has(v));
-    const key = sel && wanted.length ? `${sel.c0}_${sel.r0}_${sel.c1}_${sel.r1}_${wanted.join('')}`.replace(/[^\w-]/g, '') : '';
+    const terrain = wanted.includes('temperature_2m') && 'hsurf' in this.meta.vars;
+    const key = sel && wanted.length ? `${sel.c0}_${sel.r0}_${sel.c1}_${sel.r1}_${wanted.join('')}${terrain ? 't' : ''}`.replace(/[^\w-]/g, '') : '';
     if (key === this.detailKey) return false;
     if (!sel || !wanted.length) {
       this.detail.clear();
+      this.dem = null;
       this.detailKey = '';
       return true;
     }
     try {
-      const grids = new Map<ModelVar, WxGrid>();
-      for (const v of wanted) {
-        const rows: Decoded[][] = [];
-        for (let r = sel.r0; r <= sel.r1; r++) {
-          rows.push(await Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadFile(this.meta.run, v, `t${sel.c0 + i}_${r}`))));
-        }
-        grids.set(v, mosaic(rows, this.meta.times));
-      }
+      const run = this.meta.run;
+      const grids = new Map<string, WxGrid>();
+      await Promise.all(
+        [...wanted, ...(terrain ? ['hsurf'] : [])].map(async (v) => {
+          grids.set(v, await this.loadMosaic(sel, (c, r) => `${run}/${v}/t${c}_${r}`));
+        }),
+      );
+      // terrain heights are optional: without them the temperature stays uncorrected
+      const dem = terrain ? await this.loadMosaic(sel, (c, r) => `${DEM_PATH}/t${c}_${r}`).catch(() => null) : null;
       if (token !== this.viewToken) return false; // a newer view request took over
       this.detail.clear();
       for (const [v, g] of grids) this.detail.set(v, g);
+      this.dem = dem;
       this.detailKey = key;
       return true;
     } catch (e) {
