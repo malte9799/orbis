@@ -1,7 +1,7 @@
 import { DATA_BASE } from './data';
 import { fetchJson } from '../util';
 
-// Point data from the monthly OpenStreetMap extracts (scripts/cctv-heat.mjs, branch `data-cctv`):
+// Point data from the monthly OpenStreetMap extracts (scripts/cctv-heat.mjs, branch `data-osm`):
 // one set of 0.5° tiles per data set and region, so no live Overpass query is needed.
 // Only nodes are in there – ways and areas with the same tags are not (the callers keep asking
 // Overpass for those, or for everything while the snapshot is unavailable).
@@ -10,7 +10,7 @@ import { fetchJson } from '../util';
 export type TileSet = 'blitzer' | 'alpr' | 'webcam' | 'wind' | 'resource';
 type Box = { west: number; south: number; east: number; north: number };
 
-const BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
+const BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
 const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
 const TILE = 2; // tiles per degree
 

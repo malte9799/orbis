@@ -1,6 +1,6 @@
 # Plan: Flächen und Wege im OSM-Monatsauszug (zurückgestellt)
 
-Stand: Der Lauf `scripts/cctv-heat.mjs` (Workflow `cctv-heat`, Branch `data-cctv`) streamt die
+Stand: Der Lauf `scripts/cctv-heat.mjs` (Workflow `cctv-heat`, Branch `data-osm`) streamt die
 Geofabrik-Extrakte mit `osmium tags-filter -R` und liefert deshalb **nur Knoten**: CCTV, Blitzer,
 ALPR, OSM-Webcams, Windräder, Schächte/Stollen/Bohrlöcher (Client: `src/api/osmtiles.ts`).
 Ways und Flächen mit denselben Tags fehlen im Auszug; Overpass liefert sie weiter live

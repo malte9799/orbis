@@ -17,7 +17,7 @@ const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'a
 //   cctv-<region>.json           density cells [lon, lat, count]
 //   cctv-<region>-tiles.json     the 0.5° tiles that exist
 //   cctv-<region>/<ix>_<iy>.json cameras of one tile (record layout: see `record` in the script)
-const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
+const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
 const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
 const TILE = 2; // tiles per degree
 type Rec = [number, number, number, string, string, string, number, string, number];
