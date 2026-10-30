@@ -12,7 +12,8 @@ const TILE = 45;
 const TILE_CELLS = 360;
 /** a detail mosaic of more tiles than this would use too much memory (≈13 MB per tile and variable) */
 const MAX_DETAIL_TILES = 6;
-const MAX_CACHED = 16;
+const META_TIMEOUT_MS = 15_000;
+const FILE_TIMEOUT_MS = 40_000;
 
 export interface WxMeta {
   v: number;
@@ -92,10 +93,21 @@ export async function decodeOwx(buf: ArrayBuffer): Promise<{ header: OwxHeader; 
 // ---------------------------------------------------------------------------
 // Loading
 
+/** fetch that gives up after a while – the ICON fields are optional and must never hold up the map */
+async function fetchOk(url: string, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status} – ${url}`);
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} – ${url}`);
-  return res.json() as Promise<T>;
+  return (await fetchOk(url, META_TIMEOUT_MS)).json() as Promise<T>;
 }
 
 let metaCache: { at: number; promise: Promise<WxMeta> } | null = null;
@@ -115,24 +127,27 @@ export function getWxMeta(): Promise<WxMeta> {
   return metaCache.promise;
 }
 
-const fileCache = new Map<string, Promise<{ header: OwxHeader; values: Float32Array }>>();
+type Decoded = { header: OwxHeader; values: Float32Array };
 
-function getFile(run: string, variable: string, key: string) {
-  const url = `${WX_BASE}/v1/${run}/${variable}/${key}.owx`;
-  let p = fileCache.get(url);
-  if (p) {
-    // refresh the LRU position
-    fileCache.delete(url);
-    fileCache.set(url, p);
-    return p;
+async function loadFile(run: string, variable: string, key: string): Promise<Decoded> {
+  const res = await fetchOk(`${WX_BASE}/v1/${run}/${variable}/${key}.owx`, FILE_TIMEOUT_MS);
+  return decodeOwx(await res.arrayBuffer());
+}
+
+// Only the (small) overviews stay in memory. Decoded tiles are copied into the detail mosaic and then
+// dropped – the browser's HTTP cache keeps the compressed files (immutable), so panning back is cheap
+// and the memory use is bounded by MAX_DETAIL_TILES.
+const overviewCache = new Map<string, Promise<Decoded>>();
+
+function getOverview(run: string, variable: string): Promise<Decoded> {
+  const id = `${run}/${variable}`;
+  let p = overviewCache.get(id);
+  if (!p) {
+    p = loadFile(run, variable, 'o');
+    p.catch(() => overviewCache.delete(id));
+    overviewCache.set(id, p);
+    while (overviewCache.size > 24) overviewCache.delete(overviewCache.keys().next().value!);
   }
-  p = fetch(url).then(async (res) => {
-    if (!res.ok) throw new Error(`HTTP ${res.status} – ${url}`);
-    return decodeOwx(await res.arrayBuffer());
-  });
-  p.catch(() => fileCache.delete(url));
-  fileCache.set(url, p);
-  while (fileCache.size > MAX_CACHED) fileCache.delete(fileCache.keys().next().value!);
   return p;
 }
 
@@ -151,7 +166,7 @@ export function tilesFor(b: Bounds): { c0: number; c1: number; r0: number; r1: n
 }
 
 /** Stitches 361×361 tiles (one cell of overlap) into one rectangular grid. */
-function mosaic(tiles: { header: OwxHeader; values: Float32Array }[][], times: number[]): WxGrid {
+export function mosaic(tiles: Decoded[][], times: number[]): WxGrid {
   const rows = tiles.length;
   const cols = tiles[0].length;
   const nt = tiles[0][0].header.nt;
@@ -199,8 +214,13 @@ export class WxLayer {
     return `${this.meta.run}-${this.detailKey}`;
   }
 
+  /** the run is too old to be shown (checked on every use, not only when loading) */
+  get expired(): boolean {
+    return Date.now() - this.meta.issued > MAX_AGE_MS;
+  }
+
   has(v: ModelVar): boolean {
-    return this.overview.has(v);
+    return !this.expired && this.overview.has(v);
   }
   overviewOf(v: ModelVar): WxGrid | undefined {
     return this.overview.get(v);
@@ -215,7 +235,7 @@ export class WxLayer {
         vars
           .filter((v) => v in meta.vars)
           .map(async (v) => {
-            const f = await getFile(meta.run, v, 'o');
+            const f = await getOverview(meta.run, v);
             const h = f.header;
             layer.overview.set(v, { lat0: h.lat0, lon0: h.lon0, dx: h.dx, dy: h.dy, nx: h.nx, ny: h.ny, wrap: h.wrap, times: meta.times, data: f.values });
           }),
@@ -242,9 +262,9 @@ export class WxLayer {
     try {
       const grids = new Map<ModelVar, WxGrid>();
       for (const v of wanted) {
-        const rows: { header: OwxHeader; values: Float32Array }[][] = [];
+        const rows: Decoded[][] = [];
         for (let r = sel.r0; r <= sel.r1; r++) {
-          rows.push(await Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => getFile(this.meta.run, v, `t${sel.c0 + i}_${r}`))));
+          rows.push(await Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadFile(this.meta.run, v, `t${sel.c0 + i}_${r}`))));
         }
         grids.set(v, mosaic(rows, this.meta.times));
       }
