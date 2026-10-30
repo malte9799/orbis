@@ -160,6 +160,7 @@ export function labelLayers(): LayerSpecification[] {
       type: 'line',
       source: 'ofm',
       'source-layer': 'water',
+      filter: ['==', ['get', 'class'], 'ocean'],
       layout: { ...hidden, 'line-join': 'round' },
       paint: { 'line-color': 'rgba(255,255,255,0.55)', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
     },
