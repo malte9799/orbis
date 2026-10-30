@@ -1,12 +1,18 @@
 // Mockup: records every fetch() the page makes, so the raw-data inspector can show what came back.
 // Only the main thread is covered (MapLibre tiles and style files are fetched in a worker).
 
+import { proxyBase } from '../api/proxy';
+
 export type Kind = 'json' | 'xml' | 'text' | 'image' | 'model' | 'binary';
 
 export interface Capture {
   id: number;
+  /** URL the browser really requested (the proxy URL for proxied requests) */
   url: string;
+  /** host of the API that was asked (for proxied requests: the target, not the proxy) */
   host: string;
+  /** proxied request: the API URL the proxy was asked to fetch; `url` is then the proxy URL */
+  target?: string;
   method: string;
   status: number;
   ok: boolean;
@@ -90,6 +96,22 @@ function evict() {
   }
 }
 
+/** Proxied requests look like `<proxy>/?url=<api url>`: returns the API URL, null for everything else. */
+export function proxyTarget(abs: URL): string | null {
+  const t = abs.searchParams.get('url');
+  if (!t || !/^https?:\/\//i.test(t)) return null;
+  const base = proxyBase();
+  try {
+    if (base) {
+      const b = new URL(base, location.href);
+      if (b.host === abs.host && abs.pathname.startsWith(b.pathname.replace(/\/$/, '') || '/')) return t;
+    }
+  } catch {
+    /* unusable proxy setting */
+  }
+  return abs.host.endsWith('.workers.dev') ? t : null;
+}
+
 /** Resources the page loads without fetch() (<img>, textures, CSS images) only show up in the resource timeline. */
 const EXT_OTHER = /\.(png|jpe?g|webp|avif|gif|svg|glb|gltf|json|pbf)(\?|$)/i;
 const SKIP_PATH = /\/(src|node_modules|@vite|@id|@fs)\//;
@@ -139,10 +161,12 @@ export function installCapture() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (!/^https?:/.test(url) && !url.startsWith('/') && !url.startsWith('./')) return orig(input, init);
     const abs = new URL(url, location.href);
+    const target = proxyTarget(abs);
     const cap: Capture = {
       id: ++seq,
       url: abs.href,
-      host: abs.host,
+      host: target ? new URL(target).host : abs.host,
+      target: target ?? undefined,
       method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
       status: 0,
       ok: false,

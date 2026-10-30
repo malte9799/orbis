@@ -12,6 +12,11 @@ const PROVIDERS: [RegExp, string][] = [
   [/openfreemap\.org$/, 'OpenFreeMap'],
   [/nasa\.gov$/, 'NASA'],
   [/noaa\.gov$/, 'NOAA'],
+  [/planespotters\.net$/, 'Planespotters'],
+  [/adsbdb\.com$/, 'adsbdb'],
+  [/adsb\.(lol|fi)$/, 'ADSB-Flugdaten'],
+  [/opensky-network\.org$/, 'OpenSky'],
+  [/overpass/, 'Overpass (OSM)'],
 ];
 
 export function providerOf(host: string): string {
