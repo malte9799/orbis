@@ -60,7 +60,7 @@ import type { LocMode } from '../routing/locator';
 import { createScaleBar } from '../scalebar';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
-import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
+import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc } from '../units';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -154,6 +154,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
         <button class="btn icon-btn tl-play" aria-label="Abspielen"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+        <div class="tl-head"><b></b><span></span></div>
         <div class="tl-track">
           <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Zeit"/>
           <div class="tl-days"></div>
@@ -717,6 +718,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
+  const headEl = timeline.querySelector<HTMLDivElement>('.tl-head')!;
   const daysEl = timeline.querySelector<HTMLDivElement>('.tl-days')!;
   const playBtn = timeline.querySelector<HTMLButtonElement>('.tl-play')!;
   const nowBtn = timeline.querySelector<HTMLButtonElement>('.tl-now')!;
@@ -830,22 +832,48 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     timeEl.innerHTML = `<b>${escapeHtml(timeLabel(t))}</b><small>${
       mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
     }</small>`;
-    // day ticks under the slider (only rebuilt when the time axis changes)
-    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}`;
+    // desktop card: title + full date, progress of the slider
+    headEl.innerHTML = `<b>${mode === 'radar' ? (nowcast ? 'Radar-Prognose' : 'Radar') : 'Vorhersage'}</b><span>${escapeHtml(
+      dateTimeTxt(t, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    )} · ${escapeHtml(dateTimeTxt(t, { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }))}${tzUtc() ? ' UTC' : ''}</span>`;
+    rangeEl.style.setProperty('--p', `${(Number(rangeEl.value) / Math.max(1, Number(rangeEl.max))) * 100}%`);
+    // ticks under the slider: one per time step, labels at day change / noon (model) or every 30 min (radar),
+    // "Jetzt" at the current moment (only rebuilt when the time axis, the minute or the format change)
+    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}:${is12()}:${Math.floor(Date.now() / 60000)}`;
     if (key !== timelineKey) {
       timelineKey = key;
-      let html = '';
+      const span = Math.max(1, times[times.length - 1] - times[0]);
+      const pos = (ms: number) => ((ms - times[0]) / span) * 100;
+      const nowPos = pos(Date.now());
+      let html = times.map((tt) => `<i style="left:${pos(tt)}%"></i>`).join('');
+      const labels: [number, string][] = [];
+      const hourFmt: Intl.DateTimeFormatOptions = { hour: is12() ? 'numeric' : '2-digit' };
       if (mode === 'model') {
-        let lastDay = '';
-        times.forEach((tt, i) => {
-          const d = new Date(tt);
-          const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
-          if (day !== lastDay && (tzUtc() ? d.getUTCHours() : d.getHours()) < 3) {
-            html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
-          }
-          lastDay = day;
-        });
+        // the 3-hourly steps rarely hit local midnight / noon, so the labels sit at the exact moments
+        const day = new Date(times[0]);
+        if (tzUtc()) day.setUTCHours(0, 0, 0, 0);
+        else day.setHours(0, 0, 0, 0);
+        while (day.getTime() <= times[times.length - 1]) {
+          const mid = day.getTime();
+          if (mid >= times[0]) labels.push([mid, dateTimeTxt(mid, { weekday: 'short' })]);
+          const noon = new Date(mid);
+          if (tzUtc()) noon.setUTCHours(12);
+          else noon.setHours(12);
+          if (noon.getTime() >= times[0] && noon.getTime() <= times[times.length - 1]) labels.push([noon.getTime(), dateTimeTxt(noon, hourFmt)]);
+          if (tzUtc()) day.setUTCDate(day.getUTCDate() + 1);
+          else day.setDate(day.getDate() + 1);
+        }
+      } else {
+        for (const tt of times) {
+          if (new Date(tt).getUTCMinutes() % 30 === 0) labels.push([tt, dateTimeTxt(tt, { ...hourFmt, minute: '2-digit' })]);
+        }
       }
+      // labels near the "Jetzt" marker would overlap it
+      for (const [tt, label] of labels) {
+        const p = pos(tt);
+        if (Math.abs(p - nowPos) > 9) html += `<span style="left:${p}%">${escapeHtml(label)}</span>`;
+      }
+      if (nowPos >= 0 && nowPos <= 100) html += `<button type="button" class="tl-nowlbl" style="left:${nowPos}%">Jetzt</button>`;
       daysEl.innerHTML = html;
     }
   }
@@ -872,10 +900,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
     else setTimeIndex(Number(rangeEl.value));
   });
-  nowBtn.addEventListener('click', () => {
+  const jumpToNow = () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
     else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
+  };
+  nowBtn.addEventListener('click', jumpToNow);
+  daysEl.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.tl-nowlbl')) jumpToNow();
   });
   playBtn.addEventListener('click', () => {
     if (playTimer || playRaf) return stopAnimation();
@@ -919,10 +951,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const { stops, ticks, gradient } = def.legend;
       const lo = stops[0][0];
       const hi = stops[stops.length - 1][0];
-      const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
-      const grad = gradient ?? `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
-      const sub = `${def.unit}${sampler ? ` · ${timeLabel(sampler.time)}` : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
-      return t(def.label, sub, grad, ticks.map((v) => [pct(v), def.format(v)]));
+      // colour scales start with a lead-in that carries the unit and end a little early, so the labels fit
+      const LEAD = gradient ? 0 : 20;
+      const END = gradient ? 100 : 94;
+      const pct = (v: number) => LEAD + ((v - lo) / (hi - lo)) * (END - LEAD);
+      const first = stops[0][1];
+      const grad =
+        gradient ??
+        `linear-gradient(90deg, ${first} 0%, ${first} ${LEAD}%, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')}, ${stops[stops.length - 1][1]} 100%)`;
+      const sub = `${def.unit}${sampler ? '' : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
+      const unitTick: [number, string][] = LEAD ? [[LEAD / 2, def.unit]] : [];
+      return t(def.label, sub, grad, [...unitTick, ...ticks.map((v): [number, string] => [pct(v), def.format(v)])]);
     }
     switch (o) {
       case 'radar':
