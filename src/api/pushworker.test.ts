@@ -104,6 +104,11 @@ describe('DB timetable XML', () => {
     // the S-Bahn at the same minute has no change entry → on time, planned platform
     expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line: 'S 9', now: at('06:00') })).toEqual({ delayMin: 0, cancelled: false, track: '3', trackChanged: false });
   });
+  it('finds a train whose category field is the operator code (ODEG: c="OE", line "RE8")', () => {
+    const planned = parseTimetable('<timetable><s id="-9-2610290712-1"><tl f="D" t="p" o="OWRE" c="OE" n="62001"/><dp pt="2610290712" pp="2" l="RE8"/></s></timetable>');
+    const changes = parseTimetable('<timetable><s id="-9-2610290712-1"><dp ct="2610290737" l="RE8"/></s></timetable>');
+    for (const line of ['RE8', 'RE 8', '62001']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toMatchObject({ delayMin: 25 });
+  });
   it('does not guess when nothing or something else matches', () => {
     const planned = parseTimetable(PLAN);
     const changes = parseTimetable(CHANGES);

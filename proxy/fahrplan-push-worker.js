@@ -256,7 +256,8 @@ export function matchDelay(planned, changes, q) {
   const key = q.kind === 'arr' ? 'ar' : 'dp';
   const stamp = dbStamp(q.ts);
   const cands = planned.filter((s) => s[key]?.pt === stamp);
-  const label = (s) => [`${s.tl?.c ?? ''}${s[key]?.l ?? ''}`, `${s.tl?.c ?? ''}${s.tl?.n ?? ''}`].map(normLine);
+  // tl.c is the category (RE) for most trains but the operator code (OE for ODEG) for some, so the bare line ("RE8") counts too
+  const label = (s) => [`${s.tl?.c ?? ''}${s[key]?.l ?? ''}`, `${s.tl?.c ?? ''}${s.tl?.n ?? ''}`, /\D/.test(s[key]?.l ?? '') ? s[key].l : ''].map(normLine);
   const wanted = normLine(q.line);
   const exact = wanted ? cands.filter((s) => label(s).includes(wanted) || normLine(s.tl?.n) === wanted) : cands;
   const hit = exact.length === 1 ? exact[0] : exact.length === 0 && cands.length === 1 && !wanted ? cands[0] : null;
