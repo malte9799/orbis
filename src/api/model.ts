@@ -1,5 +1,5 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
-import type { WxLayer } from './wxmodel';
+import { wxDeps, type WxLayer } from './wxmodel';
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
@@ -504,6 +504,18 @@ export class ModelSampler {
     }
     const tf = TRANSFORMS[v];
     return tf && !Number.isNaN(r) ? tf[1](r) : r;
+  }
+
+  /**
+   * true when the ICON fields answer for `v` at the current moment (all stored variables behind it are loaded).
+   * The cosmetic sub-grid noise (organic fields in overlay.ts) is scaled to the coarse Open-Meteo grid and must not be
+   * applied to ICON data, which has its own real structure.
+   */
+  wxActive(v: ModelVar): boolean {
+    const wx = this.wx;
+    if (!wx || Number.isNaN(this.wxPosition())) return false;
+    const deps = wxDeps(v);
+    return deps.length > 0 && deps.every((d) => wx.has(d));
   }
 
   /**

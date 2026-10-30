@@ -221,3 +221,20 @@ describe('hasTerrain', () => {
     expect(new ModelSampler(global, null, 1, layer(false)).hasTerrain()).toBe(false); // temperature not loaded or the run has expired
   });
 });
+
+describe('wxActive', () => {
+  const H = 3600_000;
+  const T0 = Date.UTC(2026, 9, 30, 0);
+  const flat = { lat0: 90, lon0: -180, dx: 180, dy: 90, nx: 3, ny: 3, wrap: true, step: () => new Float32Array(9) };
+  const layer = (have: string[]) =>
+    ({ has: (v: string) => have.includes(v), overviewOf: () => flat, detail: new Map(), terrain: null, times: [T0, T0 + 3 * H], stepMs: 3 * H }) as unknown as WxLayer;
+  const global = { lat0: 90, lon0: -180, dx: 180, dy: 90, nx: 3, ny: 3, wrap: true, times: [T0, T0 + 3 * H, T0 + 6 * H], data: {} } as unknown as ModelGrid;
+
+  it('is true only when every stored variable behind the field is loaded and the time is covered', () => {
+    expect(new ModelSampler(global, null, 0, layer(['precipitation'])).wxActive('precipitation')).toBe(true);
+    expect(new ModelSampler(global, null, 0, layer(['temperature_2m'])).wxActive('relative_humidity_2m')).toBe(false); // dew point missing
+    expect(new ModelSampler(global, null, 0, layer(['temperature_2m', 'dew_point_2m'])).wxActive('relative_humidity_2m')).toBe(true);
+    expect(new ModelSampler(global, null, 2, layer(['precipitation'])).wxActive('precipitation')).toBe(false); // after the last ICON step
+    expect(new ModelSampler(global, null, 0, null).wxActive('precipitation')).toBe(false);
+  });
+});

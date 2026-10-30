@@ -377,6 +377,8 @@ export function registerFieldProtocol() {
     const z = +m[3];
     const x = +m[4];
     const y = +m[5];
+    // ICON values carry their own structure: the noise that fakes detail on the coarse Open-Meteo grid is skipped
+    const wxData = sampler.wxActive(def.variable);
     if (def.terrain && sampler.hasTerrain(def.variable)) return { data: await renderTerrainTile(def, sampler, z, x, y) };
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
@@ -388,7 +390,7 @@ export function registerFieldProtocol() {
       const lat = tile2lat(y + (py + 0.5) / N, z);
       for (let px = 0; px < N; px++) {
         const lon = tile2lon(x + (px + 0.5) / N, z);
-        const v = def.organic ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
+        const v = def.organic && !wxData ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
         let [r, g, b, a] = def.color(v);
         if (def.phase) {
           const snow = sampler.sample('temperature_2m', lat, lon) < SNOW_BELOW;
