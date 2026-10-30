@@ -67,6 +67,8 @@ async function heat(region) {
   const url = `https://download.geofabrik.de/${REGIONS[region]}-latest.osm.pbf`;
   const cmd = `curl -sSfL -A "Orbis-data/1.0 (+https://github.com/malte9799/orbis)" "${url}" | osmium tags-filter -R --input-format=pbf --output-format=opl --overwrite -o - - n/man_made=surveillance`;
   const proc = spawn('bash', ['-c', `set -o pipefail; ${cmd}`], { stdio: ['ignore', 'pipe', 'inherit'] });
+  console.log(`${region}: streaming ${url}`);
+  const t0 = Date.now();
   const cells = new Map();
   const tiles = new Map();
   let n = 0;
@@ -78,7 +80,7 @@ async function heat(region) {
     const tile = `${Math.floor(p.x * TILE)}_${Math.floor(p.y * TILE)}`;
     if (!tiles.has(tile)) tiles.set(tile, []);
     tiles.get(tile).push(record(p));
-    n++;
+    if (++n % 50000 === 0) console.log(`${region}: ${n} cameras so far (${Math.round((Date.now() - t0) / 1000)} s)`);
   }
   const code = await new Promise((res) => proc.on('close', res));
   if (code !== 0) throw new Error(`${region}: download/filter failed (exit ${code})`);
@@ -86,7 +88,7 @@ async function heat(region) {
     const [x, y] = k.split(',').map(Number);
     return [x / CELL, y / CELL, c];
   });
-  console.log(`${region}: ${n} cameras in ${out.length} cells`);
+  console.log(`${region}: ${n} cameras in ${out.length} cells and ${tiles.size} tiles (${Math.round((Date.now() - t0) / 1000)} s)`);
   return { out, n, tiles };
 }
 
@@ -103,6 +105,7 @@ async function main() {
     region = Object.keys(REGIONS).filter((r) => age(r) > MAX_AGE_DAYS * 864e5).sort((a, b) => age(b) - age(a))[0];
     if (!region) return console.log('all regions are up to date');
   }
+  console.log(`refreshing ${region}`);
   if (!REGIONS[region]) throw new Error(`unknown region ${region}`);
   const { out, n, tiles } = await heat(region);
   if (n < 50) throw new Error(`${region}: only ${n} cameras – keeping previous data`);
@@ -113,6 +116,7 @@ async function main() {
   mkdirSync(dir, { recursive: true });
   for (const [tile, cams] of tiles) writeFileSync(join(dir, `${tile}.json`), JSON.stringify(cams));
   writeFileSync(join(outDir, `cctv-${region}-tiles.json`), JSON.stringify([...tiles.keys()]));
+  console.log(`${region}: wrote ${tiles.size} tile files`);
   meta.regions[region] = { at: Date.now(), cameras: n, cells: out.length, tiles: tiles.size, format: FORMAT };
   writeFileSync(metaPath, JSON.stringify(meta));
   writeFileSync(join(outDir, 'LICENSE.txt'), 'Data © OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/\nhttps://www.openstreetmap.org/copyright\nDerived from Geofabrik extracts (https://download.geofabrik.de).\n');
