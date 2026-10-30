@@ -30,6 +30,7 @@ import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
 import { SondePanel } from '../globe/sondepanel';
+import { InfoPanel } from '../globe/infopanel';
 import { ShipPanel } from '../globe/shippanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
@@ -189,6 +190,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
   let sondePanel: SondePanel | null = null;
+  let infoPanel: InfoPanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let camPanel: CamPanel | null = null;
@@ -1203,6 +1205,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      infoPanel = new InfoPanel(el);
+      infoPanel.onOpen = () => {
+        popup?.remove();
+        flightPanel?.close();
+        shipPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        camPanel?.close();
+      };
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
       camPanel = new CamPanel(el, { map: () => map });
       camPanel.onOpen = () => {
@@ -1376,6 +1387,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return;
       }
       extras?.clearSelection();
+      infoPanel?.close();
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         camPanel?.close();
@@ -1396,6 +1408,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (extraResult?.type === 'cam') {
         popup?.remove();
         camPanel?.open({ p: extraResult.p, lng: extraResult.lng, lat: extraResult.lat });
+      } else if (extraResult?.type === 'panel') {
+        infoPanel?.open(extraResult.data);
       } else if (extraResult?.type === 'weather') {
         if (store.getOptions().clickWx) weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {
