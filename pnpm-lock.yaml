@@ -30,6 +30,9 @@ importers:
         specifier: ^0.183.2
         version: 0.183.2
     devDependencies:
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@types/three':
         specifier: ^0.183.1
         version: 0.183.1
