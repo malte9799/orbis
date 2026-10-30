@@ -1,4 +1,5 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
+import type { WxLayer } from './wxmodel';
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
@@ -38,6 +39,21 @@ export interface ModelGrid {
   /** layout: [(t * ny + y) * nx + x] */
   data: Record<ModelVar, Float32Array>;
 }
+
+/** One variable of the ICON fields (src/api/wxmodel.ts): same layout as ModelGrid.data, [(t * ny + y) * nx + x]. */
+export interface WxGrid {
+  lat0: number;
+  lon0: number;
+  dx: number;
+  dy: number;
+  nx: number;
+  ny: number;
+  wrap: boolean;
+  times: number[];
+  data: Float32Array;
+}
+
+type Geo = Pick<ModelGrid, 'lat0' | 'lon0' | 'dx' | 'dy' | 'nx' | 'ny' | 'wrap'>;
 
 export { OpenMeteoLimitError as ModelLimitError };
 
@@ -286,7 +302,7 @@ export function getDetailModel(req: NonNullable<ReturnType<typeof detailRequest>
 // ---------------------------------------------------------------------------
 // Sampling
 
-function bilinear(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bilinear(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   let y = (g.lat0 - lat) / g.dy;
   if (g.wrap) {
@@ -320,7 +336,7 @@ function bspline(t: number, w: Float64Array) {
 const WX = new Float64Array(4);
 const WY = new Float64Array(4);
 
-function bicubic(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bicubic(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   const y = Math.max(0, Math.min(g.ny - 1, (g.lat0 - lat) / g.dy));
   if (g.wrap) x = ((x % g.nx) + g.nx) % g.nx;
@@ -355,7 +371,9 @@ const TRANSFORMS: Partial<Record<ModelVar, [(x: number) => number, (y: number) =
 };
 const transformed = new WeakMap<Float32Array, Float32Array>();
 function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
-  const src = g.data[v];
+  return transformArray(g.data[v], v);
+}
+function transformArray(src: Float32Array, v: ModelVar): Float32Array {
   const tf = TRANSFORMS[v];
   if (!tf) return src;
   let out = transformed.get(src);
@@ -367,11 +385,25 @@ function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
   return out;
 }
 
-function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
-  const arr = fieldArray(g, v);
+function smoothArr(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let r = bicubic(g, arr, t, lat, lon);
   if (Number.isNaN(r)) r = bilinear(g, arr, t, lat, lon); // NaN neighbour (e.g. no data over sea)
   return r;
+}
+
+function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
+  return smoothArr(g, fieldArray(g, v), t, lat, lon);
+}
+
+/** Weight of a detail grid at this point (0 outside, 1 well inside), feathered so resolutions blend without a frame. */
+function featherWeight(d: Geo, lat: number, lon: number): number {
+  const x = (lon - d.lon0) / d.dx;
+  const y = (d.lat0 - lat) / d.dy;
+  if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
+  const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
+  const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
+  const f = Math.min(1, edge / feather);
+  return f * f * (3 - 2 * f);
 }
 
 /** Combined sampler: detail grid where available (feathered edges), global grid elsewhere. */
@@ -381,6 +413,8 @@ export class ModelSampler {
     readonly detail: ModelGrid | null,
     /** time index into global.times; between two steps (e.g. 1.5) the neighbours are mixed */
     readonly t: number,
+    /** ICON fields: used for the variables they contain (where their time range covers the moment) */
+    readonly wx: WxLayer | null = null,
   ) {}
 
   private detailT = new Map<number, number>();
@@ -394,16 +428,7 @@ export class ModelSampler {
 
   /** Weight of the detail grid at this point (0 outside, 1 well inside). */
   private detailWeight(lat: number, lon: number): number {
-    const d = this.detail;
-    if (!d) return 0;
-    const x = (lon - d.lon0) / d.dx;
-    const y = (d.lat0 - lat) / d.dy;
-    if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
-    const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
-    // wide feather so the two resolutions blend without a visible frame
-    const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
-    const f = Math.min(1, edge / feather);
-    return f * f * (3 - 2 * f);
+    return this.detail ? featherWeight(this.detail, lat, lon) : 0;
   }
 
   /** Effective grid spacing [deg] at this point – used to scale cosmetic detail. */
@@ -432,7 +457,39 @@ export class ModelSampler {
     return r;
   }
 
+  /** value from the ICON fields at the current moment, NaN where they do not cover it */
+  private sampleWx(v: ModelVar, lat: number, lon: number): number {
+    const wx = this.wx!;
+    const base = wx.overviewOf(v)!;
+    const f = (this.time - wx.times[0]) / wx.stepMs;
+    const last = wx.times.length - 1;
+    if (!(f >= -1e-6 && f <= last + 1e-6)) return NaN;
+    const i = Math.max(0, Math.min(Math.floor(f), Math.max(0, last - 1)));
+    const fr = Math.min(1, Math.max(0, f - i));
+    const detail = wx.detail.get(v);
+    const w = detail ? featherWeight(detail, lat, lon) : 0;
+    const at = (t: number) => {
+      let r = smoothArr(base, transformArray(base.data, v), t, lat, lon);
+      if (w > 0) {
+        const dv = smoothArr(detail!, transformArray(detail!.data, v), t, lat, lon);
+        if (!Number.isNaN(dv)) r = Number.isNaN(r) ? dv : dv * w + r * (1 - w);
+      }
+      return r;
+    };
+    let r = at(i);
+    if (fr > 1e-6 && i + 1 <= last) {
+      const r2 = at(i + 1);
+      r = Number.isNaN(r) ? r2 : Number.isNaN(r2) ? r : r + (r2 - r) * fr;
+    }
+    const tf = TRANSFORMS[v];
+    return tf && !Number.isNaN(r) ? tf[1](r) : r;
+  }
+
   sample(v: ModelVar, lat: number, lon: number): number {
+    if (this.wx?.has(v)) {
+      const r = this.sampleWx(v, lat, lon);
+      if (!Number.isNaN(r)) return r;
+    }
     const w = this.detailWeight(lat, lon);
     const i = Math.min(Math.floor(this.t), this.global.times.length - 1);
     const fr = this.t - i;

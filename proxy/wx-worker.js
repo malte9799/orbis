@@ -27,7 +27,7 @@ export default {
     // R2 evaluates If-None-Match and Range from the request headers itself
     const obj = await (request.method === 'HEAD'
       ? env.WX.head(key)
-      : env.WX.get(key, { onlyIf: request.headers, range: request.headers }));
+      : env.WX.get(key, { onlyIf: request.headers, ...(request.headers.has('Range') && { range: request.headers }) }));
     if (!obj) return new Response('Not found', { status: 404, headers: CORS });
 
     const headers = new Headers(CORS);
@@ -39,7 +39,7 @@ export default {
     // a get() with a failed If-None-Match returns the object metadata without a body
     if (request.method === 'HEAD') return new Response(null, { headers });
     if (!('body' in obj)) return new Response(null, { status: 304, headers });
-    if (obj.range) {
+    if (request.headers.has('Range') && obj.range) {
       const { offset = 0, length = obj.size - offset } = obj.range;
       headers.set('Content-Range', `bytes ${offset}-${offset + length - 1}/${obj.size}`);
       return new Response(obj.body, { status: 206, headers });
