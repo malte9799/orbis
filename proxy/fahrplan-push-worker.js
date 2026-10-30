@@ -258,8 +258,12 @@ export function matchDelay(planned, changes, q) {
   const cands = planned.filter((s) => s[key]?.pt === stamp);
   // tl.c is the category (RE) for most trains but the operator code (OE for ODEG) for some, so the bare line ("RE8") counts too
   const label = (s) => [`${s.tl?.c ?? ''}${s[key]?.l ?? ''}`, `${s.tl?.c ?? ''}${s.tl?.n ?? ''}`, /\D/.test(s[key]?.l ?? '') ? s[key].l : ''].map(normLine);
-  const wanted = normLine(q.line);
-  const exact = wanted ? cands.filter((s) => label(s).includes(wanted) || normLine(s.tl?.n) === wanted) : cands;
+  // the app names a train like Transitous does: "RE8 (62001)" = line + train number. The number is the surer match,
+  // the line alone the fallback (the two sources do not always agree on numbers).
+  const named = /^(.*?)\s*\((\d+)\)\s*$/.exec(q.line ?? '');
+  const byLine = (w) => (w ? cands.filter((s) => label(s).includes(w) || normLine(s.tl?.n) === w) : cands);
+  const exact = named ? (byLine(normLine(named[2])).length ? byLine(normLine(named[2])) : byLine(normLine(named[1]))) : byLine(normLine(q.line));
+  const wanted = named ? normLine(named[1] || named[2]) : normLine(q.line);
   const hit = exact.length === 1 ? exact[0] : exact.length === 0 && cands.length === 1 && !wanted ? cands[0] : null;
   if (!hit) return null;
   const ch = changes.find((c) => c.id === hit.id)?.[key];
