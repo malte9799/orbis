@@ -42,6 +42,8 @@ export interface FieldDef {
   organic?: { warp: number; texture?: number; additive?: boolean };
   /** precipitation coloured as rain or snow depending on the 2 m temperature */
   phase?: 'mix' | 'snow-only';
+  /** the ICON temperature is corrected per pixel with the terrain height (see renderTerrainTile) */
+  terrain?: boolean;
 }
 
 /** Below this 2 m temperature [°C] precipitation is drawn as snow. */
@@ -170,6 +172,7 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Temperatur',
     get unit() { return tempUnit(); },
     variable: 'temperature_2m',
+    terrain: true,
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
     format: tempNum,
@@ -335,6 +338,47 @@ function organicSample(def: FieldDef, s: ModelSampler, lat: number, lon: number)
   return v;
 }
 
+/**
+ * Tile with the terrain correction: the model temperature is sampled on a coarse lattice (as before) and
+ * interpolated bilinearly, the terrain heights (about 5 km) are applied per pixel, so valleys and ridges
+ * show up much finer than the 13 km model. Lattice nodes lie on the tile edge, so neighbouring tiles agree.
+ */
+async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: number, y: number): Promise<ImageBitmap> {
+  const N = z <= 3 ? 512 : 256;
+  const Nc = z <= 2 ? 64 : 128;
+  const nodes = new Float32Array((Nc + 1) * (Nc + 1));
+  for (let j = 0; j <= Nc; j++) {
+    const lat = tile2lat(y + j / Nc, z);
+    for (let i = 0; i <= Nc; i++) nodes[j * (Nc + 1) + i] = s.sample(def.variable, lat, tile2lon(x + i / Nc, z), false);
+  }
+  const canvas = new OffscreenCanvas(N, N);
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(N, N);
+  const lons = new Float64Array(N);
+  for (let px = 0; px < N; px++) lons[px] = tile2lon(x + (px + 0.5) / N, z);
+  for (let py = 0; py < N; py++) {
+    const lat = tile2lat(y + (py + 0.5) / N, z);
+    const fj = ((py + 0.5) / N) * Nc;
+    const j = Math.min(Nc - 1, Math.floor(fj));
+    const wy = fj - j;
+    for (let px = 0; px < N; px++) {
+      const fi = ((px + 0.5) / N) * Nc;
+      const i = Math.min(Nc - 1, Math.floor(fi));
+      const wx = fi - i;
+      const o = j * (Nc + 1) + i;
+      const base = (nodes[o] * (1 - wx) + nodes[o + 1] * wx) * (1 - wy) + (nodes[o + Nc + 1] * (1 - wx) + nodes[o + Nc + 2] * wx) * wy;
+      const [r, g, b, a] = def.color(base + s.terrainDelta(lat, lons[px]));
+      const k = (py * N + px) * 4;
+      img.data[k] = r;
+      img.data[k + 1] = g;
+      img.data[k + 2] = b;
+      img.data[k + 3] = a;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return createImageBitmap(canvas);
+}
+
 export function registerFieldProtocol() {
   if (protocolRegistered) return;
   protocolRegistered = true;
@@ -347,6 +391,7 @@ export function registerFieldProtocol() {
     const z = +m[3];
     const x = +m[4];
     const y = +m[5];
+    if (def.terrain && sampler.hasTerrain()) return { data: await renderTerrainTile(def, sampler, z, x, y) };
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
     const N = z <= 4 ? 64 : 128;

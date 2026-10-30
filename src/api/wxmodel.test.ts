@@ -44,25 +44,33 @@ describe('tilesFor', () => {
 });
 
 describe('mosaic', () => {
-  // tile value = absolute column index of the cell (so neighbouring tiles agree on the shared edge) + 1000 per step + 0.001 per row
+  // tile value = absolute column index of the cell (so neighbouring tiles agree on the shared edge) + 1000 per step + row/10
   const tile = (c: number, r: number) => {
     const nt = 2;
-    const values = new Float32Array(nt * 361 * 361);
+    const q = new Int16Array(nt * 361 * 361);
     for (let t = 0; t < nt; t++)
-      for (let y = 0; y < 361; y++) for (let x = 0; x < 361; x++) values[(t * 361 + y) * 361 + x] = c * 360 + x + t * 1000 + (r * 360 + y) * 0.001;
-    return { header: { var: 'v', nt, ny: 361, nx: 361, lat0: 90 - r * 45, lon0: -180 + c * 45, dx: 0.125, dy: 0.125, wrap: false, scale: 1, offset: 0, nodata: -32768 }, values };
+      for (let y = 0; y < 361; y++) for (let x = 0; x < 361; x++) q[(t * 361 + y) * 361 + x] = c * 360 + x + t * 1000 + (r * 360 + y) / 10;
+    return { header: { var: 'v', nt, ny: 361, nx: 361, lat0: 90 - r * 45, lon0: -180 + c * 45, dx: 0.125, dy: 0.125, wrap: false, scale: 1, offset: 0, nodata: -32768 }, q };
   };
 
   it('puts tiles side by side with a shared edge column and keeps the time steps apart', () => {
-    const g = mosaic([[tile(4, 0), tile(5, 0)], [tile(4, 1), tile(5, 1)]], [0, 1]);
+    const g = mosaic([[tile(4, 0), tile(5, 0)], [tile(4, 1), tile(5, 1)]]);
     expect([g.nx, g.ny, g.lat0, g.lon0]).toEqual([721, 721, 90, 0]);
-    const at = (t: number, y: number, x: number) => g.data[(t * g.ny + y) * g.nx + x];
-    expect(at(0, 0, 0)).toBeCloseTo(4 * 360, 2);
-    expect(at(0, 0, 360)).toBeCloseTo(5 * 360, 2); // first column of the eastern tile = last of the western one
-    expect(at(0, 0, 720)).toBeCloseTo(5 * 360 + 360, 2);
-    expect(at(1, 0, 100)).toBeCloseTo(4 * 360 + 100 + 1000, 2);
-    expect(at(0, 360, 10)).toBeCloseTo(4 * 360 + 10 + 0.36, 2); // seam between the northern and southern row
-    expect(at(0, 720, 10)).toBeCloseTo(4 * 360 + 10 + 0.72, 2);
+    const at = (t: number, y: number, x: number) => g.step(t)[y * g.nx + x];
+    expect(at(0, 0, 0)).toBe(4 * 360);
+    expect(at(0, 0, 360)).toBe(5 * 360); // first column of the eastern tile = last of the western one
+    expect(at(0, 0, 720)).toBe(5 * 360 + 360);
+    expect(at(1, 0, 100)).toBe(4 * 360 + 100 + 1000);
+    expect(at(0, 360, 10)).toBe(4 * 360 + 10 + 36); // seam between the northern and southern row
+    expect(at(0, 720, 10)).toBe(4 * 360 + 10 + 72);
+  });
+
+  it('turns the nodata value into NaN and applies scale and offset', () => {
+    const t = tile(0, 0);
+    t.q[5] = -32768;
+    const g = mosaic([[{ ...t, header: { ...t.header, scale: 0.5, offset: 10 } }]]);
+    expect(g.step(0)[5]).toBeNaN();
+    expect(g.step(0)[6]).toBe(6 * 0.5 + 10);
   });
 });
 
@@ -115,5 +123,33 @@ describe('ModelSampler with ICON fields', () => {
     expect(l.expired).toBe(true);
     expect(sampleAt(l, 0)).toBeCloseTo(42, 6);
     vi.useRealTimers();
+  });
+});
+
+describe('terrain correction', () => {
+  // 10° × 10° around (45°N, 10°E), 0.125° cells: the model surface is flat at 1000 m, the terrain at `dem` m
+  const grid = (value: number) => {
+    const nx = 81;
+    const data = new Float32Array(nx * nx).fill(value);
+    return { lat0: 50, lon0: 5, dx: 0.125, dy: 0.125, nx, ny: nx, wrap: false, step: () => data };
+  };
+  const sampler = (dem: number) => {
+    const wx = { terrain: { hs: grid(1000), dem: grid(dem) }, has: () => false } as unknown as WxLayer;
+    const global = { lat0: 90, lon0: -180, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [0], data: {} } as unknown as ModelGrid;
+    return new ModelSampler(global, null, 0, wx);
+  };
+
+  it('cools where the terrain is higher than the model surface and warms in valleys', () => {
+    expect(sampler(1500).terrainDelta(45, 10)).toBeCloseTo(-3.25, 6);
+    expect(sampler(200).terrainDelta(45, 10)).toBeCloseTo(5.2, 6);
+  });
+
+  it('is limited to ±15 K, fades out at the edge and is off without terrain data', () => {
+    expect(sampler(5000).terrainDelta(45, 10)).toBe(-15);
+    expect(sampler(1500).terrainDelta(45, 5.2)).toBeGreaterThan(-0.2);
+    expect(sampler(1500).terrainDelta(45, 4)).toBe(0); // outside the area
+    const none = new ModelSampler({ lat0: 0, lon0: 0, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [0], data: {} } as unknown as ModelGrid, null, 0, null);
+    expect(none.hasTerrain()).toBe(false);
+    expect(none.terrainDelta(45, 10)).toBe(0);
   });
 });
