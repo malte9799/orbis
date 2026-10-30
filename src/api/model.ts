@@ -57,6 +57,17 @@ type Geo = Pick<ModelGrid, 'lat0' | 'lon0' | 'dx' | 'dy' | 'nx' | 'ny' | 'wrap'>
 
 export { OpenMeteoLimitError as ModelLimitError };
 
+/**
+ * A grid without data that only carries the time axis: when the ICON fields serve everything, the Open-Meteo
+ * grid is not fetched at all and the sampler's Open-Meteo path yields NaN.
+ */
+export function emptyModelGrid(times: number[]): ModelGrid {
+  const n = times.length * 4;
+  const data = {} as Record<ModelVar, Float32Array>;
+  for (const v of [...MODEL_VARS, ...DERIVED]) data[v] = new Float32Array(n).fill(NaN);
+  return { lat0: 90, lon0: -180, dx: 360, dy: 180, nx: 2, ny: 2, wrap: true, times, data };
+}
+
 const FORECAST_DAYS = 5;
 
 type HourlyRow = { hourly: Record<string, (number | null)[]> & { time: string[] } };

@@ -17,6 +17,7 @@ import {
 } from '../api/events';
 import {
   detailRequest,
+  emptyModelGrid,
   getDetailModel,
   getGlobalModel,
   isLimitError,
@@ -42,11 +43,14 @@ import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
+  fieldQuality,
+  fieldTilesPending,
   FIELDS,
   isobars,
   nightImage,
   registerFieldProtocol,
   setActiveSampler,
+  setFieldQuality,
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
@@ -177,6 +181,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let detailModel: ModelGrid | null = null;
   let detailKey = '';
   let wxLayer: WxLayer | null = null;
+  /** the ICON fields serve the whole map (no Open-Meteo grid is loaded) */
+  let iconOnly = false;
   let modelLoading = false;
   let timeIdx = -1;
   let sampler: ModelSampler | null = null;
@@ -567,6 +573,37 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
   }
 
+  /** Which ICON variables the current view needs: the world overview of all in use, 0.125° tiles for the shown field. */
+  function wxNeeds(): { detail: ModelVar[]; overview: ModelVar[] } {
+    const def = isField(state.overlay) ? FIELDS[state.overlay] : null;
+    const detail = new Set<ModelVar>(def ? wxDeps(def.variable) : []);
+    if (def?.phase) detail.add('temperature_2m');
+    const overview = new Set<ModelVar>(detail);
+    if (state.wind) for (const v of wxDeps('wind_speed_10m')) overview.add(v);
+    if (state.isobars) overview.add('pressure_msl');
+    return { detail: [...detail], overview: [...overview] };
+  }
+
+  /** ICON fields first: a few small files instead of 408 Open-Meteo requests, and the time axis is theirs. */
+  async function useIcon(): Promise<boolean> {
+    if (!wxEnabled()) return false;
+    if (wxLayer?.expired) wxLayer = null;
+    const layer = wxLayer ?? (await WxLayer.load([]));
+    if (!layer || layer.expired) return false;
+    if (!iconOnly || layer !== wxLayer || !globalModel) {
+      const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[Math.floor(timeIdx)] : Date.now();
+      wxLayer = layer;
+      iconOnly = true;
+      globalModel = emptyModelGrid(layer.times);
+      timeIdx = nearestSubIndex(globalModel.times, prevTime);
+      detailModel = null;
+      detailKey = '';
+    }
+    // the overview of what is shown before the first draw, so the map does not start empty
+    await layer.setView(null, [], wxNeeds().overview, true);
+    return true;
+  }
+
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
     if (modelLoading) {
@@ -574,6 +611,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       renderLegend();
     }
     try {
+      if (await useIcon()) {
+        modelErrorText = '';
+        return true;
+      }
+      if (iconOnly) {
+        // ICON is gone (too old, unreachable): fall back to Open-Meteo with a fresh grid
+        iconOnly = false;
+        wxLayer = null;
+        globalModel = null;
+      }
       const g = await getGlobalModel();
       modelErrorText = '';
       if (g !== globalModel) {
@@ -603,7 +650,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     setActiveSampler(sampler);
     if (isField(state.overlay)) {
       // the field protocol only accepts [\w-] in the version: a fractional step ("7.333…") would make every tile fail
-      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey || 'g'}-${wxLayer?.version ?? ''}`.replace(/[^\w-]/g, '_');
+      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey || 'g'}-${wxLayer?.version ?? ''}-${fieldQuality()}`.replace(/[^\w-]/g, '_');
       (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${state.overlay}/${version}/{z}/{x}/{y}`]);
       vis('field', true);
     }
@@ -640,17 +687,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map || !globalModel || !needsModel()) return;
     const b = map.getBounds();
     if (wxLayer) {
-      // ICON fields for what is shown: the world overview of every variable in use, the 0.125° tiles only for the field itself
-      const def = isField(state.overlay) ? FIELDS[state.overlay] : null;
-      const detail = new Set<ModelVar>(def ? wxDeps(def.variable) : []);
-      if (def?.phase) detail.add('temperature_2m');
-      const overview = new Set<ModelVar>(detail);
-      if (state.wind) for (const v of wxDeps('wind_speed_10m')) overview.add(v);
-      if (state.isobars) overview.add('pressure_msl');
+      const { detail, overview } = wxNeeds();
       void wxLayer
-        .setView({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, [...detail], [...overview])
+        .setView({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, detail, overview)
         .then((changed) => changed && updateSampler());
     }
+    if (iconOnly) return; // no Open-Meteo detail grid either
     const req = detailRequest({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
     if (!req) {
       pendingDetail = '';
@@ -898,6 +940,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   function stopAnimation() {
+    if (fieldQuality() === 'low') {
+      setFieldQuality('full');
+      queueMicrotask(updateSampler); // redraw the tiles in full resolution
+    }
     clearInterval(playTimer);
     playTimer = 0;
     cancelAnimationFrame(playRaf);
@@ -940,11 +986,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       playRaf = requestAnimationFrame(loop);
       return;
     }
-    playTimer = window.setInterval(() => {
-      const n = radarMode ? radar!.frames.length : Number(rangeEl.max) + 1;
-      const step = radarMode ? 1 : 1 / SUBSTEPS;
-      setTimeIndex(radarMode ? (radarIdx + 1) % n : timeIdx + step >= n - 1 + 1e-6 ? 0 : timeIdx + step);
-    }, radarMode ? 700 : 450);
+    if (radarMode) {
+      playTimer = window.setInterval(() => setTimeIndex((radarIdx + 1) % radar!.frames.length), 700);
+      return;
+    }
+    // Forecast fields: the tiles are drawn on the main thread, so the next step only starts once the tiles of the
+    // current one are there (otherwise requests pile up and the browser lags the longer it plays) and they are drawn coarser.
+    setFieldQuality('low');
+    let last = performance.now();
+    const loop = (now: number) => {
+      const idle = fieldTilesPending() === 0 && (!map || map.isSourceLoaded('field'));
+      if (now - last >= 450 && ((idle && now - last >= 150) || now - last > 4000)) {
+        last = now;
+        const n = Number(rangeEl.max) + 1;
+        const step = 1 / SUBSTEPS;
+        setTimeIndex(timeIdx + step >= n - 1 + 1e-6 ? 0 : timeIdx + step);
+      }
+      playRaf = requestAnimationFrame(loop);
+    };
+    playRaf = requestAnimationFrame(loop);
   });
 
   // ----- legend & readout --------------------------------------------------

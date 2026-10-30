@@ -330,8 +330,9 @@ function organicSample(def: FieldDef, s: ModelSampler, lat: number, lon: number)
  */
 async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: number, y: number): Promise<ImageBitmap> {
   const scale = def.terrainScale ?? 1;
-  const N = z <= 3 ? 512 : 256;
-  const Nc = z <= 2 ? 64 : 128;
+  const low = quality === 'low';
+  const N = low ? 128 : z <= 3 ? 512 : 256;
+  const Nc = low || z <= 2 ? 64 : 128;
   const nodes = new Float32Array((Nc + 1) * (Nc + 1));
   for (let j = 0; j <= Nc; j++) {
     const lat = tile2lat(y + j / Nc, z);
@@ -340,10 +341,8 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
   const canvas = new OffscreenCanvas(N, N);
   const ctx = canvas.getContext('2d')!;
   const img = ctx.createImageData(N, N);
-  const lons = new Float64Array(N);
-  for (let px = 0; px < N; px++) lons[px] = tile2lon(x + (px + 0.5) / N, z);
+  const deltas = terrainDeltas(s, z, x, y, N);
   for (let py = 0; py < N; py++) {
-    const lat = tile2lat(y + (py + 0.5) / N, z);
     const fj = ((py + 0.5) / N) * Nc;
     const j = Math.min(Nc - 1, Math.floor(fj));
     const wy = fj - j;
@@ -353,7 +352,7 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
       const wx = fi - i;
       const o = j * (Nc + 1) + i;
       const base = (nodes[o] * (1 - wx) + nodes[o + 1] * wx) * (1 - wy) + (nodes[o + Nc + 1] * (1 - wx) + nodes[o + Nc + 2] * wx) * wy;
-      const [r, g, b, a] = def.color(base + s.terrainDelta(lat, lons[px]) * scale);
+      const [r, g, b, a] = def.color(base + deltas[py * N + px] * scale);
       const k = (py * N + px) * 4;
       img.data[k] = r;
       img.data[k + 1] = g;
@@ -365,12 +364,68 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
   return createImageBitmap(canvas);
 }
 
+/** while the timeline plays, tiles are drawn coarser (and cheaper); standing still they get the full resolution */
+let quality: 'full' | 'low' = 'full';
+export function setFieldQuality(q: 'full' | 'low') {
+  quality = q;
+}
+export const fieldQuality = () => quality;
+
+/** tiles being drawn right now: the animation waits for them instead of requesting the next step faster than they arrive */
+let pending = 0;
+export const fieldTilesPending = () => pending;
+
+/**
+ * The terrain correction does not change with time, so it is computed once per tile and reused for every time step
+ * (bounded by memory: the oldest tiles go first).
+ */
+const deltaCache = new Map<string, Float32Array>();
+let deltaBytes = 0;
+const DELTA_BUDGET = 24e6;
+
+function terrainDeltas(s: ModelSampler, z: number, x: number, y: number, N: number): Float32Array {
+  const key = `${s.wx?.version ?? ''}|${z}/${x}/${y}|${N}`;
+  let d = deltaCache.get(key);
+  if (d) {
+    deltaCache.delete(key);
+  } else {
+    d = new Float32Array(N * N);
+    const lons = new Float64Array(N);
+    for (let px = 0; px < N; px++) lons[px] = tile2lon(x + (px + 0.5) / N, z);
+    for (let py = 0; py < N; py++) {
+      const lat = tile2lat(y + (py + 0.5) / N, z);
+      for (let px = 0; px < N; px++) d[py * N + px] = s.terrainDelta(lat, lons[px]);
+    }
+    deltaBytes += d.byteLength;
+    while (deltaBytes > DELTA_BUDGET && deltaCache.size) {
+      const oldest = deltaCache.keys().next().value!;
+      deltaBytes -= deltaCache.get(oldest)!.byteLength;
+      deltaCache.delete(oldest);
+    }
+  }
+  deltaCache.set(key, d);
+  return d;
+}
+
 export function registerFieldProtocol() {
   if (protocolRegistered) return;
   protocolRegistered = true;
   // URL format: wxfield://<field>/<version>/<z>/<x>/<y>
-  addProtocol('wxfield', async (params) => {
-    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w.-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+  addProtocol('wxfield', async (params, abortController) => {
+    // tiles of an earlier time step that MapLibre no longer wants are not rendered any more
+    if (abortController?.signal.aborted) throw new DOMException('aborted', 'AbortError');
+    pending++;
+    try {
+      return await renderField(params.url);
+    } finally {
+      pending--;
+    }
+  });
+}
+
+async function renderField(url: string): Promise<{ data: ImageBitmap }> {
+  {
+    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w.-]+\/(\d+)\/(\d+)\/(\d+)/.exec(url);
     const def = m ? FIELDS[m[1] as FieldId] : undefined;
     const sampler = m ? samplers.get(m[2] ?? 'map') : undefined;
     if (!m || !def || !sampler) throw new Error('field not ready');
@@ -382,7 +437,7 @@ export function registerFieldProtocol() {
     if (def.terrain && sampler.hasTerrain(def.variable)) return { data: await renderTerrainTile(def, sampler, z, x, y) };
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
-    const N = z <= 4 ? 64 : 128;
+    const N = quality === 'low' ? (z <= 4 ? 32 : 64) : z <= 4 ? 64 : 128;
     const canvas = new OffscreenCanvas(N, N);
     const ctx = canvas.getContext('2d')!;
     const img = ctx.createImageData(N, N);
@@ -406,7 +461,7 @@ export function registerFieldProtocol() {
     }
     ctx.putImageData(img, 0, 0);
     return { data: await createImageBitmap(canvas) };
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------

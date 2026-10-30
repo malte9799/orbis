@@ -1,4 +1,8 @@
 import type { Bounds, ModelVar, WxGrid } from './model';
+import { decodeOwxRaw, type OwxHeader, type RawTile } from './owx';
+import { decodeOffThread } from './owxpool';
+
+export { decodeOwxRaw };
 
 // Forecast fields from the DWD ICON model, prepared by scripts/wx-icon.py (format: docs/WETTERDATEN-FORMAT.md)
 // and served by proxy/wx-worker.js. A coarse 0.5° overview of the whole world (all time steps) is always
@@ -38,58 +42,6 @@ export function wxEnabled(): boolean {
 // ---------------------------------------------------------------------------
 // OWX decoding
 
-interface OwxHeader {
-  var: string;
-  nt: number;
-  ny: number;
-  nx: number;
-  lat0: number;
-  lon0: number;
-  dx: number;
-  dy: number;
-  wrap: boolean;
-  scale: number;
-  offset: number;
-  nodata: number;
-}
-
-async function gunzip(data: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([data as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-/** Inverse of encode() in scripts/wx-icon.py: the quantised 16-bit numbers as they are stored. */
-export async function decodeOwxRaw(buf: ArrayBuffer): Promise<RawTile> {
-  const bytes = new Uint8Array(buf);
-  if (bytes[0] !== 0x4f || bytes[1] !== 0x57 || bytes[2] !== 0x58 || bytes[3] !== 0x31) throw new Error('kein OWX-Format');
-  const hl = new DataView(buf).getUint32(4, true);
-  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(8, 8 + hl))) as OwxHeader;
-  const { nt, ny, nx } = header;
-  const planes = await gunzip(bytes.subarray(8 + hl));
-  const n = ny * nx;
-  const total = nt * n;
-  if (planes.length !== total * 2) throw new Error('OWX: unerwartete Länge');
-  const q = new Int16Array(total);
-  const s = new Int16Array(n); // spatial residual plane of the current step (int16 wraps like the encoder)
-  const run = new Int16Array(n); // running sum over time
-  for (let t = 0; t < nt; t++) {
-    const o = t * n;
-    for (let y = 0; y < ny; y++) {
-      for (let x = 0; x < nx; x++) {
-        const i = y * nx + x;
-        const z = planes[o + i] | (planes[total + o + i] << 8);
-        const d = (z >>> 1) ^ -(z & 1);
-        s[i] = y === 0 ? (x === 0 ? d : s[i - 1] + d) : x === 0 ? s[i - nx] + d : d + s[i - 1] + s[i - nx] - s[i - nx - 1];
-      }
-    }
-    for (let i = 0; i < n; i++) {
-      run[i] = t === 0 ? s[i] : run[i] + s[i];
-      q[o + i] = run[i];
-    }
-  }
-  return { header, q };
-}
-
 /** Quantised numbers → values (NaN for "missing"). */
 function dequantize(h: OwxHeader, q: Int16Array, from = 0, count = q.length): Float32Array {
   const out = new Float32Array(count);
@@ -104,11 +56,6 @@ function dequantize(h: OwxHeader, q: Int16Array, from = 0, count = q.length): Fl
 export async function decodeOwx(buf: ArrayBuffer): Promise<{ header: OwxHeader; values: Float32Array }> {
   const { header, q } = await decodeOwxRaw(buf);
   return { header, values: dequantize(header, q) };
-}
-
-export interface RawTile {
-  header: OwxHeader;
-  q: Int16Array;
 }
 
 /** All steps in memory as Float32 (the small world overview). */
@@ -199,7 +146,7 @@ export function getWxMeta(): Promise<WxMeta> {
 
 async function loadRaw(path: string): Promise<RawTile> {
   const res = await fetchOk(`${WX_BASE}/v1/${path}.owx`, FILE_TIMEOUT_MS);
-  return decodeOwxRaw(await res.arrayBuffer());
+  return decodeOffThread(await res.arrayBuffer());
 }
 
 // Only the (small) overviews stay in memory. Decoded tiles are copied into the detail mosaic and then
@@ -344,10 +291,12 @@ export class WxLayer {
   }
 
   private async loadMosaic(sel: { c0: number; c1: number; r0: number; r1: number }, path: (c: number, r: number) => string): Promise<WxGrid> {
-    const rows: RawTile[][] = [];
-    for (let r = sel.r0; r <= sel.r1; r++) {
-      rows.push(await Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadRaw(path(sel.c0 + i, r)))));
-    }
+    // all tiles at once: the transfers overlap instead of waiting row by row
+    const rows: RawTile[][] = await Promise.all(
+      Array.from({ length: sel.r1 - sel.r0 + 1 }, (_, j) =>
+        Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadRaw(path(sel.c0 + i, sel.r0 + j)))),
+      ),
+    );
     return mosaic(rows);
   }
 
@@ -355,13 +304,13 @@ export class WxLayer {
    * Loads what the view needs: the world overview of `overview` (others are released) and, zoomed in, the 0.125° detail
    * of `detail` plus the terrain for the temperature. Resolves true when something changed.
    */
-  async setView(b: Bounds | null, detail: ModelVar[], overview: ModelVar[] = detail): Promise<boolean> {
-    const changed = await this.update(b, detail, overview);
+  async setView(b: Bounds | null, detail: ModelVar[], overview: ModelVar[] = detail, overviewOnly = false): Promise<boolean> {
+    const changed = await this.update(b, detail, overview, overviewOnly);
     if (changed) this.rev++;
     return changed;
   }
 
-  private async update(b: Bounds | null, detail: ModelVar[], overview: ModelVar[]): Promise<boolean> {
+  private async update(b: Bounds | null, detail: ModelVar[], overview: ModelVar[], overviewOnly: boolean): Promise<boolean> {
     const token = ++this.viewToken;
     let changed = false;
     const wantOverview = [...new Set([...overview, ...detail])].filter((v) => v in this.meta.vars);
@@ -384,6 +333,7 @@ export class WxLayer {
       }
     }
 
+    if (overviewOnly) return changed; // the detail tiles stay as they are
     const wanted = detail.filter((v) => this.overview.has(v));
     // the more variables are held in detail, the fewer tiles fit into memory
     const sel = b && wanted.length ? tilesFor(b, wanted.length > 2 ? 4 : wanted.length > 1 ? 6 : MAX_DETAIL_TILES) : null;
