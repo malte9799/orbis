@@ -30,6 +30,22 @@ const groups = new Map<string, TileGroup>();
 /** every recorded tile URL, so the same request is not listed a second time as a plain fetch */
 export const tileUrls = new Set<string>();
 
+/** a.tiles.x.org, b.tiles.x.org, {s}.tiles.x.org … are mirrors of one source: one group, template with `{s}` */
+export function canonTemplate(template: string): string {
+  return template.replace(/^(https?:\/\/)(?:[a-d]|[0-3]|\{[a-z](?:-[a-z])?\})\.(?=[^/]*\.)/i, '$1{s}.');
+}
+
+/** Removes the recorded tiles (of one route, or all); the groups stay known so new tiles are still recognised. */
+export function clearTiles(route?: string) {
+  for (const g of groups.values()) {
+    if (route && !g.routes.has(route)) continue;
+    g.tiles.forEach((t) => tileUrls.delete(t.url));
+    g.tiles.clear();
+    g.routes.clear();
+  }
+  emitChange();
+}
+
 export function getTileGroups(): TileGroup[] {
   return [...groups.values()];
 }
@@ -111,17 +127,18 @@ export function tileRecorder(getMap: () => MlMap | null) {
         for (const template of tiles) {
           const c = compile(template);
           if (!c) continue;
-          let group = groups.get(template);
+          const canon = canonTemplate(template);
+          let group = groups.get(canon);
           if (!group) {
             let host = '';
             try {
-              host = new URL(template.replace(/\{[^}]*\}/g, '0')).host;
+              host = new URL(canon.replace('{s}.', '').replace(/\{[^}]*\}/g, '0')).host;
             } catch {
               /* custom protocol */
             }
             const web = /^https?:/.test(template);
-            group = { key: template, sourceId: id, template, host, kind: !web ? 'custom' : type === 'vector' ? 'vector' : type === 'raster-dem' ? 'dem' : 'raster', routes: new Set(), tiles: new Map() };
-            groups.set(template, group);
+            group = { key: canon, sourceId: id, template: canon, host, kind: !web ? 'custom' : type === 'vector' ? 'vector' : type === 'raster-dem' ? 'dem' : 'raster', routes: new Set(), tiles: new Map() };
+            groups.set(canon, group);
           }
           next.push({ ...c, group });
         }
@@ -188,11 +205,11 @@ function guess(c: Capture): void {
     // long hex ids (radar frames) differ per time step: they must not split one map into many
     const norm = (list: string[]) => list.map((s) => (/^[0-9a-f]{10,}$/i.test(s) ? '{id}' : s));
     const cell = rowFirst ? ['{z}', '{y}', `{x}${ext}`] : ['{z}', '{x}', `{y}${ext}`];
-    const template = `${u.origin}${[...norm(segs.slice(0, i)), ...cell, ...norm(segs.slice(i + 3))].join('/')}`;
+    const template = canonTemplate(`${u.origin}${[...norm(segs.slice(0, i)), ...cell, ...norm(segs.slice(i + 3))].join('/')}`);
     let g = groups.get(template);
     if (!g) {
       const name = segs.slice(0, i).filter((s) => /^[a-z][a-z_-]{3,}$/i.test(s) && !GENERIC.has(s.toLowerCase())).pop() ?? u.host;
-      g = { key: template, sourceId: name, template, host: u.host, kind: /\.(pbf|mvt)$/i.test(u.pathname) ? 'vector' : 'raster', routes: new Set(), tiles: new Map() };
+      g = { key: template, sourceId: name, template, host: u.host.replace(/^(?:[a-d]|[0-3])\.(?=[^.]+\.)/i, ''), kind: /\.(pbf|mvt)$/i.test(u.pathname) ? 'vector' : 'raster', routes: new Set(), tiles: new Map() };
       groups.set(template, g);
     }
     g.routes.add(c.route);

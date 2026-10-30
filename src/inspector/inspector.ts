@@ -1,8 +1,8 @@
 import { toast } from '../util';
-import { currentRoute, getCaptures, onCaptures, rawFetch, type Capture } from './capture';
+import { clearCaptures, currentRoute, getCaptures, onCaptures, rawFetch, type Capture } from './capture';
 import { isGlyphUrl } from './glyphs';
 import { createGlbView, type GlbView } from './glb';
-import { getTileGroups, tileUrls, type TileGroup } from './tiles';
+import { clearTiles, getTileGroups, tileUrls, type TileGroup } from './tiles';
 import { createTileMap, type TileMapView } from './tilemap';
 import { providerOf } from './sources';
 
@@ -99,6 +99,7 @@ function open() {
   let glyphToken = 0;
   let rawSig = '';
   let rawMode: 'tree' | 'raw' = 'tree';
+  let side: 'sent' | 'recv' = 'recv';
 
   overlay = document.createElement('div');
   overlay.className = 'rdi';
@@ -112,6 +113,7 @@ function open() {
           <button type="button" data-scope="page" class="on">Diese Seite</button>
           <button type="button" data-scope="all">Alle</button>
         </div>
+        <button type="button" class="rdi-btn rdi-clear" data-r="clear" title="Alle angezeigten Datenquellen entfernen">${TRASH_ICON}Leeren</button>
         <button type="button" class="rdi-x" data-r="close" aria-label="Schließen" title="Schließen (Esc)">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </header>
@@ -119,6 +121,7 @@ function open() {
     </section>
     <section class="rdi-raw">
       <header data-r="rawhead"></header>
+      <div class="rdi-statusbar" data-r="status" hidden></div>
       <div class="rdi-scroll rdi-rawbody" data-r="rawbody"></div>
     </section>
     <div class="rdi-gut rdi-gut-v" data-g="v" title="Ziehen zum Ändern der Breite · Doppelklick: Ausgangsgröße"></div>
@@ -128,6 +131,7 @@ function open() {
   const listEl = $('list');
   const rawHead = $('rawhead');
   const rawBody = $('rawbody');
+  const statusEl = $('status');
 
   // The page keeps its full size and is scaled into its tile. Tiles: preview (top left), list (top right), raw data (bottom);
   // the gaps between them are drag handles. fx / fy = share of the free width / height that the top-left tile takes.
@@ -237,7 +241,7 @@ function open() {
         const total = e.caps.reduce((n, c) => n + (c.size ?? 0), 0);
         e.meta = `${e.count} Bilder${total ? ` · ${fmtSize(total)}` : ''}`;
       }
-      else e.meta = `${last.error ? 'Fehler' : last.status || '…'} · ${last.size == null && (last.skipped || last.kind === 'model') ? '–' : fmtSize(last.size)} · ${last.ms} ms${scope === 'all' ? ` · ${ROUTE_LABEL[last.route] ?? last.route}` : ''}`;
+      else e.meta = `${last.error ? errorTitle(last) : last.status ? `${last.status}${last.statusText ? ` ${last.statusText}` : ''}` : '…'} · ${last.size == null && (last.skipped || last.kind === 'model') ? '–' : fmtSize(last.size)} · ${last.ms} ms${scope === 'all' ? ` · ${ROUTE_LABEL[last.route] ?? last.route}` : ''}`;
     }
     for (const g of getTileGroups()) {
       if (!g.tiles.size || (scope === 'page' && !g.routes.has(route))) continue;
@@ -270,6 +274,7 @@ function open() {
   function renderList() {
     const items = entries();
     setText($('count'), `${items.length}`);
+    $<HTMLButtonElement>('clear').disabled = !items.length;
     for (const e of items) if (!seen.has(e.id)) seen.set(e.id, seen.size);
     items.sort((a, b) => seen.get(a.id)! - seen.get(b.id)!);
     const groups = new Map<string, Entry[]>();
@@ -352,10 +357,11 @@ function open() {
     rawBody.classList.remove('is-map');
   };
 
-  const sig = (c: Capture) => `${c.id}|${capIdx}|${c.imgUrl ? 1 : 0}|${c.status}|${c.size}|${c.text ? 1 : 0}|${c.objectUrl ? 1 : 0}|${c.skipped ?? ''}|${c.error ?? ''}|${rawMode}`;
+  const sig = (c: Capture) => `${c.id}|${capIdx}|${c.imgUrl ? 1 : 0}|${c.status}|${c.size}|${c.text ? 1 : 0}|${c.objectUrl ? 1 : 0}|${c.skipped ?? ''}|${c.error ?? ''}|${rawMode}|${side}`;
 
   function renderRaw(force = false) {
     const e = entries().find((x) => x.id === selected);
+    statusEl.hidden = true;
     if (!e) {
       destroyTm();
       rawHead.innerHTML = `<h2>Rohdaten</h2>`;
@@ -407,10 +413,18 @@ function open() {
     rawHead.innerHTML = `
       ${urlBox(c.method, apiUrl(c), c.target ? c.url : undefined)}
       <div class="rdi-actions">
+        <div class="rdi-seg" role="group" aria-label="Richtung"><button type="button" data-side="sent" class="${side === 'sent' ? 'on' : ''}">Gesendet</button><button type="button" data-side="recv" class="${side === 'recv' ? 'on' : ''}">Empfangen</button></div>
         ${n > 1 ? `<div class="rdi-seg rdi-step" role="group" aria-label="Anfrage wählen"><button type="button" data-step="-1" aria-label="Vorherige Anfrage" ${capIdx === 0 ? 'disabled' : ''}>‹</button><span>${capIdx + 1} / ${n}</span><button type="button" data-step="1" aria-label="Nächste Anfrage" ${capIdx === n - 1 ? 'disabled' : ''}>›</button></div>` : ''}
-        ${canTree ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}">Baum</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}">Roh</button></div>` : ''}
-        ${c.text ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Rohdaten kopieren</button>` : ''}
+        ${canTree && side === 'recv' ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}">Baum</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}">Roh</button></div>` : ''}
+        ${side === 'recv' && c.text ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Rohdaten kopieren</button>` : ''}
+        ${side === 'sent' && c.reqBody ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Body kopieren</button>` : ''}
       </div>`;
+    rawHead.querySelectorAll<HTMLButtonElement>('[data-side]').forEach((b) =>
+      b.addEventListener('click', () => {
+        side = b.dataset.side as 'sent' | 'recv';
+        renderRaw(true);
+      }),
+    );
     rawHead.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
       b.addEventListener('click', () => {
         rawMode = b.dataset.mode as 'tree' | 'raw';
@@ -424,10 +438,17 @@ function open() {
       }),
     );
     rawHead.querySelector('[data-r=copy]')?.addEventListener('click', () => {
-      void copyText(c.text ?? '', 'Rohdaten kopiert');
+      void copyText(side === 'sent' ? c.reqBody ?? '' : c.text ?? '', side === 'sent' ? 'Body kopiert' : 'Rohdaten kopiert');
     });
 
     rawBody.replaceChildren();
+    if (side === 'sent') {
+      statusEl.hidden = true;
+      rawBody.append(sentView(c));
+      return;
+    }
+    statusEl.hidden = false;
+    statusEl.innerHTML = statusBar(c);
     if (c.kind === 'model') {
       rawBody.classList.add('is-map');
       glb = createGlbView(c.url);
@@ -443,7 +464,7 @@ function open() {
       );
       return;
     }
-    if (c.error) rawBody.innerHTML = `<p class="rdi-err">${esc(c.error)}</p>`;
+    if (c.error) rawBody.append(errorView(c));
     else if (c.skipped) rawBody.innerHTML = `<p class="muted rdi-empty">${esc(c.skipped)} (${esc(c.mime || 'unbekannter Typ')}, ${fmtSize(c.size)}) – keine Vorschau.</p>`;
     else if (c.objectUrl || c.imgUrl) rawBody.innerHTML = `<div class="rdi-img"><img src="${esc(c.objectUrl ?? c.imgUrl!)}" alt="Rohbild"></div>`;
     else if (c.text == null) rawBody.innerHTML = `<p class="muted rdi-empty">Wird geladen …</p>`;
@@ -525,6 +546,23 @@ function open() {
       renderList();
     }),
   );
+  $('clear').addEventListener('click', () => {
+    const r = scope === 'page' ? route : undefined;
+    clearCaptures(r);
+    clearTiles(r);
+    seen.clear();
+    selected = null;
+    destroyTm();
+    rawSig = '';
+    renderList();
+    renderRaw(true);
+    toast(scope === 'page' ? 'Datenquellen dieser Seite geleert' : 'Alle Datenquellen geleert');
+  });
+  statusEl.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-hdr]')) return;
+    const h = statusEl.querySelector<HTMLElement>('.rdi-hdrs');
+    if (h) h.hidden = !h.hidden;
+  });
   $('close').addEventListener('click', close);
   const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
   window.addEventListener('keydown', onKey);
@@ -608,6 +646,77 @@ async function copyText(text: string, done: string, btn?: HTMLElement) {
     setTimeout(() => btn.classList.remove('done'), 1200);
   }
   toast(ok ? done : 'Kopieren nicht möglich', ok ? 'info' : 'error');
+}
+
+const TRASH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V4.5h6V7"/></svg>';
+
+const fmtTime = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour12: false }) + `.${String(t % 1000).padStart(3, '0')}`;
+
+/** short name of what went wrong */
+function errorTitle(c: Capture) {
+  return c.aborted ? 'Abgebrochen' : c.errorName === 'TypeError' ? 'Netzwerkfehler' : 'Fehler';
+}
+
+function errorExplain(c: Capture) {
+  const via = c.target ? ' Die Anfrage ging über den Daten-Proxy: ob dieser oder die API dahinter ausgefallen ist, sagt der Browser nicht.' : '';
+  if (c.errorName === 'TimeoutError') return `Die Seite hat nach einer festen Zeit aufgegeben (Timeout), es kam keine Antwort an.${via}`;
+  if (c.aborted) return `Die Seite hat die Anfrage selbst beendet – meist weil eine neuere Anfrage sie ersetzt hat, ein Timeout griff oder die Ansicht gewechselt wurde. Eine Antwort des Servers wurde nicht mehr gelesen.${via}`;
+  if (c.errorName === 'TypeError') return `Es kam keine Antwort an: Server nicht erreichbar, keine Verbindung, von CORS blockiert oder von einem Werbeblocker verworfen. Der Browser nennt den genauen Grund aus Sicherheitsgründen nicht.${via}`;
+  return via.trim();
+}
+
+/** key / value rows; a value with `copy` gets a copy button */
+function kv(rows: [string, string, boolean?][]) {
+  return `<dl class="rdi-kv">${rows.map(([k, v, copy]) => `<dt>${esc(k)}</dt><dd><span title="${esc(v)}">${esc(v)}</span>${copy ? `<button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(v)}" aria-label="${esc(k)} kopieren" title="Kopieren">${COPY_ICON}</button>` : ''}</dd>`).join('')}</dl>`;
+}
+
+function errorView(c: Capture) {
+  const d = document.createElement('div');
+  d.className = 'rdi-errbox';
+  const msg = c.error ?? '';
+  d.innerHTML = `<h3>${esc(errorTitle(c))}</h3>
+    <p>${esc(errorExplain(c))}</p>
+    ${kv([
+      ['Meldung', msg, true],
+      ['Fehlertyp', c.errorName ?? '–'],
+      ['Nach', `${c.ms} ms`],
+      ['Gestartet', fmtTime(c.t)],
+      ['Methode', c.method],
+      ['URL', apiUrl(c), true],
+      ...(c.target ? ([['Proxy', c.url, true]] as [string, string, boolean][]) : []),
+    ])}`;
+  return d;
+}
+
+/** status line above the response: code, text, type, size, time, and the response headers on demand */
+function statusBar(c: Capture) {
+  if (c.error) return `<span class="rdi-code bad">${esc(errorTitle(c))}</span><span>${c.ms} ms</span>`;
+  const bad = !c.ok;
+  const hdrs = c.resHeaders?.length ? c.resHeaders : null;
+  return `<span class="rdi-code ${bad ? 'bad' : 'ok'}">${c.status || '…'}${c.statusText ? ` ${esc(c.statusText)}` : ''}</span>
+    ${c.mime ? `<span>${esc(c.mime)}</span>` : ''}<span>${fmtSize(c.size)}</span><span>${c.ms} ms</span><span>${fmtTime(c.t)}</span>
+    ${hdrs ? `<button type="button" class="rdi-btn rdi-small" data-hdr>Header (${hdrs.length})</button>` : ''}
+    ${hdrs ? `<div class="rdi-hdrs" hidden>${kv(hdrs.map(([k, v]) => [k, v, true] as [string, string, boolean]))}</div>` : ''}`;
+}
+
+/** the "Gesendet" tab: what the page asked for */
+function sentView(c: Capture) {
+  const d = document.createElement('div');
+  d.className = 'rdi-sent';
+  let params: [string, string][] = [];
+  try {
+    params = [...new URL(apiUrl(c)).searchParams.entries()];
+  } catch {
+    /* odd URL */
+  }
+  const sec = (title: string, body: string) => `<section><h4>${title}</h4>${body}</section>`;
+  d.innerHTML =
+    sec('Anfrage', kv([['Methode', c.method], ['URL', apiUrl(c), true], ...(c.target ? ([['Über Proxy', c.url, true]] as [string, string, boolean][]) : []), ['Gestartet', fmtTime(c.t)], ['Seite', ROUTE_LABEL[c.route] ?? c.route]])) +
+    (params.length ? sec(`Parameter (${params.length})`, kv(params.map(([k, v]) => [k, v, true] as [string, string, boolean]))) : '') +
+    (c.reqHeaders ? sec(`Header (${c.reqHeaders.length})`, c.reqHeaders.length ? kv(c.reqHeaders.map(([k, v]) => [k, v, true] as [string, string, boolean])) : '<p class="muted">keine eigenen Header – der Browser ergänzt seine Standard-Header.</p>') : '<p class="muted">Vom Browser selbst geladen (Bild, Textur …): Header und Body sind nicht einsehbar.</p>');
+  if (c.reqBody) d.insertAdjacentHTML('beforeend', sec('Body', ''));
+  if (c.reqBody) d.lastElementChild!.append(pre(c.reqBody));
+  return d;
 }
 
 const jsonValues = new WeakMap<Element, unknown>();
