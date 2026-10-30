@@ -15,6 +15,14 @@ v1/<YYYYMMDDHH>/<variable>/t<c>_<r>.owx   Kachel: 45° × 45°, 0,125° (c = 0�
 Läufe sind unveränderlich (`Cache-Control: immutable`, 1 Jahr). Es bleiben die zwei neuesten Läufe liegen.
 Die Variablennamen sind die `ModelVar`-Namen aus `src/api/model.ts` (derzeit nur `temperature_2m`).
 
+## Auslieferung
+
+Der Bucket bleibt privat; ausgeliefert wird über den Worker `proxy/wx-worker.js` (R2-Binding `WX`) mit CORS, `ETag`/304 und
+`Range`. Seine Adresse ist die Repository-Variable `WX_PUBLIC_URL`. Das Tageslimit von 100 000 Aufrufen des kostenlosen
+Worker-Tarifs gilt pro Konto (geteilt mit `orbis-proxy`); Läufe sind unveränderlich und werden vom Browser ein Jahr gecacht,
+`latest.json` zwei Minuten. Reicht das Limit nicht, ist der Wechsel auf den bezahlten Worker-Tarif oder eine eigene Domain
+nur ein neuer Wert für `WX_PUBLIC_URL`.
+
 ## latest.json
 
 ```json

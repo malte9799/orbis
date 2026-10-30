@@ -4,9 +4,9 @@ name: Update weather fields
 # veröffentlicht in einem Cloudflare-R2-Bucket (S3-API). Ein ICON-Lauf ist ca. 3 h nach Laufzeit
 # vollständig; der Job startet dann und wartet bis zu 40 min auf den neuesten Lauf.
 #
-# Einrichtung (einmalig): R2-Bucket mit öffentlicher Domain und CORS (GET, Origin *), API-Token mit
-# Schreibrechten für den Bucket. Repository-Secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
-# R2_SECRET_ACCESS_KEY; Repository-Variablen R2_BUCKET und WX_PUBLIC_URL (z. B. https://wx.example.org).
+# Einrichtung (einmalig): privater R2-Bucket, Worker proxy/wx-worker.js mit R2-Binding `WX` davor (liefert mit CORS aus),
+# API-Token mit Schreibrechten für den Bucket. Repository-Secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
+# R2_SECRET_ACCESS_KEY; Repository-Variablen R2_BUCKET und WX_PUBLIC_URL (Adresse des Workers, z. B. https://orbis-wx.konto.workers.dev).
 # Ohne diese Angaben läuft die Verarbeitung trotzdem, lädt aber nichts hoch.
 
 on:
