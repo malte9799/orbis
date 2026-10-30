@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModelSampler, type ModelGrid, type ModelVar } from './model';
-import { decodeOwx, mosaic, tilesFor, WxLayer } from './wxmodel';
+import { decodeOwx, mosaic, tilesFor, wxDeps, WxLayer } from './wxmodel';
 
 // 3 steps of 5 × 6 values made by encode() in scripts/wx-icon.py (random noise on a ramp, one missing value,
 // and values near the int16 limits so the predictor wraps around)
@@ -151,5 +151,54 @@ describe('terrain correction', () => {
     const none = new ModelSampler({ lat0: 0, lon0: 0, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [0], data: {} } as unknown as ModelGrid, null, 0, null);
     expect(none.hasTerrain()).toBe(false);
     expect(none.terrainDelta(45, 10)).toBe(0);
+  });
+});
+
+describe('variables derived from the ICON fields', () => {
+  const H = 3600_000;
+  const T0 = Date.UTC(2026, 9, 30, 0);
+  const flat = (value: number) => {
+    const data = new Float32Array(9).fill(value);
+    return { lat0: 90, lon0: -180, dx: 180, dy: 90, nx: 3, ny: 3, wrap: true, step: () => data };
+  };
+  const values: Record<string, number> = { temperature_2m: 20, dew_point_2m: 10, u: 3, v: 4, precipitation: 1.5 };
+  const wx = {
+    has: (v: string) => v in values,
+    overviewOf: (v: string) => flat(values[v]),
+    detail: new Map(),
+    terrain: null,
+    times: [T0, T0 + 3 * H],
+    stepMs: 3 * H,
+  } as unknown as WxLayer;
+  const global = { lat0: 90, lon0: -180, dx: 180, dy: 90, nx: 3, ny: 3, wrap: true, times: [T0, T0 + 3 * H], data: { cape: new Float32Array(18).fill(500) } } as unknown as ModelGrid;
+  const s = new ModelSampler(global, null, 0, wx);
+
+  it('computes wind speed [km/h] and the direction it comes from', () => {
+    expect(s.sample('wind_speed_10m', 10, 10)).toBeCloseTo(18, 5); // 5 m/s
+    expect(s.sample('wind_direction_10m', 10, 10)).toBeCloseTo(216.87, 1); // blowing to the north-east
+  });
+
+  it('computes relative humidity from temperature and dew point', () => {
+    expect(s.sample('relative_humidity_2m', 10, 10)).toBeCloseTo(52.5, 0);
+  });
+
+  it('computes the apparent temperature from temperature, humidity and wind', () => {
+    const feels = s.sample('apparent_temperature', 10, 10);
+    expect(feels).toBeLessThan(20); // wind cools
+    expect(feels).toBeGreaterThan(10);
+  });
+
+  it('passes stored variables through and leaves missing ones to Open-Meteo', () => {
+    expect(s.sample('precipitation', 10, 10)).toBeCloseTo(1.5, 5);
+    expect(s.sample('cape', 10, 10)).toBeCloseTo(500, 3); // not in the (fake) ICON fields: the Open-Meteo grid answers
+  });
+});
+
+describe('wxDeps', () => {
+  it('names the stored variables behind a displayed one', () => {
+    expect(wxDeps('wind_speed_10m')).toEqual(['u', 'v']);
+    expect(wxDeps('relative_humidity_2m')).toEqual(['temperature_2m', 'dew_point_2m']);
+    expect(wxDeps('apparent_temperature')).toHaveLength(4);
+    expect(wxDeps('pressure_msl')).toEqual(['pressure_msl']);
   });
 });

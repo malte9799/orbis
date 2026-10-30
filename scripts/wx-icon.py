@@ -48,6 +48,18 @@ FORMAT_VERSION = 1
 # Variablen: Schlüssel = Orbis-Name (ModelVar in src/api/model.ts), `icon` = Verzeichnis/Kürzel beim DWD
 VARS = {
     'temperature_2m': dict(icon='t_2m', convert=lambda v: v - 273.15, scale=0.1, offset=0.0, unit='°C'),
+    'dew_point_2m': dict(icon='td_2m', convert=lambda v: v - 273.15, scale=0.1, offset=0.0, unit='°C'),
+    # Windkomponenten 10 m (erdbezogen), Böen in km/h wie bei Open-Meteo
+    'u': dict(icon='u_10m', convert=lambda v: v, scale=0.1, offset=0.0, unit='m/s'),
+    'v': dict(icon='v_10m', convert=lambda v: v, scale=0.1, offset=0.0, unit='m/s'),
+    # VMAX_10M ist das Maximum seit dem vorigen Ausgabeschritt (stündlich) → Maximum der letzten 3 Stunden
+    'wind_gusts_10m': dict(icon='vmax_10m', kind='max3', convert=lambda v: v * 3.6, scale=0.1, offset=0.0, unit='km/h'),
+    # TOT_PREC ist seit Laufstart aufsummiert → Rate [mm/h] aus den Differenzen der 3-h-Schritte
+    'precipitation': dict(icon='tot_prec', kind='rate', convert=lambda v: v, scale=0.01, offset=0.0, unit='mm/h'),
+    'cloud_cover': dict(icon='clct', convert=lambda v: v, scale=1.0, offset=0.0, unit='%'),
+    'pressure_msl': dict(icon='pmsl', convert=lambda v: v / 100, scale=0.1, offset=0.0, unit='hPa'),
+    'snow_depth': dict(icon='h_snow', fill=0.0, convert=lambda v: v, scale=0.001, offset=0.0, unit='m'),
+    'cape': dict(icon='cape_ml', convert=lambda v: v, scale=1.0, offset=0.0, unit='J/kg'),
     # Höhe der Modelloberfläche (zeitinvariant): Grundlage der Geländekorrektur der Temperatur im Client
     'hsurf': dict(icon='hsurf', static=True, convert=lambda v: v, scale=1.0, offset=0.0, unit='m'),
 }
@@ -105,9 +117,26 @@ def fetch(url, dest, tries=4):
 
 
 def hours(v=None):
+    """Ausgabeschritte (Stunden nach Laufstart)"""
     if v and v.get('static'):
         return [0]
     return list(range(0, HOURS + 1, STEP))
+
+
+def source_hours(v, h):
+    """Stunden der Quelldateien, aus denen der Ausgabeschritt h entsteht"""
+    kind = v.get('kind')
+    if kind == 'rate':
+        return [x for x in (h - STEP, h, h + STEP) if 0 <= x <= HOURS]
+    if kind == 'max3':
+        return list(range(max(1, h - STEP + 1), max(1, h) + 1))
+    return [h]
+
+
+def download_hours(v):
+    """alle Dateien, die geladen werden müssen (die Niederschlagssumme bei Stunde 0 ist per Definition 0)"""
+    hs = sorted({x for h in hours(v) for x in source_hours(v, h)})
+    return [x for x in hs if not (v.get('kind') == 'rate' and x == 0)]
 
 
 def candidate_runs(now):
@@ -119,7 +148,7 @@ def candidate_runs(now):
 
 def run_ready(run, names):
     # Dateien erscheinen in Stundenreihenfolge → die letzte Datei zeigt, dass alles da ist
-    return all(exists(grib_url(run, hours(VARS[n])[-1], VARS[n])) for n in names)
+    return all(exists(grib_url(run, download_hours(VARS[n])[-1], VARS[n])) for n in names)
 
 
 def pick_run(args, names):
@@ -256,6 +285,7 @@ def quantize(field, v):
 # ---------------------------------------------------------------------------
 
 def main():
+    global HOURS
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', required=True)
     ap.add_argument('--work', default=None)
@@ -263,9 +293,11 @@ def main():
     ap.add_argument('--vars', default=','.join(VARS))
     ap.add_argument('--wait', type=int, default=0, help='Minuten auf den neuesten Lauf warten')
     ap.add_argument('--published', default=None, help='latest.json des veröffentlichten Stands (überspringt gleichen Lauf)')
+    ap.add_argument('--hours', type=int, default=HOURS, help='Vorhersagehorizont (zum Testen kürzer)')
     ap.add_argument('--selftest', action='store_true', help='geschriebene Kacheln dekodieren und vergleichen')
     args = ap.parse_args()
 
+    HOURS = args.hours
     names = [v for v in args.vars.split(',') if v]
     for n in names:
         if n not in VARS:
@@ -291,14 +323,41 @@ def main():
     for name in names:
         v = VARS[name]
         files = {}
+        need = download_hours(v)
         with cf.ThreadPoolExecutor(6) as ex:
-            futs = {h: ex.submit(fetch, grib_url(run, h, v), f"{work}/{v['icon']}_{run}_{h:03d}.grib2") for h in hours(v)}
+            futs = {h: ex.submit(fetch, grib_url(run, h, v), f"{work}/{v['icon']}_{run}_{h:03d}.grib2") for h in need}
             for h, f in futs.items():
                 files[h] = f.result()
+
+        cache = {}
+
+        def get(h, v=v, files=files, cache=cache):
+            """umgerechnetes Feld der Quelldatei zur Stunde h"""
+            if h not in cache:
+                if v.get('kind') == 'rate' and h == 0:
+                    cache[h] = np.zeros((2 * int(round(90 / RES)) + 1, 4 * int(round(90 / RES)) + 1), np.float32)
+                else:
+                    cache[h] = remap(v['convert'](read_values(files[h])[0]), idx, w)
+            return cache[h]
+
         full, over = [], []
         for h in hours(v):
-            vals, _ = read_values(files[h])
-            f = remap(v['convert'](vals), idx, w)
+            src = source_hours(v, h)
+            if v.get('kind') == 'max3':
+                f = np.maximum.reduce([get(x) for x in src])
+            elif v.get('kind') == 'rate':
+                rates = []
+                if h >= STEP:
+                    rates.append((get(h) - get(h - STEP)) / STEP)
+                if h + STEP <= HOURS:
+                    rates.append((get(h + STEP) - get(h)) / STEP)
+                f = np.maximum(np.mean(rates, axis=0), 0).astype(np.float32)
+            else:
+                f = get(h)
+            if 'fill' in v:
+                f = np.nan_to_num(f, nan=v['fill'])
+            for old in [k for k in cache if k < min(src) - STEP]:
+                del cache[old]
             full.append(quantize(f, v))
             over.append(quantize(overview(f), v))
         full = np.stack(full)

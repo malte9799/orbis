@@ -26,7 +26,7 @@ import {
   type ModelGrid,
   type ModelVar,
 } from '../api/model';
-import { WxLayer, wxEnabled } from '../api/wxmodel';
+import { WxLayer, wxDeps, wxEnabled } from '../api/wxmodel';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
@@ -73,8 +73,6 @@ type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'sat-storm' | 'imerg
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 const isField = (o: string): o is FieldId => o in FIELDS;
-/** variables available from the ICON fields (src/api/wxmodel.ts) – grows with the migration */
-const WX_VARS: ModelVar[] = ['temperature_2m'];
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -554,7 +552,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (wxLayer?.expired) wxLayer = null;
     if (!wxEnabled() || wxLayer || wxLoading) return;
     wxLoading = true;
-    void WxLayer.load(WX_VARS)
+    void WxLayer.load([])
       .then((l) => {
         wxLoading = false;
         if (!l) return;
@@ -642,11 +640,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (!map || !globalModel || !needsModel()) return;
     const b = map.getBounds();
     if (wxLayer) {
-      // 0.125° ICON tiles for the view, only while the shown field comes from them
+      // ICON fields for what is shown: the world overview of every variable in use, the 0.125° tiles only for the field itself
       const def = isField(state.overlay) ? FIELDS[state.overlay] : null;
-      const use = def && (wxLayer.has(def.variable) || def.phase) ? WX_VARS : [];
+      const detail = new Set<ModelVar>(def ? wxDeps(def.variable) : []);
+      if (def?.phase) detail.add('temperature_2m');
+      const overview = new Set<ModelVar>(detail);
+      if (state.wind) for (const v of wxDeps('wind_speed_10m')) overview.add(v);
+      if (state.isobars) overview.add('pressure_msl');
       void wxLayer
-        .setView(use.length ? { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() } : null, use)
+        .setView({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, [...detail], [...overview])
         .then((changed) => changed && updateSampler());
     }
     const req = detailRequest({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });

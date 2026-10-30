@@ -1,6 +1,6 @@
 import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
-import type { ModelSampler, ModelVar } from '../api/model';
+import { TD_LAPSE_RATIO, type ModelSampler, type ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
 import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum, snowUnit, snowVal } from '../units';
 
@@ -42,8 +42,10 @@ export interface FieldDef {
   organic?: { warp: number; texture?: number; additive?: boolean };
   /** precipitation coloured as rain or snow depending on the 2 m temperature */
   phase?: 'mix' | 'snow-only';
-  /** the ICON temperature is corrected per pixel with the terrain height (see renderTerrainTile) */
+  /** the ICON values are corrected per pixel with the terrain height (see renderTerrainTile) */
   terrain?: boolean;
+  /** share of the temperature correction that applies to this field (default 1) */
+  terrainScale?: number;
 }
 
 /** Below this 2 m temperature [°C] precipitation is drawn as snow. */
@@ -179,6 +181,8 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Taupunkt',
     get unit() { return tempUnit(); },
     variable: 'dew_point_2m',
+    terrain: true,
+    terrainScale: TD_LAPSE_RATIO,
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
     format: tempNum,
@@ -325,6 +329,7 @@ function organicSample(def: FieldDef, s: ModelSampler, lat: number, lon: number)
  * show up much finer than the 13 km model. Lattice nodes lie on the tile edge, so neighbouring tiles agree.
  */
 async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: number, y: number): Promise<ImageBitmap> {
+  const scale = def.terrainScale ?? 1;
   const N = z <= 3 ? 512 : 256;
   const Nc = z <= 2 ? 64 : 128;
   const nodes = new Float32Array((Nc + 1) * (Nc + 1));
@@ -348,7 +353,7 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
       const wx = fi - i;
       const o = j * (Nc + 1) + i;
       const base = (nodes[o] * (1 - wx) + nodes[o + 1] * wx) * (1 - wy) + (nodes[o + Nc + 1] * (1 - wx) + nodes[o + Nc + 2] * wx) * wy;
-      const [r, g, b, a] = def.color(base + s.terrainDelta(lat, lons[px]));
+      const [r, g, b, a] = def.color(base + s.terrainDelta(lat, lons[px]) * scale);
       const k = (py * N + px) * 4;
       img.data[k] = r;
       img.data[k + 1] = g;

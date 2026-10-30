@@ -13,7 +13,23 @@ v1/<YYYYMMDDHH>/<variable>/t<c>_<r>.owx   Kachel: 45° × 45°, 0,125° (c = 0�
 ```
 
 Läufe sind unveränderlich (`Cache-Control: immutable`, 1 Jahr). Es bleiben die zwei neuesten Läufe liegen.
-Die Variablennamen sind die `ModelVar`-Namen aus `src/api/model.ts` (derzeit `temperature_2m`) sowie `hsurf`.
+Die Variablennamen sind die `ModelVar`-Namen aus `src/api/model.ts`:
+
+| Variable | ICON | Einheit | Quantisierung | Hinweis |
+|---|---|---|---|---|
+| `temperature_2m` | `T_2M` | °C | 0,1 | |
+| `dew_point_2m` | `TD_2M` | °C | 0,1 | |
+| `u`, `v` | `U_10M`, `V_10M` | m/s | 0,1 | erdbezogen (West→Ost, Süd→Nord) |
+| `wind_gusts_10m` | `VMAX_10M` | km/h | 0,1 | Maximum der letzten 3 Stunden (Quelle ist stündlich) |
+| `precipitation` | `TOT_PREC` | mm/h | 0,01 | Rate aus den Differenzen der 3-h-Summen, Wert = Mittel der beiden anliegenden Intervalle |
+| `cloud_cover` | `CLCT` | % | 1 | |
+| `pressure_msl` | `PMSL` | hPa | 0,1 | |
+| `snow_depth` | `H_SNOW` | m | 0,001 | fehlende Werte = 0 |
+| `cape` | `CAPE_ML` | J/kg | 1 | |
+| `hsurf` | `HSURF` | m | 1 | zeitinvariant, nur für die Geländekorrektur |
+
+Nicht gespeichert, sondern im Client abgeleitet (`ModelSampler`): Windgeschwindigkeit und -richtung (aus u, v), relative Feuchte
+(Magnus aus T und Td) und gefühlte Temperatur. Die Geländekorrektur gilt für Temperatur (6,5 K/km) und Taupunkt (2 K/km).
 
 ## Gelände (Temperaturkorrektur)
 
@@ -87,7 +103,7 @@ Der Encoder bildet das spiegelbildlich (erst Differenz zum Vorschritt, dann Plan
 
 ## Größe (Temperatur, Lauf 2026103012, 25 Schritte)
 
-33 Dateien, **39,8 MB** (Land-Kachel ~1,6 MB, Ozean ~0,9 MB, Überblick ~0,3 MB). Ein Client lädt für eine Ansicht
+33 Dateien, **39,8 MB** (alle zehn Variablen zusammen etwa 400 MB pro Lauf; Land-Kachel ~1,6 MB, Ozean ~0,9 MB, Überblick ~0,3 MB). Ein Client lädt für eine Ansicht
 Überblick + 1–4 Kacheln, also etwa 2–7 MB je Variable.
 
 ## Quelle & Lizenz

@@ -214,13 +214,31 @@ function getOverview(run: string, variable: string): Promise<WxGrid> {
     p = loadRaw(`${run}/${variable}/o`).then(({ header, q }) => new FloatGrid(header, dequantize(header, q)));
     p.catch(() => overviewCache.delete(id));
     overviewCache.set(id, p);
-    while (overviewCache.size > 24) overviewCache.delete(overviewCache.keys().next().value!);
+    while (overviewCache.size > 8) overviewCache.delete(overviewCache.keys().next().value!);
   }
   return p;
 }
 
+/** Variables the ICON fields hold themselves (the others are derived from them in ModelSampler). */
+export const WX_VARS: ModelVar[] = ['temperature_2m', 'dew_point_2m', 'u', 'v', 'wind_gusts_10m', 'precipitation', 'cloud_cover', 'pressure_msl', 'snow_depth', 'cape'];
+
+/** Which stored variables a displayed variable needs. */
+export function wxDeps(v: ModelVar): ModelVar[] {
+  switch (v) {
+    case 'wind_speed_10m':
+    case 'wind_direction_10m':
+      return ['u', 'v'];
+    case 'relative_humidity_2m':
+      return ['temperature_2m', 'dew_point_2m'];
+    case 'apparent_temperature':
+      return ['temperature_2m', 'dew_point_2m', 'u', 'v'];
+    default:
+      return (WX_VARS as string[]).includes(v) ? [v] : [];
+  }
+}
+
 /** Tile indices (column from the west, row from the north) covering the bounds, or null if too many. */
-export function tilesFor(b: Bounds): { c0: number; c1: number; r0: number; r1: number } | null {
+export function tilesFor(b: Bounds, max = MAX_DETAIL_TILES): { c0: number; c1: number; r0: number; r1: number } | null {
   const margin = 2;
   const west = Math.max(-180, b.west - margin);
   const east = Math.min(180, b.east + margin);
@@ -230,7 +248,7 @@ export function tilesFor(b: Bounds): { c0: number; c1: number; r0: number; r1: n
   const col = (lon: number) => Math.max(0, Math.min(360 / TILE - 1, Math.floor((lon + 180) / TILE)));
   const row = (lat: number) => Math.max(0, Math.min(180 / TILE - 1, Math.floor((90 - lat) / TILE)));
   const t = { c0: col(west), c1: col(east), r0: row(north), r1: row(south) };
-  return (t.c1 - t.c0 + 1) * (t.r1 - t.r0 + 1) > MAX_DETAIL_TILES ? null : t;
+  return (t.c1 - t.c0 + 1) * (t.r1 - t.r0 + 1) > max ? null : t;
 }
 
 /** Stitches tiles (one cell of overlap) into one rectangular grid held as 16-bit numbers. */
@@ -269,6 +287,8 @@ export class WxLayer {
   private dem: WxGrid | null = null;
   private detailKey = '';
   private viewToken = 0;
+  /** counts changes of the loaded data, so the tile URL changes with every one */
+  private rev = 0;
 
   private constructor(readonly meta: WxMeta) {}
 
@@ -283,7 +303,7 @@ export class WxLayer {
   }
   /** changes with the run and the detail area – goes into the tile URL so MapLibre re-requests tiles */
   get version(): string {
-    return `${this.meta.run}-${this.detailKey}`;
+    return `${this.meta.run}-${this.rev}-${this.detailKey}`;
   }
 
   /** the run is too old to be shown (checked on every use, not only when loading) */
@@ -316,7 +336,7 @@ export class WxLayer {
             layer.overview.set(v, await getOverview(meta.run, v));
           }),
       );
-      return layer.overview.size ? layer : null;
+      return layer;
     } catch (e) {
       console.warn('Wetterdaten (ICON) nicht verfügbar', e);
       return null;
@@ -331,15 +351,46 @@ export class WxLayer {
     return mosaic(rows);
   }
 
-  /** Loads the 0.125° detail (and the terrain for the temperature) for the view; true when something changed. */
-  async setView(b: Bounds | null, vars: ModelVar[]): Promise<boolean> {
+  /**
+   * Loads what the view needs: the world overview of `overview` (others are released) and, zoomed in, the 0.125° detail
+   * of `detail` plus the terrain for the temperature. Resolves true when something changed.
+   */
+  async setView(b: Bounds | null, detail: ModelVar[], overview: ModelVar[] = detail): Promise<boolean> {
+    const changed = await this.update(b, detail, overview);
+    if (changed) this.rev++;
+    return changed;
+  }
+
+  private async update(b: Bounds | null, detail: ModelVar[], overview: ModelVar[]): Promise<boolean> {
     const token = ++this.viewToken;
-    const sel = b ? tilesFor(b) : null;
-    const wanted = vars.filter((v) => this.overview.has(v));
-    const terrain = wanted.includes('temperature_2m') && 'hsurf' in this.meta.vars;
-    const key = sel && wanted.length ? `${sel.c0}_${sel.r0}_${sel.c1}_${sel.r1}_${wanted.join('')}${terrain ? 't' : ''}`.replace(/[^\w-]/g, '') : '';
-    if (key === this.detailKey) return false;
-    if (!sel || !wanted.length) {
+    let changed = false;
+    const wantOverview = [...new Set([...overview, ...detail])].filter((v) => v in this.meta.vars);
+    const missing = wantOverview.filter((v) => !this.overview.has(v));
+    if (missing.length) {
+      try {
+        const loaded = await Promise.all(missing.map(async (v) => [v, await getOverview(this.meta.run, v)] as const));
+        if (token !== this.viewToken) return false;
+        for (const [v, g] of loaded) this.overview.set(v, g);
+        changed = true;
+      } catch (e) {
+        console.warn('Wetterdaten (ICON) nicht verfügbar', e);
+        return false;
+      }
+    }
+    for (const v of [...this.overview.keys()]) {
+      if (!wantOverview.includes(v)) {
+        this.overview.delete(v);
+        changed = true;
+      }
+    }
+
+    const wanted = detail.filter((v) => this.overview.has(v));
+    // the more variables are held in detail, the fewer tiles fit into memory
+    const sel = b && wanted.length ? tilesFor(b, wanted.length > 2 ? 4 : wanted.length > 1 ? 6 : MAX_DETAIL_TILES) : null;
+    const terrain = wanted.some((v) => v === 'temperature_2m' || v === 'dew_point_2m') && 'hsurf' in this.meta.vars;
+    const key = sel ? `${sel.c0}_${sel.r0}_${sel.c1}_${sel.r1}_${wanted.join('')}${terrain ? 't' : ''}`.replace(/[^\w-]/g, '') : '';
+    if (key === this.detailKey) return changed;
+    if (!sel) {
       this.detail.clear();
       this.dem = null;
       this.detailKey = '';
@@ -355,7 +406,7 @@ export class WxLayer {
       );
       // terrain heights are optional: without them the temperature stays uncorrected
       const dem = terrain ? await this.loadMosaic(sel, (c, r) => `${DEM_PATH}/t${c}_${r}`).catch(() => null) : null;
-      if (token !== this.viewToken) return false; // a newer view request took over
+      if (token !== this.viewToken) return changed; // a newer view request took over
       this.detail.clear();
       for (const [v, g] of grids) this.detail.set(v, g);
       this.dem = dem;
@@ -363,7 +414,7 @@ export class WxLayer {
       return true;
     } catch (e) {
       console.warn('ICON-Detailkacheln nicht verfügbar', e);
-      return false;
+      return changed;
     }
   }
 }

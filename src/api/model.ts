@@ -396,6 +396,8 @@ function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number):
 }
 
 const LAPSE_K_PER_M = 0.0065;
+/** the dew point falls with height about 2 K/km (the temperature 6.5 K/km) */
+export const TD_LAPSE_RATIO = 0.002 / 0.0065;
 const MAX_LAPSE_DELTA = 15;
 
 /** 1 inside a grid, fading to 0 over `deg` degrees towards its edge */
@@ -517,11 +519,50 @@ export class ModelSampler {
     return w * Math.max(-MAX_LAPSE_DELTA, Math.min(MAX_LAPSE_DELTA, LAPSE_K_PER_M * (hs - dem)));
   }
 
+  /** a variable straight from the ICON fields (NaN if it is not loaded or outside their time range) */
+  private wxVar(v: ModelVar, lat: number, lon: number): number {
+    return this.wx!.has(v) ? this.sampleWx(v, lat, lon) : NaN;
+  }
+
+  /**
+   * Variables the ICON fields carry directly (temperature, dew point, wind components, …) or that follow from them
+   * like the Open-Meteo ones did (wind speed/direction, humidity, apparent temperature). NaN where they are not available.
+   */
+  private sampleFromWx(v: ModelVar, lat: number, lon: number, terrain: boolean): number {
+    const delta = terrain ? this.terrainDelta(lat, lon) : 0;
+    const temp = () => this.wxVar('temperature_2m', lat, lon) + delta;
+    const dew = () => this.wxVar('dew_point_2m', lat, lon) + delta * TD_LAPSE_RATIO;
+    const wind = () => Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon));
+    switch (v) {
+      case 'temperature_2m':
+        return temp();
+      case 'dew_point_2m':
+        return dew();
+      case 'wind_speed_10m':
+        return wind() * 3.6;
+      case 'wind_direction_10m':
+        return ((Math.atan2(-this.wxVar('u', lat, lon), -this.wxVar('v', lat, lon)) * 180) / Math.PI + 360) % 360;
+      case 'relative_humidity_2m': {
+        const t = temp();
+        const d = Math.min(dew(), t);
+        return Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
+      }
+      case 'apparent_temperature': {
+        const t = temp();
+        const d = Math.min(dew(), t);
+        const rh = Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
+        return apparent(t, rh, wind());
+      }
+      default:
+        return this.wxVar(v, lat, lon);
+    }
+  }
+
   /** @param terrain add the terrain correction (readouts); tile rendering applies it per pixel itself */
   sample(v: ModelVar, lat: number, lon: number, terrain = true): number {
-    if (this.wx?.has(v)) {
-      const r = this.sampleWx(v, lat, lon);
-      if (!Number.isNaN(r)) return terrain && v === 'temperature_2m' ? r + this.terrainDelta(lat, lon) : r;
+    if (this.wx) {
+      const r = this.sampleFromWx(v, lat, lon, terrain);
+      if (!Number.isNaN(r)) return r;
     }
     const w = this.detailWeight(lat, lon);
     const i = Math.min(Math.floor(this.t), this.global.times.length - 1);

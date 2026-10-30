@@ -1,6 +1,6 @@
 # Plan: Wetterkarten aus Modell-Rohdaten (DWD ICON, GRIB2) statt Open-Meteo-Punktraster
 
-Stand: 2026-10-30 · Status: **Schritt 1 umgesetzt (nur Temperatur, lokal getestet)**; ICON-EU zurückgestellt, Hosting R2, Horizont 72 h
+Stand: 2026-10-31 · Status: **Schritte 1–3 umgesetzt** (alle zehn Felder, Geländekorrektur Temperatur/Taupunkt); ICON-EU zurückgestellt, Hosting R2, Horizont 72 h
 
 Umsetzungsnotizen Schritt 1: Format siehe [WETTERDATEN-FORMAT.md](WETTERDATEN-FORMAT.md). Abweichungen vom Plan: Läufe liegen unter `v1/<lauf>/…` (unveränderlich, lange cachebar) statt überschriebener Pfade; `latest.json` ist der einzige kurz gecachte Eintrag. Gemessen: Temperatur 39,8 MB für 33 Dateien; Prädiktor „Plane + Zeitdifferenz“ spart gegenüber reiner Zeilen-Differenz ~15–40 %. Punktprobe gegen Open-Meteo `icon_global`: München ±0,5 K; Lhasa/La Paz weichen um 1–3,5 K ab, weil Open-Meteo auf die echte Höhe herunterskaliert (→ Höhenkorrektur, Schritt 5).
 
