@@ -144,6 +144,17 @@ export function createStarsView(): StarsView {
   sky.scale.z = -1; // Innenansicht: Osten (steigende RA) links, nicht gespiegelt
   scene.add(sky);
 
+  // Dieselbe NASA-Karte als Unterlage der 2D-Plattkarte: sofort sichtbar vor dem ersten
+  // Kachel-Load und Rückfall, wenn CDS nicht erreichbar ist (die Kacheln liegen exakt darüber).
+  const baseFlatTex = new THREE.TextureLoader().load(TEX_URL, (t) => {
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  });
+  const baseFlat = new THREE.Mesh(new THREE.PlaneGeometry(2 * Math.PI, Math.PI), new THREE.MeshBasicMaterial({ map: baseFlatTex }));
+  baseFlat.renderOrder = 5; // unter den HiPS-Kacheln (renderBase 10)
+  baseFlat.visible = false;
+  scene.add(baseFlat);
+
   // Verdeckt in der Kugelansicht die Rückseite des Globus
   const occluder = new THREE.Mesh(new THREE.SphereGeometry(0.997, 48, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
   occluder.visible = false;
@@ -180,7 +191,7 @@ export function createStarsView(): StarsView {
           survey = 'dss';
           applySurvey();
         }
-        hint.textContent = `${sv.label}: Kacheln nicht erreichbar (Netzwerk oder CDS) – DSS2 bleibt sichtbar.`;
+        hint.textContent = `${sv.label}: Kacheln nicht erreichbar (Netzwerk oder CDS) – nochmal klicken versucht es erneut.`;
         showHint();
         console.warn(`HiPS-Ebene ${sv.label} konnte nicht geladen werden`, err);
       });
@@ -207,7 +218,10 @@ export function createStarsView(): StarsView {
   function setSurvey(id: SurveyId) {
     survey = id;
     applySurvey();
-    loadSurvey('dss').then(() => loadSurvey(id)).then(applySurvey);
+    // Unterlage und gewählte Karte parallel laden (nacheinander wäre bei CDS-Ausfall doppelte Wartezeit)
+    const jobs: Promise<void>[] = [loadSurvey('dss')];
+    if (id !== 'dss') jobs.push(loadSurvey(id));
+    Promise.allSettled(jobs).then(applySurvey);
   }
 
   // ---- Zustand --------------------------------------------------------------------------------
@@ -345,6 +359,7 @@ export function createStarsView(): StarsView {
     camera = isFlat() ? ortho : persp;
     const p = projOf(mode);
     sky.visible = SHOW_BASE_MAP && mode === 'himmel';
+    baseFlat.visible = SHOW_BASE_MAP && mode === 'karte';
     occluder.visible = mode === 'kugel';
     for (const l of layers.values()) l.setProjection(p, mode === 'himmel' ? THREE.BackSide : THREE.FrontSide);
     buildGrid(p);

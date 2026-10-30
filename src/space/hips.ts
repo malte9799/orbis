@@ -84,7 +84,6 @@ export class HiPSLayer {
   private props: HiPSProps;
   maxUseOrder: number;
   renderBase = 10; // Zeichenreihenfolge der Ebene (Überlagerungen höher)
-  private texLoader: THREE.TextureLoader;
   private busy = 0;
   private queue: Cell[] = [];
   private cells = new Map<string, Cell>();
@@ -98,8 +97,6 @@ export class HiPSLayer {
   constructor(props: HiPSProps, maxUseOrder?: number) {
     this.props = props;
     this.maxUseOrder = Math.min(maxUseOrder ?? props.order, props.order);
-    this.texLoader = new THREE.TextureLoader();
-    this.texLoader.setCrossOrigin('anonymous');
     this.group.visible = false;
   }
 
@@ -287,42 +284,43 @@ export class HiPSLayer {
     }
   }
 
-  private loadTile(cell: Cell, urlIdx: number) {
+  private async loadTile(cell: Cell, urlIdx: number) {
     // HiPS-Pfad: bei hohen Ordnungen liegt die Kachel in Dir<block> (Blöcke à 10000), der Dateiname trägt den vollen Index
     const block = Math.floor(cell.ipix / 10000) * 10000;
     const url = `${this.props.serviceUrls[urlIdx % this.props.serviceUrls.length].replace(/\/+$/, '')}/Norder${cell.order}/Dir${block}/Npix${cell.ipix}.${this.props.tileExt}`;
-    this.texLoader.load(
-      url,
-      (tex) => {
-        this.busy--;
-        if (this.busy < 0) this.busy = 0;
-        if (!this.cells.has(`${cell.order}/${cell.ipix}`)) { tex.dispose(); this.pump(); return; }
+    try {
+      // Timeout, damit eine hängende Verbindung nicht dauerhaft einen Arbeitsplatz blockiert
+      const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const bitmap = await createImageBitmap(await res.blob());
+      if (this.cells.has(`${cell.order}/${cell.ipix}`)) { // inzwischen eviztiert?
+        const tex = new THREE.Texture(bitmap);
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.minFilter = THREE.LinearFilter;
         tex.magFilter = THREE.LinearFilter;
         tex.generateMipmaps = false;
+        tex.needsUpdate = true;
         cell.mat.map = tex;
         cell.mat.needsUpdate = true;
         cell.ready = true;
         this.dirty = true;
         this.fadeIn(cell);
-        this.pump();
-      },
-      undefined,
-      () => {
-        // Nächster Spiegel, falls vorhanden (busy bleibt belegt, der Versuch läuft weiter)
-        if (urlIdx + 1 < this.props.serviceUrls.length) {
-          this.loadTile(cell, urlIdx + 1);
-          return;
-        }
-        this.busy--;
-        if (this.busy < 0) this.busy = 0;
-        // dauerhaft fehlend: Zelle unsichtbar lassen (Eltern/Base zeigt durch)
-        cell.ready = false;
-        cell.mesh.visible = false;
-        this.pump();
-      },
-    );
+      } else {
+        bitmap.close();
+      }
+    } catch (err) {
+      // Nächster Spiegel, falls vorhanden (busy bleibt belegt, der Versuch läuft weiter)
+      if (urlIdx + 1 < this.props.serviceUrls.length) {
+        this.loadTile(cell, urlIdx + 1);
+        return;
+      }
+      // dauerhaft fehlend: Zelle unsichtbar lassen (Eltern/Base zeigt durch)
+      cell.ready = false;
+      cell.mesh.visible = false;
+    }
+    this.busy--;
+    if (this.busy < 0) this.busy = 0;
+    this.pump();
   }
 
   private fadeIn(cell: Cell) {
@@ -355,6 +353,7 @@ export class HiPSLayer {
       this.cells.delete(key);
       this.group.remove(cell.mesh);
       cell.mat.map?.dispose();
+      closeBitmap(cell.mat.map);
       cell.mat.dispose();
       cell.mesh.geometry.dispose();
     }
@@ -364,6 +363,7 @@ export class HiPSLayer {
     for (const [, cell] of this.cells) {
       if (cell.animId) cancelAnimationFrame(cell.animId);
       cell.mat.map?.dispose();
+      closeBitmap(cell.mat.map);
       cell.mat.dispose();
       cell.mesh.geometry.dispose();
     }
@@ -378,6 +378,12 @@ function touchLru(lru: string[], key: string) {
   const i = lru.indexOf(key);
   if (i >= 0) lru.splice(i, 1);
   lru.push(key);
+}
+
+// Decodiertes Kachelbild freigeben (das ImageBitmap hält sonst den Speicher bis zum GC)
+function closeBitmap(tex: THREE.Texture | null | undefined) {
+  const img = tex?.image as ImageBitmap | undefined;
+  if (img && typeof img.close === 'function') img.close();
 }
 
 interface GridVert {
