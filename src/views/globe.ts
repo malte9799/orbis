@@ -604,7 +604,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     sampler = new ModelSampler(globalModel, detailModel, timeIdx, wxLayer);
     setActiveSampler(sampler);
     if (isField(state.overlay)) {
-      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey.replace(/[^\w]/g, '_') || 'g'}-${wxLayer?.version ?? ''}`;
+      // the field protocol only accepts [\w-] in the version: a fractional step ("7.333…") would make every tile fail
+      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey || 'g'}-${wxLayer?.version ?? ''}`.replace(/[^\w-]/g, '_');
       (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${state.overlay}/${version}/{z}/{x}/{y}`]);
       vis('field', true);
     }
