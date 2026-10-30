@@ -1,8 +1,8 @@
 import type { FeatureCollection } from 'geojson';
 import { defineExtra } from '../types';
-import { cardHtml } from '../../popup';
+import type { InfoPanelData } from '../../infopanel';
 import { FONT_REGULAR } from '../../vector';
-import { escapeHtml, fetchJson } from '../../../util';
+import { fetchJson } from '../../../util';
 
 interface Country {
   name: string;
@@ -19,7 +19,8 @@ interface Arc {
   lines: number;
   label: string;
   text: string;
-  sources: string[];
+  board: string;
+  sources: { id: string; title: string; url: string; locator: string }[];
 }
 interface Data {
   credit: string;
@@ -76,7 +77,7 @@ function toGeoJson(d: Data): FeatureCollection {
     features.push({
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: greatCircle(f, t, CLASS[a.cls].bulge) },
-      properties: { kind: 'arc', cls: a.cls, name: `${a.from} → ${a.to}`, amounts: JSON.stringify(a.amounts ?? []), lines: a.lines, label: a.label, text: a.text, sources: a.sources.join(' ') },
+      properties: { kind: 'arc', cls: a.cls, name: `${a.from} → ${a.to}`, amounts: JSON.stringify(a.amounts ?? []), lines: a.lines, label: a.label, text: a.text, board: a.board, sources: JSON.stringify(a.sources) },
     });
   }
   return { type: 'FeatureCollection', features };
@@ -138,37 +139,40 @@ export default defineExtra({
     });
   },
   click({ p, at }) {
+    const link = { label: 'Mehr Details auf whofundedgenocide.com', url: 'https://whofundedgenocide.com/map/' };
+    const credit = '„The Entire Network“, Who Funded Genocide, Research mit Wallface (CC BY 4.0). Ein Registereintrag ist keine Anschuldigung gegen die genannten Stellen; eine Obergrenze ist kein ausgegebenes Geld.';
+    let data: InfoPanelData;
     if (p.kind === 'arc') {
       const amounts = JSON.parse(String(p.amounts)) as { currency: string; amount: number }[];
+      const srcs = JSON.parse(String(p.sources)) as Arc['sources'];
       const c = CLASS[p.cls as Cls];
-      return {
-        type: 'html',
-        html: cardHtml({
-          glyph: 'cable',
-          color: c.color,
-          title: String(p.name),
-          subtitle: [c.label, ...amounts.map((m) => `${SYMBOL[m.currency] ?? ''}${MONEY.format(m.amount)} ${m.currency}`), `${p.lines} Zeilen`].join(' · '),
-          description: `${String(p.text)} Ein Registereintrag ist keine Anschuldigung gegen die genannten Stellen; eine Obergrenze ist kein ausgegebenes Geld.`,
-          source: `Who Funded Genocide, „The Entire Network“ (CC BY 4.0) · ${String(p.sources)}`,
-          url: 'https://whofundedgenocide.com/map/',
-        }),
-        lng: at.lng,
-        lat: at.lat,
+      const [from, to] = String(p.name).split(' → ');
+      data = {
+        glyph: 'cable',
+        color: c.color,
+        title: String(p.name),
+        subtitle: c.label,
+        hero: { from, to, note: String(p.label) },
+        tiles: [...amounts.map((m): [string, string] => [m.currency, `${SYMBOL[m.currency] ?? ''}${MONEY.format(m.amount)}`]), ['Zeilen', MONEY.format(Number(p.lines))]],
+        sections: [
+          { key: 'what', title: 'Was der Eintrag sagt', open: true, rows: [{ k: 'Art', v: c.label }, { k: 'Beschreibung', v: String(p.text) }] },
+          { key: 'src', title: `Quellen (${srcs.length})`, open: true, rows: srcs.map((r) => ({ k: r.id, v: r.title, href: r.url })) },
+        ],
+        note: credit,
+        link: { ...link, url: `https://whofundedgenocide.com/map/#${String(p.board)}` },
       };
-    }
-    return {
-      type: 'html',
-      html: cardHtml({
+    } else {
+      data = {
         glyph: 'cable',
         color: COLOR,
         title: String(p.name),
-        extra: `<ul class="pop-desc">${String(p.notes).split('\n').map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>`,
-        source: 'Who Funded Genocide, „The Entire Network“ (CC BY 4.0)',
-        url: 'https://whofundedgenocide.com/map/',
-      }),
-      lng: at.lng,
-      lat: at.lat,
-    };
+        subtitle: 'Land im Datensatz',
+        sections: [{ key: 'notes', title: 'Was die Register zu diesem Land führen', open: true, rows: String(p.notes).split('\n').map((n) => ({ k: '', v: n })) }],
+        note: credit,
+        link,
+      };
+    }
+    return { type: 'panel', data, lng: at.lng, lat: at.lat };
   },
   layers: [...Object.keys(CLASS).map((c) => `geldfluesse-${c}`), 'geldfluesse-pt', 'geldfluesse-label'],
   clickLayers: [...Object.keys(CLASS).map((c) => `geldfluesse-${c}`), 'geldfluesse-pt'],

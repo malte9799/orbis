@@ -59,6 +59,8 @@ const COORD = {
 
 const entities = parseCsv(await get('the-entire-network-entities.csv'));
 const links = parseCsv(await get('the-entire-network-links.csv'));
+const srcRows = parseCsv(await get('the-entire-network-sources.csv'));
+const SRC = new Map(srcRows.map((r) => [r.source_id, r]));
 
 const byId = new Map(entities.map((e) => [`${e.board}/${e.entity_id}`, e]));
 const countries = new Map();
@@ -69,7 +71,12 @@ for (const e of entities) {
   countries.set(e.name, c);
 }
 
-const sources = (ls) => [...new Set(ls.flatMap((l) => l.source_ids.split(/\s+/)).filter(Boolean))];
+// the cited records with title, original address and locator, so the panel can link to them
+const sources = (ls) =>
+  [...new Set(ls.flatMap((l) => l.source_ids.split(/\s+/)).filter(Boolean))].map((id) => {
+    const r = SRC.get(id);
+    return { id, title: r?.title ?? id, url: r?.url ?? '', locator: r?.locator ?? '' };
+  });
 const arcs = [];
 // per currency, never across currencies
 const totals = (ls) => {
@@ -81,7 +88,7 @@ const totals = (ls) => {
 // Canada -> Israel: the Canadian charity returns state money sent to recipients in Israel (sector -> recipient lines)
 const canada = links.filter((l) => l.board === 'charity' && l.from_entity_id.startsWith('sec-') && l.currency === 'CAD' && l.measure === 'received');
 arcs.push({
-  from: 'Canada', to: 'Israel', cls: 'money', amounts: totals(canada), lines: canada.length,
+  board: 'charity', from: 'Canada', to: 'Israel', cls: 'money', amounts: totals(canada), lines: canada.length,
   label: 'Money sent, as the return states it',
   text: 'Gifts from Canadian registered charities to recipients in Israel, as filed in their annual returns.',
   sources: sources(canada),
@@ -104,7 +111,7 @@ for (const [key, ls] of groups) {
   const [from, cls] = key.split('|');
   const targets = [...new Set(ls.map((l) => l.to_name))];
   arcs.push({
-    from, to: 'United States', cls, amounts: totals(ls), lines: ls.length,
+    board: 'chain', from, to: 'United States', cls, amounts: totals(ls), lines: ls.length,
     label: ls[0].what_the_line_says,
     text: `${targets.length} US foreign-agent registrants named in the filings, e.g. ${targets.slice(0, 3).join(', ')}.`,
     sources: sources(ls),
@@ -130,7 +137,7 @@ for (const l of links) {
 for (const [key, g] of struct) {
   const [from, to] = key.split('|');
   arcs.push({
-    from, to, cls: 'structure', lines: g.n, label: 'A national chapter of the parent body',
+    board: 'orgs', from, to, cls: 'structure', lines: g.n, label: 'A national chapter of the parent body',
     text: `${g.n} national chapters of ${[...g.parents].slice(0, 4).join('; ')}${g.parents.size > 4 ? ` and ${g.parents.size - 4} more` : ''}.`,
     sources: sources(g.src),
   });
