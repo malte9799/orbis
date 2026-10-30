@@ -1,4 +1,4 @@
-import { durationTxt, inTxt, legColor, searchStops, stableKey, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
+import { durationTxt, inTxt, legColor, searchStops, stableKey, type DelaySource, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { rufbusInfo, telHref } from '../api/rufbus';
 import { modeStyle } from '../api/transit';
 import { store } from '../store';
@@ -181,13 +181,17 @@ export const timeline = (it: Itinerary) => {
 /** summary line of a status: "+14 min" red / "pünktlich" green, empty without real-time data */
 export const delayTxt = (d: number | null | undefined) => (d == null ? '' : d > 0 ? `<span class="${d <= 5 ? 'fp-ok' : 'fp-late'}">+${d} min</span>` : '<span class="fp-ok">pünktlich</span>');
 
+/** tiny mark next to a delay: where the real-time data comes from (DB timetable data or Transitous) */
+export const srcIcon = (src?: DelaySource) => `<i class="fp-src${src === 'db' ? ' db' : ''}" title="Echtzeit: ${src === 'db' ? 'DB' : 'Transitous'}" aria-label="Echtzeit: ${src === 'db' ? 'DB' : 'Transitous'}">${src === 'db' ? 'DB' : 'T'}</i>`;
+
 export const depRow = (d: Departure) => {
   const late = d.delayMin != null && d.delayMin > 0 ? `<span class="fp-late">+${d.delayMin}</span>` : d.delayMin === 0 ? '<span class="fp-ok">pünktlich</span>' : '';
+  const src = d.delayMin != null ? srcIcon(d.delaySrc) : '';
   return `<li class="fp-dep${d.cancelled ? ' cancelled' : ''}" style="--c:${modeStyle(d.mode).color}">
     <span class="fp-in">${d.cancelled ? '–' : esc(inTxt(d.time))}</span>
     <span class="fp-badge" style="${fg(d.mode)}">${esc(lineName(d.mode, d.line))}</span>
     <span class="fp-to-txt">${esc(d.headsign)}${d.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}</span>
-    <span class="fp-at">${hm(d.time)} ${late}${d.track ? `<small${d.trackChanged ? ' class="fp-gl-chg"' : ''}>Gl. ${esc(d.track)}</small>` : ''}</span>
+    <span class="fp-at">${hm(d.time)} ${late}${src}${d.track ? `<small${d.trackChanged ? ' class="fp-gl-chg"' : ''}>Gl. ${esc(d.track)}</small>` : ''}</span>
   </li>`;
 };
 
@@ -241,7 +245,10 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
     .join('');
   const cancelled = it.legs.some((l) => l.cancelled);
   const dl = first?.delayMin;
-  const tag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
+  const rawTag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
+  const src = !cancelled && dl != null ? srcIcon(first?.delaySrc) : '';
+  // the icon sits in the time line (list) and in the status tag (big card, where the time line is hidden)
+  const tag = src ? rawTag.replace(/<\/span>$/, `${src}</span>`) : rawTag;
   const lines = rides.map((l) => `<span class="fp-badge" style="--c:${legColor(l)};${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>`).join('');
   const startT = first?.dep ?? it.dep;
   return `<details class="fp-itin${hero ? ' fp-hero' : ''}" data-k="${esc(stableKey(it))}">
@@ -250,7 +257,7 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
       <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
-      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b></span>` : ''}
+      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${src}</span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}</span>
     </summary>

@@ -44,6 +44,8 @@ export interface Leg {
   cancelled: boolean;
   /** stops between start and end */
   via: { name: string; time: number; delayMin: number | null }[];
+  /** set when the delays of this leg come from the DB timetable data (otherwise from Transitous) */
+  delaySrc?: DelaySource;
   /** walking distance in meters, foot legs only */
   walkM?: number;
 }
