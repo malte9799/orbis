@@ -43,11 +43,12 @@ jobs:
       - name: 'Status: Abhängigkeiten installieren'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Abhängigkeiten installieren"
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       # Heavy optional assets (Moon textures, detailed ISS model, Trek product lists) only on main: previews would
       # each publish ~250 MB extra to gh-pages and the app falls back to the bundled assets / committed lists anyway.
       # Sharper Moon textures (NASA CGI Moon Kit, ~150 MB download), cached between deploys.
@@ -101,7 +102,7 @@ jobs:
       - name: 'Status: Build'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Build"
-      - run: npm run build
+      - run: pnpm build
         env:
           # shared data proxy (proxy/cloudflare-worker.js) – Settings → Secrets and variables → Actions → Variables
           VITE_PROXY_URL: ${{ vars.PROXY_URL }}

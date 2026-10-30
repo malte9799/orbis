@@ -200,10 +200,10 @@ RainViewer-kompatibler Radar-Server (z. B. selbst gehostetes [LibreWXR](https://
 ## 🛠️ Entwicklung
 
 ```bash
-npm install
-npm run dev       # Entwicklungsserver
-npm run build     # Typecheck + Produktions-Build nach dist/
-npm run preview   # Build lokal ansehen
+pnpm install
+pnpm dev       # Entwicklungsserver
+pnpm build     # Typecheck + Produktions-Build nach dist/
+pnpm preview   # Build lokal ansehen
 ```
 
 **Technik:** Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion,
