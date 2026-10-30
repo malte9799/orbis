@@ -384,7 +384,7 @@ export function registerFieldProtocol() {
   protocolRegistered = true;
   // URL format: wxfield://<field>/<version>/<z>/<x>/<y>
   addProtocol('wxfield', async (params) => {
-    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w.-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
     const def = m ? FIELDS[m[1] as FieldId] : undefined;
     const sampler = m ? samplers.get(m[2] ?? 'map') : undefined;
     if (!m || !def || !sampler) throw new Error('field not ready');
