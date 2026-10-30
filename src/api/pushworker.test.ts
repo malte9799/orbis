@@ -107,7 +107,13 @@ describe('DB timetable XML', () => {
   it('finds a train whose category field is the operator code (ODEG: c="OE", line "RE8")', () => {
     const planned = parseTimetable('<timetable><s id="-9-2610290712-1"><tl f="D" t="p" o="OWRE" c="OE" n="62001"/><dp pt="2610290712" pp="2" l="RE8"/></s></timetable>');
     const changes = parseTimetable('<timetable><s id="-9-2610290712-1"><dp ct="2610290737" l="RE8"/></s></timetable>');
-    for (const line of ['RE8', 'RE 8', '62001']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toMatchObject({ delayMin: 25 });
+    for (const line of ['RE8', 'RE 8', '62001', 'RE8 (62001)', 'RE8 (99999)']) expect(matchDelay(planned, changes, { ts: at('06:12'), kind: 'dep', line })).toMatchObject({ delayMin: 25 });
+  });
+  it('prefers the train number of "RE8 (62001)" and does not take another train of the line', () => {
+    const planned = parseTimetable('<timetable><s id="a"><tl c="RE" n="4306"/><dp pt="2610290712" l="8"/></s></timetable>');
+    expect(matchDelay(planned, [], { ts: at('06:12'), kind: 'dep', line: 'RE8 (4306)', now: at('06:00') })).toMatchObject({ delayMin: 0 });
+    expect(matchDelay(planned, [], { ts: at('06:12'), kind: 'dep', line: 'IC1 (4306)', now: at('06:00') })).toMatchObject({ delayMin: 0 }); // number wins
+    expect(matchDelay(planned, [], { ts: at('06:12'), kind: 'dep', line: 'IC1 (9999)', now: at('06:00') })).toBeNull();
   });
   it('does not guess when nothing or something else matches', () => {
     const planned = parseTimetable(PLAN);

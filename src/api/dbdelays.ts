@@ -86,6 +86,7 @@ export async function withDelays(list: Itinerary[]): Promise<Itinerary[]> {
       matched = true;
       return {
         ...l,
+        delaySrc: 'db',
         ...(d ? { delayMin: d.delayMin, dep: l.schedDep + (d.delayMin ?? 0) * 60000, track: d.track ?? l.track, trackChanged: d.trackChanged || l.trackChanged, cancelled: l.cancelled || d.cancelled } : {}),
         ...(a ? { arrDelayMin: a.delayMin, arr: l.schedArr + (a.delayMin ?? 0) * 60000, toTrack: a.track ?? l.toTrack, toTrackChanged: a.trackChanged || l.toTrackChanged, cancelled: l.cancelled || a.cancelled } : {}),
       };
