@@ -90,13 +90,16 @@ describe('ModelSampler with ICON fields', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
+  // every load runs on a clock that is further ahead than the metadata cache lives (5 min), so it never reuses an earlier test's metadata
+  let clock = Date.now();
+
   async function layer(iconTimes: number[]) {
-    const meta = { v: 1, run: '2026103000', issued: Date.now(), times: iconTimes, attribution: '', vars: { temperature_2m: { scale: 0.1, offset: -5, unit: '°C' } } };
+    clock += 10 * 60_000;
+    const meta = { v: 1, run: '2026103000', issued: clock, times: iconTimes, attribution: '', vars: { temperature_2m: { scale: 0.1, offset: -5, unit: '°C' } } };
     vi.stubGlobal('fetch', async (url: string) =>
       url.endsWith('latest.json') ? { ok: true, json: async () => meta } : { ok: true, arrayBuffer: async () => owx() },
     );
-    // each test needs its own metadata (the module caches it for a few minutes)
-    vi.useFakeTimers({ now: Date.now() + 10 * 60_000, toFake: ['Date'] });
+    vi.useFakeTimers({ now: clock, toFake: ['Date'] });
     const l = await WxLayer.load(['temperature_2m']);
     vi.useRealTimers();
     return l!;
@@ -111,15 +114,15 @@ describe('ModelSampler with ICON fields', () => {
     expect(sampleAt(l, 4)).toBeCloseTo(42, 6); // after the last one
     const a = sampleAt(l, 1); // T0+3h = ICON step 0
     const b = sampleAt(l, 2); // ICON step 1
-    expect(a).not.toBe(42);
+    expect(Math.abs(a - 42)).toBeGreaterThan(1); // ICON, not Open-Meteo
     expect(b).not.toBe(a);
     expect(sampleAt(l, 1.5)).toBeCloseTo((a + b) / 2, 4);
   });
 
   it('falls back to Open-Meteo once the run is too old', async () => {
     const l = await layer([T0, T0 + 3 * H, T0 + 6 * H]);
-    expect(sampleAt(l, 0)).not.toBe(42);
-    vi.useFakeTimers({ now: Date.now() + 31 * H, toFake: ['Date'] });
+    expect(Math.abs(sampleAt(l, 0) - 42)).toBeGreaterThan(1);
+    vi.useFakeTimers({ now: clock + 31 * H, toFake: ['Date'] });
     expect(l.expired).toBe(true);
     expect(sampleAt(l, 0)).toBeCloseTo(42, 6);
     vi.useRealTimers();
@@ -151,5 +154,21 @@ describe('terrain correction', () => {
     const none = new ModelSampler({ lat0: 0, lon0: 0, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [0], data: {} } as unknown as ModelGrid, null, 0, null);
     expect(none.hasTerrain()).toBe(false);
     expect(none.terrainDelta(45, 10)).toBe(0);
+  });
+});
+
+describe('hasTerrain', () => {
+  const H = 3600_000;
+  const T0 = Date.UTC(2026, 9, 30, 0);
+  const grid = { lat0: 50, lon0: 5, dx: 1, dy: 1, nx: 11, ny: 11, wrap: false, step: () => new Float32Array(121) };
+  const layer = (has: boolean) =>
+    ({ terrain: { hs: grid, dem: grid }, has: () => has, overviewOf: () => grid, detail: new Map(), times: [T0 + 3 * H, T0 + 6 * H], stepMs: 3 * H }) as unknown as WxLayer;
+  const global = { lat0: 90, lon0: -180, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [T0, T0 + 3 * H, T0 + 6 * H, T0 + 9 * H], data: {} } as unknown as ModelGrid;
+
+  it('needs the ICON temperature at the current moment, not only the terrain heights', () => {
+    expect(new ModelSampler(global, null, 1, layer(true)).hasTerrain()).toBe(true);
+    expect(new ModelSampler(global, null, 0, layer(true)).hasTerrain()).toBe(false); // before the first ICON step
+    expect(new ModelSampler(global, null, 3, layer(true)).hasTerrain()).toBe(false); // after the last one
+    expect(new ModelSampler(global, null, 1, layer(false)).hasTerrain()).toBe(false); // temperature not loaded or the run has expired
   });
 });
