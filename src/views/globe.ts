@@ -491,7 +491,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (l.type === 'symbol' && l.id !== 'lbl-water') {
         map.setPaintProperty(l.id, 'text-color', c.color);
         map.setPaintProperty(l.id, 'text-halo-color', c.halo);
-      } else if (l.id === 'lbl-border-country') map.setPaintProperty(l.id, 'line-color', c.border);
+      } else if (l.id === 'lbl-border-country' || l.id === 'lbl-border-water') map.setPaintProperty(l.id, 'line-color', c.border);
       else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.state);
     }
   }
