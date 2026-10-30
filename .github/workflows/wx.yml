@@ -1,0 +1,88 @@
+name: Update weather fields
+
+# Wetterkarten-Felder aus dem DWD-ICON-Lauf (scripts/wx-icon.py, Format: docs/WETTERDATEN-FORMAT.md),
+# veröffentlicht in einem Cloudflare-R2-Bucket (S3-API). Ein ICON-Lauf ist ca. 3 h nach Laufzeit
+# vollständig; der Job startet dann und wartet bis zu 40 min auf den neuesten Lauf.
+#
+# Einrichtung (einmalig): R2-Bucket mit öffentlicher Domain und CORS (GET, Origin *), API-Token mit
+# Schreibrechten für den Bucket. Repository-Secrets R2_ACCOUNT_ID, R2_ACCESS_KEY_ID,
+# R2_SECRET_ACCESS_KEY; Repository-Variablen R2_BUCKET und WX_PUBLIC_URL (z. B. https://wx.example.org).
+# Ohne diese Angaben läuft die Verarbeitung trotzdem, lädt aber nichts hoch.
+
+on:
+  schedule:
+    - cron: '20 3,9,15,21 * * *'
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'ICON-Lauf (YYYYMMDDHH) – leer: neuester'
+        type: string
+        default: ''
+      force:
+        description: 'Auch hochladen, wenn der Lauf schon veröffentlicht ist'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wx
+  cancel-in-progress: false
+
+env:
+  R2_BUCKET: ${{ vars.R2_BUCKET }}
+  WX_PUBLIC_URL: ${{ vars.WX_PUBLIC_URL }}
+  # R2 versteht die neuen Prüfsummen-Header der AWS-CLI nicht
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  AWS_DEFAULT_REGION: auto
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/wx-requirements.txt
+      - run: pip install -r scripts/wx-requirements.txt
+      - name: Remap weights cache
+        uses: actions/cache@v4
+        with:
+          path: ../wx-work/weights
+          key: wx-weights-v1
+      - name: Published state
+        run: |
+          mkdir -p ../wx-prev ../wx-out/v1
+          if [ -n "$WX_PUBLIC_URL" ] && [ "${{ github.event.inputs.force }}" != "true" ]; then
+            curl -fsS -m 30 "$WX_PUBLIC_URL/v1/latest.json" -o ../wx-prev/latest.json || rm -f ../wx-prev/latest.json
+          fi
+      - name: Build fields
+        run: |
+          python scripts/wx-icon.py --out ../wx-out --work ../wx-work \
+            --run "${{ github.event.inputs.run || 'latest' }}" --wait 40 --published ../wx-prev/latest.json --selftest
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          [ -f ../wx-out/v1/latest.json ] || { echo 'Kein neuer Lauf – nichts hochzuladen'; exit 0; }
+          if [ -z "$R2_BUCKET" ] || [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "::warning::R2 nicht konfiguriert – Upload übersprungen"; exit 0
+          fi
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          RUN=$(python -c "import json;print(json.load(open('../wx-out/v1/latest.json'))['run'])")
+          # Läufe sind unveränderlich (Pfad enthält den Lauf) → lange cachen; latest.json zuletzt und kurz
+          aws s3 sync "../wx-out/v1/$RUN" "s3://$R2_BUCKET/v1/$RUN" --endpoint-url "$EP" \
+            --cache-control "public, max-age=31536000, immutable" --content-type application/octet-stream --only-show-errors
+          aws s3 cp ../wx-out/v1/latest.json "s3://$R2_BUCKET/v1/latest.json" --endpoint-url "$EP" \
+            --cache-control "public, max-age=120" --content-type application/json
+          # die zwei neuesten Läufe behalten (laufende Sitzungen lesen noch den vorigen)
+          aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix v1/ --delimiter / --endpoint-url "$EP" \
+            --query 'CommonPrefixes[].Prefix' --output text | tr '\t' '\n' | grep -E '^v1/[0-9]{10}/$' | sort | head -n -2 |
+            while read -r p; do aws s3 rm "s3://$R2_BUCKET/$p" --recursive --endpoint-url "$EP" --only-show-errors; done
