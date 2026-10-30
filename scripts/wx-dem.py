@@ -67,6 +67,8 @@ def main():
     with cf.ThreadPoolExecutor(16) as ex:
         for x, y, h in ex.map(lambda a: get_tile(*a), [(x, y) for x in range(TILES) for y in range(TILES)]):
             merc[y * PX : (y + 1) * PX, x * PX : (x + 1) * PX] = h
+    # Meer = 0 m – vor dem Interpolieren, sonst ziehen die Tiefenwerte der Meeresböden die Küstenpixel unter 0
+    np.maximum(merc, 0, out=merc)
     print('Kacheln geladen', flush=True)
 
     ny, nx = round(180 / STEP_DEG) + 1, M + 1
@@ -82,7 +84,7 @@ def main():
         sel = slice(a, a + 256)
         yy, xx = np.meshgrid(fy[sel], fx, indexing='ij')
         h = map_coordinates(merc, [yy, xx], order=1, mode='nearest')
-        dem[rows[sel]] = np.clip(np.round(np.maximum(h, 0)), 0, 32000).astype(np.int16)  # Meer = 0 m
+        dem[rows[sel]] = np.clip(np.round(h), 0, 32000).astype(np.int16)
 
     out = os.path.join(args.out, 'v1', 'static', 'dem')
     os.makedirs(out, exist_ok=True)

@@ -377,7 +377,7 @@ export function registerFieldProtocol() {
     const z = +m[3];
     const x = +m[4];
     const y = +m[5];
-    if (def.terrain && sampler.hasTerrain()) return { data: await renderTerrainTile(def, sampler, z, x, y) };
+    if (def.terrain && sampler.hasTerrain(def.variable)) return { data: await renderTerrainTile(def, sampler, z, x, y) };
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
     const N = z <= 4 ? 64 : 128;

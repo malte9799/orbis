@@ -471,13 +471,20 @@ export class ModelSampler {
     return r;
   }
 
+  /** current moment as a (fractional) index into the ICON time steps; NaN when their time range does not cover it */
+  private wxPosition(): number {
+    const wx = this.wx!;
+    const f = (this.time - wx.times[0]) / wx.stepMs;
+    return f >= -1e-6 && f <= wx.times.length - 1 + 1e-6 ? f : NaN;
+  }
+
   /** value from the ICON fields at the current moment, NaN where they do not cover it */
   private sampleWx(v: ModelVar, lat: number, lon: number): number {
     const wx = this.wx!;
     const base = wx.overviewOf(v)!;
-    const f = (this.time - wx.times[0]) / wx.stepMs;
+    const f = this.wxPosition();
     const last = wx.times.length - 1;
-    if (!(f >= -1e-6 && f <= last + 1e-6)) return NaN;
+    if (Number.isNaN(f)) return NaN;
     const i = Math.max(0, Math.min(Math.floor(f), Math.max(0, last - 1)));
     const fr = Math.min(1, Math.max(0, f - i));
     const detail = wx.detail.get(v);
@@ -499,9 +506,13 @@ export class ModelSampler {
     return tf && !Number.isNaN(r) ? tf[1](r) : r;
   }
 
-  /** true while terrain heights are loaded for the view (the temperature gets the terrain correction) */
-  hasTerrain(): boolean {
-    return !!this.wx?.terrain;
+  /**
+   * true while terrain heights are loaded for the view and the ICON values of `v` (temperature or dew point) answer at
+   * the current moment (otherwise the Open-Meteo values are shown, which must not get the correction)
+   */
+  hasTerrain(v: ModelVar = 'temperature_2m'): boolean {
+    const wx = this.wx;
+    return !!wx?.terrain && wx.has(v) && !Number.isNaN(this.wxPosition());
   }
 
   /**
