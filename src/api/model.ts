@@ -41,7 +41,7 @@ export interface ModelGrid {
 
 export { OpenMeteoLimitError as ModelLimitError };
 
-const FORECAST_DAYS = 5;
+const FORECAST_DAYS = 3;
 
 type HourlyRow = { hourly: Record<string, (number | null)[]> & { time: string[] } };
 
@@ -122,7 +122,7 @@ async function fetchGrid(lat0: number, lon0: number, dx: number, dy: number, nx:
 // ---------------------------------------------------------------------------
 // Global grid (15° × 10°, 408 points = 408 API calls) – cached in memory and localStorage for 1 h.
 
-const CACHE_KEY = 'wg.model.v3';
+const CACHE_KEY = 'wg.model.v4';
 const CACHE_MS = 60 * 60 * 1000;
 let globalGrid: ModelGrid | null = null;
 let globalAt = 0;
@@ -166,6 +166,8 @@ function writeCache(g: ModelGrid, key = CACHE_KEY) {
   try {
     localStorage.removeItem('wg.cache.grid'); // older caches
     localStorage.removeItem('wg.model.v2');
+    localStorage.removeItem('wg.model.v3');
+    localStorage.removeItem('wg.region.v2');
     const data: Record<string, string> = {};
     for (const [k, v] of Object.entries(g.data)) if (!(DERIVED as readonly string[]).includes(k)) data[k] = toB64(v);
     localStorage.setItem(key, JSON.stringify({ at: Date.now(), g: { ...g, data } }));
@@ -193,7 +195,7 @@ function readCache(key = CACHE_KEY): { at: number; grid: ModelGrid } | null {
 // Regional grid around a place for the forecast page map: 17 × 9 points at 1° (153 calls),
 // the last region is kept in localStorage for an hour.
 
-const REGION_KEY = 'wg.region.v2';
+const REGION_KEY = 'wg.region.v3';
 const REGION_HALF_LON = 8;
 const REGION_HALF_LAT = 4;
 const regionCache = new Map<string, Promise<ModelGrid>>();

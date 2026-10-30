@@ -618,3 +618,43 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud .hud-bar.expanded .kc .th { height: 58px; }
 .hud .hud-bar.expanded .kc .gt { padding: 7px 9px 9px; display: grid; gap: 5px; }
 .hud.gal-open .wxm { visibility: hidden; }
+
+/* ---------- desktop: time card (play, title + date, scrubber with ticks) and the legend beside the "i" ---------- */
+/* .globe-bottom only spans the view as an anchor; the cards position themselves inside it */
+.globe-view[data-layout='desktop'] .globe-bottom { left: 0; right: 0; bottom: 0; width: auto; transform: none; padding: 0; background: none; border: 0; border-radius: 0; backdrop-filter: none; overflow: visible; display: block; height: 0; pointer-events: none; }
+.globe-view[data-layout='desktop'] .globe-bottom > * { pointer-events: auto; }
+.globe-view[data-layout='desktop'] .timeline { position: absolute; left: calc(50% + var(--hud-shift)); bottom: var(--hud-b); transform: translateX(-50%); width: min(560px, calc(100vw - 24px - var(--hud-shift) * 2 - 200px)); min-width: 320px; display: grid; grid-template-columns: auto 1fr; grid-template-areas: 'play head' 'track track'; align-items: center; gap: 6px 12px; padding: 9px 14px 6px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; background: rgba(34, 36, 44, 0.78); backdrop-filter: blur(24px) saturate(1.4); -webkit-backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35); }
+.globe-view[data-layout='desktop'] .timeline .tl-play { grid-area: play; width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.globe-view[data-layout='desktop'] .timeline .tl-play:hover { background: rgba(255, 255, 255, 0.22); }
+.globe-view[data-layout='desktop'] .timeline .tl-play svg { width: 14px; height: 14px; }
+.globe-view[data-layout='desktop'] .tl-head { grid-area: head; display: flex; flex-direction: column; gap: 0; min-width: 0; line-height: 1.25; }
+.globe-view[data-layout='desktop'] .tl-head b { font-size: 0.9rem; font-weight: 700; color: #fff; }
+.globe-view[data-layout='desktop'] .tl-head span { font-size: 0.8rem; font-weight: 500; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.globe-view[data-layout='desktop'] .timeline .tl-time, .globe-view[data-layout='desktop'] .timeline .tl-now { display: none; }
+.globe-view[data-layout='desktop'] .tl-track { grid-area: track; padding-bottom: 22px; }
+.globe-view[data-layout='desktop'] .tl-range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 6px; margin: 0; border-radius: 3px; cursor: pointer; background: linear-gradient(90deg, #fff var(--p, 0%), rgba(255, 255, 255, 0.2) var(--p, 0%)); }
+.globe-view[data-layout='desktop'] .tl-range::-webkit-slider-runnable-track { height: 6px; background: none; }
+.globe-view[data-layout='desktop'] .tl-range::-moz-range-track { height: 6px; background: none; }
+.globe-view[data-layout='desktop'] .tl-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.15s; }
+.globe-view[data-layout='desktop'] .tl-range::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; border: 0; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45); opacity: 0; transition: opacity 0.15s; }
+.globe-view[data-layout='desktop'] .tl-range:hover::-webkit-slider-thumb, .globe-view[data-layout='desktop'] .tl-range:focus-visible::-webkit-slider-thumb, .globe-view[data-layout='desktop'] .tl-range:active::-webkit-slider-thumb { opacity: 1; }
+.globe-view[data-layout='desktop'] .tl-range:hover::-moz-range-thumb, .globe-view[data-layout='desktop'] .tl-range:focus-visible::-moz-range-thumb, .globe-view[data-layout='desktop'] .tl-range:active::-moz-range-thumb { opacity: 1; }
+.globe-view[data-layout='desktop'] .tl-days { left: 0; right: 0; bottom: 0; height: 20px; font-size: 0.72rem; font-weight: 600; color: rgba(255, 255, 255, 0.6); pointer-events: none; }
+.globe-view[data-layout='desktop'] .tl-days i { position: absolute; top: 2px; width: 1px; height: 6px; margin-left: -0.5px; background: rgba(255, 255, 255, 0.28); }
+.globe-view[data-layout='desktop'] .tl-days span, .globe-view[data-layout='desktop'] .tl-days button { top: 8px; transform: translateX(-50%); white-space: nowrap; }
+.globe-view[data-layout='desktop'] .tl-days button { position: absolute; padding: 0; border: 0; background: none; font: inherit; color: #fff; cursor: pointer; pointer-events: auto; }
+.globe-view[data-layout='desktop'] .tl-days button:hover { text-decoration: underline; }
+
+/* legend: compact card bottom right, to the left of the attribution "i" (29 px button + 10 px margin) */
+.globe-view[data-layout='desktop'] .legend { position: absolute; right: calc(var(--safe-right, 0px) + 10px + 29px + 8px); bottom: calc(var(--safe-bottom, 0px) + 8px); width: 320px; padding: 0; border: 0; border-radius: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; transition: opacity 0.15s; }
+.globe-view[data-layout='desktop'] .legend[hidden] { display: none; }
+.globe-view[data-layout='desktop'] .legend-bar { height: 22px; border-radius: 5px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35), 0 2px 10px rgba(0, 0, 0, 0.35); }
+/* the name of the map only shows on hover; the card itself is just the colour scale */
+.globe-view[data-layout='desktop'] .legend-title { position: absolute; right: 0; bottom: calc(100% + 6px); margin: 0; padding: 5px 10px; border-radius: 10px; background: rgba(34, 36, 44, 0.92); border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; line-height: 1.25; white-space: nowrap; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity 0.15s, transform 0.15s; }
+.globe-view[data-layout='desktop'] .legend:hover .legend-title { opacity: 1; transform: none; }
+.globe-view[data-layout='desktop'] .legend.no-scale { display: none; }
+.globe-view[data-layout='desktop']:has(.maplibregl-compact-show) .legend { opacity: 0; pointer-events: none; }
+.globe-view[data-layout='desktop'] .globe-bottom .legend:not([hidden]) + .timeline:not([hidden]) { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.globe-view[data-layout='desktop'] .globe-bottom .legend-ticks { height: 22px; margin-top: -22px; line-height: 22px; }
+/* every label (also the unit in the lead-in) is centred on its position */
+.globe-view[data-layout='desktop'] .globe-bottom .legend-ticks span { transform: translateX(-50%); margin-left: 0; }
