@@ -523,7 +523,7 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .globe-view[data-layout='landscape'] .globe-bottom .tl-play { order: 1; }
 .globe-view[data-layout='landscape'] .globe-bottom .tl-track { order: 2; flex: 1; min-width: 0; padding-bottom: 0; }
 .globe-view[data-layout='landscape'] .globe-bottom .legend { order: 3; width: 130px; flex: none; padding: 0; }
-.globe-view[data-layout='landscape'] .globe-bottom .legend-title, .globe-view[data-layout='landscape'] .globe-bottom .legend-ticks, .globe-view[data-layout='landscape'] .globe-bottom .tl-days { display: none; }
+.globe-view[data-layout='landscape'] .globe-bottom .legend-title, .globe-view[data-layout='landscape'] .globe-bottom .legend-ticks, .globe-view[data-layout='landscape'] .globe-bottom .tl-days, .globe-view[data-layout='landscape'] .globe-bottom .tl-head { display: none; }
 .globe-view[data-layout='landscape'] .globe-bottom .legend-bar { height: 6px; border-radius: 3px; }
 .globe-view[data-layout='landscape'] .globe-bottom .tl-time { order: 4; min-width: 70px; }
 
@@ -653,6 +653,10 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .globe-view[data-layout='desktop'] .legend-title { position: absolute; right: 0; bottom: calc(100% + 6px); margin: 0; padding: 5px 10px; border-radius: 10px; background: rgba(34, 36, 44, 0.92); border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.78rem; line-height: 1.25; white-space: nowrap; opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity 0.15s, transform 0.15s; }
 .globe-view[data-layout='desktop'] .legend:hover .legend-title { opacity: 1; transform: none; }
 .globe-view[data-layout='desktop'] .legend.no-scale { display: none; }
+/* narrow desktop: the 560 px timeline would run under the legend, so the legend stacks above it (timeline ≈ 87 px tall) */
+@media (max-width: 1319px) {
+  .globe-view[data-layout='desktop'] .globe-bottom:has(.timeline:not([hidden])) .legend { bottom: calc(var(--hud-b) + 96px); }
+}
 .globe-view[data-layout='desktop']:has(.maplibregl-compact-show) .legend { opacity: 0; pointer-events: none; }
 .globe-view[data-layout='desktop'] .globe-bottom .legend:not([hidden]) + .timeline:not([hidden]) { border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .globe-view[data-layout='desktop'] .globe-bottom .legend-ticks { height: 22px; margin-top: -22px; line-height: 22px; }
