@@ -118,7 +118,7 @@ export interface Hud {
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
-  return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
+  return f.options.filter(([v]) => !f.invert?.includes(v) && (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
 };
 
 /** volume of the strike tick sounds ("Blitze Live"): stored as a vol-n token in the layer filter */
@@ -495,7 +495,7 @@ export function createHud(host: HudHost): Hud {
         open
           ? `<div class="more">
         ${c.kind === 'extra' ? `<label class="op"><span>Deckkraft</span><input type="range" class="rng" min="10" max="100" step="5" value="${op}" data-op="${esc(l.id)}" aria-label="Deckkraft"/><span data-opv>${op} %</span></label>` : ''}
-        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${f.multi ? ((l.filter ?? '').split(',').includes(v) ? 'on' : '') : (l.filter ?? '') === v ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div>` : ''}
+        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${(f.multi ? (l.filter ?? '').split(',').includes(v) : (l.filter ?? '') === v) !== !!f.invert?.includes(v) ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div>` : ''}
         <div class="src"><span>${esc(c.hint)}</span><button type="button" data-act="remove" data-id="${esc(l.id)}">Entfernen</button></div>
       </div>`
           : ''

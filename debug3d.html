@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>3D-Kacheln Debug</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1020; color: #dfe6f5; font: 13px/1.35 system-ui, sans-serif; }
+      #map { position: absolute; inset: 0; }
+      #list { position: absolute; top: 8px; left: 8px; bottom: 8px; width: 210px; z-index: 2; overflow-y: auto; background: rgba(10,14,22,.88); border-radius: 8px; padding: 6px; }
+      #list .row { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; }
+      #list .row input { flex: none; margin: 0 0 0 2px; }
+      #list button { border: 0; border-radius: 5px; background: rgba(255,255,255,.07); color: inherit; font: inherit; cursor: pointer; }
+      #list button.name { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; padding: 5px 8px; }
+      #list button.name .marks { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+      #list button.name .type { display: inline-flex; flex: none; opacity: .8; }
+      #list button.name .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+      #list button.name.on { background: #3a6cf0; color: #fff; }
+      #list .badges { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 3px 24px; }
+      #list button.tag { padding: 1px 6px; font-size: 11px; background: rgba(255,255,255,.12); }
+      #list button.tag.on { background: #3a6cf0; color: #fff; }
+      #list .picker { margin: 0 0 6px 24px; padding: 6px; border-radius: 6px; background: rgba(255,255,255,.05); font-size: 11px; }
+      #list .picker .group { margin: 0 0 4px; }
+      #list .picker .group button.tag { margin: 0 2px 2px 0; }
+      #list .picker input[type=text] { width: 100%; box-sizing: border-box; margin: 2px 0 0; padding: 3px 5px; border: 0; border-radius: 4px; background: rgba(255,255,255,.1); color: inherit; font: inherit; }
+      #status { position: absolute; right: 8px; top: 8px; z-index: 2; max-width: 320px; background: rgba(10,14,22,.88); border-radius: 8px; padding: 8px 10px; font: 12px/1.4 ui-monospace, monospace; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="list"></div>
+    <div id="status">wähle links eine Quelle</div>
+    <script type="module" src="/src/debug3d.ts"></script>
+  </body>
+</html>

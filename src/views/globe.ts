@@ -58,6 +58,7 @@ import { defaultBuildings3d, defaultTerrain3d, type Karte, type NightMode, type 
 import { createRouting, type Routing } from '../routing';
 import type { LocMode } from '../routing/locator';
 import { createScaleBar } from '../scalebar';
+import { setTiles3dOptions } from '../globe/tiles3d';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
 import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
@@ -321,6 +322,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const rcats = (lay('resources')?.filter ?? '').split(',').filter(Boolean);
     if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
+    const t3 = lay('tiles3d');
+    if (t3) setTiles3dOptions(map, store.getKeys(), t3.opacity ?? 100, !(t3.filter ?? '').split(',').includes('noedge'));
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
