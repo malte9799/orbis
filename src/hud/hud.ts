@@ -1,9 +1,9 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
-import { BASES } from '../globe/style';
+import { availableBases } from '../globe/style';
 import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
-import type { Place } from '../store';
+import { store, type Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
 import {
   BASE_GRADIENT,
@@ -16,7 +16,7 @@ import {
   INFRA_MENU,
   infraCatOf,
   ISOBAR_OPTION_MAINS,
-  MAIN_BASES,
+  BASE_GROUPS,
   TRAFFIC_LAYER_IDS,
   TRAFFIC_MENU,
   trafficCatOf,
@@ -71,6 +71,8 @@ export interface HudHost {
   /** map control column (desktop): zoom by delta levels, fly to the own position, reset the bearing */
   zoomBy(delta: number): void;
   locate(): void;
+  /** open the route planner */
+  route(): void;
   resetNorth(): void;
   /** camera tilt in degrees (0 = top-down); animated for the 2D/3D button, immediate while the slider is dragged */
   setPitch(deg: number, animate: boolean): void;
@@ -155,7 +157,7 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', moreBases: false, evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -186,6 +188,7 @@ export function createHud(host: HudHost): Hud {
       <div class="hud-cg">
         <button type="button" data-act="basepick" title="Grundkarte" aria-label="Grundkarte wählen" aria-expanded="false">${ico('earth')}</button>
         <button type="button" data-act="locate" title="Mein Standort" aria-label="Mein Standort">${ico('navarrow')}</button>
+        <button type="button" data-act="route" title="Route planen" aria-label="Route planen">${ico('route')}</button>
       </div>
       <div class="hud-bp hud-glass" hidden></div>
     </div>
@@ -240,22 +243,75 @@ export function createHud(host: HudHost): Hud {
   const mglyph = (k: Karte, s = 34) => `<span class="mglyph" style="background:${esc(k.color)};width:${s}px;height:${s}px">${ico(k.icon, 2)}</span>`;
 
   // ----- regions -----------------------------------------------------------
+  /** desktop: the "Alle Karten" view lives inside the bar itself (the bar unfolds, no separate popup) */
+  const barExpanded = () => ui.gallery && layout === 'desktop';
+  /**
+   * One Karte in the bar: the same element is a pill (collapsed) and a card (unfolded) – only the layout
+   * differs, so the unfolding can move it (and its name) from one to the other. `i` = key number when pinned.
+   */
+  function kcard(k0: Karte, i: number | null): string {
+    const k = view(k0.id);
+    const folded = i !== null && k.id === cur && !!k.menu;
+    const { html, more } = iconList(k, 8);
+    const n = k.layers.length + (k.main ? 1 : 0);
+    const f = mainFam(k);
+    const pinnedK = st.pinned.includes(k.id);
+    return `<div class="kc ${k.id === cur ? 'on' : ''}" role="button" tabindex="0" data-act="go" data-id="${esc(k.id)}" aria-pressed="${k.id === cur}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
+      <div class="kc-top"><span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : i !== null ? `<kbd>${i + 1}</kbd>` : ''}</div>
+      <div class="kc-body">
+        <div class="th" style="background:radial-gradient(120% 120% at 20% 0%, ${esc(k.color)}55, transparent 60%), ${BASE_GRADIENT[k.base]}"><span class="thi">${ico(f ? f.icon : k.icon, 1.6)}</span></div>
+        ${isStd(k) ? '<span class="std">Standard</span>' : ''}${dirty(k.id) ? '<span class="chg">geändert</span>' : ''}
+        <div class="gt"><div class="icons">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
+          <small>${n} Ebenen${k.view ? ` · ${esc((k.view.name ?? 'Ausschnitt').split(',')[0])}` : ''}</small></div>
+        <button type="button" class="pin ${pinnedK ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${pinnedK ? 'Von der Leiste lösen' : 'An die Leiste heften'}" aria-pressed="${pinnedK}">${ico('starf')}</button>
+        ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="Karte löschen" aria-label="Karte löschen">${ico('x')}</button>`}
+      </div></div>`;
+  }
+  /** the unfolded bar: the pinned Karten as cards first, then every other Karte */
+  function barGallery(): string {
+    const slot = (k: Karte) => {
+      const i = st.pinned.indexOf(k.id);
+      return i < 0 ? null : i;
+    };
+    return `<div class="bg-head"><h4><span>Karten</span><small>★ = in der Leiste · Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)}</small></h4>
+        <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="Karten einklappen" title="Einklappen">${ico('x', 2)}</button></div>
+      <div class="ggrid kc-grid">${STANDARD.map((k) => kcard(k, slot(k))).join('')}</div>
+      <h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>
+      <div class="ggrid kc-grid">${st.own.map((k) => kcard(k, slot(k))).join('')}
+        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}Neue leere Karte<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>`;
+  }
+
   function renderBar() {
-    const scrollLeft = reg('bar').querySelector('.hud-bar')?.scrollLeft ?? 0;
-    reg('bar').innerHTML = `<div class="hud-bar hud-glass" role="tablist" aria-label="Karten">
-      ${pins()
-        .map((k0, i) => {
-          const k = view(k0.id);
-          const folded = k.id === cur && !!k.menu;
-          return `<button type="button" role="tab" aria-selected="${k.id === cur}" data-act="go" data-id="${esc(k.id)}" class="${k.id === cur ? 'on' : ''}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
-            <span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : `<kbd>${i + 1}</kbd>`}</button>`;
-        })
-        .join('')}
+    const prev = reg('bar').querySelector<HTMLElement>('.hud-bar');
+    const scrollLeft = prev?.scrollLeft ?? 0;
+    const was = prev?.classList.contains('expanded') ?? false;
+    const from = prev?.getBoundingClientRect();
+    const expanded = barExpanded();
+    reg('bar').innerHTML = `<div class="hud-bar hud-glass${expanded ? ' expanded' : ''}" role="group" aria-label="Karten">
+      ${
+        expanded
+          ? barGallery()
+          : `${pins().map((k, i) => kcard(k, i)).join('')}
       <span class="sep"></span>
-      <button type="button" class="all ${ui.gallery ? 'open' : ''}" data-act="gallery" aria-expanded="${ui.gallery}">${ico('grid')}<span class="nm">${phone() ? 'Alle' : 'Alle Karten'}</span></button>
+      <button type="button" class="all" data-act="gallery" aria-expanded="false" aria-label="Alle Karten" title="Alle Karten">${ico('grid')}</button>`
+      }
     </div>`;
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
+    // unfolding / folding: the box grows (or shrinks) while its content fades in, staggered; nothing flies around
+    if (from && was !== expanded && layout === 'desktop' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const to = bar.getBoundingClientRect();
+      const easing = 'cubic-bezier(.25,.8,.25,1)';
+      bar.style.overflow = 'hidden';
+      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], { duration: 320, easing }).onfinish = () => (bar.style.overflow = '');
+      const items = expanded ? bar.querySelectorAll<HTMLElement>('.bg-head, h4, .kc') : bar.querySelectorAll<HTMLElement>('.kc, .sep, .all');
+      items.forEach((el, i) => {
+        el.animate(
+          [{ opacity: 0, transform: expanded ? 'translateY(8px) scale(.97)' : 'none' }, { opacity: 1, transform: 'none' }],
+          { duration: 240, delay: 90 + Math.min(i, 10) * 18, easing, fill: 'backwards' },
+        );
+      });
+    }
   }
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
@@ -471,18 +527,16 @@ export function createHud(host: HudHost): Hud {
 
   function stackBody(k: Karte): string {
     const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? 'Tagesbild von gestern' : k.main && k.main !== 'radar' && k.main !== 'sat' ? 'Vorhersage, ab jetzt' : 'Live';
-    const bases = BASES.map((b) => b.id);
-    const others = bases.filter((b) => !MAIN_BASES.includes(b));
-    const showMore = ui.moreBases || others.includes(k.base);
+    const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
+    const baseGroups = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) })).filter((g) => g.ids.length);
     return `
         <div class="slot"><span>Ebenen</span><small>oben liegt oben</small></div>
         ${k.layers.map(layerRow).join('') || '<div class="muted" style="font-size:12.5px;padding:4px">Noch keine Ebenen.</div>'}
         <button type="button" class="addbtn ${ui.add ? 'on' : ''}" data-act="add">${ico('plus')}Ebene hinzufügen</button>
         <div class="slot"><span>Wetter</span><small>höchstens eine</small></div>
         ${mainCard(k)}
-        <div class="slot"><span>Grundkarte</span></div>
-        <div class="baserow">${MAIN_BASES.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>
-        ${showMore ? `<div class="fl basemore">${others.map((b) => `<button type="button" class="chip ${k.base === b ? 'on' : ''}" data-act="base" data-id="${b}">${BASE_LABEL[b]}</button>`).join('')}</div>` : `<button type="button" class="linkbtn" data-act="morebases">Weitere Grundkarten</button>`}
+        ${baseGroups.map((g) => `<div class="slot"><span>Grundkarte · ${g.label}</span></div>
+        <div class="baserow">${g.ids.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>`).join('')}
         <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
         <div class="opt">${ico('sun')}<div>Tag/Nacht</div><div class="seg">${(['day', 'auto', 'night'] as const).map((v) => `<button type="button" data-act="night" data-v="${v}" class="${k.night === v ? 'on' : ''}" aria-pressed="${k.night === v}">${{ day: 'Tag', auto: 'Auto', night: 'Nacht' }[v]}</button>`).join('')}</div></div>
         <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
@@ -585,7 +639,7 @@ export function createHud(host: HudHost): Hud {
       ${st.own.length ? `<div class="ggrid">${st.own.map(galleryCard).join('')}</div>` : '<div class="muted gempty">Noch keine eigenen Karten. Ändere eine Karte und speichere sie als neue Karte.</div>'}
       ${phone() ? `<button type="button" class="setrow" data-act="settings">${ico('gear')}Einstellungen<span class="c">${ico('chev')}</span></button>` : `<div class="ghint"><span>Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)} wechseln die angehefteten Karten</span></div>`}`;
   function renderGallery() {
-    if (!ui.gallery || layout === 'portrait') {
+    if (!ui.gallery || layout === 'portrait' || layout === 'desktop') {
       reg('gallery').innerHTML = '';
       return;
     }
@@ -722,14 +776,9 @@ export function createHud(host: HudHost): Hud {
   const { renderSheet, detentOf, globeView, closeOverlay, tickerInner, syncSheetH } = sheet;
 
   // ----- phone landscape: Orbis menu -----------------------------------------
+  // the Orbis button (nav.ts) is the menu on every layout, this region stays empty
   function renderMenu() {
-    const r = reg('menu');
-    if (layout !== 'landscape') {
-      r.innerHTML = '';
-      return;
-    }
-    r.innerHTML = `<button type="button" class="hud-logo" data-act="menu" aria-label="Menü: Vorhersage, Karte, Weltall, Spiele" aria-expanded="${ui.menu}"><i></i></button>
-      ${ui.menu ? `<div class="hud-menu hud-glass" role="menu"><a role="menuitem" data-act="menuclose" href="#/vorhersage">Vorhersage</a><a role="menuitem" data-act="menuclose" class="on" href="#/karte">Karte</a><a role="menuitem" data-act="menuclose" href="#/weltall">Weltall</a><a role="menuitem" data-act="menuclose" href="#/spiele">Spiele</a></div>` : ''}`;
+    reg('menu').innerHTML = '';
   }
 
   let lastShift = '';
@@ -745,6 +794,7 @@ export function createHud(host: HudHost): Hud {
     root.dataset.layout = layout;
     root.classList.toggle('is-edit', ui.edit);
     root.classList.toggle('searching', ui.search);
+    root.classList.toggle('gal-open', ui.gallery && layout === 'desktop');
     document.body.classList.toggle('hud-cover', layout === 'portrait' && detentOf() === 'full');
     if (layout !== 'portrait') placeNode = null;
     if (hadPlace && !placeNode) host.placeClosed();
@@ -785,7 +835,11 @@ export function createHud(host: HudHost): Hud {
     root.querySelector('[data-act="basepick"]')?.setAttribute('aria-expanded', String(ui.basepick));
     root.querySelector('[data-act="basepick"]')?.classList.toggle('on', ui.basepick);
     if (!ui.basepick) return;
-    bp.innerHTML = BASES.map((b) => `<button type="button" data-act="base" data-id="${b.id}" class="${k.base === b.id ? 'on' : ''}" aria-pressed="${k.base === b.id}"><i class="bth">${baseThumb(b.id)}</i><span>${BASE_LABEL[b.id]}</span></button>`).join('');
+    const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
+    bp.innerHTML = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) }))
+      .filter((g) => g.ids.length)
+      .map((g) => `<div class="bpgrp">${g.label}</div>${g.ids.map((id) => `<button type="button" data-act="base" data-id="${id}" class="${k.base === id ? 'on' : ''}" aria-pressed="${k.base === id}"><i class="bth">${baseThumb(id)}</i><span>${BASE_LABEL[id]}</span></button>`).join('')}`)
+      .join('');
   }
 
   // ----- actions -----------------------------------------------------------
@@ -1085,11 +1139,11 @@ export function createHud(host: HudHost): Hud {
     let changed = false;
     if (ui.basepick && !t.closest('.hud-bp, [data-act="basepick"]')) (ui.basepick = false), (changed = true);
     if (ui.menu && !t.closest('.hud-menu, [data-act="menu"]')) (ui.menu = false), (changed = true);
-    if (root.contains(t) && t.closest('.hud-sheet, .gallery, .addpop, [data-act="gallery"], [data-act="add"], .scrim, .dlg')) {
+    if (root.contains(t) && t.closest('.hud-sheet, .gallery, .hud-bar.expanded, .addpop, [data-act="gallery"], [data-act="add"], .scrim, .dlg')) {
       if (changed) render();
       return;
     }
-    if (ui.gallery && !t.closest('.gallery, [data-act="gallery"]')) (ui.gallery = false), (changed = true);
+    if (ui.gallery && !t.closest('.gallery, .hud-bar.expanded, [data-act="gallery"]')) (ui.gallery = false), (changed = true);
     if (ui.add && !t.closest('.addpop, [data-act="add"]')) (ui.add = false), (changed = true);
     if (changed) render();
   });

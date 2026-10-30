@@ -95,6 +95,19 @@ function loadGames(): Promise<GamesView> {
   return gamesLoading;
 }
 
+// Fahrplan (connection search + departure boards), loaded on demand
+type FahrplanView = import('./views/fahrplan').FahrplanView;
+let fahrplan: FahrplanView | null = null;
+let fahrplanLoading: Promise<FahrplanView> | null = null;
+function loadFahrplan(): Promise<FahrplanView> {
+  fahrplanLoading ??= import('./views/fahrplan').then(({ createFahrplanView }) => {
+    fahrplan = createFahrplanView();
+    app.append(fahrplan.el);
+    return fahrplan;
+  });
+  return fahrplanLoading;
+}
+
 let forecastLoaded = false;
 let active: NavRoute | null = null;
 
@@ -118,12 +131,13 @@ function route() {
   const lat = parseFloat(params.get('lat') ?? '');
   const lon = parseFloat(params.get('lon') ?? '');
   const hasPos = Number.isFinite(lat) && Number.isFinite(lon);
-  const next = path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/sterne') ? 'stars' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : path.startsWith('/vorhersage') ? 'forecast' : 'globe';
+  const next = path.startsWith('/fahrplan') ? 'fahrplan' : path.startsWith('/spiele') ? 'games' : path.startsWith('/planet') ? 'planet' : path.startsWith('/weltall') ? 'space' : path.startsWith('/sterne') ? 'stars' : path.startsWith('/karte') || path.startsWith('/globus') ? 'globe' : path.startsWith('/vorhersage') ? 'forecast' : 'globe';
 
   if (active === 'globe' && next !== 'globe') globe.deactivate();
   if (active === 'space' && next !== 'space') space?.deactivate();
   if (active === 'planet' && next !== 'planet') planet?.deactivate();
   if (active === 'stars' && next !== 'stars') stars?.deactivate();
+  if (active === 'fahrplan' && next !== 'fahrplan') fahrplan?.deactivate();
   if (active === 'games' && next !== 'games') games?.deactivate();
   forecast.el.hidden = next !== 'forecast';
   globe.el.hidden = next !== 'globe';
@@ -131,7 +145,8 @@ function route() {
   if (planet) planet.el.hidden = next !== 'planet';
   if (stars) stars.el.hidden = next !== 'stars';
   if (games) games.el.hidden = next !== 'games';
-  document.body.classList.toggle('mode-globe', next !== 'forecast');
+  if (fahrplan) fahrplan.el.hidden = next !== 'fahrplan';
+  document.body.classList.toggle('mode-globe', next !== 'forecast' && next !== 'fahrplan');
   document.body.classList.toggle('mode-map', next === 'globe');
   document.body.classList.toggle('mode-space', next === 'space');
   document.body.classList.toggle('mode-planet', next === 'planet');
@@ -140,7 +155,12 @@ function route() {
   navMenu.update(next, eyes, params.get('body'));
   settingsPanel.close();
 
-  if (next === 'games') {
+  if (next === 'fahrplan') {
+    loadFahrplan().then((v) => {
+      if (active !== 'fahrplan') return;
+      v.activate();
+    });
+  } else if (next === 'games') {
     loadGames().then((v) => {
       if (active !== 'games') return;
       v.el.hidden = false;
@@ -195,8 +215,25 @@ function route() {
   active = next;
 }
 
-window.addEventListener('hashchange', route);
+// remember the last page (forecast / map / space / planet / games) and reopen it on the next start
+const LAST_ROUTE_KEY = 'orbis.lastRoute';
+if (!location.hash || location.hash === '#' || location.hash === '#/') {
+  try {
+    const saved = localStorage.getItem(LAST_ROUTE_KEY);
+    if (saved && saved.startsWith('#/')) history.replaceState(null, '', saved);
+  } catch {}
+}
+function saveRoute() {
+  try {
+    localStorage.setItem(LAST_ROUTE_KEY, location.hash || '#/');
+  } catch {}
+}
+window.addEventListener('hashchange', () => {
+  route();
+  saveRoute();
+});
 route();
+saveRoute();
 
 // launch reminders (browser notifications for tracked rockets) run independently of the active view
 import('./launch/tracker')

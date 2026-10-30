@@ -423,6 +423,14 @@ export interface RadarFrames {
   frames: { time: number; path: string; nowcast: boolean; hd?: boolean }[];
 }
 
+/** Steps of the extrapolated radar forecast: up to one hour from now, in the 10-minute grid of the measurements. */
+export function radarForecastSteps(lastTime: number, horizonMin = 60): RadarFrames['frames'] {
+  const end = Date.now() / 1000 + horizonMin * 60;
+  const out: RadarFrames['frames'] = [];
+  for (let t = lastTime + 600; t <= end && out.length < 9; t += 600) out.push({ time: t, path: '', nowcast: true });
+  return out;
+}
+
 /** RainViewer by default; a self-hosted, API-compatible server (LibreWXR) can be set in the settings. */
 export const radarHost = () => (store.getKeys().radarHost || 'https://api.rainviewer.com').replace(/\/+$/, '');
 

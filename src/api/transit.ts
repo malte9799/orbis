@@ -51,6 +51,8 @@ export const MODE_STYLE: Record<string, { label: string; color: string }> = {
   TRAM: { label: 'Straßenbahn', color: '#ec407a' },
   BUS: { label: 'Bus', color: '#ab47bc' },
   COACH: { label: 'Fernbus', color: '#8d6e63' },
+  ODM: { label: 'Rufbus', color: '#fdd835' },
+  FLEX: { label: 'Rufbus', color: '#fdd835' },
   FERRY: { label: 'Fähre', color: '#29b6f6' },
 };
 export const modeStyle = (m: string) => MODE_STYLE[m] ?? { label: 'ÖPNV', color: '#bdbdbd' };

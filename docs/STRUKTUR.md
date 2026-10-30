@@ -21,3 +21,14 @@ layer-/feed-spezifischen Listen mehr. Der Bottom-Sheet der Phone-Ansicht liegt i
 
 Noch nicht zerlegt: `planetmap.ts`, die Spielabläufe in `games.ts`, Radar/Timeline/`initMap` in
 `globe.ts` und `render*` in `hud.ts` (eng mit gemeinsamem Zustand verwoben).
+
+## Routenplanung & GPS (`src/routing/`)
+
+| Was | Wo |
+|---|---|
+| Routing-Dienst (Google, Valhalla, …) | `src/routing/providers/<id>.ts` – `defineProvider`; Reihenfolge über `order`, Fallback in `router.ts` |
+| Schlüssel eines Dienstes | `src/settings/keys/<id>.ts` (Gruppe `routing`), Name in `provider.key` |
+| GPS-Filter, Kurs (GPS + Kompass, Selbstkalibrierung) | `gps.ts` |
+| Pfeil + Kamera (Folgen / Blickrichtung) | `puck.ts`, `locator.ts` |
+| Fortschritt auf der Route, Abweichung, Restzeit | `guidance.ts` (rein, getestet in `routing.test.ts`) |
+| Oberfläche / Ablauf | `panel.ts` / `index.ts`, Styles `src/styles/140-routing.css` |

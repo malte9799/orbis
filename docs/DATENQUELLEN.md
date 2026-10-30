@@ -133,6 +133,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NGA World Port Index](https://msi.nga.mil/Publications/WPI) (Pub. 150) | Häfen: ~3.800 Häfen mit Größe, Tiefen, Schiffsgrenzen und Umschlag; Werk der US-Regierung (NGA), kein Urheberrecht beansprucht; vorab erzeugt in `public/data/ports.json` (`scripts/ports.mjs`) | 🟢 gemeinfrei, 📦 |
 | [Upply Seaports Locations Data](https://opendata.upply.com/seaports) (UN/LOCODE) | Häfen: ~12.000 weitere Seehäfen mit Koordinaten, die der World Port Index nicht führt | 🟢 CC BY 4.0, 📦 |
 | [Transitous (MOTIS)](https://transitous.org) | Züge Deutschland & Europa; Busse, Trams, U-Bahnen (ab Stadtzoom) | 🟢 |
+| [DB API Marketplace – Timetables](https://developers.deutschebahn.com) (CC BY 4.0, Schlüssel im eigenen Worker) | Fahrplan: Echtzeit-Verspätungen, Gleise und Ausfälle der Bahn, nachträglich zu den Transitous-Verbindungen | 🟡 |
 | [Amtraker](https://amtraker.com) | Züge USA (Amtrak) | 🟢 |
 | [Entur](https://developer.entur.org) | Nahverkehr & Bahn Norwegen | 🟢 NLOD |
 | [MBTA](https://api-v3.mbta.com) | Boston | 🟢 |
@@ -151,6 +152,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [OpenRailwayMap](https://www.openrailwaymap.org) | Bahnnetz, Streckengeschwindigkeit, Elektrifizierung | 🟢 |
 | [OpenStreetMap Overpass](https://overpass-api.de) (+ [private.coffee](https://overpass.private.coffee)) | Bus-, Tram-, U-Bahn- und Fährlinien mit Haltestellen (ab Zoom 11) | 🟢 🌐 |
 | Leihrad-Betreiber über [GBFS](https://gbfs.org) (Liste in `src/api/bikesystems.ts`, übernommen aus God's Eye View) | Leihräder: Stationen mit freien Rädern und Plätzen, live, 61 Systeme mit ~17.000 Stationen – Lyft (Citi Bike, Divvy, Capital Bikeshare, Bay Wheels), Bluebikes, BIKETOWN, BCycle (18 US-Städte), PBSC (u. a. Bike Share Toronto, Bike Itaú/Tembici in Brasilien, Santiago, Bogotá, Bicing, BiciMAD, spanische Städte), Urban Sharing (Oslo, Bergen, Trondheim), Entur (Stavanger, Skien), JCDecaux (Lillestrøm, Valencia, Sevilla), nextbike (AMBici), Social Bicycles (Buffalo) | 🟢 Betreiber-Feeds, Nutzung mit Nennung; Einzelheiten je Betreiber (z. B. AMBici CC0, JCDecaux Licence Ouverte, Lyft-Datenlizenz) |
+| [TomTom Traffic Flow](https://developer.tomtom.com/traffic-api/documentation/traffic-flow/raster-flow-tiles) (Vektorkacheln, Schlüssel unter `src/settings/keys/tomtom.ts`) | Ebene „Verkehr: Fahrzeuge & Lage“: Straßen grün/gelb/rot nach Verkehrslage, simulierte Fahrzeuge fahren entsprechend langsamer und dichter. Ohne Key fahren Fahrzeuge auf dem OpenFreeMap-Straßennetz mit Normaltempo | 🔑 BYOK (Free-Tarif), Nennung „Verkehrslage © TomTom“; Kacheln nur im Browser, nicht weiterverbreitet |
 | [Waymarked Trails](https://waymarkedtrails.org) ([Rad](https://cycling.waymarkedtrails.org), [Wandern](https://hiking.waymarkedtrails.org)) | Radnetz, Wandernetz | 🟢 |
 
 ## 8. Kameras & Radio
@@ -197,6 +199,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [QLDTraffic](https://qldtraffic.qld.gov.au/more/Developers-and-Data/) | Queensland – Webcams (GeoJSON, Pfad `/v1/webcams`, Felder ungetestet) | 🔑 `QLDTRAFFIC_KEY`, 📦 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
 | [DeFlock](https://deflock.org) · [deflock-data](https://github.com/flockhopper3/deflock-data) · [Tiles](https://tiles.dontgetflocked.com) | Kennzeichen-Kameras (ALPR) mit Blickrichtung | 🟢 OSM-basiert |
+| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Geofabrik-Extrakte) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), aus monatlichen [Geofabrik](https://download.geofabrik.de)-Auszügen (`scripts/cctv-heat.mjs`, Branch `data-osm`): Dichte-Heatmap und Einzelkameras in 0,5°-Kacheln ab Zoom 11, kein Live-Overpass; derselbe Lauf liefert als Knoten-Kacheln auch Blitzer/Rotlicht (`highway=speed_camera`, `type=enforcement`), ALPR, OSM-Webcams, Windräder (`generator:source=wind`) sowie Schächte/Stollen/Bohrlöcher/Bergwerks-Punkte (`blitzer-*`, `alpr-*`, `webcam-*`, `wind-*`, `resource-*`); Wege und Flächen nicht enthalten, Overpass bleibt Fallback bzw. liefert diese | 🟢 ODbL, 📦 |
 | [Radio Browser](https://www.radio-browser.info) | Über 50.000 Radiosender, eingebauter Player | 🟢 📦 |
 
 ## 9. Infrastruktur
@@ -215,10 +218,17 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 |---|---|---|
 | [OpenFreeMap](https://openfreemap.org) / [OpenStreetMap](https://www.openstreetmap.org/copyright) | Vektorkarte (Dunkel/Hell), Ortsnamen auf Deutsch, Grenzen | 🟢 ODbL |
 | [Esri World Imagery](https://server.arcgisonline.com) | Satellitenbild | ⚠️ Esri-Nutzungsbedingungen, eigentlich ArcGIS-Token nötig; Attribution „Powered by Esri“ |
+| [Esri World Imagery Clarity](https://clarity.maptiles.arcgis.com) | Satellit Clarity (schärfer/aktueller als Esri-Standard) | ⚠️ wie Esri World Imagery, Attribution „Powered by Esri“ |
+| [Mapbox Satellite](https://www.mapbox.com/maps/satellite) | Satellitenbild, nur mit eigenem Token (Einstellungen) | 🔑 kostenloses Kontingent, Mapbox-Bedingungen |
+| [MapTiler Satellite](https://www.maptiler.com/maps/) | Satellitenbild, nur mit eigenem Key (Einstellungen) | 🔑 Free-Plan nicht-kommerziell |
 | [EOX Sentinel-2 cloudless](https://s2maps.eu) | Wolkenloses Satellitenbild (Copernicus Sentinel-2) | 🟢 CC BY-NC-SA 4.0, 🚫 |
 | [OpenTopoMap](https://opentopomap.org) | Topografie | 🟢 CC BY-SA |
 | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Höhenmodell für die 3D-Geländeanpassung (USGS 3DEP, SRTM, GMTED, ETOPO1) – wird nicht als sichtbare Ebene angezeigt | 🟢 |
 | [MapLibre GL JS](https://maplibre.org) | Kartendarstellung (2D & Globus) | 🟢 BSD-3 |
+| [Valhalla / OSRM (FOSSGIS)](https://routing.openstreetmap.de) | Routenplanung & Navigation (Auto, Rad, Fuß), Standard ohne Schlüssel: Valhalla, OSRM zeigt vorab die schnelle Route und ist Fallback | 🟢 OSM-Daten (ODbL), faire Nutzung – kein Dauerbetrieb im Produktivdienst |
+| [Google Routes](https://developers.google.com/maps/documentation/routes) | Routenplanung mit Live-Verkehr, nur mit eigenem Key | 🔑 Google-Bedingungen, Abrechnung nötig (Gratis-Kontingent) |
+| [Mapbox Directions](https://docs.mapbox.com/api/navigation/directions/) · [TomTom Routing](https://developer.tomtom.com/routing-api/documentation/routing/calculate-route) | Routenplanung mit Verkehrslage, mit dem vorhandenen Mapbox-/TomTom-Key | 🔑 kostenloses Kontingent |
+| [OpenRouteService](https://openrouteservice.org) · [GraphHopper](https://www.graphhopper.com) | Routenplanung (Rad/Fuß/Auto), nur mit eigenem Key | 🔑 kostenloses Kontingent |
 
 ## 11. Weltall: Daten, Karten & Texturen
 
@@ -321,6 +331,7 @@ Alle kostenlos; werden nur im `localStorage` des Browsers gespeichert (außer de
 
 | Schlüssel | Wofür | Anmeldung |
 |---|---|---|
+| Google Routes · OpenRouteService · GraphHopper | Routenplanung (die Dienste ohne Schlüssel laufen immer als Fallback) | siehe Tabelle Basiskarten |
 | OpenWeatherMap | zusätzliche Wetterkarten | [openweathermap.org/api](https://openweathermap.org/api) |
 | NASA FIRMS `MAP_KEY` | anklickbare Feuer-Hotspots | [firms.modaps.eosdis.nasa.gov/api](https://firms.modaps.eosdis.nasa.gov/api/map_key/) |
 | aisstream.io | Schiffe weltweit | [aisstream.io](https://aisstream.io) |

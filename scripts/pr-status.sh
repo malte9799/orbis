@@ -16,7 +16,7 @@ if ! [[ "$pr" =~ ^[0-9]+$ ]]; then
   echo "$pr" > "$state/pr"
 fi
 
-steps=("Abhängigkeiten installieren" "Texturen & Modelle" "Build" "Veröffentlichen" "Online prüfen")
+steps=("Abhängigkeiten installieren" "Build" "Veröffentlichen" "Online prüfen")
 cur=$(cat "$state/stage" 2>/dev/null || echo "")
 
 rows=""; seen=0

@@ -23,6 +23,7 @@ export type ExtraGlyph =
   | 'plant'
   | 'webcam'
   | 'alpr'
+  | 'cctv'
   | 'blitzer'
   | 'cone'
   | 'aurora'
@@ -102,6 +103,10 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   alpr: [
     { mode: 'fill', d: 'M3 7h13l5-2.5v9L16 11H3z' },
     { mode: 'stroke', width: 2, d: 'M6 11v5M3 19h7' },
+  ],
+  cctv: [
+    { mode: 'fill', d: 'M3 6h14l4 2.5v5L17 16H3z' },
+    { mode: 'stroke', width: 2, d: 'M7 16v3h6' },
   ],
   blitzer: [
     { mode: 'stroke', width: 2.2, d: 'M4.5 4.5h15v9h-15zM12 13.5v7.5M9 22h6' },

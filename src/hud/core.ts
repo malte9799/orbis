@@ -15,7 +15,6 @@ export interface HudUi {
   pick: boolean;
   open: string | null;
   q: string;
-  moreBases: boolean;
   evHours: number;
   search: boolean;
   menu: boolean;

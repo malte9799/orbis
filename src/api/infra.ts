@@ -3,6 +3,7 @@ import { store } from '../store';
 import { fetchJson, fmt } from '../util';
 import { snapshotJson } from './data';
 import { overpass } from './overpass';
+import { snapshotOrNull } from './osmtiles';
 
 // ---------------------------------------------------------------------------
 // Shipping lanes – "Global Shipping Lanes" by P. Benden (CC BY 4.0), static GeoJSON on GitHub
@@ -278,7 +279,9 @@ const OSM_SOURCE: Record<string, string> = {
 
 export async function loadOsmPower(b: { west: number; south: number; east: number; north: number }): Promise<FeatureCollection<Point>> {
   const bbox = `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.north.toFixed(4)},${b.east.toFixed(4)}`;
-  const query = `[out:json][timeout:25];(nwr["power"="plant"](${bbox});node["power"="generator"]["generator:source"="wind"](${bbox}););out center tags 3000;`;
+  // single wind turbines come from the monthly extract; Overpass then only has to deliver the plants
+  const turbines = await snapshotOrNull<[number, number, string, string, string, string, string, number]>('wind', b);
+  const query = `[out:json][timeout:25];(nwr["power"="plant"](${bbox});${turbines ? '' : `node["power"="generator"]["generator:source"="wind"](${bbox});`});out center tags 3000;`;
   const data = await overpass<{ elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }>(query, 'power', 30000);
   const features: Feature<Point>[] = [];
   for (const el of data.elements) {
@@ -303,6 +306,22 @@ export async function loadOsmPower(b: { west: number; south: number; east: numbe
           .filter(Boolean)
           .join(' · '),
         url: `https://www.openstreetmap.org/${el.type}/${el.id}`,
+        source: 'OpenStreetMap',
+      },
+    });
+  }
+  for (const [lon, lat, name, operator, manufacturer, model, output, id] of turbines ?? []) {
+    const f = FUELS.Wind;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lon, lat] },
+      properties: {
+        cat: f.cat,
+        color: f.color,
+        turbine: true,
+        title: name || 'Windenergieanlage',
+        subtitle: [f.label, output && output !== 'yes' ? output : '', operator, manufacturer, model].filter(Boolean).join(' · '),
+        url: `https://www.openstreetmap.org/node/${id}`,
         source: 'OpenStreetMap',
       },
     });

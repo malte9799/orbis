@@ -1,0 +1,55 @@
+name: Update CCTV heatmap
+
+# Camera density per region for the CCTV layer's overview (and further OSM point tiles, see the script) (scripts/cctv-heat.mjs): streams a
+# Geofabrik extract through osmium, one region per run. Runs daily, but a region is only
+# refreshed when its file is older than 30 days – so the regions stagger over the month.
+# Published on the `data-osm` branch (kept apart from `data`, whose live feeds must not wait
+# for these long runs).
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'Region erzwingen (europe, russia, asia, north-america, central-america, south-america, africa, oceania) – leer: älteste fällige'
+        type: string
+        default: ''
+  push:
+    branches: [main]
+    paths: ['scripts/cctv-heat.mjs', '.github/workflows/cctv-heat.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cctv-heat
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Previous snapshot
+        run: |
+          mkdir -p ../cctv-out
+          if git fetch --depth=1 origin data-osm; then
+            git worktree add --detach ../cctv-prev FETCH_HEAD
+            cp -r ../cctv-prev/. ../cctv-out/ && rm -rf ../cctv-out/.git
+          fi
+      - run: sudo apt-get install -y --no-install-recommends osmium-tool
+      - name: Refresh one region
+        run: node scripts/cctv-heat.mjs ../cctv-out "${{ github.event.inputs.region }}"
+      - name: Publish data-osm branch
+        working-directory: ../cctv-out
+        run: |
+          ls
+          git init -q -b data-osm
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "CCTV heatmap $(date -u +%Y-%m-%d)"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data-osm

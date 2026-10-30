@@ -1,8 +1,8 @@
 import { toast } from '../util';
-import { currentRoute, getCaptures, onCaptures, rawFetch, type Capture } from './capture';
+import { clearCaptures, currentRoute, getCaptures, onCaptures, rawFetch, type Capture } from './capture';
 import { isGlyphUrl } from './glyphs';
 import { createGlbView, type GlbView } from './glb';
-import { getTileGroups, tileUrls, type TileGroup } from './tiles';
+import { clearTiles, getTileGroups, tileUrls, type TileGroup } from './tiles';
 import { createTileMap, type TileMapView } from './tilemap';
 import { providerOf } from './sources';
 
@@ -99,6 +99,7 @@ function open() {
   let glyphToken = 0;
   let rawSig = '';
   let rawMode: 'tree' | 'raw' = 'tree';
+  let side: 'sent' | 'recv' = 'recv';
 
   overlay = document.createElement('div');
   overlay.className = 'rdi';
@@ -112,6 +113,7 @@ function open() {
           <button type="button" data-scope="page" class="on">Diese Seite</button>
           <button type="button" data-scope="all">Alle</button>
         </div>
+        <button type="button" class="rdi-btn rdi-clear" data-r="clear" title="Alle angezeigten Datenquellen entfernen">${TRASH_ICON}Leeren</button>
         <button type="button" class="rdi-x" data-r="close" aria-label="Schließen" title="Schließen (Esc)">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </header>
@@ -119,6 +121,7 @@ function open() {
     </section>
     <section class="rdi-raw">
       <header data-r="rawhead"></header>
+      <div class="rdi-statusbar" data-r="status" hidden></div>
       <div class="rdi-scroll rdi-rawbody" data-r="rawbody"></div>
     </section>
     <div class="rdi-gut rdi-gut-v" data-g="v" title="Ziehen zum Ändern der Breite · Doppelklick: Ausgangsgröße"></div>
@@ -128,6 +131,7 @@ function open() {
   const listEl = $('list');
   const rawHead = $('rawhead');
   const rawBody = $('rawbody');
+  const statusEl = $('status');
 
   // The page keeps its full size and is scaled into its tile. Tiles: preview (top left), list (top right), raw data (bottom);
   // the gaps between them are drag handles. fx / fy = share of the free width / height that the top-left tile takes.
@@ -206,6 +210,8 @@ function open() {
     label: string;
     meta: string;
     bad: boolean;
+    /** at least one request went through the data proxy */
+    proxied: boolean;
     caps: Capture[];
     /** shown count: unique files in a gallery, requests otherwise */
     count: number;
@@ -219,12 +225,13 @@ function open() {
       // images the page loads itself (textures, icons) are grouped per folder
       const key = c.imgUrl ? `g:${c.host}${new URL(c.url).pathname.replace(/[^/]*$/, '')}` : `f:${c.method} ${endpointPath(c)}`;
       let e = out.get(key);
-      if (!e) out.set(key, (e = { id: key, provider: providerOf(c.host), kind: c.kind, label: '', meta: '', bad: false, caps: [], count: 0 }));
+      if (!e) out.set(key, (e = { id: key, provider: providerOf(c.host), kind: c.kind, label: '', meta: '', bad: false, proxied: false, caps: [], count: 0 }));
       e.caps.push(c);
     }
     for (const e of out.values()) {
       const last = e.caps[e.caps.length - 1];
-      const u = new URL(last.url);
+      const u = new URL(apiUrl(last));
+      e.proxied = e.caps.some((c) => c.target);
       e.kind = isGlyphUrl(last.url) ? 'font' : last.kind;
       const gallery = e.caps.length > 1 && e.caps.every((c) => c.imgUrl);
       e.count = gallery ? new Set(e.caps.map((c) => c.url)).size : e.caps.length;
@@ -234,7 +241,7 @@ function open() {
         const total = e.caps.reduce((n, c) => n + (c.size ?? 0), 0);
         e.meta = `${e.count} Bilder${total ? ` · ${fmtSize(total)}` : ''}`;
       }
-      else e.meta = `${last.error ? 'Fehler' : last.status || '…'} · ${last.size == null && (last.skipped || last.kind === 'model') ? '–' : fmtSize(last.size)} · ${last.ms} ms${scope === 'all' ? ` · ${ROUTE_LABEL[last.route] ?? last.route}` : ''}`;
+      else e.meta = `${last.error ? errorTitle(last) : last.status ? `${last.status}${last.statusText ? ` ${last.statusText}` : ''}` : '…'} · ${last.size == null && (last.skipped || last.kind === 'model') ? '–' : fmtSize(last.size)} · ${last.ms} ms${scope === 'all' ? ` · ${ROUTE_LABEL[last.route] ?? last.route}` : ''}`;
     }
     for (const g of getTileGroups()) {
       if (!g.tiles.size || (scope === 'page' && !g.routes.has(route))) continue;
@@ -247,6 +254,7 @@ function open() {
         label: `${g.sourceId} · ${label}`,
         meta: `${g.tiles.size} Kacheln · Stufe ${Math.min(...zs)}–${Math.max(...zs)}`,
         bad: false,
+        proxied: false,
         caps: [],
         count: g.tiles.size,
         tiles: g,
@@ -255,34 +263,83 @@ function open() {
     return [...out.values()];
   }
 
+  // The list is updated in place: rows keep their DOM node (and their position) while requests keep arriving,
+  // so a tap lands on the row it was aimed at even when a lot is loading.
+  const seen = new Map<string, number>();
+  const rowEls = new Map<string, HTMLElement>();
+  const groupEls = new Map<string, { el: HTMLElement; title: HTMLElement; count: HTMLElement }>();
+  const setText = (el: Element, v: string) => el.textContent !== v && (el.textContent = v);
+  const place = (parent: HTMLElement, el: HTMLElement, i: number) => parent.children[i] !== el && parent.insertBefore(el, parent.children[i] ?? null);
+
   function renderList() {
     const items = entries();
-    $('count').textContent = `${items.length}`;
+    setText($('count'), `${items.length}`);
+    $<HTMLButtonElement>('clear').disabled = !items.length;
+    for (const e of items) if (!seen.has(e.id)) seen.set(e.id, seen.size);
+    items.sort((a, b) => seen.get(a.id)! - seen.get(b.id)!);
     const groups = new Map<string, Entry[]>();
     for (const e of items) (groups.get(e.provider) ?? groups.set(e.provider, []).get(e.provider)!).push(e);
-    const keep = listEl.scrollTop;
-    listEl.replaceChildren();
+
+    listEl.querySelector('.rdi-empty')?.remove();
     if (!items.length) {
+      rowEls.clear();
+      groupEls.clear();
       listEl.innerHTML = `<p class="muted rdi-empty">Auf dieser Seite wurden noch keine Daten geladen.</p>`;
       return;
     }
+    const liveRows = new Set<string>();
+    let gi = 0;
     for (const [name, list] of groups) {
-      const g = document.createElement('div');
-      g.className = 'rdi-group';
-      g.innerHTML = `<h3>${esc(name)} <small>${list.length}</small></h3>`;
-      for (const e of list) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = `rdi-item${e.id === selected ? ' on' : ''}`;
-        b.innerHTML = `<span class="rdi-kind k-${e.kind}">${e.kind === 'tiles' ? 'MAP' : e.kind === 'font' ? 'FONT' : KIND_LABEL[e.kind]}</span>
-          <span class="rdi-path" title="${esc(e.tiles?.template ?? e.caps[e.caps.length - 1].url)}">${esc(e.label)}${e.count > 1 ? ` <i class="rdi-count">×${e.count}</i>` : ''}</span>
-          <span class="rdi-meta ${e.bad ? 'bad' : ''}">${e.meta}</span>`;
-        b.addEventListener('click', () => select(e.id));
-        g.append(b);
+      let g = groupEls.get(name);
+      if (!g) {
+        const el = document.createElement('div');
+        el.className = 'rdi-group';
+        el.innerHTML = `<h3><span></span> <small></small></h3>`;
+        g = { el, title: el.querySelector('h3 span')!, count: el.querySelector('h3 small')! };
+        groupEls.set(name, g);
       }
-      listEl.append(g);
+      setText(g.title, name);
+      setText(g.count, `${list.length}`);
+      place(listEl, g.el, gi++);
+      list.forEach((e, i) => {
+        liveRows.add(e.id);
+        let row = rowEls.get(e.id);
+        if (!row) {
+          row = document.createElement('div');
+          row.className = 'rdi-item';
+          row.innerHTML = `<button type="button" class="rdi-item-main">
+              <span class="rdi-kind"></span>
+              <span class="rdi-path"><span class="rdi-label"></span><i class="rdi-count" hidden></i></span>
+              <span class="rdi-meta"><span class="rdi-badge rdi-badge-proxy" hidden title="Über den Daten-Proxy geladen">PROXY</span><span class="rdi-meta-text"></span></span>
+            </button>
+            <button type="button" class="rdi-ibtn rdi-copy" data-copy="url" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button>`;
+          row.querySelector('.rdi-item-main')!.addEventListener('click', () => select(e.id));
+          rowEls.set(e.id, row);
+        }
+        const main = row.firstElementChild as HTMLElement;
+        const cap = e.caps[e.caps.length - 1];
+        const url = e.tiles?.template ?? apiUrl(cap);
+        row.classList.toggle('on', e.id === selected);
+        row.dataset.url = url;
+        main.setAttribute('aria-pressed', String(e.id === selected));
+        const kind = main.querySelector('.rdi-kind')!;
+        setText(kind, e.kind === 'tiles' ? 'MAP' : e.kind === 'font' ? 'FONT' : KIND_LABEL[e.kind]);
+        kind.className = `rdi-kind k-${e.kind}`;
+        const path = main.querySelector<HTMLElement>('.rdi-path')!;
+        path.title = url;
+        setText(main.querySelector('.rdi-label')!, e.label);
+        const cnt = main.querySelector<HTMLElement>('.rdi-count')!;
+        cnt.hidden = e.count < 2;
+        setText(cnt, `×${e.count}`);
+        main.querySelector<HTMLElement>('.rdi-badge-proxy')!.hidden = !e.proxied;
+        const meta = main.querySelector('.rdi-meta')!;
+        meta.classList.toggle('bad', e.bad);
+        setText(main.querySelector('.rdi-meta-text')!, e.meta);
+        place(g.el, row, i + 1);
+      });
     }
-    listEl.scrollTop = keep;
+    for (const [k, el] of rowEls) if (!liveRows.has(k)) (el.remove(), rowEls.delete(k));
+    for (const [k, g] of groupEls) if (!groups.has(k)) (g.el.remove(), groupEls.delete(k));
   }
 
   let tm: { key: string; view: TileMapView } | null = null;
@@ -300,10 +357,11 @@ function open() {
     rawBody.classList.remove('is-map');
   };
 
-  const sig = (c: Capture) => `${c.id}|${capIdx}|${c.imgUrl ? 1 : 0}|${c.status}|${c.size}|${c.text ? 1 : 0}|${c.objectUrl ? 1 : 0}|${c.skipped ?? ''}|${c.error ?? ''}|${rawMode}`;
+  const sig = (c: Capture) => `${c.id}|${capIdx}|${c.imgUrl ? 1 : 0}|${c.status}|${c.size}|${c.text ? 1 : 0}|${c.objectUrl ? 1 : 0}|${c.skipped ?? ''}|${c.error ?? ''}|${rawMode}|${side}`;
 
   function renderRaw(force = false) {
     const e = entries().find((x) => x.id === selected);
+    statusEl.hidden = true;
     if (!e) {
       destroyTm();
       rawHead.innerHTML = `<h2>Rohdaten</h2>`;
@@ -315,7 +373,7 @@ function open() {
       if (tm?.key === e.id) return tm.view.refresh();
       destroyTm();
       rawSig = '';
-      rawHead.innerHTML = `<div class="rdi-url"><b>KACHELN</b> <span title="${esc(e.tiles.template)}">${esc(e.tiles.template)}</span></div>
+      rawHead.innerHTML = `${urlBox('KACHELN', e.tiles.template)}
         <div class="rdi-actions"><span class="rdi-hint">Ziehen · Mausrad zoomt · Klick wählt eine Kachel</span></div>`;
       rawBody.replaceChildren();
       rawBody.classList.add('is-map');
@@ -335,7 +393,7 @@ function open() {
       }
       destroyTm();
       rawSig = '';
-      rawHead.innerHTML = `<div class="rdi-url"><b>BILDER</b> <span>${esc(new URL(e.caps[0].url).host + dir)}</span></div>
+      rawHead.innerHTML = `${urlBox('BILDER', new URL(e.caps[0].url).host + dir)}
         <div class="rdi-actions"><span class="rdi-hint">${hint}</span></div>`;
       rawBody.replaceChildren();
       rawBody.classList.add('is-map');
@@ -353,12 +411,20 @@ function open() {
     destroyTm();
     const canTree = c.kind === 'json' && !!c.text && !c.truncated;
     rawHead.innerHTML = `
-      <div class="rdi-url"><b>${esc(c.method)}</b> <a href="${esc(c.url)}" target="_blank" rel="noopener" title="${esc(c.url)}">${esc(c.url)}</a></div>
+      ${urlBox(c.method, apiUrl(c), c.target ? c.url : undefined)}
       <div class="rdi-actions">
+        <div class="rdi-seg" role="group" aria-label="Richtung"><button type="button" data-side="sent" class="${side === 'sent' ? 'on' : ''}">Gesendet</button><button type="button" data-side="recv" class="${side === 'recv' ? 'on' : ''}">Empfangen</button></div>
         ${n > 1 ? `<div class="rdi-seg rdi-step" role="group" aria-label="Anfrage wählen"><button type="button" data-step="-1" aria-label="Vorherige Anfrage" ${capIdx === 0 ? 'disabled' : ''}>‹</button><span>${capIdx + 1} / ${n}</span><button type="button" data-step="1" aria-label="Nächste Anfrage" ${capIdx === n - 1 ? 'disabled' : ''}>›</button></div>` : ''}
-        ${canTree ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}">Baum</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}">Roh</button></div>` : ''}
-        ${c.text ? `<button type="button" class="rdi-btn" data-r="copy">Kopieren</button>` : ''}
+        ${canTree && side === 'recv' ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}">Baum</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}">Roh</button></div>` : ''}
+        ${side === 'recv' && c.text ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Rohdaten kopieren</button>` : ''}
+        ${side === 'sent' && c.reqBody ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Body kopieren</button>` : ''}
       </div>`;
+    rawHead.querySelectorAll<HTMLButtonElement>('[data-side]').forEach((b) =>
+      b.addEventListener('click', () => {
+        side = b.dataset.side as 'sent' | 'recv';
+        renderRaw(true);
+      }),
+    );
     rawHead.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
       b.addEventListener('click', () => {
         rawMode = b.dataset.mode as 'tree' | 'raw';
@@ -372,10 +438,17 @@ function open() {
       }),
     );
     rawHead.querySelector('[data-r=copy]')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText(c.text ?? '').then(() => toast('Rohdaten kopiert'), () => toast('Kopieren nicht möglich', 'error'));
+      void copyText(side === 'sent' ? c.reqBody ?? '' : c.text ?? '', side === 'sent' ? 'Body kopiert' : 'Rohdaten kopiert');
     });
 
     rawBody.replaceChildren();
+    if (side === 'sent') {
+      statusEl.hidden = true;
+      rawBody.append(sentView(c));
+      return;
+    }
+    statusEl.hidden = false;
+    statusEl.innerHTML = statusBar(c);
     if (c.kind === 'model') {
       rawBody.classList.add('is-map');
       glb = createGlbView(c.url);
@@ -391,7 +464,7 @@ function open() {
       );
       return;
     }
-    if (c.error) rawBody.innerHTML = `<p class="rdi-err">${esc(c.error)}</p>`;
+    if (c.error) rawBody.append(errorView(c));
     else if (c.skipped) rawBody.innerHTML = `<p class="muted rdi-empty">${esc(c.skipped)} (${esc(c.mime || 'unbekannter Typ')}, ${fmtSize(c.size)}) – keine Vorschau.</p>`;
     else if (c.objectUrl || c.imgUrl) rawBody.innerHTML = `<div class="rdi-img"><img src="${esc(c.objectUrl ?? c.imgUrl!)}" alt="Rohbild"></div>`;
     else if (c.text == null) rawBody.innerHTML = `<p class="muted rdi-empty">Wird geladen …</p>`;
@@ -425,13 +498,45 @@ function open() {
     renderRaw(true);
   }
 
+  // New requests are batched (at most ~4 redraws a second) and never redraw while a finger / the mouse is down on the list.
   let raf = 0;
-  const unsub = onCaptures(() => {
+  let timer = 0;
+  let last = 0;
+  let pressing = false;
+  let dirty = false;
+  const flush = () => {
+    timer = 0;
+    if (pressing) return void (dirty = true);
+    dirty = false;
+    last = performance.now();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(() => {
       renderList();
       renderRaw();
     });
+  };
+  const schedule = () => {
+    if (timer) return;
+    timer = window.setTimeout(flush, Math.max(0, 250 - (performance.now() - last)));
+  };
+  const unsub = onCaptures(schedule);
+  const release = () => {
+    if (!pressing) return;
+    pressing = false;
+    if (dirty) setTimeout(schedule, 120);
+  };
+  listEl.addEventListener('pointerdown', () => (pressing = true));
+  window.addEventListener('pointerup', release);
+  window.addEventListener('pointercancel', release);
+
+  overlay.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-copy]');
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const kind = b.dataset.copy;
+    const text = kind === 'url' ? b.closest<HTMLElement>('[data-url]')?.dataset.url : kind === 'val' ? jsonText(b.closest<HTMLElement>('.j-row')) : b.dataset.text;
+    if (text) void copyText(text, 'In die Zwischenablage kopiert', b);
   });
 
   overlay.querySelectorAll<HTMLButtonElement>('[data-scope]').forEach((b) =>
@@ -441,6 +546,23 @@ function open() {
       renderList();
     }),
   );
+  $('clear').addEventListener('click', () => {
+    const r = scope === 'page' ? route : undefined;
+    clearCaptures(r);
+    clearTiles(r);
+    seen.clear();
+    selected = null;
+    destroyTm();
+    rawSig = '';
+    renderList();
+    renderRaw(true);
+    toast(scope === 'page' ? 'Datenquellen dieser Seite geleert' : 'Alle Datenquellen geleert');
+  });
+  statusEl.addEventListener('click', (e) => {
+    if (!(e.target as HTMLElement).closest('[data-hdr]')) return;
+    const h = statusEl.querySelector<HTMLElement>('.rdi-hdrs');
+    if (h) h.hidden = !h.hidden;
+  });
   $('close').addEventListener('click', close);
   const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
   window.addEventListener('keydown', onKey);
@@ -458,6 +580,9 @@ function open() {
     window.removeEventListener('resize', fit);
     ['--rdi-sx', '--rdi-sy'].forEach((v) => shell.style.removeProperty(v));
     unsub();
+    clearTimeout(timer);
+    window.removeEventListener('pointerup', release);
+    window.removeEventListener('pointercancel', release);
     cancelAnimationFrame(raf);
     window.removeEventListener('keydown', onKey);
     window.removeEventListener('hashchange', onHash);
@@ -483,9 +608,128 @@ function close() {
 
 // ---------- helpers ----------
 
+const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" class="rdi-ic-copy"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg><svg viewBox="0 0 24 24" aria-hidden="true" class="rdi-ic-ok"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+
+/** the API that was asked: for proxied requests the target behind the proxy */
+const apiUrl = (c: Capture) => c.target ?? c.url;
+
+/** URL line of the raw-data header: label, URL, copy button; a second line names the proxy a request went through */
+function urlBox(label: string, url: string, proxyUrl?: string) {
+  const link = /^https?:/.test(url) ? `<a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(url)}">${esc(url)}</a>` : `<span title="${esc(url)}">${esc(url)}</span>`;
+  return `<div class="rdi-urlbox">
+    <div class="rdi-url"><b>${esc(label)}</b>${link}<button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(url)}" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button></div>
+    ${proxyUrl ? `<div class="rdi-url rdi-url-sub"><span class="rdi-badge rdi-badge-proxy">PROXY</span><span title="${esc(proxyUrl)}">${esc(proxyUrl)}</span><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(proxyUrl)}" aria-label="Proxy-URL kopieren" title="Proxy-URL kopieren">${COPY_ICON}</button></div>` : ''}
+  </div>`;
+}
+
+async function copyText(text: string, done: string, btn?: HTMLElement) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    // no clipboard permission (http, iframe): the old way still works from a click
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.append(ta);
+    ta.select();
+    try {
+      ok = document.execCommand('copy');
+    } catch {
+      /* ignore */
+    }
+    ta.remove();
+  }
+  if (ok && btn) {
+    btn.classList.add('done');
+    setTimeout(() => btn.classList.remove('done'), 1200);
+  }
+  toast(ok ? done : 'Kopieren nicht möglich', ok ? 'info' : 'error');
+}
+
+const TRASH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V4.5h6V7"/></svg>';
+
+const fmtTime = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour12: false }) + `.${String(t % 1000).padStart(3, '0')}`;
+
+/** short name of what went wrong */
+function errorTitle(c: Capture) {
+  return c.aborted ? 'Abgebrochen' : c.errorName === 'TypeError' ? 'Netzwerkfehler' : 'Fehler';
+}
+
+function errorExplain(c: Capture) {
+  const via = c.target ? ' Die Anfrage ging über den Daten-Proxy: ob dieser oder die API dahinter ausgefallen ist, sagt der Browser nicht.' : '';
+  if (c.errorName === 'TimeoutError') return `Die Seite hat nach einer festen Zeit aufgegeben (Timeout), es kam keine Antwort an.${via}`;
+  if (c.aborted) return `Die Seite hat die Anfrage selbst beendet – meist weil eine neuere Anfrage sie ersetzt hat, ein Timeout griff oder die Ansicht gewechselt wurde. Eine Antwort des Servers wurde nicht mehr gelesen.${via}`;
+  if (c.errorName === 'TypeError') return `Es kam keine Antwort an: Server nicht erreichbar, keine Verbindung, von CORS blockiert oder von einem Werbeblocker verworfen. Der Browser nennt den genauen Grund aus Sicherheitsgründen nicht.${via}`;
+  return via.trim();
+}
+
+/** key / value rows; a value with `copy` gets a copy button */
+function kv(rows: [string, string, boolean?][]) {
+  return `<dl class="rdi-kv">${rows.map(([k, v, copy]) => `<dt>${esc(k)}</dt><dd><span title="${esc(v)}">${esc(v)}</span>${copy ? `<button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(v)}" aria-label="${esc(k)} kopieren" title="Kopieren">${COPY_ICON}</button>` : ''}</dd>`).join('')}</dl>`;
+}
+
+function errorView(c: Capture) {
+  const d = document.createElement('div');
+  d.className = 'rdi-errbox';
+  const msg = c.error ?? '';
+  d.innerHTML = `<h3>${esc(errorTitle(c))}</h3>
+    <p>${esc(errorExplain(c))}</p>
+    ${kv([
+      ['Meldung', msg, true],
+      ['Fehlertyp', c.errorName ?? '–'],
+      ['Nach', `${c.ms} ms`],
+      ['Gestartet', fmtTime(c.t)],
+      ['Methode', c.method],
+      ['URL', apiUrl(c), true],
+      ...(c.target ? ([['Proxy', c.url, true]] as [string, string, boolean][]) : []),
+    ])}`;
+  return d;
+}
+
+/** status line above the response: code, text, type, size, time, and the response headers on demand */
+function statusBar(c: Capture) {
+  if (c.error) return `<span class="rdi-code bad">${esc(errorTitle(c))}</span><span>${c.ms} ms</span>`;
+  const bad = !c.ok;
+  const hdrs = c.resHeaders?.length ? c.resHeaders : null;
+  return `<span class="rdi-code ${bad ? 'bad' : 'ok'}">${c.status || '…'}${c.statusText ? ` ${esc(c.statusText)}` : ''}</span>
+    ${c.mime ? `<span>${esc(c.mime)}</span>` : ''}<span>${fmtSize(c.size)}</span><span>${c.ms} ms</span><span>${fmtTime(c.t)}</span>
+    ${hdrs ? `<button type="button" class="rdi-btn rdi-small" data-hdr>Header (${hdrs.length})</button>` : ''}
+    ${hdrs ? `<div class="rdi-hdrs" hidden>${kv(hdrs.map(([k, v]) => [k, v, true] as [string, string, boolean]))}</div>` : ''}`;
+}
+
+/** the "Gesendet" tab: what the page asked for */
+function sentView(c: Capture) {
+  const d = document.createElement('div');
+  d.className = 'rdi-sent';
+  let params: [string, string][] = [];
+  try {
+    params = [...new URL(apiUrl(c)).searchParams.entries()];
+  } catch {
+    /* odd URL */
+  }
+  const sec = (title: string, body: string) => `<section><h4>${title}</h4>${body}</section>`;
+  d.innerHTML =
+    sec('Anfrage', kv([['Methode', c.method], ['URL', apiUrl(c), true], ...(c.target ? ([['Über Proxy', c.url, true]] as [string, string, boolean][]) : []), ['Gestartet', fmtTime(c.t)], ['Seite', ROUTE_LABEL[c.route] ?? c.route]])) +
+    (params.length ? sec(`Parameter (${params.length})`, kv(params.map(([k, v]) => [k, v, true] as [string, string, boolean]))) : '') +
+    (c.reqHeaders ? sec(`Header (${c.reqHeaders.length})`, c.reqHeaders.length ? kv(c.reqHeaders.map(([k, v]) => [k, v, true] as [string, string, boolean])) : '<p class="muted">keine eigenen Header – der Browser ergänzt seine Standard-Header.</p>') : '<p class="muted">Vom Browser selbst geladen (Bild, Textur …): Header und Body sind nicht einsehbar.</p>');
+  if (c.reqBody) d.insertAdjacentHTML('beforeend', sec('Body', ''));
+  if (c.reqBody) d.lastElementChild!.append(pre(c.reqBody));
+  return d;
+}
+
+const jsonValues = new WeakMap<Element, unknown>();
+function jsonText(row: HTMLElement | null) {
+  if (!row || !jsonValues.has(row)) return '';
+  const v = jsonValues.get(row);
+  return typeof v === 'string' ? v : typeof v === 'object' && v !== null ? JSON.stringify(v, null, 2) : String(v);
+}
+const JSON_COPY = `<button type="button" class="rdi-ibtn j-copy" data-copy="val" aria-label="Wert kopieren" title="Wert kopieren">${COPY_ICON}</button>`;
+
 /** host + path with counters (tile numbers, glyph ranges …) replaced by "*", so repeated requests collapse into one entry */
 function endpointPath(c: Capture) {
-  const u = new URL(c.url);
+  const u = new URL(apiUrl(c));
   return `${u.host}${u.pathname
     .split('/')
     .map((seg) => (/^\d+(-\d+)?(\.\w+)?$/.test(seg) ? `*${seg.replace(/^[\d-]+/, '')}` : seg))
@@ -534,7 +778,7 @@ function gallery(initial: Capture[]): { el: HTMLElement; update(caps: Capture[])
     }
     remember(bigCache, c.url, img, BIG_MAX);
     big.replaceChildren(img);
-    big.insertAdjacentHTML('beforeend', `<div class="rdi-gal-cap"><b>${esc(name(c))}</b><span>${c.size ? `${fmtSize(c.size)} · ` : ''}${c.ms} ms</span><a href="${esc(c.url)}" target="_blank" rel="noopener">Öffnen</a></div>`);
+    big.insertAdjacentHTML('beforeend', `<div class="rdi-gal-cap"><b>${esc(name(c))}</b><span>${c.size ? `${fmtSize(c.size)} · ` : ''}${c.ms} ms</span><a href="${esc(c.url)}" target="_blank" rel="noopener">Öffnen</a><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(c.url)}" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button></div>`);
   };
 
   let dead = false;
@@ -668,9 +912,11 @@ function jsonTree(v: unknown, key: string | null, depth: number, open = false): 
   row.className = 'j-row';
   const label = key == null ? '' : `<span class="j-key">${esc(key)}</span>: `;
 
+  jsonValues.set(row, v);
   if (typeof v !== 'object' || v === null) {
     row.innerHTML = label;
     row.append(prim(v));
+    row.insertAdjacentHTML('beforeend', JSON_COPY);
     return row;
   }
 
@@ -681,7 +927,7 @@ function jsonTree(v: unknown, key: string | null, depth: number, open = false): 
     ? ` <span class="j-preview">${esc(entries.slice(0, 8).map(([, x]) => (typeof x === 'string' ? JSON.stringify(x) : String(x))).join(', '))}${entries.length > 8 ? ', …' : ''}</span>`
     : '';
   const summary = document.createElement('summary');
-  summary.innerHTML = `${label}<span class="j-count">${isArr ? `[${entries.length}]` : `{${entries.length}}`}</span>${isArr && allPrim ? preview : ''}`;
+  summary.innerHTML = `${label}<span class="j-count">${isArr ? `[${entries.length}]` : `{${entries.length}}`}</span>${isArr && allPrim ? preview : ''}${JSON_COPY}`;
   row.append(summary);
 
   // children are built in pages of PAGE; the "more" row loads the next ones

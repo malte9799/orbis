@@ -2,8 +2,9 @@ import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type
 import { getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid } from '../api/model';
 import type { Forecast } from '../api/openmeteo';
 import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
+import { regionsGeoJSON } from '../globe/regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
-import { loadRadarFrames } from '../api/events';
+import { loadRadarFrames, radarForecastSteps } from '../api/events';
 import { LUT, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
 import { loadCityWeather } from '../api/europe';
@@ -44,6 +45,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   let radarLoading = false;
   let citiesLoaded = false;
   let radarFrames: number[] = [];
+  /** radarFrames[i] with i >= this are extrapolated, not measured */
+  let radarMeasured = 0;
   let radarIdx = 0;
   let modelMin = 0;
   let curSampler: ModelSampler | null = null;
@@ -199,7 +202,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       style: {
         version: 8,
         glyphs: OFM_GLYPHS,
-        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), cities: empty },
+        sources: { ofm: { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR }, f0: field('f0'), f1: field('f1'), cities: empty, regions: { type: 'geojson', data: regionsGeoJSON() } },
         layers: [
           { id: 'bg', type: 'background', paint: { 'background-color': '#0b1220' } },
           ...baseLayers('dark').map(visible),
@@ -297,7 +300,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       radarGl?.setVisible(true);
       if (radarFrames.length) {
         radarGl?.setTime(radarFrames[radarIdx]);
-        whenEl.textContent = formatWhen(radarFrames[radarIdx]);
+        whenEl.textContent = formatWhen(radarFrames[radarIdx]) + (radarIdx >= radarMeasured ? ' · Prognose' : '');
       } else {
         whenEl.textContent = 'Radar wird geladen …';
         void showRadar();
@@ -381,7 +384,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       if (destroyed || !map || !frames.length) return;
       const last = frames[frames.length - 1].time;
       frames = frames.filter((f) => f.time >= last - 2 * 3600);
-      radarFrames = frames.map((f) => f.time * 1000);
+      radarMeasured = frames.length;
+      radarFrames = [...frames, ...radarForecastSteps(last)].map((f) => f.time * 1000);
       radarIdx = frames.length - 1;
       radarGl = new RadarGl(LUT);
       map.addLayer(radarGl, labelLayers().find((l) => l.id !== 'lbl-water')?.id);

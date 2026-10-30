@@ -1,0 +1,1646 @@
+/* ---------- Fahrplan (connection search + departure boards) ---------- */
+.fahrplan-view {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 72px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.fp-card {
+  background: var(--card-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fp-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.fp-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.fp-ft {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.fp-ft .fp-from,
+.fp-ft .fp-to {
+  grid-column: 1;
+}
+.fp-ft .fp-swap {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.fp-field {
+  position: relative;
+}
+.fp-field input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.fp-field input,
+.fp-opts select,
+.fp-opts input {
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  padding: 0 12px;
+  min-width: 0;
+}
+.fp-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fp-opts .fp-time {
+  flex: 1 1 180px;
+}
+.fp-res {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fp-day {
+  margin: 4px 0 0;
+  font-weight: 600;
+}
+.fp-itin {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-itin > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.fp-itin > summary::-webkit-details-marker {
+  display: none;
+}
+.fp-l1 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 1.1rem;
+}
+.fp-l1 span {
+  color: var(--text-2);
+  font-size: 0.95rem;
+}
+.fp-l2 {
+  display: flex;
+  gap: 14px;
+  font-size: 1.05rem;
+}
+.fp-l2 b {
+  font-weight: 600;
+}
+.fp-l2 .ok {
+  color: #66bb6a;
+}
+.fp-l2 .late {
+  color: var(--danger);
+}
+.fp-src {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  margin-left: 6px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 25%, transparent);
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.2;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.fp-src.db {
+  background: #ec0016;
+  color: #fff;
+}
+.fp-dtag .fp-src {
+  display: none;
+}
+.fp-hero .fp-dtag .fp-src {
+  display: inline-flex;
+}
+.fp-bar {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+.fp-seg {
+  min-width: 40px; /* ride names win over walks: a ride never shrinks below a readable name */
+  background: var(--c);
+  color: #fff;
+  font-weight: 650;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 5px 4px;
+  border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-seg.walk {
+  background: none;
+  color: var(--text-2);
+  padding: 5px 0;
+  flex: 0 0 18px;
+  min-width: 0;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fp-seg.walk svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fp-von {
+  color: var(--text-2);
+  font-size: 0.9rem;
+}
+.fp-route {
+  font-weight: 600;
+}
+.fp-page {
+  align-self: stretch;
+}
+.fp-day {
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.fp-badge {
+  font-style: normal;
+  font-weight: 650;
+  font-size: 0.78rem;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: var(--c, #666);
+  color: #fff;
+  white-space: nowrap;
+}
+.fp-late {
+  color: var(--danger);
+  font-weight: 650;
+  font-size: 0.82rem;
+}
+.fp-ok {
+  color: #66bb6a;
+  font-size: 0.75rem;
+}
+.fp-legbody.cancelled,
+.fp-dep.cancelled {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.fp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fp-chip {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.fp-chip.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+}
+.fp-bh {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.fp-bh small {
+  display: block;
+  color: var(--muted);
+}
+.fp-save.on svg {
+  fill: var(--danger);
+  stroke: var(--danger);
+}
+.fp-near {
+  margin-top: 8px;
+}
+.fp-deps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fp-dep {
+  display: grid;
+  grid-template-columns: 56px minmax(52px, auto) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+.fp-dep .fp-in {
+  font-weight: 650;
+}
+.fp-dep .fp-badge {
+  background: var(--c);
+  text-align: center;
+}
+.fp-at {
+  text-align: right;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.fp-at small {
+  display: block;
+  color: var(--muted);
+}
+@media (max-width: 520px) {
+  .fp-dep {
+    grid-template-columns: 48px minmax(44px, auto) 1fr;
+  }
+  .fp-at {
+    grid-column: 2 / 4;
+    text-align: left;
+  }
+}
+
+/* connection detail: timeline */
+.fp-detail {
+  border-top: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+.fp-stops summary {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.fp-dh {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  container-type: inline-size;
+  padding: 8px 12px;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+.fp-row,
+.fp-ride,
+.fp-gap {
+  display: grid;
+  grid-template-columns: 56px 22px 1fr;
+  column-gap: 8px;
+  padding: 0 12px;
+}
+.fp-tm {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.fp-tm b {
+  font-weight: 600;
+}
+.fp-tm b.ok {
+  color: #66bb6a;
+}
+.fp-tm b.late {
+  color: var(--danger);
+}
+.fp-row {
+  padding-top: 10px;
+  padding-bottom: 2px;
+  align-items: start;
+}
+.fp-dot {
+  justify-self: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 3px solid var(--c);
+  background: var(--card-solid);
+  position: relative;
+  z-index: 1;
+}
+.fp-st b {
+  font-size: 1.02rem;
+}
+.fp-st small {
+  display: block;
+  color: var(--muted);
+}
+.fp-gm {
+  align-self: center;
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.fp-gl {
+  justify-self: center;
+  width: 4px;
+  min-height: 24px;
+  margin: -4px 0 -4px;
+  border-radius: 2px;
+  background: var(--c);
+}
+.fp-gap .fp-gl {
+  width: 0;
+  border-left: 3px dotted var(--c);
+  background: none;
+  border-radius: 0;
+}
+.fp-ride > .fp-legbody {
+  padding: 8px 0 12px;
+}
+.fp-gap {
+  background: rgba(255, 255, 255, 0.04);
+  margin: 6px 0 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.fp-gap .fp-gb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+.fp-gi svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+.fp-legbody .fp-badge {
+  display: inline-block;
+  font-size: 0.9rem;
+  padding: 6px 9px;
+}
+.fp-nach {
+  margin: 6px 0 0;
+  color: var(--text-2);
+}
+.fp-stops {
+  margin-top: 6px;
+}
+.fp-stops summary {
+  cursor: pointer;
+  color: var(--text-2);
+  padding: 4px 0;
+}
+.fp-stops ul {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 0;
+}
+.fp-stops li {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+.fp-stops li .fp-tm {
+  font-size: 0.85rem;
+}
+
+/* options */
+.fp-optbtn.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.fp-optpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-og {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fp-oh {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.fp-optpanel select {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  padding: 0 10px;
+}
+.fp-mchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.fp-mchip {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.fp-mchip.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-chk {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.fp-reset {
+  align-self: flex-start;
+}
+
+.fp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-search.compact .fp-form,
+.fp-search.compact h2 {
+  display: none;
+}
+@media (min-width: 900px) {
+  .fp-search.compact .fp-form {
+    display: flex;
+  }
+  .fp-search.compact h2 {
+    display: block;
+  }
+  .fp-compact {
+    display: none !important;
+  }
+}
+.fp-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-ce {
+  color: var(--accent);
+  font-size: 0.85rem;
+  flex: none;
+}
+.fp-cs {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .fahrplan-view {
+    padding: 60px 10px 32px;
+    gap: 10px;
+  }
+  .fp-card {
+    padding: 12px;
+    gap: 10px;
+    border-radius: 14px;
+  }
+  .fp-search h2,
+  .fp-stations > .fp-hint {
+    display: none;
+  }
+  .fp-ft {
+    position: relative;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .fp-ft .fp-swap {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    grid-column: auto;
+    grid-row: auto;
+    width: 34px;
+    height: 34px;
+    z-index: 2;
+  }
+  .fp-ft .fp-field input {
+    padding-right: 48px;
+  }
+  .fp-field input,
+  .fp-opts select,
+  .fp-opts input {
+    height: 38px;
+  }
+  .fp-opts {
+    gap: 6px;
+  }
+  .fp-opts select {
+    flex: none;
+    padding: 0 6px;
+  }
+  .fp-opts .fp-time {
+    flex: 1 1 150px;
+    padding: 0 4px;
+    font-size: 0.8rem;
+  }
+  .fp-opts .btn.small {
+    flex: none;
+    height: 38px;
+  }
+  .fp-itin > summary {
+    padding: 10px;
+  }
+  .fp-row,
+  .fp-ride,
+  .fp-gap {
+    grid-template-columns: 48px 20px 1fr;
+    padding: 0 8px;
+  }
+  .fp-dep {
+    padding: 8px 0;
+  }
+}
+.fp-opts .fp-go {
+  flex: 1 1 auto;
+  height: 38px;
+}
+@media (max-width: 899px) {
+  /* the folded search bar already names the route: keep only the save button */
+  .fahrplan-view.is-compact .fp-route > span {
+    display: none;
+  }
+  .fahrplan-view.is-compact .fp-route {
+    justify-content: flex-end;
+  }
+}
+.fp-side {
+  display: contents;
+}
+.fp-search {
+  order: 1;
+}
+.fp-results {
+  order: 2;
+}
+.fp-stations {
+  order: 3;
+}
+.fp-results.empty {
+  display: none;
+}
+.fp-empty {
+  display: none;
+}
+
+/* desktop: search + saved stops on the left, connections on the right */
+@media (min-width: 900px) {
+  .fahrplan-view {
+    max-width: 1220px;
+    padding: 76px 24px 56px;
+  }
+  .fahrplan-view .fp-pane-search,
+  .fahrplan-view .fp-saved {
+    display: grid;
+    grid-template-columns: 400px minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+  }
+  .fp-side {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .fp-results,
+  .fp-results.empty {
+    display: flex;
+    min-height: 320px;
+    padding: 20px;
+  }
+  .fp-results.empty .fp-res {
+    display: none;
+  }
+  .fp-empty {
+    display: none;
+  }
+  .fp-results.empty .fp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+    flex: 1;
+    color: var(--text-2);
+    padding: 40px 20px;
+  }
+  .fp-empty svg {
+    width: 56px;
+    height: 56px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.8;
+  }
+  .fp-empty b {
+    font-size: 1.15rem;
+    color: var(--text);
+  }
+  .fp-empty p {
+    margin: 0;
+    max-width: 380px;
+  }
+  .fp-res {
+    gap: 10px;
+  }
+  .fp-route {
+    font-size: 1.15rem;
+  }
+  .fp-itin {
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .fp-itin:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+  /* times and duration on one line, delay below, platform top right, the timetable bar right under that over the whole width */
+  .fp-itin > summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 24px;
+    row-gap: 2px;
+    align-items: center;
+    padding: 14px 16px;
+  }
+  .fp-itin > summary .fp-l1 {
+    grid-column: 1;
+    grid-row: 1;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .fp-itin > summary .fp-sum-gl {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+  .fp-itin > summary .fp-l2 {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .fp-itin > summary .fp-bar {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 6px;
+  }
+  .fp-itin > summary .fp-von {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+  .fp-itin[open] > summary {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px 12px 0 0;
+  }
+  .fp-page {
+    align-self: center;
+    min-width: 200px;
+  }
+}
+
+/* tabs: segmented control on top (desktop), bottom bar on phones */
+.fahrplan-view[data-tab='search'] .fp-pane-saved,
+.fahrplan-view[data-tab='saved'] .fp-pane-search {
+  display: none;
+}
+.fp-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card-solid);
+}
+.fp-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-tab svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.fp-tab.on {
+  background: var(--accent-2);
+  color: #fff;
+}
+.fp-count {
+  font-style: normal;
+  font-size: 0.72rem;
+  line-height: 1;
+  min-width: 18px;
+  padding: 3px 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.18);
+  text-align: center;
+}
+.fp-tab.on .fp-count {
+  background: rgba(255, 255, 255, 0.3);
+}
+@media (max-width: 899px) {
+  .fahrplan-view {
+    padding-bottom: calc(86px + var(--safe-bottom));
+  }
+  .fp-tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 6px 8px calc(6px + var(--safe-bottom));
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--card-solid);
+  }
+  .fp-tab {
+    flex-direction: column;
+    gap: 2px;
+    height: 52px;
+    padding: 0;
+    font-size: 0.72rem;
+    background: transparent !important;
+    color: var(--muted);
+  }
+  .fp-tab.on {
+    color: var(--accent);
+  }
+  .fp-tab svg {
+    width: 24px;
+    height: 24px;
+  }
+  .fp-count {
+    position: absolute;
+    top: 2px;
+    left: calc(50% + 8px);
+    background: var(--danger) !important;
+    color: #fff;
+  }
+}
+
+/* save buttons in the results */
+.fp-route {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.fp-rtbtn,
+.fp-trip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.fp-rtbtn svg,
+.fp-trip svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.fp-rtbtn.on,
+.fp-trip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.fp-rtbtn.on svg,
+.fp-trip.on svg {
+  fill: currentColor;
+}
+.fp-dact {
+  padding: 10px 12px 0;
+}
+
+/* Gemerkt */
+.fp-saved {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-sl,
+.fp-sd {
+  min-width: 0;
+}
+.fp-subs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-gsub {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-gsub.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-gsub i {
+  font-style: normal;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+.fp-sadd {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fp-sadd:empty {
+  display: none;
+}
+.fp-sitems {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fp-sr {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.fp-sr .fp-si {
+  flex: 1;
+  min-width: 0;
+}
+.fp-si {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fp-si:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.fp-si.on {
+  border-color: var(--accent);
+  background: rgba(91, 157, 255, 0.12);
+}
+.fp-sit {
+  display: flex;
+  flex-direction: column;
+  min-width: 46px;
+  font-size: 1.05rem;
+}
+.fp-sit small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.fp-sim {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.fp-sim b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fp-sim small {
+  color: var(--muted);
+}
+.fp-sim .fp-badge {
+  align-self: flex-start;
+  background: var(--c);
+}
+.fp-sis {
+  flex: none;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.fp-sis small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+}
+.fp-del {
+  height: auto;
+  min-height: 56px;
+  width: 44px;
+  flex: none;
+}
+.fp-del svg {
+  width: 18px;
+  height: 18px;
+}
+.fp-sempty {
+  padding: 8px 2px;
+  line-height: 1.5;
+}
+.fp-back {
+  display: none;
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  padding: 0 0 8px;
+  cursor: pointer;
+}
+.fp-sdbody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fp-sdhint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 12px;
+  text-align: center;
+  color: var(--text-2);
+}
+.fp-sdhint p {
+  margin: 0;
+}
+.fp-th {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.fp-th b {
+  font-size: 1.1rem;
+}
+.fp-th small {
+  display: block;
+  color: var(--text-2);
+}
+.fp-days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-day-btn {
+  width: 40px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-day-btn.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-saved .fp-detail {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-rm {
+  align-self: flex-start;
+  color: var(--danger);
+}
+@media (max-width: 899px) {
+  .fp-saved .fp-sd {
+    display: none;
+  }
+  .fp-saved.has-detail .fp-sd {
+    display: flex;
+    flex-direction: column;
+  }
+  .fp-saved.has-detail .fp-sl {
+    display: none;
+  }
+  .fp-back {
+    display: block;
+  }
+}
+@media (min-width: 900px) {
+  .fp-tabs {
+    margin-bottom: 20px;
+  }
+  .fp-sd {
+    min-height: 320px;
+    padding: 20px;
+  }
+  .fp-sd .fp-sdbody {
+    max-width: 680px;
+  }
+}
+.fp-dact {
+  padding-bottom: 8px;
+}
+/* the toast must not cover the bottom tab bar on phones */
+@media (max-width: 899px) {
+  body:has(.fahrplan-view:not([hidden])) .toast {
+    bottom: calc(80px + var(--safe-bottom));
+  }
+}
+
+/* push notifications of a trip */
+.fp-notify {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+}
+.fp-notify .fp-hint {
+  margin: 0;
+}
+.fp-chk {
+  cursor: pointer;
+}
+.fp-chk input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-2);
+}
+.fp-leads {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.fp-lead {
+  min-width: 64px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.fp-lead.on {
+  background: var(--accent-2);
+  border-color: var(--accent);
+  color: #fff;
+}
+.fp-nrow {
+  display: flex;
+}
+
+/* preliminary list while the DB data loads */
+.fp-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--accent);
+}
+.fp-spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: fp-rot 0.8s linear infinite;
+}
+@keyframes fp-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fp-spin {
+    animation-duration: 3s;
+  }
+}
+
+/* ---------- phone: "next connection" card, slim rows, action bar ---------- */
+.fp-cbar,
+.fp-hero-lbl,
+.fp-rt,
+.fp-lines,
+.fp-cd,
+.fp-dtag,
+.fp-cchips {
+  display: none;
+}
+.fp-chip {
+  flex: none;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-solid);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+@media (max-width: 899px) {
+  .fp-cbar:not([hidden]) {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .fp-cbar .fp-compact {
+    flex: 1;
+    min-width: 0;
+  }
+  .fp-ph-star {
+    flex: none;
+    width: 44px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .fp-ph-star svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linejoin: round;
+  }
+  .fp-ph-star.on {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .fp-ph-star.on svg {
+    fill: currentColor;
+  }
+  .fahrplan-view.is-compact .fp-route,
+  .fp-results .fp-pg-top {
+    display: none;
+  }
+  .fp-results {
+    gap: 8px;
+  }
+
+  /* slim rows */
+  .fp-itin > summary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 4px 10px;
+    padding: 10px 12px;
+  }
+  .fp-itin .fp-l1 {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 1rem;
+  }
+  .fp-itin .fp-cd {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    color: var(--text-2);
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .fp-itin .fp-l2 {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 0.95rem;
+  }
+  .fp-itin .fp-dtag {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .fp-itin .fp-dtag.ok {
+    color: #66bb6a;
+  }
+  .fp-itin .fp-dtag.late {
+    color: var(--danger);
+  }
+  .fp-itin .fp-lines {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+  .fp-itin .fp-lines .fp-badge {
+    background: var(--c);
+    color: #fff;
+  }
+  .fp-itin .fp-bar,
+  .fp-itin .fp-von {
+    display: none;
+  }
+
+  /* the next connection: a big card with the countdown */
+  .fp-itin.fp-hero {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent-2) 22%, var(--card-solid));
+  }
+  .fp-itin.fp-hero > summary {
+    padding: 14px;
+    gap: 6px 10px;
+  }
+  .fp-hero .fp-hero-lbl {
+    display: block;
+    grid-column: 1 / -1;
+    color: color-mix(in srgb, var(--accent) 70%, #fff);
+    font-size: 0.85rem;
+  }
+  .fp-hero .fp-cd {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: start;
+    color: var(--text);
+    font-size: 1.9rem;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .fp-hero .fp-rt {
+    display: block;
+    grid-column: 1 / -1;
+    color: var(--text-2);
+    font-size: 0.9rem;
+  }
+  .fp-hero .fp-l1,
+  .fp-hero .fp-l2 {
+    display: none;
+  }
+  .fp-hero .fp-bar {
+    display: flex;
+    grid-column: 1 / -1;
+  }
+  /* the bar already names the trains: no badge row in the big card, the status sits next to the countdown */
+  .fp-hero .fp-lines {
+    display: none;
+  }
+  .fp-hero .fp-hero-lbl {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  /* the platform sits in the top right corner of the card */
+  .fp-hero .fp-hero-gl {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+    border: 1px solid #fff;
+  }
+  .fp-hero .fp-cd {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .fp-hero .fp-dtag {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+  }
+  .fp-hero .fp-rt {
+    grid-row: 3;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .fp-hero .fp-rt-to {
+    text-align: right;
+  }
+  .fp-hero .fp-bar {
+    grid-row: 4;
+  }
+}
+
+/* wide screens: use the room – the connections (and their bars) grow with the window */
+@media (min-width: 1300px) {
+  .fahrplan-view {
+    max-width: min(1760px, 96vw);
+  }
+  .fahrplan-view .fp-pane-search,
+  .fahrplan-view .fp-saved {
+    grid-template-columns: 420px minmax(0, 1fr);
+  }
+}
+
+.fp-seg:not(.walk) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 0.3em;
+  padding: 0 4px;
+  height: calc(0.85rem * 1.35 + 10px); /* one line: a train number that does not fit wraps below and is clipped */
+  line-height: 1.35;
+}
+.fp-seg .fp-sn {
+  padding: 5px 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+/* platform as a blue badge on the right of the station row */
+.fp-st {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fp-st small.fp-gl-badge {
+  display: inline-block;
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #1c3f94;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+@media (max-width: 899px) {
+  /* options, "Jetzt" and "Früher" sit in the same box as the folded search */
+  .fp-cchips:not([hidden]) {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .fp-cchips > .fp-chip {
+    flex: none;
+  }
+  /* "Jetzt" and "Früher" share the right half */
+  .fp-cgrp {
+    display: flex;
+    gap: 8px;
+    width: 50%;
+  }
+  .fp-cchips .fp-chip {
+    padding: 0 8px;
+  }
+  .fp-cgrp .fp-chip {
+    flex: 1;
+  }
+  .fp-cchips .fp-chip[hidden] {
+    display: none;
+  }
+  .fp-search.compact {
+    padding: 12px;
+    gap: 10px;
+    border: 1px solid var(--border);
+    background: var(--card-solid);
+  }
+}
+
+/* detail header: day, duration and the save button on one line; the button shrinks its text when the line is narrow */
+.fp-dh {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.fp-dh > span {
+  white-space: nowrap;
+}
+.fp-dh > span:first-child {
+  margin-right: auto;
+}
+.fp-dh .fp-trip {
+  padding: 4px 10px;
+}
+.fp-dh .fp-shrt {
+  display: none;
+}
+@container (max-width: 520px) {
+  .fp-dh .fp-dl,
+  .fp-dh .fp-lg {
+    display: none;
+  }
+  .fp-dh .fp-shrt {
+    display: inline;
+  }
+}
+
+/* platform badges: blue, red on a platform change; also in the "next connection" card */
+.fp-gl-badge {
+  display: inline-block;
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #1c3f94;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.3;
+  vertical-align: 1px;
+}
+.fp-gl-badge.changed {
+  background: #c62828;
+}
+.fp-rt .fp-gl-badge {
+  margin-left: 4px;
+}
+.fp-gl-chg {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* on-demand bus: number to call */
+.fp-tel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 6px;
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.fp-tel svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 899px) {
+  /* room between the light header bar of an opened connection and its first station */
+  .fp-dh {
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 899px) {
+  /* a walk / transfer strip gets the same room above and below (8 px to the station texts) */
+  .fp-row:has(+ .fp-gap) {
+    padding-bottom: 2px;
+  }
+  .fp-gap + .fp-row {
+    padding-top: 8px;
+  }
+}
+
+/* a station with a delay has two times, so its row is one line taller than the name: the line that follows starts right under the dot
+   again instead of leaving room for the second time */
+.fp-row:has(.fp-tm b + b) + .fp-ride > .fp-gl,
+.fp-row:has(.fp-tm b + b) + .fp-gap > .fp-gl {
+  margin-top: -18px;
+}
+
+/* phone: the rows have no vertical padding there, so the line of a ride ran into the dot below it. Same gaps to the dots as on the desktop (about 3 px at the top and at the bottom) */
+@media (max-width: 600px) {
+  .fp-ride > .fp-gl {
+    margin-top: -2px;
+    margin-bottom: 0;
+  }
+}
+
+/* desktop / tablet: the rows keep their padding, so the line of a ride ended about 9 px above the dot below it; same gap as on the phone (about 3.5 px) */
+@media (min-width: 601px) {
+  .fp-ride > .fp-gl {
+    margin-bottom: -9.5px;
+  }
+}
+
+/* on the phone only the "next connection" card shows the platform up in its corner */
+@media (max-width: 899px) {
+  .fp-itin:not(.fp-hero) .fp-sum-gl {
+    display: none;
+  }
+}
+
+@media (min-width: 900px) {
+  /* many rides: the bar shrinks to the width of its column instead of running out of the card (names that no longer fit are hidden) */
+  .fp-itin > summary .fp-bar {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .fp-seg:not(.walk) {
+    min-width: 0;
+  }
+}

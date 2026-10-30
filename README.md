@@ -51,6 +51,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Blitzer & Rotlicht, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts mit Live-Tracking, Stream & Erinnerung |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
+| 🧭 **Route & Navigation** | Routenplanung für Auto, Rad und Fuß mit Alternativen und Zwischenstopps; Dienst wählbar (OSM/OSRM, Valhalla, Google Routes, Mapbox, TomTom, OpenRouteService, GraphHopper – mit automatischem Fallback). Navigation mit gefiltertem GPS, Kompass-/Kursrotation der Karte, Abbiegehinweisen, Sprachansage und automatischer Neuberechnung |
 | 🏗️ **Infrastruktur** | Dritte Standardkarte: Kraftwerke nach Energieträger (Wind, Solar, Wasser, Kern, Kohle, Gas, Öl, Biomasse), Rohstoffvorkommen, Seekabel & Pipelines, Radio, Kameras |
 | 🚀 **Weltall** | 3D-Sonnensystem, Raumsonden mit Flugbahnen, ISS & Satelliten live, Mond- und Mars-Karte mit Rovern |
 | 🔌 **Ohne Anmeldung** | Alle Kernquellen sind kostenlos; optionale Schlüssel nur für Extras |
@@ -199,10 +200,10 @@ RainViewer-kompatibler Radar-Server (z. B. selbst gehostetes [LibreWXR](https://
 ## 🛠️ Entwicklung
 
 ```bash
-npm install
-npm run dev       # Entwicklungsserver
-npm run build     # Typecheck + Produktions-Build nach dist/
-npm run preview   # Build lokal ansehen
+pnpm install
+pnpm dev       # Entwicklungsserver
+pnpm build     # Typecheck + Produktions-Build nach dist/
+pnpm preview   # Build lokal ansehen
 ```
 
 **Technik:** Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion,
@@ -269,9 +270,9 @@ eingebauten. Fällt der Proxy aus, greift die App wieder direkt auf die Quellen 
 <details>
 <summary><b>🧭 Kamera-Richtungen (eigener Cloudflare-Worker)</b></summary>
 
-Im Kamera-Panel rechts öffnet *Richtung bearbeiten* einen Dialog: links das Kamerabild, rechts eine Satellitenkarte mit dem Sichtkegel.
-Die Richtung lässt sich durch Klicken/Ziehen auf der Karte, per Regler, Gradfeld oder N/O/S/W einstellen; „Bild über die Karte legen“
-dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, damit Straßen und Gebäude zur Deckung kommen.
+Im Kamera-Panel rechts startet *Auf Karte bearbeiten* das Bearbeiten direkt auf der Hauptkarte: die Kamera (großer Punkt) lässt sich per
+Drag & Drop verschieben, der weiße Griff am Sichtkegel dreht die Blickrichtung. Im Panel stehen Richtung, Höhe, Neigung, Rollen,
+Sichtfeld und die Reichweite des projizierten Bildes (dahinter blendet die „Wand“ nach oben aus) als Regler und Zahlenfelder.
 *Speichern* schickt den Wert an einen eigenen Worker, den alle Besucher beim Laden der Webcams mitlesen.
 
 1. Cloudflare → *Workers & Pages → KV* → Namespace anlegen.
@@ -280,9 +281,49 @@ dreht die Karte in Blickrichtung und blendet das Bild halbtransparent darüber, 
 4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
 5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
 
-Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld – aus „Fluchtpunkt“, „Punkte abgleichen“ oder „Überlagerung“) speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für die Pose den Worker neu deployen.
+Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld) und verschobener Position speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für Pose und Position den Worker neu deployen.
 
 Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Moderation, Ratenbegrenzung) sind im Worker vorbereitet, aber noch nicht eingebaut.
+
+</details>
+
+<details>
+<summary><b>🔔 Fahrplan: Bahn-Verspätungen & Benachrichtigungen (eigener Cloudflare-Worker)</b></summary>
+
+<br>
+
+Ein kleiner Worker (`proxy/fahrplan-push-worker.js`) macht für den Fahrplan zwei Dinge:
+
+- **Verspätungen der Bahn:** Die Verbindungen kommen sofort von Transitous (nur Plan-Zeiten, wo der Betreiber nichts meldet). Der Worker
+  holt danach die genauen Verspätungen, Gleisänderungen und Ausfälle der Bahn von der offiziellen **DB-Fahrplan-Schnittstelle**
+  (DB API Marketplace, „Timetables“) und die App mischt sie nachträglich in die Anzeige. Der Schlüssel liegt nur im Worker und gilt für
+  alle Nutzer. Abgedeckt ist Schienenverkehr, den die DB-Daten kennen (Fern-, Regional-, S-Bahn); Busse und Straßenbahnen behalten die
+  Werte von Transitous. Daten: Deutsche Bahn AG, CC BY 4.0.
+- **Benachrichtigungen:** Unter *Fahrplan → Gemerkt → Verbindungen* lässt sich pro Pendler-Verbindung „Vor der Abfahrt benachrichtigen“
+  einschalten (30 / 20 / 10 / 5 Minuten vorher, optional nur bei Verspätung oder Ausfall), z. B. „Dein Zug hat 14 min Verspätung
+  (Abfahrt: 07:26 Uhr)“ – **auch bei geschlossener App**. Eine PWA kann im Hintergrund nicht minutengenau nachsehen, deshalb schaut der
+  Worker per Cron in den Fahrplan und schickt eine verschlüsselte Web-Push-Nachricht (VAPID). Er fragt die Schnittstellen nur ab, wenn
+  gerade ein Zeitpunkt fällig ist; ohne angemeldete Geräte liest er nur seinen Speicher.
+
+Einrichtung (alles im kostenlosen Tarif):
+
+1. **DB-Schlüssel:** Auf [developers.deutschebahn.com](https://developers.deutschebahn.com) kostenlos registrieren, eine Anwendung anlegen
+   und die API „Timetables“ (Fahrplan) abonnieren. Das ergibt *Client-ID* und *API-Key*. Die Nutzungsbedingungen und das Abfragelimit
+   (nach meinem Stand 60 Aufrufe pro Minute für alle Nutzer zusammen, der Worker speichert Antworten zwischen) bitte dort prüfen.
+2. Push-Schlüssel erzeugen: `node scripts/vapid-keys.mjs` – gibt `VAPID_PUBLIC` und `VAPID_PRIVATE` aus.
+3. Cloudflare → *Workers & Pages → KV* → Namespace anlegen (z. B. `orbis-push`).
+4. Neuen Worker mit dem Inhalt von `proxy/fahrplan-push-worker.js` erstellen. Unter *Bindings* den Namespace als `PUSH_KV` einbinden.
+5. *Settings → Variables and Secrets*: Secrets `DB_CLIENT_ID` und `DB_API_KEY` (aus Schritt 1), `VAPID_PUBLIC` und `VAPID_PRIVATE`
+   (aus Schritt 2), Text `VAPID_SUBJECT` (z. B. `mailto:du@example.org`), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
+6. *Settings → Trigger Events → Cron Triggers*: `* * * * *` (jede Minute) hinzufügen. Nur für die Benachrichtigungen nötig.
+7. Repository-Variable `PUSH_URL` = Worker-Adresse, danach den Deploy neu starten. Alternativ trägt jeder Nutzer die Adresse unter
+   *Einstellungen → Verkehr & Nahverkehr → Fahrplan-Worker* selbst ein.
+8. In der App eine Verbindung merken, die Benachrichtigung einschalten, die Erlaubnis bestätigen und mit „Test-Nachricht senden“ prüfen.
+
+Hinweise: Ohne die DB-Schlüssel antwortet der Worker bei den Verspätungen mit „nicht eingerichtet“, der Fahrplan zeigt dann nur
+Transitous. Auf dem iPhone funktioniert Web-Push nur, wenn Orbis zum Home-Bildschirm hinzugefügt wurde (iOS 16.4+). Der Worker
+speichert pro Gerät nur die Push-Adresse, die Verbindungen und die Zeitzone. Die Grenzen des Gratis-Tarifs (Cron jede Minute, ein
+KV-Eintrag, höchstens 500 Geräte und 10 Verbindungen pro Gerät) reichen für den privaten Gebrauch.
 
 </details>
 
