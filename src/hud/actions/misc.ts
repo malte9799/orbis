@@ -1,5 +1,6 @@
 import type { ActFn, HudCore } from '../core';
 import { toast } from '../../util';
+import { t } from '../../i18n';
 
 export default (c: HudCore): Record<string, ActFn> => {
   const { encodeKarte, view, ui } = c;
@@ -11,8 +12,8 @@ export default (c: HudCore): Record<string, ActFn> => {
       const code = encodeKarte(view(c.cur));
       const url = `${location.origin}${location.pathname}#/karte?k=${code}`;
       navigator.clipboard?.writeText(url).then(
-        () => toast('Link zur Karte kopiert'),
-        () => toast('Link konnte nicht kopiert werden.', 'error'),
+        () => toast(t('hud.toast.copied')),
+        () => toast(t('hud.toast.copyFail'), 'error'),
       );
     },
   };

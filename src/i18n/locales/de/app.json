@@ -1,0 +1,138 @@
+{
+  "common": {
+    "loading": "Lädt …",
+    "retry": "Erneut versuchen",
+    "close": "Schließen",
+    "cancel": "Abbrechen",
+    "back": "Zurück"
+  },
+  "settings": {
+    "language": "Sprache",
+    "languageHint": "Sprache der gesamten App – die Seite wird zum Anwenden neu geladen",
+    "languageA11y": "Sprache wählen",
+    "title": "Einstellungen",
+    "close": "Einstellungen schließen",
+    "general": "Allgemein",
+    "units": "Einheiten",
+    "apiKeys": "API-Schlüssel",
+    "dev": "Entwickleroptionen",
+    "keysNote": "Grundfunktionen laufen ohne Schlüssel. Kostenlose Schlüssel schalten zusätzliche Quellen frei – sie werden nur lokal in diesem Browser gespeichert.",
+    "keysActive": {
+      "one": "1 aktiv",
+      "other": "{count} aktiv"
+    },
+    "keysOptional": "optional",
+    "optionalShort": "(optional)",
+    "guideA11y": "Kurzanleitung für {name}",
+    "sourcesTitle": "Alle Quellen mit Lizenzen",
+    "sourcesTail": "Die genaue Quellenangabe steht unten rechts auf der Karte (ⓘ) bzw. im Popup.",
+    "licenses": "Software-Lizenzen:",
+    "saved": "Einstellungen gespeichert",
+    "clickWx": "Wetter beim Kartenklick",
+    "clickWxHint": "Ein freier Klick zeigt das Wetter am geklickten Ort",
+    "unit": {
+      "tz": {
+        "label": "Zeitzone",
+        "opt": {
+          "auto": "Ortszeit",
+          "utc": "UTC"
+        }
+      },
+      "hour12": {
+        "label": "Uhrzeit",
+        "opt": {
+          "24h": "24 Std.",
+          "12h": "12 Std. (AM/PM)"
+        }
+      },
+      "temp": {
+        "label": "Temperatur",
+        "opt": {
+          "c": "°C",
+          "f": "°F"
+        }
+      },
+      "wind": {
+        "label": "Wind",
+        "opt": {
+          "kmh": "km/h",
+          "ms": "m/s",
+          "mph": "mph",
+          "kn": "Knoten",
+          "bft": "Bft"
+        }
+      },
+      "windDir": {
+        "label": "Windrichtung",
+        "opt": {
+          "compass": "Kompass",
+          "deg": "Grad"
+        }
+      },
+      "rain": {
+        "label": "Niederschlag",
+        "opt": {
+          "mm": "mm/h",
+          "in": "in/h",
+          "dbz": "dBZ"
+        }
+      },
+      "pressure": {
+        "label": "Luftdruck",
+        "opt": {
+          "hpa": "hPa",
+          "mb": "mb",
+          "mmhg": "mmHg",
+          "inhg": "inHg"
+        }
+      },
+      "dist": {
+        "label": "Distanz",
+        "opt": {
+          "km": "km",
+          "mi": "Meilen",
+          "nmi": "Seemeilen"
+        }
+      },
+      "height": {
+        "label": "Höhe, Tiefe & Wellen",
+        "opt": {
+          "m": "Meter",
+          "ft": "Fuß (ft)"
+        }
+      },
+      "area": {
+        "label": "Fläche",
+        "opt": {
+          "km2": "km²",
+          "mi2": "mi²",
+          "acre": "Acre",
+          "ha": "Hektar"
+        }
+      },
+      "burned": {
+        "label": "Verbrannte Fläche",
+        "opt": {
+          "km2": "km²",
+          "mi2": "mi²",
+          "acre": "Acre",
+          "ha": "Hektar"
+        }
+      },
+      "coords": {
+        "label": "Koordinaten",
+        "opt": {
+          "dec": "Dezimalgrade",
+          "gms": "GMS"
+        }
+      }
+    }
+  },
+  "meta": {
+    "tagline": "Orbis – Wetter, Erde & Weltall",
+    "description": "Orbis – Wettervorhersage, Live-Weltkarte (2D/3D) mit Radar, Wind, Unwettern, Erdbeben, Flugzeugen, Satelliten und Infrastruktur sowie ein interaktives 3D-Sonnensystem mit Planeten und Raumsonden.",
+    "noscript": "Diese App benötigt JavaScript.",
+    "manifestName": "Orbis – Wetter, Erde & Weltall",
+    "manifestDescription": "Wettervorhersage, Live-Weltkarte und interaktives 3D-Sonnensystem"
+  }
+}

@@ -5,6 +5,7 @@ import 'mapillary-js/dist/mapillary.css';
 import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from './data';
 import { escapeHtml } from '../util';
 import { snapshotJson } from '../api/data';
+import { t as m, fmtLocale } from '../i18n';
 
 // Street guessing (GeoGuessr light) on Mapillary's open street-level photos.
 // A random place in the chosen area is searched for a photo; you place a guess on a map.
@@ -69,7 +70,11 @@ async function searchPhoto(token: string, [lng, lat]: [number, number], pano = f
   const bbox = [lng - half, lat - half, lng + half, lat + half].map((n) => n.toFixed(5)).join(',');
   try {
     const r = await fetch(`${API}?access_token=${encodeURIComponent(token)}&fields=id,computed_geometry&bbox=${bbox}${pano ? '&is_pano=true' : ''}&limit=40`);
-    if (r.status === 400 || r.status === 401 || r.status === 403) throw new Error('Mapillary lehnt den Token ab (bitte prüfen).');
+    if (r.status === 400 || r.status === 401 || r.status === 403) {
+      const err = new Error(m('games.tokenRejected'));
+      err.name = 'TokenRejected';
+      throw err;
+    }
     if (!r.ok) return null;
     const j = (await r.json()) as { data?: { id: string; computed_geometry?: { coordinates: [number, number] } }[] };
     const list = (j.data ?? []).filter((d) => d.computed_geometry);
@@ -77,7 +82,7 @@ async function searchPhoto(token: string, [lng, lat]: [number, number], pano = f
     const d = list[Math.floor(Math.random() * list.length)];
     return { id: d.id, lngLat: d.computed_geometry!.coordinates };
   } catch (e) {
-    if ((e as Error).message.startsWith('Mapillary')) throw e;
+    if ((e as Error).name === 'TokenRejected') throw e;
     return null;
   }
 }
@@ -121,11 +126,11 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
   root.className = 'sg';
   root.innerHTML = `
     <div class="sg-viewer"></div>
-    <div class="sg-top"><span class="sg-round"></span><span class="sg-total"></span><button class="btn sg-exit" type="button">Beenden</button></div>
-    <div class="sg-loading">Suche ein Foto …</div>
+    <div class="sg-top"><span class="sg-round"></span><span class="sg-total"></span><button class="btn sg-exit" type="button">${m('games.exit')}</button></div>
+    <div class="sg-loading">${m('games.searchPhoto')}</div>
     <div class="sg-guess">
       <div class="sg-map"></div>
-      <button class="btn btn-primary sg-confirm" type="button" disabled>Tipp setzen</button>
+      <button class="btn btn-primary sg-confirm" type="button" disabled>${m('games.placeGuess')}</button>
     </div>
     <div class="sg-result" hidden></div>`;
   host.append(root);
@@ -201,19 +206,19 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     guessBox.classList.remove('big');
     confirm.hidden = false;
     confirm.disabled = true;
-    confirm.textContent = 'Tipp setzen';
+    confirm.textContent = m('games.placeGuess');
     step = 'guess';
-    $('.sg-round').textContent = `Runde ${round} / ${o.rounds}`;
-    $('.sg-total').textContent = `${sum} Punkte`;
+    $('.sg-round').textContent = m('games.roundOf', { i: round, n: o.rounds });
+    $('.sg-total').textContent = m('games.points', { count: sum });
     loading.hidden = false;
-    loading.textContent = 'Suche ein Foto …';
+    loading.textContent = m('games.searchPhoto');
     map.resize();
     map.fitBounds(view, { padding: 10, duration: 0 });
     try {
       const photo = await (upcoming ?? loadPhoto());
       upcoming = null;
       if (dead) return;
-      if (!photo) throw new Error('Kein Foto gefunden – in diesem Gebiet gibt es offenbar wenig Mapillary-Abdeckung.');
+      if (!photo) throw new Error(m('games.noPhoto'));
       truth = photo.lngLat;
       mountViewer(photo.id);
       loading.hidden = true;
@@ -243,18 +248,18 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     const pts = Math.round(5000 * Math.exp(-km / scale));
     scores.push(pts);
     sum += pts;
-    $('.sg-total').textContent = `${sum} Punkte`;
+    $('.sg-total').textContent = m('games.points', { count: sum });
     truthMarker = new Marker({ color: '#2fbf71' }).setLngLat(t).addTo(map);
     (map.getSource('line') as GeoJSONSource).setData({ type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [guess, t] } } as Feature] });
     guessBox.classList.add('big');
     step = 'next';
-    confirm.textContent = round >= o.rounds ? 'Ergebnis' : 'Nächste Runde';
+    confirm.textContent = round >= o.rounds ? m('games.result') : m('games.nextRound');
     map.resize();
     map.fitBounds([Math.min(guess[0], t[0]), Math.min(guess[1], t[1]), Math.max(guess[0], t[0]), Math.max(guess[1], t[1])], { padding: 70, maxZoom: 12, duration: 600 });
     result.hidden = false;
     result.innerHTML = `
-      <b>${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString('de-DE')} km daneben</b>
-      <span>+${pts} Punkte</span>`;
+      <b>${m('games.kmOff', { km: km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString(fmtLocale()) })}</b>
+      <span>+${m('games.points', { count: pts })}</span>`;
   });
 
   function finish() {
@@ -262,9 +267,9 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     result.hidden = false;
     result.className = 'sg-result sg-final';
     result.innerHTML = `
-      <h2>${sum.toLocaleString('de-DE')} <small>/ ${(o.rounds * 5000).toLocaleString('de-DE')} Punkte</small></h2>
-      <p>${scores.map((s, i) => `Runde ${i + 1}: ${s}`).map(escapeHtml).join(' · ')}</p>
-      <div class="gm-actions"><button class="btn btn-primary sg-again" type="button">Nochmal</button><button class="btn sg-menu" type="button">Menü</button></div>`;
+      <h2>${sum.toLocaleString(fmtLocale())} <small>/${m('games.pointsOf', { total: o.rounds * 5000 }, { count: o.rounds * 5000 })}</small></h2>
+      <p>${scores.map((s, i) => m('games.roundN', { i: i + 1, s })).map(escapeHtml).join(' · ')}</p>
+      <div class="gm-actions"><button class="btn btn-primary sg-again" type="button">${m('games.again')}</button><button class="btn sg-menu" type="button">${m('games.menu')}</button></div>`;
     result.querySelector('.sg-again')!.addEventListener('click', () => {
       round = 0; sum = 0; scores.length = 0;
       guessBox.hidden = false;

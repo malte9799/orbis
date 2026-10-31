@@ -28,7 +28,7 @@ import {
   type ModelVar,
 } from '../api/model';
 import { WxLayer, wxDeps, wxEnabled } from '../api/wxmodel';
-import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
+import { getCurrent, isPickedPlaceholder, reverseGeocodePoint } from '../api/openmeteo';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
@@ -66,6 +66,8 @@ import type { LocMode } from '../routing/locator';
 import { createScaleBar } from '../scalebar';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
+import { t as m } from '../i18n';
+import { tx } from '../globe/layers';
 import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc } from '../units';
 import { describe, weatherIcon } from '../weather';
 
@@ -159,13 +161,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     <div class="globe-bottom">
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
-        <button class="btn icon-btn tl-play" aria-label="Abspielen"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+        <button class="btn icon-btn tl-play" aria-label="${m('map.timeline.play')}"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
         <div class="tl-head"><b></b><span></span></div>
         <div class="tl-track">
-          <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Zeit"/>
+          <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="${m('map.timeline.aria')}"/>
           <div class="tl-days"></div>
         </div>
-        <button class="btn small tl-now" title="Zur aktuellen Zeit">Jetzt</button>
+        <button class="btn small tl-now" title="${m('map.timeline.toNow')}">${m('map.timeline.now')}</button>
         <span class="tl-time"></span>
       </div>
     </div>
@@ -385,13 +387,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (!state.groups[g]) return { sub: '', live: false, count: null };
       const n = ev.count(g);
       const loading = ev.loading(g);
-      return { sub: loading && n == null ? 'lädt …' : n != null ? `${fmt.num(n)} aktuell` : '', live: live && n != null, count: n };
+      return { sub: loading && n == null ? m('map.loading') : n != null ? m('map.count.now', { count: fmt.num(n) }) : '', live: live && n != null, count: n };
     }
     const e = id as ExtraId;
     const n = extras?.count(e);
     const parts: string[] = [];
-    if (extras?.badge(e) === '…') parts.push('lädt …');
-    else if (n != null) parts.push(`${fmt.num(n)} geladen`);
+    if (extras?.badge(e) === '…') parts.push(m('map.loading'));
+    else if (n != null) parts.push(m('map.count.loaded', { count: fmt.num(n) }));
     const note = extras?.note(e);
     if (note) parts.push(note);
     return { sub: parts.join(' · '), live: live && n != null, count: n ?? null, delay: id === 'lightning' ? extras?.lightningDelay() : undefined };
@@ -418,17 +420,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   /** locate button: GPS position with heading (off → follow → follow with heading → off) */
   function locateMe() {
     if (!map || !ready) {
-      toast('Karte wird noch geladen.', 'info');
+      toast(m('map.load'), 'info');
       return;
     }
     routing?.locator.cycle();
   }
 
   const LOC_TITLE: Record<LocMode, string> = {
-    off: 'Mein Standort',
-    track: 'Mein Standort (Karte folgt nicht)',
-    follow: 'Karte nach Norden, folgt dem Standort – erneut tippen: Blickrichtung',
-    heading: 'Karte dreht sich mit der Blickrichtung – erneut tippen: Standort aus',
+    off: m('map.locMode.off'),
+    track: m('map.locMode.track'),
+    follow: m('map.locMode.follow'),
+    heading: m('map.locMode.heading'),
   };
   function locMode(m: LocMode) {
     for (const b of el.querySelectorAll<HTMLElement>('.loc-ctl button, [data-act=locate]')) {
@@ -545,8 +547,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function modelError(e: unknown) {
     console.warn('Vorhersagedaten', e);
     const msg = isLimitError(e)
-      ? `${(e as Error).message} – bitte später erneut versuchen.`
-      : 'Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.';
+      ? m('map.err.limit', { msg: (e as Error).message })
+      : m('map.err.model');
     if (msg !== modelErrorText) toast(msg, 'error');
     modelErrorText = msg;
     refreshHud();
@@ -811,7 +813,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         radar = await loadRadarFrames();
         radarAt = Date.now();
       } catch {
-        toast('Regenradar (RainViewer) konnte nicht geladen werden.', 'error');
+        toast(m('map.err.radar'), 'error');
         return;
       }
     }
@@ -911,10 +913,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const nowcast = mode === 'radar' && radar!.frames[idx].nowcast;
     const rel = Math.round((t - Date.now()) / 3600000);
     timeEl.innerHTML = `<b>${escapeHtml(timeLabel(t))}</b><small>${
-      mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
+      mode === 'radar' ? (nowcast ? m('map.timeline.nowcast') : m('map.timeline.radar')) : Math.abs(rel) < 2 ? m('map.timeline.nowRel') : rel > 0 ? m('map.timeline.relPlus', { h: rel }) : m('map.timeline.relMinus', { h: rel })
     }</small>`;
     // desktop card: title + full date, progress of the slider
-    headEl.innerHTML = `<b>${mode === 'radar' ? (nowcast ? 'Radar-Prognose' : 'Radar') : 'Vorhersage'}</b><span>${escapeHtml(
+    headEl.innerHTML = `<b>${mode === 'radar' ? (nowcast ? m('map.timeline.headRadarPro') : m('map.timeline.radar')) : m('map.timeline.headForecast')}</b><span>${escapeHtml(
       dateTimeTxt(t, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     )} · ${escapeHtml(dateTimeTxt(t, { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }))}${tzUtc() ? ' UTC' : ''}</span>`;
     rangeEl.style.setProperty('--p', `${(Number(rangeEl.value) / Math.max(1, Number(rangeEl.max))) * 100}%`);
@@ -954,7 +956,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         const p = pos(tt);
         if (Math.abs(p - nowPos) > 9) html += `<span style="left:${p}%">${escapeHtml(label)}</span>`;
       }
-      if (nowPos >= 0 && nowPos <= 100) html += `<button type="button" class="tl-nowlbl" style="left:${nowPos}%">Jetzt</button>`;
+      if (nowPos >= 0 && nowPos <= 100) html += `<button type="button" class="tl-nowlbl" style="left:${nowPos}%">${m('map.timeline.now')}</button>`;
       daysEl.innerHTML = html;
     }
   }
@@ -977,7 +979,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     cancelAnimationFrame(playRaf);
     playRaf = 0;
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
-    playBtn.setAttribute('aria-label', 'Abspielen');
+    playBtn.setAttribute('aria-label', m('map.timeline.play'));
   }
 
   rangeEl.addEventListener('input', () => {
@@ -997,7 +999,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   playBtn.addEventListener('click', () => {
     if (playTimer || playRaf) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-    playBtn.setAttribute('aria-label', 'Pause');
+    playBtn.setAttribute('aria-label', m('map.timeline.pause'));
     const radarMode = timelineMode() === 'radar';
     if (radarMode && radar && radarGl) {
       // continuous time: 10 minutes of radar per 700 ms; the layer mixes the steps around it
@@ -1058,30 +1060,30 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const grad =
         gradient ??
         `linear-gradient(90deg, ${first} 0%, ${first} ${LEAD}%, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')}, ${stops[stops.length - 1][1]} 100%)`;
-      const sub = `${def.unit}${sampler ? '' : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
+      const sub = `${def.unit}${sampler ? '' : modelLoading ? ` · ${m('map.loading')}` : modelErrorText ? ` · ${modelErrorText}` : ''}`;
       const unitTick: [number, string][] = LEAD ? [[LEAD / 2, def.unit]] : [];
-      return t(def.label, sub, grad, [...unitTick, ...ticks.map((v): [number, string] => [pct(v), def.format(v)])]);
+      return t(tx(`map.field.${o}`, def.label), sub, grad, [...unitTick, ...ticks.map((v): [number, string] => [pct(v), def.format(v)])]);
     }
     switch (o) {
       case 'radar':
-        return t('Niederschlagsradar', 'live', 'linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)', [[0, 'leicht'], [50, 'mäßig'], [100, 'stark']]);
+        return t(m('map.legend.radar.title'), m('map.legend.radar.sub'), 'linear-gradient(90deg,#73afff,#5a96fa,#5587f5,#506eeb,#7855dc,#be4bb4,#e45587,#f48264,#fabe55,#fff05f)', [[0, m('map.legend.radar.light')], [50, m('map.legend.radar.medium')], [100, m('map.legend.radar.heavy')]]);
       case 'dwd-radar':
-        return t('Radar Deutschland', 'DWD · letzte Messung, alle 5 min aktualisiert', 'linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)', [[0, 'leicht'], [50, 'mäßig'], [100, 'Unwetter']]);
+        return t(m('map.legend.dwdRadar.title'), m('map.legend.dwdRadar.sub'), 'linear-gradient(90deg,#a0e6ff,#4fb0ff,#2f6fe0,#2bd46f,#ffe14d,#ff8c1a,#e8384f,#b03ad6)', [[0, m('map.legend.dwdRadar.light')], [50, m('map.legend.dwdRadar.medium')], [100, m('map.legend.dwdRadar.storm')]]);
       case 'sat-hd':
         // a true-colour image: no colour scale
-        return t('Satellit HD', 'NASA VIIRS · Tagesbild von gestern', '', []);
+        return t(m('map.legend.satHd.title'), m('map.legend.satHd.sub'), '', []);
       case 'sat-ir':
-        return t('Satellit Infrarot', 'live · hohe, kalte Wolken erscheinen hell', 'linear-gradient(90deg,#111,#777,#fff)', [[0, 'warm/tief'], [100, 'kalt/hoch']]);
+        return t(m('map.legend.satIr.title'), m('map.legend.satIr.sub'), 'linear-gradient(90deg,#111,#777,#fff)', [[0, m('map.legend.satIr.warm')], [100, m('map.legend.satIr.cold')]]);
       case 'sat-storm':
-        return t('Satellit Gewitter', 'Meteosat Konvektions-RGB · live, Europa & Afrika', 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, 'ruhig'], [100, 'kräftige Gewitter']]);
+        return t(m('map.legend.satStorm.title'), m('map.legend.satStorm.sub'), 'linear-gradient(90deg,#2a1a5e,#6a4cb8,#f2e24a)', [[0, m('map.legend.satStorm.calm')], [100, m('map.legend.satStorm.storms')]]);
       case 'water':
-        return t('Wassertemperatur', 'NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
+        return t(m('map.legend.water.title'), m('map.legend.water.sub', { unit: tempUnit() }), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'sst':
-        return t('Meerestemperatur', 'NASA GHRSST MUR · Tagesmittel vor 2 Tagen · ' + tempUnit(), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
+        return t(m('map.legend.sst.title'), m('map.legend.sst.sub', { unit: tempUnit() }), 'linear-gradient(90deg,#2b0f6b,#2b2f8f,#2a6fc8,#2aa8c8,#5fd0a0,#f6d743,#f39c33,#e2462f,#9e1a3a)', [[0, tempNum(-2)], [35, tempNum(10)], [65, tempNum(20)], [100, tempNum(32)]]);
       case 'seaice':
-        return t('Meereis-Konzentration', 'NASA GHRSST MUR · vor 2 Tagen', 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, 'gering'], [100, '100 %']]);
+        return t(m('map.legend.seaice.title'), m('map.legend.seaice.sub'), 'linear-gradient(90deg,#2a2ae0,#2ad0e0,#40e040,#f0e040,#f04020,#ffffff)', [[0, m('map.legend.seaice.low')], [100, '100 %']]);
       case 'imerg':
-        return t('Niederschlag Satellit', 'NASA IMERG · ' + rainUnit(), 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, rainNum(0.1)], [50, rainNum(5)], [100, rainNum(50) + '+']]);
+        return t(m('map.legend.imerg.title'), m('map.legend.imerg.sub', { unit: rainUnit() }), 'linear-gradient(90deg,#b4e3ff,#3c8fff,#28c76f,#ffe14d,#ff8c1a,#e8384f)', [[0, rainNum(0.1)], [50, rainNum(5)], [100, rainNum(50) + '+']]);
       default:
         return null;
     }
@@ -1121,7 +1123,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const byte = radarGl?.sample(lngLat.lng, lngLat.lat);
       if (byte == null) return hideReadout();
       const rr = rainRate(byte);
-      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${rainTxt(rr, rr < 1 ? 1 : 0)}` : 'kein Niederschlag';
+      readout.textContent = rr >= 0.05 ? `${rainLabel(rr)}, ${rainTxt(rr, rr < 1 ? 1 : 0)}` : m('map.err.noRain');
       readout.style.transform = `translate(${Math.max(8, point.x - 40)}px, ${Math.max(8, point.y - 64)}px)`;
       readout.hidden = false;
       return;
@@ -1152,7 +1154,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       ${p.subtitle ? `<div class="pop-sub">${escapeHtml(p.subtitle)}</div>` : ''}
       ${p.date ? `<div class="pop-sub">${escapeHtml(fmt.dateTime(String(p.date)))} (${escapeHtml(fmt.relative(String(p.date)))})</div>` : ''}
       ${desc ? `<p class="pop-desc">${escapeHtml(desc)}${desc.length >= 400 ? ' …' : ''}</p>` : ''}
-      <div class="pop-foot"><span>Quelle: ${escapeHtml(p.source)}</span>${url ? ` · <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Details ↗</a>` : ''}</div>
+      <div class="pop-foot"><span>${m('map.pop.source', { src: escapeHtml(p.source) })}</span>${url ? ` · <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${m('map.pop.details')}</a>` : ''}</div>
     </div>`;
   }
 
@@ -1168,7 +1170,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       d = list.find((x) => x.id && x.id === l.id) ?? detailFromLaunch(l, lng, lat);
     } catch {
       d = detailFromLaunch(l, lng, lat);
-      toast('Startdetails gerade nicht erreichbar – Tracking mit Basisdaten.', 'error');
+      toast(m('map.err.launch'), 'error');
     }
     launchPanel?.open(d);
   }
@@ -1184,8 +1186,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   async function weatherPopup(lng: number, lat: number, rain?: number | null) {
     // radar read-out of the Orbis composites: available even if the weather request fails
     const radarLine =
-      rain != null ? `<div class="pop-sub">Radar: <b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${rainTxt(rain, rain < 1 ? 1 : 0)}` : 'kein Niederschlag')}</b></div>` : '';
-    const loadingHtml = `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">Lade Wetter …</div></div>`;
+      rain != null ? `<div class="pop-sub">${m('map.pop.wx.radar', { v: `<b>${escapeHtml(rain >= 0.05 ? `${rainLabel(rain)}, ${rainTxt(rain, rain < 1 ? 1 : 0)}` : m('map.err.noRain'))}</b>` })}</div>` : '';
+    const loadingHtml = `<div class="pop"><div class="pop-sub">${fmt.coords(lat, lng)}</div>${radarLine}<div class="pop-loading">${m('map.loadingWx')}</div></div>`;
     let node: HTMLElement;
     if (hud?.layout() === 'portrait') {
       // phone: the place weather fills the bottom sheet instead of a pop-up
@@ -1204,15 +1206,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         <div class="pop-wx">${weatherIcon(c.weather_code, c.is_day === 1, 52)}
           <div><div class="pop-temp">${fmt.temp(c.temperature_2m, 1)}</div><div>${escapeHtml(describe(c.weather_code))}</div></div></div>
         <div class="pop-grid">
-          <span>Gefühlt</span><b>${fmt.temp(c.apparent_temperature)}</b>
-          <span>Wind</span><b>${windTxt(c.wind_speed_10m)} ${windDirTxt(c.wind_direction_10m)}</b>
-          <span>Böen</span><b>${windTxt(c.wind_gusts_10m)}</b>
-          <span>Feuchte</span><b>${Math.round(c.relative_humidity_2m)} %</b>
-          <span>Wolken</span><b>${Math.round(c.cloud_cover)} %</b>
-          <span>Druck</span><b>${pressureTxt(c.pressure_msl)}</b>
+          <span>${m('map.pop.wx.feels')}</span><b>${fmt.temp(c.apparent_temperature)}</b>
+          <span>${m('map.pop.wx.wind')}</span><b>${windTxt(c.wind_speed_10m)} ${windDirTxt(c.wind_direction_10m)}</b>
+          <span>${m('map.pop.wx.gusts')}</span><b>${windTxt(c.wind_gusts_10m)}</b>
+          <span>${m('map.pop.wx.humidity')}</span><b>${Math.round(c.relative_humidity_2m)} %</b>
+          <span>${m('map.pop.wx.clouds')}</span><b>${Math.round(c.cloud_cover)} %</b>
+          <span>${m('map.pop.wx.pressure')}</span><b>${pressureTxt(c.pressure_msl)}</b>
         </div>
-        <button class="btn small wide" data-wx="open">Vorhersage öffnen →</button>
-        <button class="btn small wide" data-wx="route">Route hierher →</button>
+        <button class="btn small wide" data-wx="open">${m('map.pop.wx.open')}</button>
+        <button class="btn small wide" data-wx="route">${m('map.pop.wx.route')}</button>
       </div>`;
       node.querySelector('[data-wx=open]')!.addEventListener('click', async () => {
         onOpenForecast(await reverseGeocodePoint(lat, lng));
@@ -1223,7 +1225,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         routing?.open({ lat, lon: lng });
       });
     } catch {
-      node.querySelector('.pop-loading')!.textContent = 'Wetterdaten nicht verfügbar.';
+      node.querySelector('.pop-loading')!.textContent = m('map.err.wx');
     }
   }
 
@@ -1302,13 +1304,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
     const locCtl = document.createElement('div');
     locCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group loc-ctl';
-    locCtl.innerHTML = `<button type="button" title="Mein Standort" aria-label="Mein Standort"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
+    locCtl.innerHTML = `<button type="button" title="${m('map.locMode.off')}" aria-label="${m('map.locMode.off')}"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>`;
     locCtl.querySelector('button')!.addEventListener('click', () => void locateMe());
     map.addControl({ onAdd: () => locCtl, onRemove: () => locCtl.remove() }, 'bottom-right');
     // phones have no HUD control column: the route planner gets its own button above the locate button
     const routeCtl = document.createElement('div');
     routeCtl.className = 'maplibregl-ctrl maplibregl-ctrl-group route-ctl';
-    routeCtl.innerHTML = `<button type="button" title="Route planen" aria-label="Route planen"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="6" cy="17" r="2"/><circle cx="18" cy="7" r="2"/><path d="M8 17h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/></svg></button>`;
+    routeCtl.innerHTML = `<button type="button" title="${m('hud.ctl.route')}" aria-label="${m('hud.ctl.route')}"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="6" cy="17" r="2"/><circle cx="18" cy="7" r="2"/><path d="M8 17h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6"/></svg></button>`;
     routeCtl.querySelector('button')!.addEventListener('click', () => routing?.open());
     map.addControl({ onAdd: () => routeCtl, onRemove: () => routeCtl.remove() }, 'bottom-right');
 
@@ -1555,14 +1557,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         extraResult.after?.(node);
       } else if (hit && hit.layer.id === 'firms') {
         const p = hit.properties as { frp: number; conf: string; time: string };
-        openPopup(e.lngLat, `<div class="pop"><div class="pop-head">${glyphSvg('fire', '#ff5a1f', 26)}<b>Feuer-Hotspot</b></div>
-          <div class="pop-sub">Strahlungsleistung ${fmt.num(p.frp, 1)} MW · Konfidenz ${escapeHtml(p.conf)}</div>
-          <div class="pop-sub">Erfasst ${escapeHtml(p.time)} UTC</div>
-          <div class="pop-foot">Quelle: NASA FIRMS (VIIRS NOAA-20)</div></div>`);
+        openPopup(e.lngLat, `<div class="pop"><div class="pop-head">${glyphSvg('fire', '#ff5a1f', 26)}<b>${m('map.pop.firms.title')}</b></div>
+          <div class="pop-sub">${m('map.pop.firms.power', { mw: fmt.num(p.frp, 1), conf: escapeHtml(p.conf) })}</div>
+          <div class="pop-sub">${m('map.pop.firms.time', { t: escapeHtml(p.time) })}</div>
+          <div class="pop-foot">${m('map.pop.source', { src: 'NASA FIRMS (VIIRS NOAA-20)' })}</div></div>`);
       } else if (hit && hit.layer.id === 'nws-fill') {
         openPopup(e.lngLat, `<div class="pop"><div class="pop-head">${glyphSvg('tornado', String(hit.properties.color), 26)}<b>${escapeHtml(hit.properties.event)}</b></div>
-          <div class="pop-sub">Warngebiet des National Weather Service</div>
-          <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
+          <div class="pop-sub">${m('map.pop.nws.area')}</div>
+          <div class="pop-foot">${m('map.pop.source', { src: 'NWS (USA)' })}</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
       } else if (isWeatherKarte(curKarte)) {
@@ -1601,7 +1603,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     async placeName(v) {
       // any point on the map: Nominatim (BigDataCloud may only be asked for the own position)
       const p = await reverseGeocodePoint(v.center[1], v.center[0]);
-      return p.name && p.name !== 'Ausgewählter Ort' ? p.name : undefined;
+      return p.name && !isPickedPlaceholder(p.name) ? p.name : undefined;
     },
     onPlace(p) {
       store.setLastPlace(p);

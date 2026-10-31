@@ -27,7 +27,8 @@ export interface LandingSite {
   hideFlag?: boolean;
 }
 
-export const COUNTRY: Record<FlagKind, string> = { us: 'USA', su: 'Sowjetunion', cn: 'China', in: 'Indien', jp: 'Japan', eu: 'Europa' };
+/** nation of a landing site: message keys (space.country.*) that the views resolve */
+export const COUNTRY: Record<FlagKind, string> = { us: 'us', su: 'su', cn: 'cn', in: 'in', jp: 'jp', eu: 'eu' };
 
 export const LANDING_SITES: LandingSite[] = [
   {
@@ -38,10 +39,10 @@ export const LANDING_SITES: LandingSite[] = [
     lat: 0.67408,
     lon: 23.47297,
     crewed: true,
-    crew: 'Neil Armstrong, Buzz Aldrin (im Orbit: Michael Collins)',
-    craft: 'Mondfähre „Eagle“',
-    region: 'Mare Tranquillitatis (Meer der Ruhe)',
-    text: 'Die erste bemannte Mondlandung. „Das ist ein kleiner Schritt für einen Menschen, aber ein riesiger Sprung für die Menschheit.“ Der Laser-Reflektor wird bis heute zur Entfernungsmessung genutzt.',
+    crew: 'crew',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'apollo12',
@@ -52,9 +53,9 @@ export const LANDING_SITES: LandingSite[] = [
     lon: -23.42157,
     crewed: true,
     crew: 'Pete Conrad, Alan Bean',
-    craft: 'Mondfähre „Intrepid“',
-    region: 'Oceanus Procellarum (Ozean der Stürme)',
-    text: 'Punktlandung nur 180 m neben der Sonde Surveyor 3 – Teile davon nahm die Crew mit zur Erde.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'apollo14',
@@ -65,9 +66,9 @@ export const LANDING_SITES: LandingSite[] = [
     lon: -17.47136,
     crewed: true,
     crew: 'Alan Shepard, Edgar Mitchell',
-    craft: 'Mondfähre „Antares“',
-    region: 'Fra-Mauro-Hochland',
-    text: 'Alan Shepard schlug hier mit einem improvisierten Schläger zwei Golfbälle.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'apollo15',
@@ -78,9 +79,9 @@ export const LANDING_SITES: LandingSite[] = [
     lon: 3.63386,
     crewed: true,
     crew: 'David Scott, James Irwin',
-    craft: 'Mondfähre „Falcon“, erstes Mondauto',
-    region: 'Hadley-Rille am Fuß der Mond-Apenninen',
-    text: 'Erstmals mit Mondauto. David Scott ließ Hammer und Feder gleichzeitig fallen – ohne Luft kamen beide gleichzeitig am Boden an.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'apollo16',
@@ -91,9 +92,9 @@ export const LANDING_SITES: LandingSite[] = [
     lon: 15.50019,
     crewed: true,
     crew: 'John Young, Charles Duke',
-    craft: 'Mondfähre „Orion“',
-    region: 'Descartes-Hochland',
-    text: 'Einzige Landung im zentralen Hochland. Charles Duke ließ ein Foto seiner Familie auf dem Mond zurück.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'apollo17',
@@ -104,9 +105,9 @@ export const LANDING_SITES: LandingSite[] = [
     lon: 30.77168,
     crewed: true,
     crew: 'Eugene Cernan, Harrison Schmitt',
-    craft: 'Mondfähre „Challenger“',
-    region: 'Taurus-Littrow-Tal',
-    text: 'Die bisher letzten Menschen auf dem Mond. Harrison Schmitt war als Geologe der erste Wissenschaftler dort.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'luna9',
@@ -115,8 +116,8 @@ export const LANDING_SITES: LandingSite[] = [
     date: '1966-02-03T18:45Z',
     lat: 7.08,
     lon: -64.37,
-    region: 'Oceanus Procellarum',
-    text: 'Erste weiche Landung auf einem anderen Himmelskörper und erste Fotos von der Mondoberfläche.',
+region: 'region',
+    text: 'text',
   },
   {
     id: 'surveyor1',
@@ -125,8 +126,8 @@ export const LANDING_SITES: LandingSite[] = [
     date: '1966-06-02T06:17Z',
     lat: -2.474,
     lon: -43.339,
-    region: 'Oceanus Procellarum',
-    text: 'Erste weiche Mondlandung der USA – Generalprobe für Apollo.',
+region: 'region',
+    text: 'text',
   },
   {
     id: 'luna16',
@@ -136,7 +137,7 @@ export const LANDING_SITES: LandingSite[] = [
     lat: -0.513,
     lon: 56.364,
     region: 'Mare Fecunditatis',
-    text: 'Erste robotische Probenrückführung: 101 g Mondboden kamen zur Erde.',
+    text: 'text',
   },
   {
     id: 'luna17',
@@ -145,9 +146,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '1970-11-17T03:47Z',
     lat: 38.238,
     lon: -35.0,
-    craft: 'Rover Lunochod 1',
+    craft: 'craft',
     region: 'Mare Imbrium',
-    text: 'Brachte Lunochod 1 – das erste ferngesteuerte Fahrzeug auf einem anderen Himmelskörper.',
+    text: 'text',
   },
   {
     id: 'luna21',
@@ -156,9 +157,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '1973-01-15T22:35Z',
     lat: 25.85,
     lon: 30.45,
-    craft: 'Rover Lunochod 2',
-    region: 'Krater Le Monnier',
-    text: 'Lunochod 2 fuhr rund 39 km weit – Rekord bis 2014.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'luna24',
@@ -168,7 +169,7 @@ export const LANDING_SITES: LandingSite[] = [
     lat: 12.714,
     lon: 62.213,
     region: 'Mare Crisium',
-    text: 'Letzte sowjetische Mondmission, brachte 170 g Bohrkern zur Erde.',
+    text: 'text',
   },
   {
     id: 'change3',
@@ -177,9 +178,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2013-12-14T13:11Z',
     lat: 44.121,
     lon: -19.512,
-    craft: 'Rover Yutu („Jadehase“)',
+    craft: 'craft',
     region: 'Mare Imbrium',
-    text: 'Die erste weiche Mondlandung seit 37 Jahren.',
+    text: 'text',
   },
   {
     id: 'change4',
@@ -188,9 +189,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2019-01-03T02:26Z',
     lat: -45.445,
     lon: 177.599,
-    craft: 'Rover Yutu-2',
-    region: 'Von-Kármán-Krater (Rückseite)',
-    text: 'Erste Landung auf der Mondrückseite. Funkkontakt zur Erde nur über den Relaissatelliten Queqiao.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'change5',
@@ -199,8 +200,8 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2020-12-01T15:11Z',
     lat: 43.058,
     lon: -51.916,
-    region: 'Mons Rümker, Oceanus Procellarum',
-    text: 'Brachte 1,7 kg Proben zur Erde – das jüngste bisher untersuchte Mondgestein (≈ 2 Mrd. Jahre).',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'change6',
@@ -209,8 +210,8 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2024-06-01T22:23Z',
     lat: -41.639,
     lon: -153.985,
-    region: 'Apollo-Becken (Rückseite)',
-    text: 'Erste Gesteinsproben von der Mondrückseite (1,9 kg).',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'chandrayaan3',
@@ -219,9 +220,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2023-08-23T12:33Z',
     lat: -69.373,
     lon: 32.319,
-    craft: 'Lander Vikram, Rover Pragyan',
-    region: 'Südpolregion',
-    text: 'Indien landete als vierte Nation auf dem Mond – und als erste nahe dem Südpol.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'slim',
@@ -230,8 +231,8 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2024-01-19T15:20Z',
     lat: -13.316,
     lon: 25.251,
-    region: 'Krater Shioli',
-    text: 'Japans „Mondscharfschütze“ landete auf etwa 10 m genau – allerdings kopfüber.',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'im1',
@@ -240,9 +241,9 @@ export const LANDING_SITES: LandingSite[] = [
     date: '2024-02-22T23:23Z',
     lat: -80.13,
     lon: 1.44,
-    craft: 'Intuitive Machines',
-    region: 'Malapert A, Südpolregion',
-    text: 'Erste private Mondlandung; der Lander kippte dabei auf die Seite.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'blueghost1',
@@ -252,8 +253,8 @@ export const LANDING_SITES: LandingSite[] = [
     lat: 18.56,
     lon: 61.81,
     craft: 'Firefly Aerospace',
-    region: 'Mons Latreille, Mare Crisium',
-    text: 'Erste vollständig gelungene private Mondlandung; filmte einen Sonnenuntergang auf dem Mond.',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'im2',
@@ -263,9 +264,9 @@ export const LANDING_SITES: LandingSite[] = [
     lat: -84.5,
     lon: 29.2,
     approx: true,
-    craft: 'Intuitive Machines',
-    region: 'Mons Mouton, Südpolregion',
-    text: 'Landete am südlichsten Punkt aller bisherigen Missionen, kippte aber in einem Krater um.',
+    craft: 'craft',
+    region: 'region',
+    text: 'text',
   },
 ];
 

@@ -1,4 +1,5 @@
 import type { GlFrame } from './radargl';
+import { t as m } from '../i18n';
 
 // Radar data for the WebGL layer (src/globe/radargl.ts): the tiles are read back into *values*,
 // the colours come from one scale (LUT) in the shader.
@@ -44,11 +45,11 @@ export const LUT = (() => {
 export const rainRate = (byte: number) => (byte / 25) ** 2;
 
 export function rainLabel(mmh: number): string {
-  if (mmh < 0.5) return 'Sehr leichter Regen';
-  if (mmh < 2.5) return 'Leichter Regen';
-  if (mmh < 10) return 'Mäßiger Regen';
-  if (mmh < 50) return 'Starker Regen';
-  return 'Sehr starker Regen';
+  if (mmh < 0.5) return m('map.rain.l1');
+  if (mmh < 2.5) return m('map.rain.l2');
+  if (mmh < 10) return m('map.rain.l3');
+  if (mmh < 50) return m('map.rain.l4');
+  return m('map.rain.l5');
 }
 
 // ---- RainViewer ----------------------------------------------------------------------------

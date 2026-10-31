@@ -3,6 +3,7 @@ import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { climbTxt, climbUnit, climbVal, distTxt, heightBoth, heightTxt, heightUnit, heightVal, speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
+import { t } from '../i18n';
 import { category, clock, distKm, duration, graph, routeHero, tile } from './sidepanel';
 import { fetchAircraftPhoto, lookupAircraftSpec, seatmapUrl, type AircraftPhoto } from '../api/aircraft';
 import './flightpanel.css';
@@ -52,16 +53,16 @@ export class FlightPanel {
     this.root.className = 'fp';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head"><i class="fp-ic">${glyphSvg('plane', 'currentColor', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head"><i class="fp-ic">${glyphSvg('plane', 'currentColor', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="${t('hud.close')}">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body">
         <div class="fp-photo-container"></div>
         <div class="fp-content"></div>
       </div>
       <div class="fp-actions three">
-        <button type="button" data-act="route">Strecke</button>
-        <button type="button" data-act="follow">Folgen</button>
-        <button type="button" data-act="cockpit">Cockpit</button>
+        <button type="button" data-act="route">${t('map.fly.route') ?? 'Strecke'}</button>
+        <button type="button" data-act="follow">${t('map.fly.follow') ?? 'Folgen'}</button>
+        <button type="button" data-act="cockpit">${t('map.fly.cockpit') ?? 'Cockpit'}</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
@@ -160,12 +161,12 @@ export class FlightPanel {
     const altText = [i.operator, i.type, i.reg].filter(Boolean).join(' ') || i.callsign || i.hex;
     this.photoEl.innerHTML = `
       <div class="fp-photo-wrap">
-        <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer" class="fp-photo-link" title="Foto in voller Auflösung auf Planespotters.net ansehen">
+        <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer" class="fp-photo-link" title="${t('map.fly.photo')}">
           <img src="${escapeHtml(this.photo.large)}" alt="${escapeHtml(altText)}" loading="lazy" />
         </a>
         <div class="fp-photo-credit">
           <a href="${escapeHtml(this.photo.link)}" target="_blank" rel="noopener noreferrer">
-            Foto: © ${escapeHtml(this.photo.photographer)} (Planespotters.net) ↗
+            ${t('map.fly.credit', { who: escapeHtml(this.photo.photographer) })}
           </a>
         </div>
       </div>`;
@@ -179,7 +180,7 @@ export class FlightPanel {
       title.textContent = this.hex?.toUpperCase() ?? '';
       sub.textContent = '';
       this.photoEl.innerHTML = '';
-      this.contentEl.innerHTML = '<div class="fp-note">Gerade keine Daten zu diesem Flugzeug – es ist außerhalb des Ausschnitts oder nicht mehr in Reichweite.</div>';
+      this.contentEl.innerHTML = `<div class="fp-note">${t('map.fly.nodata')}</div>`;
       return;
     }
 
@@ -214,7 +215,7 @@ export class FlightPanel {
       const now = Date.now();
       const arrive = cruising ? clock(now + (left / i.speedKmh!) * 3600_000) : undefined;
       const depart = cruising ? clock(now - (done / i.speedKmh!) * 3600_000) : undefined;
-      const eta = cruising ? ` · noch ca. ${duration((left / i.speedKmh!) * 60)}` : '';
+      const eta = cruising ? ` · ${t('map.fly.eta', { d: duration((left / i.speedKmh!) * 60) })}` : '';
       hero = routeHero({
         from: { code: r.origin.iata || r.origin.icao, sub: r.origin.city || r.origin.name, time: depart },
         to: { code: r.destination.iata || r.destination.icao, sub: r.destination.city || r.destination.name, time: arrive },
@@ -224,60 +225,60 @@ export class FlightPanel {
         note: `${Math.round(progress * 100)} %${eta}`,
       });
     } else {
-      hero = `<div class="sp-note" style="margin-top:10px">${i.route === undefined ? 'Route wird geladen …' : 'Route unbekannt'}</div>`;
+      hero = `<div class="sp-note" style="margin-top:10px">${i.route === undefined ? t('map.fly.routeLoading') : t('map.fly.routeUnknown')}</div>`;
     }
 
     const m = this.metric;
-    const tiles = `<div class="sp-tiles">${tile('Höhe', i.ground ? 'am Boden' : heightTxt(i.altM), { metric: 'alt', on: m === 'alt' })}${tile('Tempo', i.speedKmh == null ? '–' : speedTxt(i.speedKmh), { metric: 'speed', on: m === 'speed' })}${tile('Kurs', `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile('Steigrate', i.vsMs == null ? '–' : climbTxt(i.vsMs), { metric: 'vs', on: m === 'vs' })}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', heightUnit()], speed: ['Tempo', speedUnit()], track: ['Kurs', '°'], vs: ['Steigrate', climbUnit()] };
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : m === 'alt' ? (i.history?.alt ?? []).map(heightVal) : m === 'vs' ? (i.history?.vs ?? []).map(climbVal) : (i.history?.track ?? [])), GRAPHS[m][1], COLOR) : '';
+    const tiles = `<div class="sp-tiles">${tile(t('map.tile.alt'), i.ground ? t('map.fly.ground') : heightTxt(i.altM), { metric: 'alt', on: m === 'alt' })}${tile(t('map.tile.speed'), i.speedKmh == null ? '–' : speedTxt(i.speedKmh), { metric: 'speed', on: m === 'speed' })}${tile(t('map.tile.course'), `${Math.round(i.track)}° ${compass(i.track)}`, { metric: 'track', on: m === 'track' })}${tile(t('map.tile.vs'), i.vsMs == null ? '–' : climbTxt(i.vsMs), { metric: 'vs', on: m === 'vs' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: [t('map.metric.alt'), heightUnit()], speed: [t('map.metric.speed'), speedUnit()], track: [t('map.metric.course'), '°'], vs: [t('map.metric.vs'), climbUnit()] };
+    const chart = m && GRAPHS[m] ? graph(t('map.graph.title', { m: GRAPHS[m][0] }), (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : m === 'alt' ? (i.history?.alt ?? []).map(heightVal) : m === 'vs' ? (i.history?.vs ?? []).map(climbVal) : (i.history?.track ?? [])), GRAPHS[m][1], COLOR) : '';
 
     // Flugzeug-Identifikation
     const planeRows: [string, string][] = [
-      ['Betreiber', escapeHtml(i.operator || '–')],
-      ['Modell', escapeHtml(spec?.name || i.type || '–')],
-      ['ICAO-Typ', escapeHtml(i.icao || '–')],
-      ['Kennzeichen', escapeHtml(i.reg || '–')],
-      ['Mode-S (Hex)', escapeHtml(i.hex.toUpperCase())],
+      [t('map.fly.rows.operator'), escapeHtml(i.operator || '–')],
+      [t('map.fly.rows.model'), escapeHtml(spec?.name || i.type || '–')],
+      [t('map.fly.rows.icao'), escapeHtml(i.icao || '–')],
+      [t('map.fly.rows.reg'), escapeHtml(i.reg || '–')],
+      [t('map.fly.rows.modeS'), escapeHtml(i.hex.toUpperCase())],
     ];
-    if (spec?.mfr) planeRows.splice(1, 0, ['Hersteller', escapeHtml(spec.mfr)]);
-    if (i.mil) planeRows.unshift(['Einordnung', '<b>Militär</b>']);
+    if (spec?.mfr) planeRows.splice(1, 0, [t('map.fly.rows.mfr'), escapeHtml(spec.mfr)]);
+    if (i.mil) planeRows.unshift([t('map.fly.rows.mil'), `<b>${t('map.fly.rows.military')}</b>`]);
 
     // Technische Daten & Spezifikationen (für Flugzeug-Enthusiasten)
     let techCat = '';
     if (spec) {
       const techRows: [string, string][] = [
-        ['Triebwerke', escapeHtml(spec.engines)],
-        ['Passagiere', escapeHtml(spec.seats)],
-        ['Reichweite', distTxt(spec.rangeKm, 0)],
-        ['Spannweite / Länge', `${heightTxt(spec.spanM, 1)} / ${heightTxt(spec.lengthM, 1)}`],
-        ['Reisetempo', `ca. ${speedTxt(spec.speedKmh)}`],
-        ['Dienstgipfelhöhe', heightBoth(spec.ceilingFt * 0.3048)],
-        ['Wirbelschleppe (WTC)', escapeHtml(spec.wtc)],
+        [t('map.fly.rows.engines'), escapeHtml(spec.engines)],
+        [t('map.fly.rows.passengers'), escapeHtml(spec.seats)],
+        [t('map.fly.rows.range'), distTxt(spec.rangeKm, 0)],
+        [t('map.fly.rows.span'), `${heightTxt(spec.spanM, 1)} / ${heightTxt(spec.lengthM, 1)}`],
+        [t('map.fly.rows.cruise'), `${t('map.fly.rows.approx')}${speedTxt(spec.speedKmh)}`],
+        [t('map.fly.rows.ceiling'), heightBoth(spec.ceilingFt * 0.3048)],
+        [t('map.fly.rows.wtc'), escapeHtml(spec.wtc)],
       ];
-      techCat = category('specs', 'Technische Daten', techRows, this.open_);
+      techCat = category('specs', t('map.cat.specs'), techRows, this.open_);
     }
 
     // Sitzplan & Kabine
     const seatUrl = seatmapUrl(i.icao, i.operator);
     const seatRows: [string, string][] = [
-      ['Passagierkapazität', escapeHtml(spec?.seats || 'Je nach Konfiguration')],
-      ['Sitzpläne', `<a href="${escapeHtml(seatUrl)}" target="_blank" rel="noopener noreferrer" class="fp-link">💺 Auf AeroLOPA suchen ↗</a>`],
+      [t('map.fly.rows.seatsCap'), escapeHtml(spec?.seats || t('map.fly.rows.seatsVar'))],
+      [t('map.fly.rows.seatsLink'), `<a href="${escapeHtml(seatUrl)}" target="_blank" rel="noopener noreferrer" class="fp-link">💺 Auf AeroLOPA suchen ↗</a>`],
     ];
-    const seatCat = category('seating', 'Sitzplan & Kabine', seatRows, this.open_);
+    const seatCat = category('seating', t('map.cat.seats'), seatRows, this.open_);
 
     // Position & Telemetrie
     const posRows: [string, string][] = [
-      ['Breitengrad', fmt.num(i.lat, 3)],
-      ['Längengrad', fmt.num(i.lon, 3)],
-      ['Höhe (baro)', i.ground ? 'am Boden' : heightBoth(i.altM)],
-      ['Squawk', escapeHtml(i.squawk || '–')],
-      ['Navigation (NIC / NACp)', i.nic == null && i.nacp == null ? '–' : `${i.nic ?? '–'} / ${i.nacp ?? '–'}${(i.nacp != null && i.nacp < 8) || (i.nic != null && i.nic < 7 && !(i.nic === 0 && i.nacp != null && i.nacp >= 10)) ? ' <span class="warn">ungenau</span>' : ''}`],
-      ['Notfall', i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : 'keiner'],
+      [t('map.fly.rows.lat'), fmt.num(i.lat, 3)],
+      [t('map.fly.rows.lon'), fmt.num(i.lon, 3)],
+      [t('map.fly.rows.alt'), i.ground ? t('map.fly.ground') : heightBoth(i.altM)],
+      [t('map.fly.rows.squawk'), escapeHtml(i.squawk || '–')],
+      [t('map.fly.rows.nav'), i.nic == null && i.nacp == null ? '–' : `${i.nic ?? '–'} / ${i.nacp ?? '–'}${(i.nacp != null && i.nacp < 8) || (i.nic != null && i.nic < 7 && !(i.nic === 0 && i.nacp != null && i.nacp >= 10)) ? ` <span class="warn">${t('map.fly.rows.inaccurate')}</span>` : ''}`],
+      [t('map.fly.rows.emergency'), i.emergency ? `<span class="warn">${escapeHtml(i.emergency)}</span>` : t('map.fly.rows.emergencyNone')],
     ];
-    const posCat = category('position', 'Position und Signal', posRows, this.open_);
+    const posCat = category('position', t('map.cat.position'), posRows, this.open_);
 
-    const cats = category('aircraft', 'Flugzeug', planeRows, this.open_) + techCat + seatCat + posCat;
+    const cats = category('aircraft', t('map.cat.plane'), planeRows, this.open_) + techCat + seatCat + posCat;
 
     const source = i.source ? `${escapeHtml(i.source)} · ` : '';
     const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${source}${i.route ? 'Route: <a href="https://www.adsbdb.com" target="_blank" rel="noopener noreferrer">adsbdb</a> · ' : ''}Fotos: <a href="https://www.planespotters.net" target="_blank" rel="noopener noreferrer">Planespotters.net</a> · <a href="https://globe.adsb.lol/?icao=${encodeURIComponent(i.hex)}" target="_blank" rel="noopener noreferrer">Auf adsb.lol ansehen ↗</a></div></details>`;

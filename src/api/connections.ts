@@ -1,4 +1,5 @@
 import { fetchJson } from '../util';
+import { fmtLocale } from '../i18n';
 import { modeStyle } from './transit';
 
 // Connection search and departure boards – Transitous (community-run MOTIS, v5 API, no key needed):
@@ -6,6 +7,9 @@ import { modeStyle } from './transit';
 // Real-time delays of rail come from the DB timetable data through our worker (dbdelays.ts) and are merged in later.
 
 const BASE = 'https://api.transitous.org/api';
+
+/** Transitous/MOTIS language code (two-letter) for stop names, leg texts and the like */
+const apiLang = () => (fmtLocale().startsWith('de') ? 'de' : 'en');
 
 export interface Stop {
   id: string;
@@ -212,13 +216,13 @@ export function parseDepartures(list: StopTimeDto[]): Departure[] {
 // ---- requests --------------------------------------------------------------
 
 export async function searchStops(text: string): Promise<Stop[]> {
-  const q = new URLSearchParams({ text, type: 'STOP', language: 'de' });
+  const q = new URLSearchParams({ text, type: 'STOP', language: apiLang() });
   return parseStops(await fetchJson<GeocodeDto[]>(`${BASE}/v1/geocode?${q}`, undefined, 12000));
 }
 
 /** Stops around a position, nearest first. */
 export async function nearbyStops(lat: number, lon: number): Promise<Stop[]> {
-  const q = new URLSearchParams({ place: `${lat.toFixed(5)},${lon.toFixed(5)}`, type: 'STOP', language: 'de' });
+  const q = new URLSearchParams({ place: `${lat.toFixed(5)},${lon.toFixed(5)}`, type: 'STOP', language: apiLang() });
   return parseStops(await fetchJson<GeocodeDto[]>(`${BASE}/v1/reverse-geocode?${q}`, undefined, 12000));
 }
 
@@ -289,7 +293,7 @@ export async function planConnections(fromStop: Stop, toStop: Stop, o: PlanOptio
     time: new Date(o.time).toISOString(),
     arriveBy: String(o.arriveBy),
     numItineraries: '6',
-    language: 'de',
+    language: apiLang(),
   });
   if (o.maxTransfers != null) q.set('maxTransfers', String(o.maxTransfers));
   if (o.modes && o.modes.length) q.set('transitModes', o.modes.join(','));
@@ -308,7 +312,7 @@ export async function planConnections(fromStop: Stop, toStop: Stop, o: PlanOptio
 /** The next `n` departures at a stop, starting at `from` (default: now). */
 export async function departures(given: Pick<Stop, 'id' | 'name' | 'lat' | 'lon' | 'src'>, n = 25, from = Date.now()): Promise<Departure[]> {
   const stop = await toMotis(given as Stop);
-  const q = new URLSearchParams({ stopId: stop.id, n: String(n), time: new Date(from).toISOString(), language: 'de' });
+  const q = new URLSearchParams({ stopId: stop.id, n: String(n), time: new Date(from).toISOString(), language: apiLang() });
   const r = await fetchJson<{ stopTimes?: StopTimeDto[] }>(`${BASE}/v5/stoptimes?${q}`, undefined, 20000);
   return parseDepartures(r.stopTimes ?? []);
 }

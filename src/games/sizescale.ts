@@ -3,6 +3,7 @@ import { escapeHtml } from '../util';
 import { areaVal, areaUnit } from '../units';
 import { outlineShape } from './quizitems';
 import { ringArea, type SizeItem } from './sizeduel';
+import { t as m, fmtLocale } from '../i18n';
 
 // Size scale: country A stays as it is, country B starts at a wrong size – drag its corner handle until it fits.
 
@@ -21,9 +22,10 @@ const F_ROOM = 2.4; // minimum room of the scene: B can be pulled up to this siz
 const POINTS_RANGE = 2.2; // |ln(area ratio error)| at which a round is worth 0 points
 
 const shuffle = <T>(a: T[]): T[] => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
-const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
-const nfa = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
-const nf2 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+/** locale-aware number formatters (built per call: the language can change) */
+const nf = () => new Intl.NumberFormat(fmtLocale(), { maximumFractionDigits: 1 });
+const nfa = () => new Intl.NumberFormat(fmtLocale(), { maximumFractionDigits: 0 });
+const nf2 = () => new Intl.NumberFormat(fmtLocale(), { maximumFractionDigits: 2 });
 
 /** silhouette in km, centred on its bounding box, plus its visible area (km²) */
 function shape(item: SizeItem) {
@@ -58,15 +60,15 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     <div class="gm-hud fg-hud">
       <div class="gm-stats"><span class="sc-score"></span><span class="sc-time">0:00</span></div>
       <div class="fg-stage">
-        <div class="sc-vs"><small class="sc-vs-label">Fläche</small><div class="sc-vs-names"></div><small class="sc-vs-areas"></small></div>
-        <svg class="sc-svg" role="img" aria-label="Größenvergleich" preserveAspectRatio="xMidYMax meet"></svg>
+        <div class="sc-vs"><small class="sc-vs-label">${m('games.areaShort')}</small><div class="sc-vs-names"></div><small class="sc-vs-areas"></small></div>
+        <svg class="sc-svg" role="img" aria-label="${m('games.sizeA11y')}" preserveAspectRatio="xMidYMax meet"></svg>
         <div class="gm-feedback" aria-live="polite"></div>
-        <button class="btn btn-primary sc-check" type="button">Prüfen</button>
-        <button class="btn btn-primary sc-next" type="button" hidden>Weiter</button>
+        <button class="btn btn-primary sc-check" type="button">${m('games.check')}</button>
+        <button class="btn btn-primary sc-next" type="button" hidden>${m('games.next')}</button>
       </div>
       <div class="gm-actions">
-        <button class="btn sc-giveup" type="button">Aufgeben</button>
-        <button class="btn sc-menu" type="button">Menü</button>
+        <button class="btn sc-giveup" type="button">${m('games.giveUp')}</button>
+        <button class="btn sc-menu" type="button">${m('games.menu')}</button>
       </div>
     </div>`;
   host.append(root);
@@ -90,7 +92,7 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
   };
   const timer = window.setInterval(clock, 500);
   const score = () => {
-    $('.sc-score').textContent = `${round} / ${total} · ${points} Punkte`;
+    $('.sc-score').textContent = `${round} / ${total} · ${m('games.points', { count: points })}`;
   };
   const say = (t: string, kind: '' | 'ok' | 'bad' = '') => {
     msg.textContent = t;
@@ -223,13 +225,16 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     log.push({ a: cur.a.name, b: cur.b.name, f, pts });
     svg.querySelector<SVGGElement>('.sc-true')!.style.display = '';
     handle!.style.display = 'none';
-    const trueArea = `${nfa.format(Math.round(areaVal(cur.b.area)))} ${areaUnit()}`;
-    $('.sc-vs-areas').textContent = `${nfa.format(Math.round(areaVal(cur.a.area)))} ${areaUnit()} vs ${trueArea}`;
+    const trueArea = `${nfa().format(Math.round(areaVal(cur.b.area)))} ${areaUnit()}`;
+    $('.sc-vs-areas').textContent = `${nfa().format(Math.round(areaVal(cur.a.area)))} ${areaUnit()} vs ${trueArea}`;
     const r = cur.ratio; // B's real area relative to A
     const mine = f * f * r; // what the drawing shows
-    const x = (v: number) => (v >= 10 ? nfa : v >= 1 ? nf : nf2).format(v) + '×';
-    const verdict = pts >= 90 ? 'Volltreffer!' : pts >= 60 ? 'Nah dran.' : pts >= 30 ? 'Knapp daneben.' : 'Weit daneben.';
-    say(`${verdict} +${pts} Punkte. ${cur.b.name} ist ${r >= 1 ? `${x(r)} so groß wie` : `nur ${x(r)} so groß wie`} ${cur.a.name} – bei dir waren es ${x(mine)}.`, pts >= 60 ? 'ok' : 'bad');
+    const x = (v: number) => (v >= 10 ? nfa() : v >= 1 ? nf() : nf2()).format(v) + '×';
+    const verdict = pts >= 90 ? m('games.perfect') : pts >= 60 ? m('games.close') : pts >= 30 ? m('games.slightlyOff') : m('games.far');
+    const detail = r >= 1
+      ? m('games.scaleBigger', { b: cur.b.name, factor: x(r), a: cur.a.name, mine: x(mine) })
+      : m('games.scaleSmaller', { b: cur.b.name, factor: x(r), a: cur.a.name, mine: x(mine) });
+    say(`${verdict} +${m('games.points', { count: pts })}. ${detail}`, pts >= 60 ? 'ok' : 'bad');
     checkBtn.hidden = true;
     nextBtn.hidden = false;
     nextBtn.focus();
@@ -245,11 +250,11 @@ export function startSizeScale(host: HTMLElement, o: SizeScaleOptions, onExit: (
     const max = Math.max(round, 1) * 100;
     root.innerHTML = `
       <div class="gm-result">
-        <h2>${gaveUp ? 'Aufgegeben' : 'Geschafft!'}</h2>
-        <div class="gm-big">${points} <span>von ${total * 100} Punkten (${Math.round((points / max) * 100)} %)</span></div>
-        <p>Zeit ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}</p>
-        ${log.length ? `<details open><summary>Deine Runden</summary><p class="gm-missed">${log.map((l) => `${escapeHtml(l.b)} (${l.f >= 1 ? 'zu groß' : 'zu klein'}, ${l.pts} P.)`).join(' · ')}</p></details>` : ''}
-        <div class="gm-actions"><button class="btn btn-primary sc-again" type="button">Nochmal</button><button class="btn sc-menu" type="button">Menü</button></div>
+        <h2>${gaveUp ? m('games.gaveUp') : m('games.done')}</h2>
+        <div class="gm-big">${points} <span>${m('games.scoreOf', { points, total: total * 100, pct: Math.round((points / max) * 100) }, { count: total * 100 })}</span></div>
+        <p>${m('games.timeShort', { when: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })}</p>
+        ${log.length ? `<details open><summary>${m('games.yourRounds')}</summary><p class="gm-missed">${log.map((l) => `${escapeHtml(l.b)} (${l.f >= 1 ? m('games.tooBig') : m('games.tooSmall')}, ${m('games.ptsAbbr', { count: l.pts })})`).join(' · ')}</p></details>` : ''}
+        <div class="gm-actions"><button class="btn btn-primary sc-again" type="button">${m('games.again')}</button><button class="btn sc-menu" type="button">${m('games.menu')}</button></div>
       </div>`;
     root.querySelector('.sc-again')!.addEventListener('click', () => {
       destroy();

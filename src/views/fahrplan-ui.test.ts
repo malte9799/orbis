@@ -7,6 +7,9 @@ const mem = new Map<string, string>();
   setItem: (k: string, v: string) => void mem.set(k, v),
   removeItem: (k: string) => void mem.delete(k),
 };
+// the de strings are asserted below: force German before the module is imported
+const { setLang } = await import('../i18n');
+setLang('de');
 const { timeline, lineName, itinHtml } = await import('./fahrplan-ui');
 
 const leg = (over: Partial<Leg>): Leg => ({ mode: 'BUS', line: '32', headsign: 'Moorbrink', from: 'A', to: 'B', dep: 1000, arr: 61000, schedDep: 1000, schedArr: 61000, delayMin: null, arrDelayMin: null, cancelled: false, via: [], ...over });

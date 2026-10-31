@@ -1,4 +1,5 @@
 import { escapeHtml, fmt, safeUrl } from '../util';
+import { t } from '../i18n';
 import { resolveUnits } from '../units';
 import { glyphSvg, type GlyphId } from './icons';
 
@@ -25,6 +26,6 @@ export function cardHtml(p: CardProps): string {
     ${date ? `<div class="pop-sub">${escapeHtml(fmt.dateTime(date))} (${escapeHtml(fmt.relative(date))})</div>` : ''}
     ${desc ? `<p class="pop-desc">${resolveUnits(escapeHtml(desc))}${desc.length >= 500 ? ' …' : ''}</p>` : ''}
     ${p.extra ?? ''}
-    ${p.source || url ? `<div class="pop-foot">${p.source ? `Quelle: ${escapeHtml(p.source)}` : ''}${url ? `${p.source ? ' · ' : ''}<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Details ↗</a>` : ''}</div>` : ''}
+    ${p.source || url ? `<div class="pop-foot">${p.source ? t('map.pop.source', { src: escapeHtml(p.source) }) : ''}${url ? `${p.source ? ' · ' : ''}<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${t('map.pop.details')}</a>` : ''}</div>` : ''}
   </div>`;
 }

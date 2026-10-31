@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { loadRivers } from '../../../api/ocean';
 import { waveLabel } from '../shared/ocean';
 
@@ -17,12 +18,12 @@ function loadNow(ctx: ExtraCtx) {
     .then((r) => {
       if (st.key !== key) return;
       ctx.setData('rivers', r.fc);
-      ctx.set('rivers', { loading: false, count: r.fc.features.length, note: r.fc.features.length ? `Raster ${r.step}° – zoomen für mehr Flüsse · Farbe = Abfluss (blau klein → lila/rot sehr groß)` : 'hier keine Flüsse im Modell – anderen Ausschnitt wählen' });
+      ctx.set('rivers', { loading: false, count: r.fc.features.length, note: r.fc.features.length ? t('layers.rivers.noteGrid', { step: r.step }) : t('layers.rivers.noteNone') });
     })
     .catch((e) => {
       console.warn('Open-Meteo Flood', e);
       st.key = '';
-      ctx.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Flood nicht erreichbar' });
+      ctx.set('rivers', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : t('layers.rivers.noteFail') });
     });
 }
 

@@ -1,4 +1,5 @@
 import { defineProvider, type LngLat, type Route, type RouteStep } from '../types';
+import { fmtLocale } from '../../i18n';
 import { fetchJson } from '../../util';
 import type { Maneuver } from '../types';
 
@@ -55,7 +56,7 @@ export default defineProvider({
       travelMode: MODE[req.profile],
       traffic: 'true',
       instructionsType: 'text',
-      language: 'de-DE',
+      language: fmtLocale() === 'de-DE' ? 'de-DE' : 'en-US',
       routeRepresentation: 'polyline',
       maxAlternatives: req.alternatives ? '2' : '0',
     });

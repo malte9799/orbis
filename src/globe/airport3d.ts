@@ -6,6 +6,7 @@ import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
+import { t } from '../i18n';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
 // models with trails and callsign labels. Everything lives in its own sources/layers (ap3d-*).
@@ -275,12 +276,11 @@ export class Airport3D {
   onMoveEnd() {
     if (!this.layoutOn) return;
     if (this.globeShown()) {
-      this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht oder auf dem Globus ab Zoomstufe 12' });
+      this.hooks.info({ loading: false, note: t('map.airport3d.note2d') });
       return;
     }
     if (this.map.getZoom() < AIRPORT_ZOOM) {
-      this.hooks.info({ loading: false, note: `ab Zoomstufe ${AIRPORT_ZOOM} sichtbar – zu einem Flughafen zoomen` });
-      return;
+      this.hooks.info({ loading: false, note: t('map.airport3d.noteZoom', { z: String(AIRPORT_ZOOM) }) });      return;
     }
     clearTimeout(this.retry);
     const b = this.viewBox();
@@ -342,7 +342,7 @@ export class Airport3D {
         if (isSuperseded(e)) return;
         this.loading = false;
         console.warn('Overpass airport3d', e);
-        this.hooks.info({ loading: false, note: 'OpenStreetMap (Overpass) gerade nicht erreichbar – neuer Versuch in Kürze' });
+        this.hooks.info({ loading: false, note: t('map.airport3d.noteFail') });
         this.retry = window.setTimeout(() => this.onMoveEnd(), RETRY_MS);
       });
   }
@@ -434,7 +434,7 @@ export class Airport3D {
     this.hooks.info({
       loading: this.loading,
       count: n || undefined,
-      note: n ? 'Rollwege, Gates und Befeuerung – zum Kippen Strg + Ziehen' : 'hier kein Flughafen in OpenStreetMap erfasst',
+      note: n ? t('map.airport3d.noteOk') : t('map.airport3d.noteNone'),
     });
   }
 

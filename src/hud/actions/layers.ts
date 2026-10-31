@@ -1,6 +1,8 @@
 import type { ActFn, HudCore } from '../core';
 import { FILTERS } from '../filters';
 import { toast } from '../../util';
+import { t } from '../../i18n';
+import { tx } from '../../globe/layers';
 import { catalogOf } from '../catalog';
 
 export default (c: HudCore): Record<string, ActFn> => {
@@ -50,7 +52,7 @@ export default (c: HudCore): Record<string, ActFn> => {
       c.fresh.add(id);
       ui.open = null;
       afterEdit();
-      toast(`${catalogOf(id)?.label ?? id} hinzugefügt`);
+      toast(t('hud.toast.added', { label: catalogOf(id) ? tx(`layers.${id}.label`, catalogOf(id)!.label) : id }));
     },
     pick: () => {
       ui.pick = !ui.pick;

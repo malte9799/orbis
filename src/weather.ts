@@ -1,4 +1,6 @@
-/** WMO weather interpretation codes (as used by Open-Meteo) → German text + icon kind. */
+/** WMO weather interpretation codes (as used by Open-Meteo) → text (catalog) + icon kind. */
+import { t, type MessageKey } from './i18n';
+
 type IconKind =
   | 'clear'
   | 'mostlyClear'
@@ -15,39 +17,42 @@ type IconKind =
   | 'thunder'
   | 'hail';
 
-const CODES: Record<number, [string, IconKind]> = {
-  0: ['Klar', 'clear'],
-  1: ['Überwiegend klar', 'mostlyClear'],
-  2: ['Teilweise bewölkt', 'partly'],
-  3: ['Bedeckt', 'overcast'],
-  45: ['Nebel', 'fog'],
-  48: ['Reifnebel', 'fog'],
-  51: ['Leichter Nieselregen', 'drizzle'],
-  53: ['Nieselregen', 'drizzle'],
-  55: ['Starker Nieselregen', 'drizzle'],
-  56: ['Gefrierender Nieselregen', 'freezing'],
-  57: ['Starker gefrierender Nieselregen', 'freezing'],
-  61: ['Leichter Regen', 'rain'],
-  63: ['Regen', 'rain'],
-  65: ['Starker Regen', 'heavyRain'],
-  66: ['Gefrierender Regen', 'freezing'],
-  67: ['Starker gefrierender Regen', 'freezing'],
-  71: ['Leichter Schneefall', 'snow'],
-  73: ['Schneefall', 'snow'],
-  75: ['Starker Schneefall', 'snow'],
-  77: ['Schneegriesel', 'snow'],
-  80: ['Leichte Regenschauer', 'showers'],
-  81: ['Regenschauer', 'showers'],
-  82: ['Heftige Regenschauer', 'heavyRain'],
-  85: ['Schneeschauer', 'snowShowers'],
-  86: ['Starke Schneeschauer', 'snowShowers'],
-  95: ['Gewitter', 'thunder'],
-  96: ['Gewitter mit Hagel', 'hail'],
-  99: ['Schweres Gewitter mit Hagel', 'hail'],
-};
+const CODES: { code: number; icon: IconKind; key: MessageKey }[] = [
+  { code: 0, icon: 'clear', key: 'wx.code.0' },
+  { code: 1, icon: 'mostlyClear', key: 'wx.code.1' },
+  { code: 2, icon: 'partly', key: 'wx.code.2' },
+  { code: 3, icon: 'overcast', key: 'wx.code.3' },
+  { code: 45, icon: 'fog', key: 'wx.code.45' },
+  { code: 48, icon: 'fog', key: 'wx.code.48' },
+  { code: 51, icon: 'drizzle', key: 'wx.code.51' },
+  { code: 53, icon: 'drizzle', key: 'wx.code.53' },
+  { code: 55, icon: 'drizzle', key: 'wx.code.55' },
+  { code: 56, icon: 'freezing', key: 'wx.code.56' },
+  { code: 57, icon: 'freezing', key: 'wx.code.57' },
+  { code: 61, icon: 'rain', key: 'wx.code.61' },
+  { code: 63, icon: 'rain', key: 'wx.code.63' },
+  { code: 65, icon: 'heavyRain', key: 'wx.code.65' },
+  { code: 66, icon: 'freezing', key: 'wx.code.66' },
+  { code: 67, icon: 'freezing', key: 'wx.code.67' },
+  { code: 71, icon: 'snow', key: 'wx.code.71' },
+  { code: 73, icon: 'snow', key: 'wx.code.73' },
+  { code: 75, icon: 'snow', key: 'wx.code.75' },
+  { code: 77, icon: 'snow', key: 'wx.code.77' },
+  { code: 80, icon: 'showers', key: 'wx.code.80' },
+  { code: 81, icon: 'showers', key: 'wx.code.81' },
+  { code: 82, icon: 'heavyRain', key: 'wx.code.82' },
+  { code: 85, icon: 'snowShowers', key: 'wx.code.85' },
+  { code: 86, icon: 'snowShowers', key: 'wx.code.86' },
+  { code: 95, icon: 'thunder', key: 'wx.code.95' },
+  { code: 96, icon: 'hail', key: 'wx.code.96' },
+  { code: 99, icon: 'hail', key: 'wx.code.99' },
+];
+
+const BY_CODE = new Map(CODES.map((c) => [c.code, c]));
 
 export function describe(code: number | null | undefined): string {
-  return CODES[code ?? -1]?.[0] ?? 'Unbekannt';
+  const e = BY_CODE.get(code ?? -1);
+  return e ? t(e.key) : t('wx.unknown');
 }
 
 // ---------------------------------------------------------------------------
@@ -80,7 +85,7 @@ const BOLT = `<path fill="#ffd23f" stroke="#e0a400" stroke-width="1" d="M33 44l-
 const FOG = `<g stroke="#c9d1dc" stroke-width="3.5" stroke-linecap="round"><line x1="12" y1="46" x2="52" y2="46"/><line x1="16" y1="53" x2="48" y2="53"/><line x1="20" y1="60" x2="44" y2="60"/></g>`;
 
 export function weatherIcon(code: number | null | undefined, isDay = true, size = 48): string {
-  const kind = CODES[code ?? -1]?.[1] ?? 'overcast';
+  const kind = BY_CODE.get(code ?? -1)?.icon ?? 'overcast';
   const celestial = (cx: number, cy: number, r: number) => (isDay ? SUN(cx, cy, r) : MOON(cx, cy, r + 2));
   let body: string;
   switch (kind) {
@@ -134,28 +139,28 @@ export function weatherIcon(code: number | null | undefined, isDay = true, size 
 
 export function aqiLabel(eaqi: number | null | undefined): { label: string; color: string } {
   if (eaqi == null) return { label: '–', color: '#8892a6' };
-  if (eaqi <= 20) return { label: 'Gut', color: '#50c878' };
-  if (eaqi <= 40) return { label: 'Ordentlich', color: '#a3d65c' };
-  if (eaqi <= 60) return { label: 'Mäßig', color: '#f2c94c' };
-  if (eaqi <= 80) return { label: 'Schlecht', color: '#f2994a' };
-  if (eaqi <= 100) return { label: 'Sehr schlecht', color: '#eb5757' };
-  return { label: 'Extrem schlecht', color: '#9b51e0' };
+  if (eaqi <= 20) return { label: t('wx.aqi.good'), color: '#50c878' };
+  if (eaqi <= 40) return { label: t('wx.aqi.fair'), color: '#a3d65c' };
+  if (eaqi <= 60) return { label: t('wx.aqi.moderate'), color: '#f2c94c' };
+  if (eaqi <= 80) return { label: t('wx.aqi.poor'), color: '#f2994a' };
+  if (eaqi <= 100) return { label: t('wx.aqi.veryPoor'), color: '#eb5757' };
+  return { label: t('wx.aqi.extremelyPoor'), color: '#9b51e0' };
 }
 
 export function uvLabel(uv: number | null | undefined): { label: string; color: string } {
   if (uv == null) return { label: '–', color: '#8892a6' };
-  if (uv < 3) return { label: 'Niedrig', color: '#50c878' };
-  if (uv < 6) return { label: 'Mäßig', color: '#f2c94c' };
-  if (uv < 8) return { label: 'Hoch', color: '#f2994a' };
-  if (uv < 11) return { label: 'Sehr hoch', color: '#eb5757' };
-  return { label: 'Extrem', color: '#9b51e0' };
+  if (uv < 3) return { label: t('wx.uv.low'), color: '#50c878' };
+  if (uv < 6) return { label: t('wx.uv.moderate'), color: '#f2c94c' };
+  if (uv < 8) return { label: t('wx.uv.high'), color: '#f2994a' };
+  if (uv < 11) return { label: t('wx.uv.veryHigh'), color: '#eb5757' };
+  return { label: t('wx.uv.extreme'), color: '#9b51e0' };
 }
 
 export function pollenLabel(v: number | null | undefined): string {
   if (v == null) return '–';
-  if (v < 1) return 'keine';
-  if (v < 10) return 'gering';
-  if (v < 50) return 'mäßig';
-  if (v < 100) return 'hoch';
-  return 'sehr hoch';
+  if (v < 1) return t('wx.pollen.none');
+  if (v < 10) return t('wx.pollen.low');
+  if (v < 50) return t('wx.pollen.moderate');
+  if (v < 100) return t('wx.pollen.high');
+  return t('wx.pollen.veryHigh');
 }

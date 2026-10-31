@@ -1,4 +1,5 @@
 import type { ExpressionSpecification } from 'maplibre-gl';
+import { t } from '../../../i18n';
 import { defineExtra } from '../types';
 import { FONT_REGULAR } from '../../vector';
 import { cardHtml } from '../../popup';
@@ -58,21 +59,21 @@ export default defineExtra({
     ctx.loadOnce('ports', Infinity, async () => {
       const fc = await loadPorts();
       ctx.setData('ports', fc);
-      return { count: fc.features.length, note: 'Größere Häfen ab kleinem Zoom, kleinere beim Heranzoomen · Klick zeigt Hafendaten' };
+      return { count: fc.features.length, note: t('layers.ports.note') };
     });
   },
   click({ p, pt }) {
     const row = (k: string, v: unknown, unit = '') => (v === '' || v == null ? null : [k, `${v}${unit}`]);
     const rows = [
-      row('Größe', p.size),
-      row('Hafentyp', p.type),
-      row('Fahrwassertiefe', p.channel, ' m'),
-      row('Pier-Tiefe', p.pier, ' m'),
-      row('Größtes Schiff', p.length, ' m lang'),
-      row('Max. Tiefgang', p.draft, ' m'),
-      row('Lotsen', p.pilot),
-      row('Schutz', p.shelter),
-      row('Umschlag', p.fac),
+      row(t('layers.ports.rowSize'), p.size),
+      row(t('layers.ports.rowType'), p.type),
+      row(t('layers.ports.rowChannel'), p.channel, ' m'),
+      row(t('layers.ports.rowPier'), p.pier, ' m'),
+      row(t('layers.ports.rowMaxShip'), p.length, t('layers.ports.suffix')),
+      row(t('layers.ports.rowDraft'), p.draft, ' m'),
+      row(t('layers.ports.rowPilot'), p.pilot),
+      row(t('layers.ports.rowShelter'), p.shelter),
+      row(t('layers.ports.rowCargo'), p.fac),
     ].filter(Boolean) as string[][];
     const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>` : '';
     return {

@@ -1,3 +1,5 @@
+/** Filter chips render through `tx()` at the consumption point (hud.ts filterText);
+ *  this list stays pure data (German source label as fallback), keys are `hud.filter.<layer>.<value>`. */
 export const FILTERS: Record<string, { multi?: boolean; options: [string, string][]; none: string }> = {
   quakes: { options: [['', 'Alle'], ['4', 'ab M 4'], ['5', 'ab M 5'], ['6', 'ab M 6']], none: '' },
   aircraft: {

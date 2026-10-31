@@ -1,7 +1,8 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import type { LaunchDetail } from './tracker';
-import { flightPhase, flightEndSec, getReminder, notifSupported, notifyPermission, requestNotifyPermission, setReminder, trackFeatures, tLabel } from './tracker';
+import { flightPhase, flightEndSec, getReminder, notifSupported, notifyPermission, requestNotifyPermission, setReminder, statusTxt, trackFeatures, tLabel } from './tracker';
+import { t as m } from '../i18n';
 import { escapeHtml, fmt, safeUrl, toast } from '../util';
 import { clockTxt, distTxt, heightTxt, speedTxt } from '../units';
 import { glyphSvg } from '../globe/icons';
@@ -41,7 +42,7 @@ function fmtBig(ms: number): string {
   const d = Math.floor(s / 86400);
   const r = s % 86400;
   const time = `${pad2(Math.floor(r / 3600))}:${pad2(Math.floor((r % 3600) / 60))}:${pad2(r % 60)}`;
-  return d ? `${d} T ${time}` : time;
+  return d ? `${d} ${m('launch.tfDay')} ${time}` : time;
 }
 
 export class LaunchPanel {
@@ -61,7 +62,7 @@ export class LaunchPanel {
     this.root.className = 'fp launch';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head"><i class="fp-ic">${glyphSvg('rocket', '#ff6e40', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head"><i class="fp-ic">${glyphSvg('rocket', '#ff6e40', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="${escapeHtml(m('common.close'))}">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body">
         <div class="lp-media">
@@ -127,25 +128,25 @@ export class LaunchPanel {
     this.root.querySelector('.fp-title')!.textContent = d.name;
     const color = STATUS_COLOR[d.status] ?? '#c3ccd9';
     this.root.querySelector('.fp-sub')!.innerHTML =
-      `<span class="lp-status" style="--c:${color}">${escapeHtml(d.statusDe || d.status || 'Status offen')}</span> · ` +
-      ([d.provider, d.rocket].filter(Boolean).map((v) => escapeHtml(v)).join(' · ') || 'Rakete');
+      `<span class="lp-status" style="--c:${color}">${escapeHtml(statusTxt(d) || m('launch.statusUnknown'))}</span> · ` +
+      ([d.provider, d.rocket].filter(Boolean).map((v) => escapeHtml(v)).join(' · ') || m('launch.noRocket'));
     const stream = this.root.querySelector('.lp-stream')!;
     if (this.streamId) {
       stream.innerHTML = `
-        <button type="button" class="lp-play" data-act="play">▶ Livestream ansehen</button>
+        <button type="button" class="lp-play" data-act="play">${m('launch.watchLive')}</button>
         <div class="lp-frame" hidden></div>
-        <span class="lp-badge">Splitscreen über „⤢“ im Kopf aktivieren</span>`;
+        <span class="lp-badge">${m('launch.splitHint')}</span>`;
       stream.querySelector('[data-act=play]')!.addEventListener('click', () => {
         stream.querySelector('.lp-play')!.toggleAttribute('hidden', true);
         const frame = stream.querySelector<HTMLDivElement>('.lp-frame')!;
         frame.hidden = false;
-        frame.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(this.streamId)}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="Livestream"></iframe>`;
+        frame.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(this.streamId)}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="${m('launch.streamTitle')}"></iframe>`;
       });
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'fp-split';
       btn.dataset.act = 'split';
-      btn.title = 'Stream und Daten nebeneinander';
+      btn.title = m('launch.splitTitle');
       btn.innerHTML = '⤢';
       this.root.querySelector('.fp-head')!.append(btn);
       btn.addEventListener('click', () => {
@@ -153,38 +154,38 @@ export class LaunchPanel {
         btn.classList.toggle('on', this.root.classList.contains('split'));
       });
     } else if (d.video) {
-      stream.innerHTML = `<a class="lp-link" href="${escapeHtml(safeUrl(d.video)!)}" target="_blank" rel="noopener noreferrer">▶ Livestream auf YouTube öffnen ↗</a>`;
+      stream.innerHTML = `<a class="lp-link" href="${escapeHtml(safeUrl(d.video)!)}" target="_blank" rel="noopener noreferrer">${m('launch.openYt')}</a>`;
     } else {
       stream.innerHTML = '';
     }
     this.body.innerHTML = `
-      <details data-key="mission" ${this.open_.has('mission') ? 'open' : ''}><summary>Mission</summary><div class="sp-rows"><div class="fp-note">${escapeHtml(d.desc || d.missionName || 'Keine Missionsbeschreibung.')}</div></div></details>
-      <details data-key="track" ${this.open_.has('track') ? 'open' : ''}><summary>Live-Daten (Simulation)</summary>
+      <details data-key="mission" ${this.open_.has('mission') ? 'open' : ''}><summary>${m('launch.mission')}</summary><div class="sp-rows"><div class="fp-note">${escapeHtml(d.desc || d.missionName || m('launch.noMissionDesc'))}</div></div></details>
+      <details data-key="track" ${this.open_.has('track') ? 'open' : ''}><summary>${m('launch.liveData')}</summary>
         <div class="lp-track">
           <div class="sp-tiles">
             ${tile('T+', '–', { metric: 't' })}
-            ${tile('Höhe', '–', { metric: 'alt' })}
-            ${tile('Tempo', '–', { metric: 'v' })}
-            ${tile('Über Grund', '–', { metric: 'r' })}
+            ${tile(m('launch.alt'), '–', { metric: 'alt' })}
+            ${tile(m('launch.speed'), '–', { metric: 'v' })}
+            ${tile(m('launch.downrange'), '–', { metric: 'r' })}
           </div>
           <div class="lp-tracknote"></div>
-          <button type="button" class="btn small" data-act="follow">Rakete auf der Karte folgen</button>
+          <button type="button" class="btn small" data-act="follow">${m('launch.follow')}</button>
         </div></details>
-      <details data-key="remind" ${this.open_.has('remind') ? 'open' : ''}><summary>Erinnerung</summary><div class="sp-rows">
-        <div class="lp-remind"><select aria-label="Erinnerung">
-          <option value="">Keine Erinnerung</option>
-          <option value="0">Bei Start (T-0)</option>
-          <option value="10">10 min vorher</option>
-          <option value="30">30 min vorher</option>
-          <option value="10,0">10 min vorher + bei Start</option>
-          <option value="30,10,0">30 + 10 min vorher + bei Start</option>
+      <details data-key="remind" ${this.open_.has('remind') ? 'open' : ''}><summary>${m('launch.remind')}</summary><div class="sp-rows">
+        <div class="lp-remind"><select aria-label="${escapeHtml(m('launch.remindA11y'))}">
+          <option value="">${m('launch.remindNone')}</option>
+          <option value="0">${m('launch.remindAt')}</option>
+          <option value="10">${m('launch.remind10')}</option>
+          <option value="30">${m('launch.remind30')}</option>
+          <option value="10,0">${m('launch.remind10At')}</option>
+          <option value="30,10,0">${m('launch.remind3010')}</option>
         </select><div class="lp-perm"></div></div></div></details>
-      <details data-key="pad" ${this.open_.has('pad') ? 'open' : ''}><summary>Startplatz</summary><div class="sp-rows">${this.padRows(d)}</div></details>
+      <details data-key="pad" ${this.open_.has('pad') ? 'open' : ''}><summary>${m('launch.pad')}</summary><div class="sp-rows">${this.padRows(d)}</div></details>
       <div class="fp-actions lp-foot">
-        <button type="button" data-act="zoom">Zum Startplatz</button>
+        <button type="button" data-act="zoom">${m('launch.toPad')}</button>
       </div>
-      <div class="fp-note lp-simnote">Bahndaten sind keine Telemetrie: Höhe, Tempo und Spur sind ein Simulationsmodell aus Startzeit und Zielorbit (${escapeHtml(d.orbit || 'Orbit')}). Echte Positionsdaten gibt es öffentlich nicht.</div>
-      <div class="fp-note">Quelle: The Space Devs (Launch Library 2)· <a href="https://thespacedevs.com/launch/${escapeHtml(d.id)}" target="_blank" rel="noopener noreferrer">Details ↗</a></div>`;
+      <div class="fp-note lp-simnote">${m('launch.simNote', { orbit: d.orbit || m('launch.orbitNone') })}</div>
+      <div class="fp-note">${m('launch.sourceLabel')} <a href="https://thespacedevs.com/launch/${escapeHtml(d.id)}" target="_blank" rel="noopener noreferrer">${m('launch.details')}</a></div>`;
     this.hydrateRemind();
     this.syncFollowLabel();
   }
@@ -195,14 +196,14 @@ export class LaunchPanel {
       return escapeHtml(clockTxt(t));
     };
     const rows: [string, string][] = [
-      ['Startfenster', d.windowStart !== d.windowEnd ? `${clockOf(d.windowStart)} – ${clockOf(d.windowEnd)}` : clockOf(d.net)],
-      ['Startzeit', `${escapeHtml(d.net ? fmt.dateTime(d.net) : '?')} (${escapeHtml(relCountdown(d.net))})`],
-      ['Zielorbit', escapeHtml([d.orbit, d.orbitName].filter(Boolean).join(' – ') + (d.altKm ? ` · ≈ ${distTxt(d.altKm, 0)}` : ''))],
+      [m('launch.win'), d.windowStart !== d.windowEnd ? `${clockOf(d.windowStart)} – ${clockOf(d.windowEnd)}` : clockOf(d.net)],
+      [m('launch.netTime'), `${escapeHtml(d.net ? fmt.dateTime(d.net) : '?')} (${escapeHtml(relCountdown(d.net))})`],
+      [m('launch.orbit'), escapeHtml([d.orbit, d.orbitName].filter(Boolean).join(' – ') + (d.altKm ? ` · ≈ ${distTxt(d.altKm, 0)}` : ''))],
     ];
-    if (d.pad) rows.push(['Rampe', escapeHtml(d.pad)]);
-    if (d.place) rows.push(['Ort', escapeHtml(d.place)]);
-    if (d.incDeg) rows.push(['Inklination', `${d.incDeg.toFixed(1)}°`]);
-    if (d.probability != null) rows.push(['Startwahrscheinlichkeit', `${d.probability} %`]);
+    if (d.pad) rows.push([m('launch.ramp'), escapeHtml(d.pad)]);
+    if (d.place) rows.push([m('launch.place'), escapeHtml(d.place)]);
+    if (d.incDeg) rows.push([m('launch.incl'), `${d.incDeg.toFixed(1)}°`]);
+    if (d.probability != null) rows.push([m('launch.probability'), `${d.probability} %`]);
     return `<div class="sp-rows">${rows.map(([k, v]) => `<div class="sp-kv"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
   }
 
@@ -223,10 +224,10 @@ export class LaunchPanel {
       const perm = notifyPermission();
       sel.disabled = false;
       this.body.querySelector('.lp-perm')!.innerHTML =
-        perm === 'granted' ? '<span class="ok">✅ Mitteilungen erlaubt – auch bei geschlossenem Orbis</span>' : '<button type="button" class="btn small">Mitteilungen erlauben</button>';
+        perm === 'granted' ? `<span class="ok">${m('launch.permOk')}</span>` : `<button type="button" class="btn small">${m('launch.permAsk')}</button>`;
     } else {
       sel.disabled = false;
-      this.body.querySelector('.lp-perm')!.innerHTML = '<span class="muted small">Der Browser unterstützt keine Mitteilungen; Erinnerungen erscheinen nur als Hinweis in Orbis.</span>';
+      this.body.querySelector('.lp-perm')!.innerHTML = `<span class="muted small">${m('launch.permNo')}</span>`;
     }
   }
 
@@ -240,7 +241,7 @@ export class LaunchPanel {
       .filter((v) => Number.isFinite(v));
     if (minutes.length && notifSupported() && notifyPermission() !== 'granted') await requestNotifyPermission();
     setReminder(d, minutes);
-    toast(minutes.length ? `Erinnerung aktiviert: ${this.describe(minutes)}` : 'Erinnerung deaktiviert.', 'info');
+    toast(minutes.length ? m('launch.remindOn', { list: this.describe(minutes) }, { count: minutes.length }) : m('launch.remindOff'), 'info');
     this.hydratePerm();
   }
 
@@ -249,7 +250,7 @@ export class LaunchPanel {
       .filter((m) => m > 0)
       .sort((a, b) => b - a)
       .map((m) => `${m} min`);
-    return [...parts, ...(minutes.includes(0) ? ['bei Start'] : [])].join(' + ');
+    return [...parts, ...(minutes.includes(0) ? [m('launch.atStart')] : [])].join(' + ');
   }
 
   private setFollow(on: boolean) {
@@ -271,7 +272,7 @@ export class LaunchPanel {
 
   private syncFollowLabel() {
     const b = this.body.querySelector('[data-act=follow]');
-    if (b) b.textContent = this.following ? 'Folgen stoppen' : 'Rakete auf der Karte folgen';
+    if (b) b.textContent = this.following ? m('launch.followStop') : m('launch.follow');
     if (b) b.classList.toggle('on', this.following);
   }
 
@@ -289,15 +290,15 @@ export class LaunchPanel {
       const diff = Date.parse(d.net) - Date.now();
       dot.style.background = diff < 10 * 60000 ? '#ff6e40' : '#66bb6a';
       cd.textContent = fmtBig(diff);
-      tp.textContent = `Start ${relCountdown(d.net)}`;
+      tp.textContent = m('launch.startIn', { when: relCountdown(d.net) });
     } else if (p.phase === 'active') {
       dot.style.background = '#ff6e40';
       cd.textContent = `T+ ${tLabel(p.tSec)}`;
-      tp.textContent = p.at ? `${d.orbit ? 'Ziel ' + d.orbit + ' · ' : ''}Brennschluss ca. T+${tLabel(endSec)}` : '';
+      tp.textContent = p.at ? `${d.orbit ? `${m('launch.orbitPrefix', { orbit: d.orbit })} · ` : ''}${m('launch.cutoff', { t: tLabel(endSec) })}` : '';
     } else {
       dot.style.background = Date.parse(d.net) + endSec * 1000 < Date.now() ? '#4dd0e1' : '#c3ccd9';
-      cd.textContent = p.tSec <= endSec + 300 ? 'Orbit erreicht 🛰️' : `T+ ${tLabel(p.tSec)}`;
-      tp.textContent = `Sekundär zu ${escapeHtml(d.orbitName || d.orbit || 'Orbit')}`;
+      cd.textContent = p.tSec <= endSec + 300 ? m('launch.orbitReached') : `T+ ${tLabel(p.tSec)}`;
+      tp.textContent = m('launch.secondary', { orbit: d.orbitName || d.orbit || m('launch.orbitNone') });
     }
     const active = p.phase === 'active' && p.at;
     this.setLive(active ? trackFeatures(d, Date.now()) : null);
@@ -314,17 +315,17 @@ export class LaunchPanel {
       tileText('r', distTxt(p.at.downrangeKm, 0));
     } else {
       tileText('t', p.phase === 'pre' ? '–' : '–');
-      tileText('alt', p.phase === 'pre' ? '–' : 'in Orbit');
+      tileText('alt', p.phase === 'pre' ? '–' : m('launch.inOrbit'));
       tileText('v', p.phase === 'pre' ? '–' : '…');
       tileText('r', p.phase === 'pre' ? '–' : '…');
     }
     const note = this.body.querySelector('.lp-tracknote');
     if (note) {
       note.innerHTML = p.phase === 'pre'
-        ? `Noch ${escapeHtml(relCountdown(d.net))} – die Live-Spur erscheint bei T-0 auf der Karte.`
+        ? escapeHtml(m('launch.countdownNote', { when: relCountdown(d.net) }))
         : p.phase === 'active'
-          ? `Spur: ${escapeHtml(d.place || d.pad || '')} → ${escapeHtml(d.orbit || 'Orbit')} (angenähert)`
-          : `Brennschluss bei T+${tLabel(endSec)} · die Rakete ist in der Zielbahn`;
+          ? escapeHtml(m('launch.trackNote', { place: d.place || d.pad || '', orbit: d.orbit || m('launch.orbitNone') }))
+          : escapeHtml(m('launch.coastNote', { t: tLabel(endSec) }));
     }
   }
 }

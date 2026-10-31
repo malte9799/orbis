@@ -1,4 +1,6 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { tx } from '../../layers';
+import { t } from '../../../i18n';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { DATA_BASE } from '../../../api/data';
@@ -81,7 +83,7 @@ const toFeature = ([lon, lat, dir, kind, ctype, mount, guard, operator, id]: Rec
   type: 'Feature',
   geometry: { type: 'Point', coordinates: [lon, lat] },
   properties: {
-    title: guard ? 'Wachpersonal / Sicherheitsdienst' : 'Überwachungskamera',
+    title: guard ? t('layers.cctv.rowGuard') : t('layers.cctv.rowCam'),
     subtitle: [ctype, operator].filter(Boolean).join(' · '),
     dir,
     kind,
@@ -212,12 +214,12 @@ export default defineExtra({
     const dir = Number(p.dir);
     const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
     const rows = [
-      ['Bereich', KIND[String(p.kind)] ?? p.kind],
-      ['Bauart', CTYPE[String(p.ctype)] ?? p.ctype],
-      ['Montage', ALPR_MOUNT[String(p.mount)] ?? p.mount],
-      ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
-      ['Betreiber', p.operator],
-      ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
+      [t('layers.cctv.rowZone'), KIND[String(p.kind)] ?? p.kind],
+      [t('layers.cctv.rowCtype'), CTYPE[String(p.ctype)] ?? p.ctype],
+      [t('layers.cctv.rowMount'), tx(`layers.cams.alprMount.${String(p.mount).replace(/[-_](\w)/g, (_0, s1: string) => s1.toUpperCase())}`, ALPR_MOUNT[String(p.mount)] ?? p.mount ?? '')],
+      [t('layers.cctv.rowDirection'), dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
+      [t('layers.cctv.rowOperator'), p.operator],
+      [t('layers.cctv.rowPosition'), coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : '';
     return { type: 'html', html: cardHtml({ glyph: 'cctv', color: CCTV_COLOR, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };

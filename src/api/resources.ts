@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
 import { snapshotOrNull } from './osmtiles';
+import { getLang, t } from '../i18n';
 
 // Mineral and energy resources at three levels of detail:
 // • worldwide: mines, oil, gas and coal fields from Wikidata (CC0)
@@ -20,19 +21,19 @@ export interface Bounds {
 export type ResourceCat = 'oil' | 'gas' | 'coal' | 'iron' | 'gold' | 'copper' | 'uranium' | 'lithium' | 'salt' | 'stone' | 'metal' | 'gem' | 'other';
 
 export const RESOURCE_STYLE: Record<ResourceCat, { label: string; color: string }> = {
-  oil: { label: 'Erdöl', color: '#212121' },
-  gas: { label: 'Erdgas', color: '#29b6f6' },
-  coal: { label: 'Kohle', color: '#6d4c41' },
-  iron: { label: 'Eisenerz', color: '#c62828' },
-  gold: { label: 'Gold/Silber', color: '#fdd835' },
-  copper: { label: 'Kupfer', color: '#ff7043' },
-  uranium: { label: 'Uran', color: '#76ff03' },
-  lithium: { label: 'Lithium', color: '#e040fb' },
-  salt: { label: 'Salz/Kali', color: '#eeeeee' },
-  stone: { label: 'Steine & Erden', color: '#bcaaa4' },
-  metal: { label: 'Andere Metalle', color: '#90a4ae' },
-  gem: { label: 'Edelsteine', color: '#00e5ff' },
-  other: { label: 'Bergbau', color: '#a1887f' },
+  oil: { label: t('map.res.cat.oil' as never), color: '#212121' },
+  gas: { label: t('map.res.cat.gas' as never), color: '#29b6f6' },
+  coal: { label: t('map.res.cat.coal' as never), color: '#6d4c41' },
+  iron: { label: t('map.res.cat.iron' as never), color: '#c62828' },
+  gold: { label: t('map.res.cat.gold' as never), color: '#fdd835' },
+  copper: { label: t('map.res.cat.copper' as never), color: '#ff7043' },
+  uranium: { label: t('map.res.cat.uranium' as never), color: '#76ff03' },
+  lithium: { label: t('map.res.cat.lithium' as never), color: '#e040fb' },
+  salt: { label: t('map.res.cat.salt' as never), color: '#eeeeee' },
+  stone: { label: t('map.res.cat.stone' as never), color: '#bcaaa4' },
+  metal: { label: t('map.res.cat.metal' as never), color: '#90a4ae' },
+  gem: { label: t('map.res.cat.gem' as never), color: '#00e5ff' },
+  other: { label: t('map.res.cat.other' as never), color: '#a1887f' },
 };
 
 const RULES: [RegExp, ResourceCat][] = [
@@ -104,7 +105,7 @@ export async function loadWikidataResources(): Promise<FeatureCollection<Point>>
     ?class rdfs:label ?cl .
     ?item wdt:P31 ?class ; wdt:P625 ?coord .
     OPTIONAL { ?item wdt:P1056 ?prod . ?prod rdfs:label ?prodLabel . FILTER(LANG(?prodLabel) = "en") }
-    SERVICE wikibase:label { bd:serviceParam wikibase:language "de,en". ?item rdfs:label ?itemLabel . ?class rdfs:label ?classLabel . }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "${getLang()},en". ?item rdfs:label ?itemLabel . ?class rdfs:label ?classLabel . }
   } GROUP BY ?item ?itemLabel ?coord ?classLabel LIMIT 40000`;
   const json = await fetchJson<{ results: { bindings: Record<string, { value: string }>[] } }>(
     `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(query)}`,
@@ -144,7 +145,7 @@ export async function loadWikidataResources(): Promise<FeatureCollection<Point>>
 // ---------------------------------------------------------------------------
 // USGS MRDS via WFS 1.0.0 (GML; 1.0.0 keeps lon/lat axis order for the BBOX)
 
-const DEV_STAT: Record<string, string> = { Producer: 'in Förderung', 'Past Producer': 'ehemals gefördert', Prospect: 'Prospekt', Occurrence: 'Vorkommen', Plant: 'Aufbereitung' };
+const DEV_STAT: Record<string, string> = { Producer: t('map.res.dev.producer'), 'Past Producer': t('map.res.dev.past'), Prospect: t('map.res.dev.prospect'), Occurrence: t('map.res.dev.occurrence'), Plant: t('map.res.dev.plant') };
 
 export async function loadMrds(b: Bounds): Promise<FeatureCollection<Point>> {
   const url = `https://mrdata.usgs.gov/services/wfs/mrds?service=WFS&version=1.0.0&request=GetFeature&typeName=mrds&maxFeatures=4000&bbox=${b.west.toFixed(3)},${b.south.toFixed(3)},${b.east.toFixed(3)},${b.north.toFixed(3)}`;
@@ -175,7 +176,7 @@ export async function loadMrds(b: Bounds): Promise<FeatureCollection<Point>> {
     const depId = val('dep_id');
     features.push(
       point(x, y, classify(commod), {
-        title: val('site_name') || 'Rohstoff-Fundstelle',
+        title: val('site_name') || t('map.res.site'),
         subtitle: [commod, DEV_STAT[status] ?? status].filter(Boolean).join(' · '),
         url: depId ? `https://mrdata.usgs.gov/mrds/show-mrds.php?dep_id=${encodeURIComponent(depId)}` : 'https://mrdata.usgs.gov/mrds/',
         source: 'USGS MRDS',
@@ -224,14 +225,14 @@ export async function loadOsmResources(b: Bounds): Promise<FeatureCollection<Poi
     const lat = el.lat ?? el.center?.lat;
     const lon = el.lon ?? el.center?.lon;
     if (lat == null || lon == null) continue;
-    const t = el.tags ?? {};
+    const tags = el.tags ?? {};
     const kind =
-      t.man_made === 'petroleum_well' || t.man_made === 'pumpjack' ? 'Bohrloch' : t.landuse === 'quarry' ? 'Steinbruch/Tagebau' : t.man_made === 'mineshaft' ? 'Schacht' : t.man_made === 'adit' ? 'Stollen' : t.industrial === 'refinery' ? 'Raffinerie' : 'Bergwerk';
-    const res = [t.resource, t['resource:type'], t.product, t.substance, t.industrial === 'oil' ? 'oil' : '', t.industrial === 'gas' ? 'gas' : '', t.man_made === 'petroleum_well' ? 'oil' : ''].filter(Boolean).join(' ');
+      tags.man_made === 'petroleum_well' || tags.man_made === 'pumpjack' ? t('map.res.kind.well') : tags.landuse === 'quarry' ? t('map.res.kind.quarry') : tags.man_made === 'mineshaft' ? t('map.res.kind.shaft') : tags.man_made === 'adit' ? t('map.res.kind.adit') : tags.industrial === 'refinery' ? t('map.res.kind.refinery') : t('map.res.kind.mine');
+    const res = [tags.resource, tags['resource:type'], tags.product, tags.substance, tags.industrial === 'oil' ? 'oil' : '', tags.industrial === 'gas' ? 'gas' : '', tags.man_made === 'petroleum_well' ? 'oil' : ''].filter(Boolean).join(' ');
     features.push(
-      point(lon, lat, res ? classify(res) : t.landuse === 'quarry' ? 'stone' : 'other', {
-        title: t.name ?? kind,
-        subtitle: [kind, t.resource, t.operator].filter(Boolean).join(' · '),
+      point(lon, lat, res ? classify(res) : tags.landuse === 'quarry' ? 'stone' : 'other', {
+        title: tags.name ?? kind,
+        subtitle: [kind, tags.resource, tags.operator].filter(Boolean).join(' · '),
         url: `https://www.openstreetmap.org/${el.type}/${el.id}`,
         source: 'OpenStreetMap',
         lvl: 2,
@@ -247,30 +248,30 @@ export async function loadPipelines(b: Bounds): Promise<FeatureCollection<LineSt
     `[out:json][timeout:35];way["man_made"="pipeline"]["substance"~"^(gas|oil|fuel|hydrogen|natural_gas|lpg|crude_oil|petroleum|water)$"](${bb});out geom tags 5000;`,
     'pipelines',
   );
-  const SUB: Record<string, [string, string]> = {
-    gas: ['Gas', '#29b6f6'],
-    natural_gas: ['Erdgas', '#29b6f6'],
-    lpg: ['Flüssiggas', '#4dd0e1'],
-    hydrogen: ['Wasserstoff', '#b388ff'],
-    oil: ['Öl', '#ff9800'],
-    crude_oil: ['Rohöl', '#ff9800'],
-    petroleum: ['Öl', '#ff9800'],
-    fuel: ['Kraftstoff', '#ffb74d'],
-    water: ['Wasser', '#1e88e5'],
+    const sub: Record<string, [string, string]> = {
+    gas: [t('map.res.sub.gas'), '#29b6f6'],
+    natural_gas: [t('map.res.sub.naturalGas'), '#29b6f6'],
+    lpg: [t('map.res.sub.lpg'), '#4dd0e1'],
+    hydrogen: [t('map.res.sub.hydrogen'), '#b388ff'],
+    oil: [t('map.res.sub.oil'), '#ff9800'],
+    crude_oil: [t('map.res.sub.crudeOil'), '#ff9800'],
+    petroleum: [t('map.res.sub.petroleum'), '#ff9800'],
+    fuel: [t('map.res.sub.fuel'), '#ffb74d'],
+    water: [t('map.res.sub.water'), '#1e88e5'],
   };
   return {
     type: 'FeatureCollection',
     features: j.elements
       .filter((e) => e.geometry && e.geometry.length > 1)
       .map((e) => {
-        const t = e.tags ?? {};
-        const [label, color] = SUB[t.substance] ?? ['Pipeline', '#9e9e9e'];
+        const tags = e.tags ?? {};
+        const [label, color] = sub[tags.substance] ?? [t('map.res.sub.pipe'), '#9e9e9e'];
         return {
           type: 'Feature' as const,
           geometry: { type: 'LineString' as const, coordinates: e.geometry!.map((p) => [p.lon, p.lat]) },
           properties: {
-            title: t.name ?? `${label}-Pipeline`,
-            subtitle: [label, t.operator, t.diameter ? `Ø ${t.diameter} mm` : '', t.location === 'underground' ? 'unterirdisch' : ''].filter(Boolean).join(' · '),
+            title: tags.name ?? t('map.res.pipeline', { label }),
+            subtitle: [label, tags.operator, tags.diameter ? `Ø ${tags.diameter} mm` : '', tags.location === 'underground' ? t('map.res.underground') : ''].filter(Boolean).join(' · '),
             color,
             url: `https://www.openstreetmap.org/way/${e.id}`,
             source: 'OpenStreetMap',

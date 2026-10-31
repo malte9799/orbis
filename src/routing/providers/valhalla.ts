@@ -1,4 +1,5 @@
 import { defineProvider, type Route, type RouteStep } from '../types';
+import { fmtLocale } from '../../i18n';
 import { fetchJson } from '../../util';
 import { decodePolyline } from '../geo';
 import { fromValhalla } from '../text';
@@ -52,7 +53,7 @@ export default defineProvider({
         ...(i === 0 && req.bearing != null ? { heading: Math.round(req.bearing), heading_tolerance: 60 } : {}),
       })),
       costing: COSTING[req.profile],
-      directions_options: { language: 'de-DE', units: 'kilometers' },
+      directions_options: { language: fmtLocale() === 'de-DE' ? 'de-DE' : 'en-US', units: 'kilometers' },
       alternates: req.alternatives && req.points.length === 2 ? 2 : 0,
     };
     const j = await fetchJson<{ trip: ValhallaTrip; alternates?: { trip: ValhallaTrip }[] }>(`https://valhalla1.openstreetmap.de/route?json=${encodeURIComponent(JSON.stringify(json))}`);

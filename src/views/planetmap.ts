@@ -16,13 +16,17 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { CRAFT } from '../space/bodies';
 import { MARS_SITES, SOL_MS, getMarsTracks, heliAt, loadMarsTracks, roverAt, solAt, trackCount, trackKm, type Track } from '../space/mars';
-import { COUNTRY, LANDING_SITES, flagDataUrl, type LandingSite } from '../space/moon';
-import { KIND_LABEL, MOON_FEATURES, type MoonFeature } from '../space/moon-features';
+import { LANDING_SITES, flagDataUrl, type LandingSite } from '../space/moon';
+/** display text of a landing site field (the data holds message-key suffixes) */
+const siteTxt = (site: LandingSite, field: 'crew' | 'craft' | 'region' | 'text'): string => m(`space.${site.id}.${field}` as MessageKey);
+import { MOON_FEATURES, type MoonFeature } from '../space/moon-features';
+const kindLabel = (kind: string): string => m(`space.kind.${kind}` as MessageKey);
 import { buildSiteScene, hasSceneModel } from '../space/surface-models';
 import { PLANET_MAPS, type PlanetMapConfig, type TileLayer } from '../space/planets';
 import { FONT_BOLD, FONT_ITALIC, FONT_REGULAR, OFM_GLYPHS } from '../globe/vector';
 import { escapeHtml, fmt } from '../util';
 import { distTxt } from '../units';
+import { t as m, fmtLocale, type MessageKey } from '../i18n';
 
 // Map of another planet – the counterpart of the Earth map (views/globe.ts): MapLibre with
 // 2D (mercator) / 3D (globe) switch, zooming far out hands over to the solar system.
@@ -613,14 +617,14 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   el.innerHTML = `
     <div class="map"></div>
     <div class="globe-top">
-      <button class="btn icon-btn panel-toggle" aria-label="Ebenen" title="Ebenen" aria-expanded="true">
+      <button class="btn icon-btn panel-toggle" aria-label="${m('space.layersA11y')}" title="${m('space.layersA11y')}" aria-expanded="true">
         <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
       </button>
-      <div class="search"><svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg><input class="pm-search" type="search" list="pm-places" placeholder="Ort oder Rover suchen …" aria-label="Suchen" autocomplete="off"/><datalist id="pm-places"></datalist></div>
+      <div class="search"><svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg><input class="pm-search" type="search" list="pm-places" placeholder="${m('space.pmSearch')}" aria-label="${m('space.pmSearchA11y')}" autocomplete="off"/><datalist id="pm-places"></datalist></div>
     </div>
     <aside class="panel pm-panel"></aside>
     <div class="base-switch"></div>
-    <div class="pm-active" aria-label="Angezeigte Ebenen"></div>
+    <div class="pm-active" aria-label="${m('space.activeA11y')}"></div>
     <section class="space-info pm-info" hidden></section>`;
 
   mountRawDataLink(el.querySelector<HTMLElement>('.globe-top')!, 'button', { cls: 'btn icon-btn' });
@@ -657,10 +661,10 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   const places = (): { id: string; name: string; group: string }[] => {
     const sites = sitesOf()
       .filter((x) => !x.hideFlag)
-      .map((x) => ({ id: x.id, name: x.name, group: 'Landestellen' }));
-    if (bodyId === 'mars') return [...TRACKS.map((t) => ({ id: t.id as string, name: t.name, group: 'Rover' })), ...sites];
+      .map((x) => ({ id: x.id, name: x.name, group: m('space.gSites') }));
+    if (bodyId === 'mars') return [...TRACKS.map((t) => ({ id: t.id as string, name: t.name, group: m('space.gRover') })), ...sites];
     if (bodyId === 'moon') {
-      const group = (f: MoonFeature) => (f.kind === 'mare' || f.kind === 'basin' ? 'Meere & Becken' : f.kind === 'crater' ? 'Krater' : 'Gebirge & Täler');
+      const group = (f: MoonFeature) => (f.kind === 'mare' || f.kind === 'basin' ? m('space.gMares') : f.kind === 'crater' ? m('space.gCraters') : m('space.gMountains'));
       return [...sites, ...MOON_FEATURES.map((f) => ({ id: featureId(f), name: f.name, group: group(f) }))];
     }
     return [];
@@ -769,7 +773,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const id = String(p.id);
     const rows: [string, string][] = [];
     let body = '';
-    let label = 'Landestelle';
+    let label: string = m('space.infoSite');
     let flag = '';
     let coordLon = 0;
     let coordLat = 0;
@@ -778,45 +782,45 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       const s = sitesOf().find((x) => x.id === id);
       if (!s) return;
       body = `<p>${escapeHtml(s.text)}</p>`;
-      rows.push(['Landung', new Date(s.date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })], ['Nation', COUNTRY[s.flag]], ['Ort', s.region]);
-      if (s.crew) rows.push(['Besatzung', s.crew]);
-      if (s.craft) rows.push(['Mission', s.craft]);
+      rows.push([m('space.pmRowLanding'), new Date(s.date).toLocaleDateString(fmtLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })], [m('space.pmRowNation'), m(`space.country.${s.flag}` as MessageKey)], [m('space.pmRowRegion'), siteTxt(s, 'region')]);
+      if (s.crew) rows.push([m('space.pmRowCrew'), siteTxt(s, 'crew')]);
+      if (s.craft) rows.push([m('space.pmRowMission'), siteTxt(s, 'craft')]);
       flag = `<img class="sp-flag" src="${flagDataUrl(s.flag)}" alt=""/>`;
       [coordLon, coordLat] = [s.lon, s.lat];
-      if (hasSceneModel(s.id)) body += '<p class="small muted">Beim Heranzoomen erscheint das 3D-Modell von Lander' + (bodyId === 'moon' ? ', Flagge' : '') + ' und Fahrzeugen – vergrößert, damit man es erkennt, und mit dem Zoom mitskalierend.</p>';
+      if (hasSceneModel(s.id)) body += `<p class="small muted">${m('space.siteModelNote', { flags: bodyId === 'moon' ? m('space.siteModelFlags') : '' })}</p>`;
     } else if (kind === 'feature') {
       const f = MOON_FEATURES.find((x) => featureId(x) === id);
       if (!f) return;
-      label = KIND_LABEL[f.kind];
-      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? 'Länge' : 'Durchmesser', distTxt(f.km, 0)]);
+      label = kindLabel(f.kind);
+      rows.push([f.kind === 'mountain' || f.kind === 'valley' ? m('space.rowLength') : m('space.rowDiameter'), distTxt(f.km, 0)]);
       [coordLon, coordLat] = [f.lon, f.lat];
       zoomTo = featureZoom(f);
     } else if (kind === 'rover') {
-      label = 'Rover';
+      label = m('space.infoRover');
       const tr = TRACKS.find((x) => x.craft === id)!;
       const t = getMarsTracks()?.[tr.id];
       const p0 = roverAt(t, Date.now());
       [coordLon, coordLat] = p0 ?? (tr.id === 'm20' ? [77.45, 18.44] : [137.44, -4.59]);
       if (t) {
         const n = trackCount(t, Date.now());
-        rows.push(['Marstag (Sol)', fmt.num(solAt(Date.now(), t.sol0), 0)], ['Gefahrene Strecke', distTxt(trackKm(t, n), 1)]);
+        rows.push([m('space.rowSol'), fmt.num(solAt(Date.now(), t.sol0), 0)], [m('space.rowDistance'), distTxt(trackKm(t, n), 1)]);
       }
-      body = '<p>Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell – vergrößert und mit dem Zoom mitskalierend.</p>';
+      body = `<p>${m('space.roverNote')}</p>`;
     } else {
-      label = 'Hubschrauber';
+      label = m('space.infoHeli');
       const f = getMarsTracks()?.heli.flights ?? [];
-      rows.push(['Flüge', String(f.length)], ['Flugstrecke gesamt', distTxt(f.reduce((a, x) => a + x.len, 0) / 1000, 1)]);
+      rows.push([m('space.rowFlights'), String(f.length)], [m('space.rowFlown'), distTxt(f.reduce((a, x) => a + x.len, 0) / 1000, 1)]);
       [coordLon, coordLat] = heliAt(Date.now()) ?? [77.45, 18.44];
-      body = '<p>Ingenuity flog zwischen April 2021 und Januar 2024 72-mal. Der Punkt markiert den letzten Landeplatz.</p>';
+      body = `<p>${m('space.heliNote')}</p>`;
     }
-    rows.push(['Koordinaten', `${fmt.num(Math.abs(coordLat), 3)}° ${coordLat >= 0 ? 'N' : 'S'}, ${fmt.num(Math.abs(coordLon), 3)}° ${coordLon >= 0 ? 'O' : 'W'}`]);
+    rows.push([m('space.rowCoords'), `${fmt.num(Math.abs(coordLat), 3)}° ${coordLat >= 0 ? m('space.dirNorth') : m('space.dirSouth')}, ${fmt.num(Math.abs(coordLon), 3)}° ${coordLon >= 0 ? m('space.dirEast') : m('space.dirWest')}`]);
     info.hidden = false;
     info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
       <div class="sp-kind">${label} · ${escapeHtml(cfg().name)}</div>
       <h2 class="sp-site-title">${flag}${escapeHtml(String(p.name))}</h2>
       ${body}
       <dl>${rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-      <div class="sp-actions"><button class="btn small" data-a="zoom">Heranzoomen</button></div>`;
+      <div class="sp-actions"><button class="btn small" data-a="zoom">${m('space.zoomIn')}</button></div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
     info.querySelector('[data-a=zoom]')!.addEventListener('click', () => map?.flyTo({ center: [coordLon, coordLat], zoom: zoomTo, pitch: kind === 'feature' ? 0 : Math.max(map.getPitch(), 45), speed: 1.4 }));
   }
@@ -1074,7 +1078,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   function renderProj() {
     if (!projCtl) return;
     projCtl.innerHTML =
-      `<button type="button" data-proj="space" title="Ins Sonnensystem" aria-label="Ins Sonnensystem"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
+      `<button type="button" data-proj="space" title="${m('space.toSpace')}" aria-label="${m('space.toSpace')}"><svg viewBox="0 0 24 24" class="ctl-ic"><circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="3.6" transform="rotate(-20 12 12)"/></svg></button>`;
   }
 
   /** The map shows another body: swap the base source, drop overlays / models. */
@@ -1124,13 +1128,13 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
       .filter((p) => p.group === 'overlay')
       .sort((x, y) => Number(isGlobal(y.bbox)) - Number(isGlobal(x.bbox)) || overlayName(x).localeCompare(overlayName(y), 'de'));
   /** short names: "MRO CRISM Fe-Mg Smectite Indicator, CRISM tile 1303" → "Smectit (CRISM)" */
-  function overlayName(p: { title: string }) {
-    const t = p.title;
-    if (/Geology/i.test(t)) return 'Geologie';
-    if (/Valley/i.test(t)) return 'Täler';
-    if (/Smectite/i.test(t)) return 'Smektit (CRISM)';
-    if (/Sulfate/i.test(t)) return 'Sulfat (CRISM)';
-    return t.replace(/^MRO |^MGS /, '');
+  function overlayName(p: { title: string }): string {
+    const _t = p.title;
+    if (/Geology/i.test(_t)) return m('space.ovGeology');
+    if (/Valley/i.test(_t)) return m('space.ovValleys');
+    if (/Smectite/i.test(_t)) return m('space.ovSmectite');
+    if (/Sulfate/i.test(_t)) return m('space.ovSulfate');
+    return _t.replace(/^MRO |^MGS /, '');
   }
   function toggleOverlay(id: string) {
     const on = !overlays.has(id);
@@ -1154,19 +1158,23 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const c = cfg();
     const products = c.products ?? [];
     const hasMosaics = products.some((p) => p.group === 'mosaic');
+    const mapTxt = (suffix?: string) => m(`space.${suffix ?? 'auto'}` as MessageKey);
     return [
-      ...(products.length ? [{ id: 'auto', label: hasMosaics ? (c.autoLabel ?? 'Automatisch') : 'Automatisch', short: 'Automatisch', img: thumb(c.detail3d(0)) }] : []),
-      ...(hasMosaics && c.globalLabel ? [{ id: 'global', label: c.globalLabel, short: 'Farbmosaik', img: thumb(c.detail3d(0)) }] : []),
+      ...(products.length ? [{ id: 'auto', label: mapTxt(c.autoLabel), short: mapTxt(), img: thumb(c.detail3d(0)) }] : []),
+      ...(hasMosaics && c.globalLabel ? [{ id: 'global', label: mapTxt(c.globalLabel), short: mapTxt('layer.marsColor'), img: thumb(c.detail3d(0)) }] : []),
       // the automatic map already is that mosaic (plus the finer regional ones)
-      ...c.layers.filter((l) => !(products.length && !c.globalLabel && l.id === c.detail3d(0).id)).map((l) => ({ id: l.id, label: l.label, short: l.label.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional })),
+      ...c.layers.filter((l) => !(products.length && !c.globalLabel && l.id === c.detail3d(0).id)).map((l) => {
+        const resolved = m(`space.layer.${l.label}` as MessageKey);
+        return { id: l.id, label: resolved, short: resolved.replace(/ \(.*$/, ''), img: thumb(l), optional: !!l.optional };
+      }),
       ...products.filter((p) => p.group === 'base' && isGlobal(p.bbox)).map((p) => ({ id: p.id, label: baseName(p.title), short: baseName(p.title), img: thumb(p.layer) })),
     ];
   }
-  function baseName(t: string) {
-    if (/Color Hillshade Blend/.test(t)) return 'Höhe & Tiefe (MOLA/HRSC, 200 m)';
-    if (/THEMIS-IR Day/.test(t)) return 'Infrarot (THEMIS, 100 m)';
-    if (/^Mars Express HRSC/.test(t)) return t.replace(/^Mars Express HRSC, /, 'HRSC · ').replace(/ Color Mosaic| Mosaic/g, '');
-    return t;
+  function baseName(_t: string): string {
+    if (/Color Hillshade Blend/.test(_t)) return m('space.baseHeightShade');
+    if (/THEMIS-IR Day/.test(_t)) return m('space.baseInfrared');
+    if (/^Mars Express HRSC/.test(_t)) return _t.replace(/^Mars Express HRSC, /, '').replace(/ Color Mosaic| Mosaic/g, '');
+    return _t;
   }
 
   /** the chips on the map: current base map + everything drawn over it (✕ hides) */
@@ -1177,16 +1185,16 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const cur = all.find((o) => o.id === layerId) ?? (regional ? { short: baseName(regional.title) } : all[0]);
     const chips: { label: string; color?: string; off?: string }[] = [];
     for (const p of ovProducts()) if (overlays.has(p.id)) chips.push({ label: overlayName(p), color: ovColor(p), off: `ov:${p.id}` });
-    if (show.sites) chips.push({ label: 'Landestellen', color: '#ffffff', off: 'sites' });
-    if (cfg().dem && show.terrain) chips.push({ label: 'Relief', color: '#8fd3ff', off: 'terrain' });
-    if (show.models && bodyId !== 'earth') chips.push({ label: '3D-Modelle', color: '#ffd23f', off: 'models' });
-    if (bodyId === 'moon' && show.features) chips.push({ label: 'Mondformationen', color: '#bfe3ff', off: 'features' });
-    if (mars && show.tracks) chips.push({ label: 'Rover-Spuren', color: 'linear-gradient(90deg,#ffb347,#5ad1ff)', off: 'tracks' });
-    if (mars && show.heli) chips.push({ label: 'Ingenuity', color: '#ff5ad1', off: 'heli' });
+    if (show.sites) chips.push({ label: m('space.tSites'), color: '#ffffff', off: 'sites' });
+    if (cfg().dem && show.terrain) chips.push({ label: m('space.tTerrainShort'), color: '#8fd3ff', off: 'terrain' });
+    if (show.models && bodyId !== 'earth') chips.push({ label: m('space.tModels'), color: '#ffd23f', off: 'models' });
+    if (bodyId === 'moon' && show.features) chips.push({ label: m('space.tFeatures'), color: '#bfe3ff', off: 'features' });
+    if (mars && show.tracks) chips.push({ label: m('space.tTracks'), color: 'linear-gradient(90deg,#ffb347,#5ad1ff)', off: 'tracks' });
+    if (mars && show.heli) chips.push({ label: m('space.tHeli'), color: '#ff5ad1', off: 'heli' });
     activeEl.innerHTML =
-      `<span class="pm-chip base" title="Aktuelle Karte">${escapeHtml(cur.short)}</span>` +
+      `<span class="pm-chip base" title="${m('space.chipBaseTitle')}">${escapeHtml(cur.short)}</span>` +
       chips
-        .map((c) => `<button type="button" class="pm-chip" data-off="${c.off}" title="Ausblenden"><i style="background:${c.color}"></i>${escapeHtml(c.label)}<b aria-hidden="true">×</b></button>`)
+        .map((c) => `<button type="button" class="pm-chip" data-off="${c.off}" title="${m('space.chipHideTitle')}"><i style="background:${c.color}"></i>${escapeHtml(c.label)}<b aria-hidden="true">×</b></button>`)
         .join('');
   }
   activeEl.addEventListener('click', (e) => {
@@ -1208,7 +1216,7 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
   function placesHtml() {
     const groups = new Map<string, { id: string; name: string }[]>();
     for (const p of places()) groups.set(p.group, [...(groups.get(p.group) ?? []), p]);
-    if (bodyId === 'mars') groups.set('Regionen', [{ id: 'olympus', name: 'Olympus Mons' }, { id: 'valles', name: 'Valles Marineris' }]);
+    if (bodyId === 'mars') groups.set(m('space.gRegions'), [{ id: 'olympus', name: 'Olympus Mons' }, { id: 'valles', name: 'Valles Marineris' }]);
     return [...groups]
       .map(([g, list]) => `<h3 class="sp-sub">${escapeHtml(g)}</h3><div class="sp-sites pm-jump">${list.map((p) => `<button class="sp-site" data-place="${escapeHtml(p.id)}">${escapeHtml(p.name)}</button>`).join('')}</div>`)
       .join('');
@@ -1230,23 +1238,23 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
           .join('')}</div>
         ${
           panelTab === 'layers'
-            ? `<h3 class="sp-sub">Markierungen</h3>
+            ? `<h3 class="sp-sub">${m('space.markersH')}</h3>
               <div class="tile-grid three">
-                ${tile('sites', show.sites, '#ffffff', 'Landestellen')}
-                ${tile('models', show.models, '#ffd23f', '3D-Modelle')}
-                ${bodyId === 'moon' ? tile('features', show.features, '#bfe3ff', 'Mondformationen') : ''}
-                ${cfg().dem ? tile('terrain', show.terrain, '#8fd3ff', 'Relief (Höhenmodell)') : ''}
-                ${mars ? tile('tracks', show.tracks, 'linear-gradient(135deg,#ffb347,#5ad1ff)', 'Rover-Spuren') : ''}
-                ${mars ? tile('heli', show.heli, '#ff5ad1', 'Ingenuity') : ''}
-                ${tile('labels', show.labels, '#8899bb', 'Namen')}
+                ${tile('sites', show.sites, '#ffffff', m('space.tSites'))}
+                ${tile('models', show.models, '#ffd23f', m('space.tModels'))}
+                ${bodyId === 'moon' ? tile('features', show.features, '#bfe3ff', m('space.tFeatures')) : ''}
+                ${cfg().dem ? tile('terrain', show.terrain, '#8fd3ff', m('space.tTerrain')) : ''}
+                ${mars ? tile('tracks', show.tracks, 'linear-gradient(135deg,#ffb347,#5ad1ff)', m('space.tTracks')) : ''}
+                ${mars ? tile('heli', show.heli, '#ff5ad1', m('space.tHeli')) : ''}
+                ${tile('labels', show.labels, '#8899bb', m('space.tLabels'))}
               </div>
               ${
                 ovProducts().length
-                  ? `<h3 class="sp-sub">Überlagerungen</h3>
+                  ? `<h3 class="sp-sub">${m('space.overlaysH')}</h3>
               <div class="tile-grid three">${ovProducts()
                 .map((p) => tile(`ov:${p.id}`, overlays.has(p.id), ovColor(p), overlayName(p)).replace('data-opt=', 'data-ov-tile='))
                 .join('')}</div>
-              <p class="small muted">Überlagerungen liegen halbtransparent über der gewählten Karte. Regionale (Mineralien) gelten nur in ihrem Gebiet.</p>`
+              <p class="small muted">${m('space.overlaysNote')}</p>`
                   : ''
               }`
             : placesHtml()
@@ -1325,9 +1333,9 @@ export function createPlanetMapView(deps: PlanetDeps): PlanetMapView {
     const regional = (c.products ?? []).filter((p) => p.group === 'region' && here(p.bbox));
     const cur = std.find((o) => o.id === layerId) ?? (regional.find((p) => p.id === layerId) ? { ...std[0], img: thumb(regional.find((p) => p.id === layerId)!.layer) } : std[0]);
     baseSwitch.innerHTML = `
-      <button type="button" class="base-current" aria-expanded="${open}" title="Karte wählen">
+      <button type="button" class="base-current" aria-expanded="${open}" title="${m('space.mapTitle')}">
         <span class="thumb"><img alt="" src="${cur.img}"/></span>
-        <span class="base-current-label"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Karte</span>
+        <span class="base-current-label"><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>${m('space.mapLabel')}</span>
       </button>
       <div class="base-pop" ${open ? '' : 'hidden'}>
         <div class="base-options">

@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadGvpVolcanoes } from '../../../api/earth';
 
 export default defineExtra({
@@ -34,7 +35,7 @@ export default defineExtra({
       const fc = await loadGvpVolcanoes();
       ctx.setData('gvp', fc);
       const recent = fc.features.filter((f) => f.properties?.state === 'recent').length;
-      return { count: fc.features.length, note: `${recent} mit Ausbruch seit letztem Jahr (rot)` };
+      return { count: fc.features.length, note: t('layers.gvp.note', { recent }) };
     });
   },
   click({ p, pt, html }) {

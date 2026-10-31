@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { loadNina, loadNinaDetails } from '../../../api/transit';
@@ -42,7 +43,7 @@ export default defineExtra({
       const fc = await loadNina();
       ctx.setData('nina', fc);
       const ids = new Set(fc.features.map((f) => f.properties?.id));
-      return { count: ids.size, note: ids.size ? undefined : 'derzeit keine Warnungen' };
+      return { count: ids.size, note: ids.size ? undefined : t('layers.nina.noteNone') };
     });
   },
   click({ p, at }) {

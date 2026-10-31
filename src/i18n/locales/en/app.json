@@ -1,0 +1,138 @@
+{
+  "common": {
+    "loading": "Loading …",
+    "retry": "Try again",
+    "close": "Close",
+    "cancel": "Cancel",
+    "back": "Back"
+  },
+  "settings": {
+    "language": "Language",
+    "languageHint": "App-wide language – the page reloads to apply the change",
+    "languageA11y": "Choose language",
+    "title": "Settings",
+    "close": "Close settings",
+    "general": "General",
+    "units": "Units",
+    "apiKeys": "API keys",
+    "dev": "Developer options",
+    "keysNote": "Core features work without keys. Free keys unlock additional sources – they are stored only locally in this browser.",
+    "keysActive": {
+      "one": "1 active",
+      "other": "{count} active"
+    },
+    "keysOptional": "optional",
+    "optionalShort": "(optional)",
+    "guideA11y": "Quick guide for {name}",
+    "sourcesTitle": "All sources with licenses",
+    "sourcesTail": "The exact source note sits at the bottom right of the map (ⓘ) or in the popup.",
+    "licenses": "Software licenses:",
+    "saved": "Settings saved",
+    "clickWx": "Weather on map click",
+    "clickWxHint": "A plain click shows the weather at the clicked location",
+    "unit": {
+      "tz": {
+        "label": "Time zone",
+        "opt": {
+          "auto": "Local time",
+          "utc": "UTC"
+        }
+      },
+      "hour12": {
+        "label": "Time of day",
+        "opt": {
+          "24h": "24-hour",
+          "12h": "12-hour (AM/PM)"
+        }
+      },
+      "temp": {
+        "label": "Temperature",
+        "opt": {
+          "c": "°C",
+          "f": "°F"
+        }
+      },
+      "wind": {
+        "label": "Wind",
+        "opt": {
+          "kmh": "km/h",
+          "ms": "m/s",
+          "mph": "mph",
+          "kn": "knots",
+          "bft": "Bft"
+        }
+      },
+      "windDir": {
+        "label": "Wind direction",
+        "opt": {
+          "compass": "Compass",
+          "deg": "Degrees"
+        }
+      },
+      "rain": {
+        "label": "Precipitation",
+        "opt": {
+          "mm": "mm/h",
+          "in": "in/h",
+          "dbz": "dBZ"
+        }
+      },
+      "pressure": {
+        "label": "Air pressure",
+        "opt": {
+          "hpa": "hPa",
+          "mb": "mb",
+          "mmhg": "mmHg",
+          "inhg": "inHg"
+        }
+      },
+      "dist": {
+        "label": "Distance",
+        "opt": {
+          "km": "km",
+          "mi": "miles",
+          "nmi": "nautical miles"
+        }
+      },
+      "height": {
+        "label": "Height, depth & waves",
+        "opt": {
+          "m": "meters",
+          "ft": "feet (ft)"
+        }
+      },
+      "area": {
+        "label": "Area",
+        "opt": {
+          "km2": "km²",
+          "mi2": "mi²",
+          "acre": "acres",
+          "ha": "hectares"
+        }
+      },
+      "burned": {
+        "label": "Burned area",
+        "opt": {
+          "km2": "km²",
+          "mi2": "mi²",
+          "acre": "acres",
+          "ha": "hectares"
+        }
+      },
+      "coords": {
+        "label": "Coordinates",
+        "opt": {
+          "dec": "Decimal degrees",
+          "gms": "DMS"
+        }
+      }
+    }
+  },
+  "meta": {
+    "tagline": "Orbis – Weather, Earth & Space",
+    "description": "Orbis – weather forecast, live world map (2D/3D) with radar, wind, storms, earthquakes, aircraft, satellites and infrastructure, plus an interactive 3D solar system with planets and space probes.",
+    "noscript": "This app requires JavaScript.",
+    "manifestName": "Orbis – Weather, Earth & Space",
+    "manifestDescription": "Weather forecast, live world map and interactive 3D solar system"
+  }
+}

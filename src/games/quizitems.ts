@@ -1,12 +1,13 @@
 import type { Geometry, Position } from 'geojson';
 import { bboxOf, loadData, SCOPES, scopeOf, type Feat } from './data';
 import type { QuizItem } from './namequiz';
+import { t as m } from '../i18n';
 
 // Question sets for the name quiz: flags, capitals and outlines.
 
 const DATA = `${import.meta.env.BASE_URL}data/games/`;
 export const flagUrl = (code: string) => `${DATA}flags/${code}.svg`;
-const flagImg = (code: string, cls = 'fg-img') => `<img class="${cls}" alt="Flagge" src="${flagUrl(code)}" />`;
+const flagImg = (code: string, cls = 'fg-img') => `<img class="${cls}" alt="${m('games.flagA11y')}" src="${flagUrl(code)}" />`;
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 async function countries(scopeId: string, keep: (f: Feat) => boolean): Promise<Feat[]> {
@@ -33,11 +34,11 @@ export async function capitalItems(scope: string, dir: 'cap' | 'land'): Promise<
     return dir === 'cap'
       ? {
           id: p.id, group: p.cont ?? '', label: p.cap![0], answers: [...p.cap!, ...(p.capEn ?? [])],
-          prompt: `<div class="fg-text"><small>Hauptstadt von</small><b>${esc(p.name)}</b></div>`,
+          prompt: `<div class="fg-text"><small>${m('games.capOf')}</small><b>${esc(p.name)}</b></div>`,
         }
       : {
           id: p.id, group: p.cont ?? '', label: p.name, answers: [p.name, p.en],
-          prompt: `<div class="fg-text"><small>Hauptstadt von welchem Land?</small><b>${esc(p.cap![0])}</b></div>`,
+          prompt: `<div class="fg-text"><small>${m('games.capOfCountry')}</small><b>${esc(p.cap![0])}</b></div>`,
         };
   });
 }
@@ -86,7 +87,7 @@ export function outlineSvg(g: Geometry): string {
   const pad = Math.max(w, h) * 0.06;
   const pt = ([x, y]: Position) => `${((x - bb[0]) * k).toFixed(3)} ${(bb[3] - y).toFixed(3)}`;
   const d = keep.flatMap((p) => p.map((r) => `M${r.map(pt).join('L')}Z`)).join('');
-  return `<svg class="fg-outline" viewBox="${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}" role="img" aria-label="Umriss"><path d="${d}" fill-rule="evenodd" /></svg>`;
+  return `<svg class="fg-outline" viewBox="${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}" role="img" aria-label="${m('games.outlineA11y')}"><path d="${d}" fill-rule="evenodd" /></svg>`;
 }
 
 const tiny = (f: Feat) => {

@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { isSuperseded } from '../../../api/overpass';
 import { loadPipelines } from '../../../api/resources';
 
@@ -21,13 +22,13 @@ function loadNow(ctx: ExtraCtx) {
     .then((fc) => {
       if (st.key !== key) return;
       ctx.setData('pipelines', fc);
-      ctx.set('pipelines', { loading: false, count: fc.features.length, note: 'blau Gas · orange Öl · lila Wasserstoff' });
+      ctx.set('pipelines', { loading: false, count: fc.features.length, note: t('layers.pipelines.note') });
     })
     .catch((e) => {
       if (isSuperseded(e) || st.key !== key) return;
       console.warn('Overpass pipelines', e);
       st.key = '';
-      ctx.set('pipelines', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      ctx.set('pipelines', { loading: false, note: t('layers.pipelines.noteFail') });
     });
 }
 

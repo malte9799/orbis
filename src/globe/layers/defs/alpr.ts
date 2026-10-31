@@ -1,7 +1,15 @@
 import { defineExtra, type ExtraCtx } from '../types';
-import type { Feature, Point } from 'geojson';
+import { t } from '../../../i18n';
+
+const CARD_TX = [t('layers.cams.card.n'), t('layers.cams.card.ne'), t('layers.cams.card.e'), t('layers.cams.card.se'), t('layers.cams.card.s'), t('layers.cams.card.sw'), t('layers.cams.card.w'), t('layers.cams.card.nw')];
+
+/** value of a shared label dict (ALPR zone / mount) translated through the catalog */
+const ztx = (ns: string, dict: Record<string, string>, tag: unknown): string => {
+  const k = String(tag ?? '');
+  return t(`${ns}.${k.replace(/[-_](\w)/g, (_0, s1: string) => s1.toUpperCase())}` as never) || (dict[k] ?? k);
+};import type { Feature, Point } from 'geojson';
 import { empty } from '../shared/geo';
-import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, ALPR_RED, ALPR_ZONE, CAM_DETAIL_ZOOM, CARDINAL, alprVendorImg, fovSectors } from '../shared/cams';
+import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, ALPR_RED, ALPR_ZONE, CAM_DETAIL_ZOOM, alprVendorImg, fovSectors } from '../shared/cams';
 import { ALPR_SOURCE_LAYER, ALPR_TILES_CA, ALPR_TILES_US, loadAlpr } from '../../../api/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml, safeUrl } from '../../../util';
@@ -86,7 +94,7 @@ function updateNote(ctx: ExtraCtx) {
   if (z >= CAM_DETAIL_ZOOM) return; // keeps the per-view summary
   const notes: string[] = [];
   if (z < CAM_DETAIL_ZOOM)
-    notes.push(st.tilesFailed ? 'Übersicht nicht erreichbar – ab Zoomstufe 9 live aus OpenStreetMap' : 'Übersicht USA/Kanada · Details ab Zoomstufe 9 (weltweit)');
+    notes.push(st.tilesFailed ? t('layers.alpr.noteHeat') : t('layers.alpr.noteHeatOk'));
   ctx.set('alpr', { note: notes.join(' · ') || undefined });
 }
 
@@ -111,13 +119,13 @@ function loadNow(ctx: ExtraCtx) {
       st.live = fc.features;
       updateFov(ctx);
       const flock = fc.features.filter((f) => f.properties?.flock).length;
-      ctx.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? `${flock} davon Flock Safety (im Ausschnitt)` : 'keine Kennzeichen-Kameras im Ausschnitt erfasst' });
+      ctx.set('alpr', { loading: false, count: fc.features.length, note: fc.features.length ? t('layers.alpr.noteFlock', { flock }) : t('layers.alpr.noteNone') });
     })
     .catch((e) => {
       if (isSuperseded(e) || st.key !== key) return;
       console.warn('Overpass ALPR', e);
       st.key = '';
-      ctx.set('alpr', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      ctx.set('alpr', { loading: false, note: t('layers.alpr.noteFail') });
     });
 }
 
@@ -171,14 +179,14 @@ export default defineExtra({
       },
       'marker',
     );
-        const st = getState(ctx);
+    const st = getState(ctx);
     ctx.map.on('error', (ev) => {
-          const e = ev as typeof ev & { sourceId?: string };
-          if (e.sourceId !== 'alpr-us' && e.sourceId !== 'alpr-ca') return;
-          if (!st.tilesFailed) console.warn('ALPR-Übersicht', e.error);
-          st.tilesFailed = true;
-          updateNote(ctx);
-        });
+      const e = ev as typeof ev & { sourceId?: string };
+      if (e.sourceId !== 'alpr-us' && e.sourceId !== 'alpr-ca') return;
+      if (!st.tilesFailed) console.warn('ALPR-Übersicht', e.error);
+      st.tilesFailed = true;
+      updateNote(ctx);
+    });
   },
   enable(ctx) {
     ensureTiles(ctx);
@@ -187,20 +195,21 @@ export default defineExtra({
   onMoveEnd: loadNow,
   click({ p, pt }) {
     const dir = Number(p.dir);
-    const card = dir >= 0 ? CARDINAL[Math.round(dir / 45) % 8] : '';
+    const card = dir >= 0 ? CARD_TX[Math.round(dir / 45) % 8] : '';
     const rows = [
-      ['Hersteller', p.brand],
-      ['Betreiber', p.operator],
-      ['Bereich', ALPR_ZONE[String(p.zone)] ?? p.zone],
-      ['Montage', ALPR_MOUNT[String(p.mount)] ?? p.mount],
-      ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
-      ['Seit', p.since],
-      ['Kennung', p.ref],
-      ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
+      [t('layers.alpr.rowBrand'), p.brand],
+      [t('layers.alpr.rowOperator'), p.operator],
+      [t('layers.alpr.rowZone'), ztx('layers.cams.alprZone', ALPR_ZONE, p.zone)],
+      [t('layers.alpr.rowMount'), ztx('layers.cams.alprMount', ALPR_MOUNT, p.mount)],
+      [t('layers.alpr.rowDirection'), dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
+      [t('layers.alpr.rowSince'), p.since],
+      [t('layers.alpr.rowRef'), p.ref],
+      [t('layers.alpr.rowPosition'), coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const photo = alprVendorImg(String(p.brand ?? ''));
-    const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} (Beispielfoto)" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
-      <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">Auf DeFlock ansehen ↗</a></div>`;
+    const extra = `${photo ? `<div class="pop-cam"><img src="${escapeHtml(photo)}" alt="${escapeHtml(String(p.brand))} ${t('layers.alpr.examplePhoto')}" loading="lazy" referrerpolicy="no-referrer"></div>` : ''}${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
+      <div class="pop-foot"><a href="${escapeHtml(safeUrl(p.deflock) ?? '#')}" target="_blank" rel="noopener noreferrer">${t('layers.alpr.view')}</a></div>`;
+
     return { type: 'html', html: cardHtml({ glyph: 'alpr', color: p.flock ? ALPR_RED : '#ff9800', title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap / DeFlock (Beispielfoto: deflock.org)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
   },
   layers: ['alpr-heat', 'alpr-dots', 'alpr-cone', 'alpr-cone-line', 'alpr'],

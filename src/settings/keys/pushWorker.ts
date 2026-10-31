@@ -1,18 +1,19 @@
 import { defineKey } from '../types';
 import { builtInPush } from '../../api/pushnotify';
+import { t as m } from '../../i18n';
 
 export default defineKey({
   id: 'pushWorker',
   order: 120,
   group: 'transit',
-  tip: () => `Eigener Cloudflare-Worker für den Fahrplan: Bahn-Verspätungen (DB-Daten) und Benachrichtigungen für Pendler-Verbindungen. ${builtInPush() ? 'Leer lassen = eingebauter Worker.' : ''}`,
+  tip: () => (builtInPush() ? m('keys.pushWorker.tipBuiltIn') : m('keys.pushWorker.tip')),
   steps: [
-    { t: '1. proxy/fahrplan-push-worker.js als Cloudflare-Worker deployen, KV und Schlüssel einrichten (siehe README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“)', u: 'https://github.com/malte9799/orbis' },
-    { t: '2. Worker-URL (https://…workers.dev) hier eintragen' },
+    { t: '1', u: 'https://github.com/malte9799/orbis' },
+    { t: '2' },
   ],
   optional: () => !!builtInPush(),
-  label: 'Fahrplan-Worker (Verspätungen & Push)',
-  placeholder: () => builtInPush() || 'https://mein-fahrplan-push.workers.dev',
+  label: 'label',
+  placeholder: () => builtInPush() || m('keys.pushWorker.placeholder'),
   type: 'url',
   httpsOnly: true,
 });

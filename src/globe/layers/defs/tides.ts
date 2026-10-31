@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadTideDetails, loadTideStations } from '../../../api/ocean';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
@@ -33,7 +34,7 @@ export default defineExtra({
     ctx.loadOnce('tides', Infinity, async () => {
       const fc = await loadTideStations();
       ctx.setData('tides', fc);
-      return { count: fc.features.length, note: 'Klick auf einen Pegel zeigt Wasserstand & Gezeiten' };
+      return { count: fc.features.length, note: t('layers.tides.note') };
     });
   },
   click({ p, pt }) {
@@ -48,14 +49,14 @@ export default defineExtra({
           .then((d) => {
             const t = (iso: string) => dateTimeTxt(new Date(iso), { weekday: 'short', hour: '2-digit', minute: '2-digit' });
             const rows: [string, string][] = [];
-            if (d.level) rows.push(['Wasserstand', `${heightTxt(d.level.v, 2)} (über MLLW) · ${t(d.level.t)}`]);
+            if (d.level) rows.push([t('layers.tides.rowLevel'), `${heightTxt(d.level.v, 2)} (über MLLW) · ${t(d.level.t)}`]);
             for (const n of d.next) rows.push([n.type === 'H' ? 'Hochwasser' : 'Niedrigwasser', `${t(n.t)} · ${heightTxt(n.v, 2)}`]);
             const el = node.querySelector('.pop-loading');
             if (el) el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
           })
           .catch(() => {
             const el = node.querySelector('.pop-loading');
-            if (el) el.textContent = 'keine aktuellen Messwerte';
+            if (el) el.textContent = t('layers.tides.noteNoData');
           });
       },
     };

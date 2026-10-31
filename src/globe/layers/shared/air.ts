@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
+import { t as tT } from '../../../i18n';
 import { Airport3D } from '../../airport3d';
 import type { FlightInfo, SondeInfo } from '../../extras';
 import type { ExtraCtx } from '../types';
@@ -65,12 +66,12 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
       .then((fc) => {
         if (seq !== st.aircraftSeq || !ctx.isOn('aircraft')) return;
         ctx.setData('aircraft', fc);
-        ctx.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min; zuvor herangezoomte Gebiete aktueller) – reinzoomen für Live-Details' });
+        ctx.set('aircraft', { loading: false, count: fc.features.length, note: tT('layers.air.noteWorld') });
       })
       .catch(() => {
         if (seq !== st.aircraftSeq) return;
         ctx.setData('aircraft', empty());
-        ctx.set('aircraft', { note: 'Weltübersicht gerade nicht verfügbar – zum Anzeigen näher heranzoomen', count: undefined, loading: false });
+        ctx.set('aircraft', { note: tT('layers.air.noteNoWorld'), count: undefined, loading: false });
       });
   }
   const c = m.getCenter();
@@ -101,7 +102,7 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
       if (msg !== st.aircraftErr && msg !== AC_ALL_PAUSED) console.warn('aircraft', e);
       st.aircraftErr = msg;
       if (seq === st.aircraftSeq && ctx.isOn('aircraft'))
-        ctx.set('aircraft', { loading: false, note: 'keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)' });
+        ctx.set('aircraft', { loading: false, note: tT('layers.air.noteFail') });
     });
 }
 

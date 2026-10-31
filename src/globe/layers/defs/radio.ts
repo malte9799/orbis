@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import type { FeatureCollection } from 'geojson';
 import { empty } from '../shared/geo';
 import { FONT_REGULAR } from '../../vector';
@@ -20,12 +21,12 @@ function loadNow(ctx: ExtraCtx) {
       })
       .catch((e) => {
         console.warn('Radio Browser', e);
-        ctx.set('radio', { loading: false, note: 'Radio Browser nicht erreichbar' });
+        ctx.set('radio', { loading: false, note: t('layers.radio.noteFail') });
       });
   }
   const z = ctx.map.getZoom();
   if (z < 6) {
-    ctx.set('radio', { note: 'beliebteste Sender weltweit – reinzoomen für alle Sender der Region' });
+    ctx.set('radio', { note: t('layers.radio.noteStart') });
     return;
   }
   const c = ctx.map.getCenter();
@@ -57,7 +58,7 @@ function merge(ctx: ExtraCtx) {
   });
   ctx.setData('radio', { type: 'FeatureCollection', features });
   const playable = features.filter((f) => f.properties?.playable).length;
-  ctx.set('radio', { loading: false, count: features.length, note: `${playable} direkt abspielbar (pink) · andere öffnen im neuen Tab` });
+  ctx.set('radio', { loading: false, count: features.length, note: t('layers.radio.notePlayable', { count: playable }) });
 }
 
 export default defineExtra({

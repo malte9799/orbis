@@ -1,7 +1,11 @@
 import { fetchJson } from '../util';
+import { t as m, fmtLocale, type Lang } from '../i18n';
 import type { Place } from '../store';
 
 // Open-Meteo: free, no API key, CORS enabled. https://open-meteo.com/
+
+/** API language code: the searchable APIs take two-letter codes ("de"/"en"), not regions. */
+const apiLang = (): Lang => (fmtLocale().startsWith('de') ? 'de' : 'en');
 
 export interface Forecast {
   latitude: number;
@@ -169,7 +173,7 @@ interface GeoResult {
  * listed are dropped.
  */
 export async function searchPlaces(name: string): Promise<Place[]> {
-  const q = new URLSearchParams({ name, count: '8', language: 'de', format: 'json' });
+  const q = new URLSearchParams({ name, count: '8', language: apiLang(), format: 'json' });
   const [towns, photon] = await Promise.allSettled([
     fetchJson<{ results?: GeoResult[] }>(`https://geocoding-api.open-meteo.com/v1/search?${q}`),
     searchPhoton(name),
@@ -202,7 +206,7 @@ interface PhotonProps {
 }
 
 async function searchPhoton(text: string): Promise<Place[]> {
-  const q = new URLSearchParams({ q: text, limit: '6', lang: 'de' });
+  const q = new URLSearchParams({ q: text, limit: '6', lang: apiLang() });
   const fc = await fetchJson<{ features: { geometry: { coordinates: number[] }; properties: PhotonProps }[] }>(`https://photon.komoot.io/api/?${q}`, undefined, 8000);
   return fc.features.map(({ geometry, properties: p }) => {
     const street = [p.street, p.housenumber].filter(Boolean).join(' ');
@@ -220,7 +224,7 @@ async function searchPhoton(text: string): Promise<Place[]> {
  */
 export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
   try {
-    const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), localityLanguage: 'de' });
+    const q = new URLSearchParams({ latitude: String(lat), longitude: String(lon), localityLanguage: apiLang() });
     const r = await fetchJson<{
       city?: string;
       locality?: string;
@@ -229,7 +233,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
       countryCode?: string;
     }>(`https://api.bigdatacloud.net/data/reverse-geocode-client?${q}`, undefined, 8000);
     return {
-      name: r.city || r.locality || 'Mein Standort',
+      name: r.city || r.locality || m('forecast.myLocation'),
       lat,
       lon,
       region: r.principalSubdivision,
@@ -237,7 +241,7 @@ export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
       countryCode: r.countryCode,
     };
   } catch {
-    return { name: 'Mein Standort', lat, lon };
+    return { name: m('forecast.myLocation'), lat, lon };
   }
 }
 
@@ -247,14 +251,14 @@ export async function reverseGeocode(lat: number, lon: number): Promise<Place> {
  */
 export async function reverseGeocodePoint(lat: number, lon: number): Promise<Place> {
   try {
-    const q = new URLSearchParams({ format: 'jsonv2', lat: String(lat), lon: String(lon), zoom: '10', 'accept-language': 'de' });
+    const q = new URLSearchParams({ format: 'jsonv2', lat: String(lat), lon: String(lon), zoom: '10', 'accept-language': apiLang() });
     const r = await fetchJson<{
       name?: string;
       address?: { city?: string; town?: string; village?: string; municipality?: string; county?: string; state?: string; country?: string; country_code?: string };
     }>(`https://nominatim.openstreetmap.org/reverse?${q}`, undefined, 8000);
     const a = r.address ?? {};
     return {
-      name: a.city || a.town || a.village || a.municipality || r.name || a.county || 'Ausgewählter Ort',
+      name: a.city || a.town || a.village || a.municipality || r.name || a.county || m('forecast.pickedPlace'),
       lat,
       lon,
       region: a.state,
@@ -262,6 +266,11 @@ export async function reverseGeocodePoint(lat: number, lon: number): Promise<Pla
       countryCode: a.country_code?.toUpperCase(),
     };
   } catch {
-    return { name: 'Ausgewählter Ort', lat, lon };
+    return { name: m('forecast.pickedPlace'), lat, lon };
   }
 }
+
+/** true when a place is the anonymous "picked place" placeholder (the German
+ *  literal matches legacy data that predates i18n) */
+export const isPickedPlaceholder = (name: string): boolean =>
+  name === m('forecast.pickedPlace') || name === 'Ausgewählter Ort';

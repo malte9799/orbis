@@ -1,0 +1,1645 @@
+{
+  "hud": {
+    "search": {
+      "title": "Suchen ( / )",
+      "aria": "Suchen",
+      "close": "Suche schließen",
+      "ph": "Ort suchen und hinfliegen …"
+    },
+    "cancel": "Abbrechen",
+    "done": "Fertig",
+    "close": "Schließen",
+    "none": "Keine",
+    "std": "Standard",
+    "changed": "geändert",
+    "changedCap": "Geändert",
+    "justNow": "gerade eben",
+    "cut": "Ausschnitt",
+    "layerCount": {
+      "one": "1 Ebene",
+      "other": "{count} Ebenen"
+    },
+    "aria": {
+      "wxLayer": "Wetterebene",
+      "chosenLayer": "Ausgewählte Ebene"
+    },
+    "menuunfold": "Menü aufklappen",
+    "ctl": {
+      "base": "Grundkarte",
+      "baseAria": "Grundkarte wählen",
+      "locate": "Mein Standort",
+      "route": "Route planen"
+    },
+    "settings": "Einstellungen",
+    "settingsFor": "Einstellungen für {name}",
+    "dirtySuffix": " – geändert",
+    "gear": {
+      "tip": "{name} – Einstellungen öffnen"
+    },
+    "summary": {
+      "dirty": " – geändert"
+    },
+    "pin": {
+      "on": "Von der Leiste lösen",
+      "off": "An die Leiste heften"
+    },
+    "kdel": "Karte löschen",
+    "confirm": {
+      "delete": "Karte „{name}“ löschen?"
+    },
+    "kstatus": {
+      "std": "Standardkarte",
+      "dirty": "· geändert",
+      "own": "Eigene Karte",
+      "saved": "gespeichert {rel}",
+      "savedTitle": "Gespeichert"
+    },
+    "kname": {
+      "new": "Neue Karte",
+      "map": "Karte",
+      "shared": "Geteilte Karte",
+      "own": "{name} (eigene)"
+    },
+    "toast": {
+      "saved": "„{name}“ gespeichert",
+      "pinned": " und angeheftet",
+      "full": "Höchstens 5 Karten in der Leiste. Erst eine lösen.",
+      "added": "{label} hinzugefügt",
+      "copied": "Link zur Karte kopiert",
+      "copyFail": "Link konnte nicht kopiert werden.",
+      "shared": "Geteilte Karte „{name}“ geöffnet. Sie ist unter „Meine Karten“ gespeichert.",
+      "bad": "Der Link enthält keine gültige Karte."
+    },
+    "sug": {
+      "lightning1": "Gewitter und Einschläge live",
+      "lightning2": "Gewitter live",
+      "aq": "Luftqualität und Pollenflug",
+      "gauges": "Pegelstände in Deutschland",
+      "radiation": "Messnetz in ganz Europa",
+      "rivers": "Hochwasser an Flüssen",
+      "transit": "Busse und Bahnen im Stadtverkehr",
+      "railmap": "Strecken unter den Zügen",
+      "airports": "Flughäfen mit Abflügen",
+      "webcams": "Live-Webcams weltweit",
+      "aircraft": "Flugzeuge live"
+    },
+    "cat": {
+      "wetter": "Wetter",
+      "gefahr": "Warnungen & Ereignisse",
+      "verkehr": "Verkehr live",
+      "meer": "Meer & Gewässer",
+      "erde": "Erde & Umwelt",
+      "netze": "Netze & Infrastruktur",
+      "medien": "Kameras & Radio"
+    },
+    "basegrp": {
+      "satellite": "Satellit",
+      "dark": "Karte",
+      "blue": "Weitere"
+    },
+    "base": {
+      "satellite": "Satellit",
+      "clarity": "Satellit Clarity",
+      "mapbox": "Mapbox Satellit",
+      "maptiler": "MapTiler Satellit",
+      "sentinel": "Sentinel-2",
+      "topo": "Gelände",
+      "nasa": "NASA Tagesbild",
+      "blue": "Blue Marble",
+      "night": "Nachtlichter",
+      "dark": "Dunkel",
+      "light": "Hell"
+    },
+    "menu": {
+      "humid": {
+        "label": "Feuchtigkeit",
+        "hint": "Vorhersage"
+      },
+      "precip": {
+        "label": "Niederschlag",
+        "hint": "Vorhersage (Open-Meteo), Satellit (NASA IMERG) und Schneehöhe"
+      },
+      "pressure": {
+        "label": "Luftdruck",
+        "hint": "Vorhersage"
+      },
+      "radar": {
+        "label": "Radar",
+        "hint": "Live-Niederschlagsradar (RainViewer)"
+      },
+      "sat": {
+        "label": "Satellit",
+        "hint": "HD-Tagesbild (VIIRS) und Wolken (IR)"
+      },
+      "storm": {
+        "label": "Gewitter",
+        "hint": "Blitze live, CAPE-Vorhersage und Satellit live (Meteosat)"
+      },
+      "temp": {
+        "label": "Temperatur",
+        "hint": "Vorhersage, 2 m über Grund; Wasser: Satellit (NASA)"
+      },
+      "wind": {
+        "label": "Wind",
+        "hint": "Vorhersage, mit Windpartikeln"
+      }
+    },
+    "sub": {
+      "humidity": "Relativ",
+      "dewpoint": "Taupunkt",
+      "precip": "Vorhersage",
+      "imerg": "Satellit",
+      "snow": "Schnee",
+      "satHd": "HD",
+      "satIr": "Wolken",
+      "lightning": "Blitze Live",
+      "cape": "Vorhersage",
+      "satStorm": "Live",
+      "temp": "Luft",
+      "feels": "Gefühlt",
+      "water": "Wasser",
+      "wind": "Stärke",
+      "gusts": "Böen"
+    },
+    "family": {
+      "owm": {
+        "hint": "OpenWeatherMap-Karten (eigener Schlüssel)"
+      },
+      "radar": {
+        "label": "Radar",
+        "hint": "Live-Niederschlagsradar"
+      },
+      "sat": {
+        "label": "Satellit",
+        "hint": "HD-Tagesbild (VIIRS) und Live-Daten"
+      },
+      "temp": {
+        "label": "Temperatur",
+        "hint": "Vorhersage, 2 m über Grund"
+      },
+      "wind": {
+        "label": "Wind",
+        "hint": "Vorhersage, mit Windpartikeln"
+      },
+      "cloud": {
+        "label": "Wolken",
+        "hint": "Vorhersage: Bewölkung"
+      },
+      "pressure": {
+        "label": "Luftdruck",
+        "hint": "Vorhersage"
+      },
+      "humidity": {
+        "label": "Feuchte",
+        "hint": "Vorhersage: relative Luftfeuchtigkeit"
+      },
+      "ocean": {
+        "label": "Ozean",
+        "hint": "Satellit (NASA, täglich): Meerestemperatur & Meereis"
+      },
+      "snow": {
+        "label": "Schnee",
+        "hint": "Vorhersage: Schneehöhe"
+      },
+      "precip": {
+        "label": "Niederschlag",
+        "hint": "Vorhersage (Modell)"
+      },
+      "cape": {
+        "label": "Gewitter",
+        "hint": "Vorhersage: Gewitterenergie (CAPE)"
+      }
+    },
+    "var": {
+      "water": "Meer + Eis",
+      "sst": "Meerestemperatur",
+      "seaice": "Meereis",
+      "satHd": "HD",
+      "satIr": "Wolken (IR)",
+      "imerg": "Niederschlag",
+      "satStorm": "Gewitter live",
+      "radar": "Regen (RainViewer)",
+      "dwdRadar": "Deutschland (DWD)",
+      "temp": "Luft",
+      "feels": "Gefühlt",
+      "dewpoint": "Taupunkt",
+      "wind": "Mittelwind",
+      "gusts": "Böen",
+      "owmTempNew": "Temperatur",
+      "owmPrecipitationNew": "Niederschlag",
+      "owmCloudsNew": "Wolken",
+      "owmWindNew": "Wind",
+      "owmPressureNew": "Luftdruck"
+    },
+    "modes": {
+      "infra": "Infrastruktur",
+      "traffic": "Verkehrsmittel"
+    },
+    "mcat": {
+      "air": "Flugzeug",
+      "auto": "Auto",
+      "oepnv": "ÖPNV",
+      "ship": "Schiff",
+      "energie": "Energie",
+      "netze": "Netze",
+      "radio": "Radio",
+      "rohstoffe": "Rohstoffe",
+      "ueberwachung": "Überwachung"
+    },
+    "row": {
+      "airports": "Flughäfen",
+      "roadnet": "Straßen",
+      "autobahn": "Staus & Baustellen",
+      "blitzer": "Blitzer & Rotlicht",
+      "traffic": "Simulation",
+      "transit": "Busse live",
+      "busnet": "Busnetz",
+      "trains": "Züge live",
+      "railspeed": "Zugnetz",
+      "shipping": "Schiffsrouten",
+      "wind": "Windkraft",
+      "solar": "Solarparks",
+      "water": "Wasserkraft",
+      "nuclear": "Kernkraftwerke",
+      "coal": "Kohlekraftwerke",
+      "gas": "Gaskraftwerke",
+      "oil": "Ölkraftwerke",
+      "biomass": "Biomasse & Abfall",
+      "plants": "Weitere Kraftwerke",
+      "cables": "Seekabel",
+      "ixp": "Internetknoten",
+      "pipelines": "Öl- & Gaspipelines",
+      "radio": "Radiosender",
+      "resources": "Vorkommen",
+      "webcams": "Live-Kameras",
+      "alpr": "Kennzeichen-Kameras",
+      "cctv": "Überwachungskameras (CCTV)"
+    },
+    "opt": {
+      "isobars": "Isobaren",
+      "sound": "Ton",
+      "wave": "Kreis",
+      "detectors": "Detektoren",
+      "lines": "Linien",
+      "thunder": "Donner",
+      "volume": "Lautstärke der Tick-Töne"
+    },
+    "filter": {
+      "quakes": {
+        "4": "ab M 4",
+        "5": "ab M 5",
+        "6": "ab M 6"
+      },
+      "lightning": {
+        "sound": "Ton",
+        "wave": "Einschlagskreis",
+        "detectors": "Detektoren",
+        "lines": "Detektor-Linien",
+        "thunder": "Donner"
+      },
+      "aircraft": {
+        "plane": "Flugzeuge",
+        "heli": "Hubschrauber",
+        "glider": "Segelflug",
+        "drone": "Drohnen",
+        "balloon": "Ballone",
+        "mil": "Nur Militär"
+      }
+    },
+    "tip": {
+      "show": "{label} – einblenden",
+      "hide": "{label} – ausblenden"
+    },
+    "sort": "Ziehen zum Sortieren (oder Alt + ↑/↓)",
+    "opacity": "Deckkraft",
+    "remove": "Entfernen",
+    "more": "+{n} weitere Ebenen",
+    "area": "Ausschnitt: {v}",
+    "eye": {
+      "on": "Einblenden",
+      "off": "Ausblenden"
+    },
+    "nowx": {
+      "title": "Keine Wetterebene",
+      "sub": "Diese Karte zeigt kein Wetterfeld"
+    },
+    "switch": "Wechseln",
+    "slot": {
+      "layers": "Ebenen",
+      "layersSub": "oben liegt oben",
+      "none": "Noch keine Ebenen.",
+      "wx": "Wetter",
+      "wxSub": "höchstens eine",
+      "base": "Grundkarte · {g}",
+      "noView": "nein, öffnet am aktuellen Ort",
+      "savedWith": "Gespeichert mit",
+      "view": "Ausschnitt",
+      "revertFull": "Auf den Ausgangszustand zurücksetzen"
+    },
+    "optRow": {
+      "labels": "Ortsnamen & Grenzen",
+      "daynight": "Tag/Nacht",
+      "buildings": "3D-Gebäude",
+      "buildingsSub": "ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)",
+      "terrain": "3D-Gelände",
+      "terrainSub": "echte Höhen, nur bei geneigter Kamera (Strg + Ziehen) – von oben deaktiviert",
+      "windparticles": "Windpartikel",
+      "windparticlesSub": "bei Wind & Böen und Satellit/Wolken (IR) sichtbar",
+      "time": "Zeit"
+    },
+    "night": {
+      "day": "Tag",
+      "auto": "Auto",
+      "night": "Nacht"
+    },
+    "time": {
+      "yesterday": "Tagesbild von gestern",
+      "forecast": "Vorhersage, ab jetzt",
+      "live": "Live"
+    },
+    "revert": "Zurücksetzen",
+    "savebtn": "Speichern",
+    "saveAs": "Als neue Karte",
+    "share": "Teilen",
+    "duplicate": "Duplizieren",
+    "dlg": {
+      "title": "Als neue Karte speichern",
+      "name": "Name",
+      "icon": "Symbol",
+      "color": "Farbe",
+      "incl": "Enthält:",
+      "inclNone": "keine Ebenen",
+      "saveview": "Ausschnitt mitspeichern",
+      "saveviewSub": "Sonst öffnet sie am aktuellen Ort.",
+      "pinbar": "In der Leiste anheften",
+      "pinbarFull": "Leiste ist voll (5). Erst eine Karte lösen.",
+      "pinbarSlot": "als Taste {n}",
+      "saveMap": "Karte speichern",
+      "base": "Grundkarte {base}"
+    },
+    "add": {
+      "ph": "Ebene suchen, z. B. „Blitze“",
+      "fit": "Passend zu dieser Karte",
+      "empty": "Keine Ebene für „{q}“.",
+      "title": "Ebene hinzufügen"
+    },
+    "addRow": {
+      "new": "Neue leere Karte",
+      "newPhone": "Neue Karte",
+      "newSub": "Grundkarte wählen, Ebenen hinzufügen"
+    },
+    "karten": {
+      "title": "Karten",
+      "star": "★ = in der Leiste · Tasten 1–{n}",
+      "fold": "Karten einklappen",
+      "all": "Alle Karten",
+      "more": "Weitere Karten",
+      "moreSub": "anpassbar, jederzeit zurücksetzbar",
+      "galleryTitle": "Alle Karten"
+    },
+    "stdMaps": "Standardkarten",
+    "myMaps": "Meine Karten",
+    "myMapsSub": "{n} gespeichert · ★ = in der Leiste",
+    "emptyOwn": "Noch keine eigenen Karten. Ändere eine Karte und speichere sie als neue Karte.",
+    "keysHint": "Tasten 1–{n} wechseln die angehefteten Karten",
+    "titleAddLayer": "Ebene hinzufügen",
+    "titleAllMaps": "Alle Karten",
+    "events": "Ereignisse",
+    "ev": {
+      "7": "7 Tage",
+      "24": "24 h"
+    },
+    "evEmpty": "Keine Ereignisse im Zeitraum (oder Daten laden noch).",
+    "rename": "Umbenennen",
+    "renameAria": "Name der Karte",
+    "renameSuffix": "{name} umbenennen",
+    "sheet": {
+      "fold": "Ebenen zuklappen",
+      "unfold": "Ebenen aufklappen"
+    },
+    "kn": {
+      "wetter": "Wetter",
+      "verkehr": "Verkehr",
+      "infra": "Infrastruktur"
+    }
+  },
+  "nav": {
+    "menu": {
+      "aria": "Menü",
+      "title": "Menü"
+    },
+    "route": {
+      "forecast": "Vorhersage",
+      "globe": "Karte",
+      "fahrplan": "Fahrplan",
+      "space": "Weltall",
+      "games": "Spiele"
+    },
+    "settings": "Einstellungen",
+    "eyes": {
+      "earth": "Erde",
+      "solar": "Sonnensystem",
+      "asteroids": "Asteroiden",
+      "exo": "Exoplaneten"
+    },
+    "bodies": {
+      "planets": "Planeten",
+      "moons": "Monde",
+      "asteroids": "Asteroiden"
+    }
+  },
+  "routing": {
+    "aria": {
+      "plan": "Routenplanung",
+      "guide": "Navigation",
+      "travel": "Fortbewegung",
+      "routes": "Routen",
+      "speed": "Tempo",
+      "voice": "Sprachansagen",
+      "close": "Schließen",
+      "dirSent": "Gesendet",
+      "dirRecv": "Empfangen"
+    },
+    "profile": {
+      "car": "Auto",
+      "bike": "Fahrrad",
+      "foot": "Zu Fuß"
+    },
+    "swap": "Start und Ziel tauschen",
+    "addVia": "+ Zwischenstopp hinzufügen",
+    "provider": {
+      "title": "Routing-Dienst",
+      "needsKey": " – Schlüssel nötig",
+      "noProfile": " – nicht für diese Fortbewegung",
+      "none": "Kein Routing-Anbieter verfügbar"
+    },
+    "prov": {
+      "fossgis": {
+        "note": "Kostenlos, ohne Schlüssel. Auto, Rad und Fuß auf OpenStreetMap-Daten."
+      },
+      "valhalla": {
+        "note": "Standard. Kostenlos, ohne Schlüssel. Deutsche Ansagen vom Server, gute Rad- und Fußrouten. Während Valhalla rechnet, zeigt Orbis schon die schnelle OSRM-Route."
+      },
+      "mapbox": {
+        "note": "Mit Verkehrslage (Auto). Nutzt den Mapbox-Schlüssel aus den Einstellungen."
+      },
+      "tomtom": {
+        "note": "Mit Live-Verkehr (Auto). Nutzt den TomTom-Schlüssel aus den Einstellungen."
+      },
+      "google": {
+        "note": "Mit Live-Verkehr (Auto), beste Abdeckung. Schlüssel mit „Routes API“, per HTTP-Referrer beschränken."
+      },
+      "graphhopper": {
+        "note": "Kostenloser Schlüssel (500 Routen/Tag). Deutsche Ansagen."
+      },
+      "ors": {
+        "note": "Kostenloser Schlüssel (2 000 Routen/Tag). Sehr gute Rad- und Fußprofile."
+      }
+    },
+    "stops": {
+      "here": "Mein Standort",
+      "start": "Start",
+      "dest": "Ziel",
+      "stop": "Stopp",
+      "ph": "{role} suchen …",
+      "pickTitle": "Auf der Karte wählen",
+      "pickAria": "{role} auf der Karte wählen",
+      "rm": "Entfernen",
+      "rmStop": "Stopp entfernen",
+      "noResults": "Keine Treffer",
+      "searchFail": "Suche nicht verfügbar",
+      "notFound": "„{name}“ nicht gefunden",
+      "missingPlace": "Ort fehlt",
+      "giveBoth": "Start und Ziel angeben.",
+      "giveDest": "Ziel eingeben oder auf der Karte wählen.",
+      "tapMap": "Tippe auf die Karte, um den Punkt zu setzen."
+    },
+    "calc": {
+      "busy": "Route wird berechnet …",
+      "fail": "Route konnte nicht berechnet werden",
+      "locFail": "Dein Standort konnte nicht bestimmt werden. Starte ein anderes Ziel oder erlaube den Standortzugriff.",
+      "fallback": "{first} war nicht erreichbar – berechnet mit {provider}.",
+      "refining": "{provider} verbessert die Route …",
+      "refiningFallback": "{provider} verbessert die Route …",
+      "rerouting": "Route wird neu berechnet …",
+      "rerouteSay": "Route wird neu berechnet",
+      "offRoute": "Abseits der Route",
+      "noNewRoute": "Keine neue Route gefunden – bitte zurück auf die Route fahren",
+      "noRouteFound": "keine Route gefunden",
+      "noRoute": "keine Route"
+    },
+    "voice": {
+      "on": "Sprachansagen sind an"
+    },
+    "geo": {
+      "denied": "Standortzugriff verweigert. Bitte in den Browser-Einstellungen erlauben.",
+      "unavailable": "Standort nicht verfügbar.",
+      "unsupported": "Standort nicht unterstützt"
+    },
+    "result": {
+      "eta": "Ankunft {t}",
+      "fastest": "Schnellste Route",
+      "alt": "Alternative",
+      "via": "über {via}",
+      "start": "Start",
+      "steps": "Schritte"
+    },
+    "guide": {
+      "recentre": "Zentrieren",
+      "endTitle": "Navigation beenden",
+      "endAria": "Navigation beenden"
+    },
+    "text": {
+      "depart": "Losfahren",
+      "straight": "Geradeaus weiter",
+      "slightLeft": "Leicht links halten",
+      "left": "Links abbiegen",
+      "sharpLeft": "Scharf links abbiegen",
+      "slightRight": "Leicht rechts halten",
+      "right": "Rechts abbiegen",
+      "sharpRight": "Scharf rechts abbiegen",
+      "uturn": "Wenden",
+      "roundabout": "In den Kreisverkehr einfahren",
+      "merge": "Einfädeln",
+      "forkLeft": "Links halten",
+      "forkRight": "Rechts halten",
+      "rampLeft": "Links auf die Auffahrt",
+      "rampRight": "Rechts auf die Auffahrt",
+      "ferry": "Fähre nehmen",
+      "arrive": "Ziel erreicht",
+      "onto": " auf {name}",
+      "towards": " Richtung {name}",
+      "exitNote": "Dort die {ord} Ausfahrt nehmen",
+      "exitLeave": "Den Kreisverkehr verlassen",
+      "ord": {
+        "1": "erste",
+        "2": "zweite",
+        "3": "dritte",
+        "4": "vierte",
+        "5": "fünfte",
+        "6": "sechste",
+        "7": "siebte",
+        "8": "achte",
+        "9": "neunte",
+        "10": "zehnte"
+      }
+    },
+    "say": {
+      "depart": "Losfahren",
+      "straight": "Geradeaus weiter",
+      "slightLeft": "Leicht links halten",
+      "left": "Links abbiegen",
+      "sharpLeft": "Scharf links abbiegen",
+      "slightRight": "Leicht rechts halten",
+      "right": "Rechts abbiegen",
+      "sharpRight": "Scharf rechts abbiegen",
+      "uturn": "Wenden",
+      "roundabout": "in den Kreisverkehr einfahren",
+      "merge": "einfädeln",
+      "forkLeft": "Links halten",
+      "forkRight": "Rechts halten",
+      "rampLeft": "links auf die Auffahrt",
+      "rampRight": "rechts auf die Auffahrt",
+      "ferry": "die Fähre nehmen",
+      "arrive": "Ziel erreicht",
+      "inDistance": "In {d}: {what}",
+      "m": "{n} Meter",
+      "km": "{n} Kilometer"
+    }
+  },
+  "map": {
+    "load": "Karte wird noch geladen.",
+    "loading": "lädt …",
+    "count": {
+      "now": "{count} aktuell",
+      "loaded": "{count} geladen"
+    },
+    "locMode": {
+      "off": "Mein Standort",
+      "track": "Mein Standort (Karte folgt nicht)",
+      "follow": "Karte nach Norden, folgt dem Standort – erneut tippen: Blickrichtung",
+      "heading": "Karte dreht sich mit der Blickrichtung – erneut tippen: Standort aus"
+    },
+    "err": {
+      "model": "Vorhersagedaten (Open-Meteo) konnten nicht geladen werden.",
+      "limit": "{msg} – bitte später erneut versuchen.",
+      "radar": "Regenradar (RainViewer) konnte nicht geladen werden.",
+      "launch": "Startdetails gerade nicht erreichbar – Tracking mit Basisdaten.",
+      "wx": "Wetterdaten nicht verfügbar.",
+      "noRain": "kein Niederschlag"
+    },
+    "loadingWx": "Lade Wetter …",
+    "timeline": {
+      "play": "Abspielen",
+      "pause": "Pause",
+      "now": "Jetzt",
+      "aria": "Zeit",
+      "toNow": "Zur aktuellen Zeit",
+      "nowcast": "Prognose",
+      "radar": "Radar",
+      "nowRel": "jetzt",
+      "relPlus": "+{h} h",
+      "relMinus": "{h} h",
+      "headRadarPro": "Radar-Prognose",
+      "headForecast": "Vorhersage"
+    },
+    "field": {
+      "wind": "Wind",
+      "gusts": "Windböen",
+      "temp": "Temperatur",
+      "feels": "Gefühlte Temperatur",
+      "humidity": "Luftfeuchtigkeit",
+      "dewpoint": "Taupunkt",
+      "precip": "Niederschlag",
+      "cloud": "Bewölkung",
+      "pressure": "Luftdruck",
+      "snow": "Schneehöhe",
+      "precipmix": "Niederschlag",
+      "snowfall": "Schneefall",
+      "cape": "Gewitterenergie (CAPE)"
+    },
+    "legend": {
+      "radar": {
+        "title": "Niederschlagsradar",
+        "sub": "live",
+        "light": "leicht",
+        "medium": "mäßig",
+        "heavy": "stark"
+      },
+      "dwdRadar": {
+        "title": "Radar Deutschland",
+        "sub": "DWD · letzte Messung, alle 5 min aktualisiert",
+        "light": "leicht",
+        "medium": "mäßig",
+        "storm": "Unwetter"
+      },
+      "satHd": {
+        "title": "Satellit HD",
+        "sub": "NASA VIIRS · Tagesbild von gestern"
+      },
+      "satIr": {
+        "title": "Satellit Infrarot",
+        "sub": "live · hohe, kalte Wolken erscheinen hell",
+        "warm": "warm/tief",
+        "cold": "kalt/hoch"
+      },
+      "satStorm": {
+        "title": "Satellit Gewitter",
+        "sub": "Meteosat Konvektions-RGB · live, Europa & Afrika",
+        "calm": "ruhig",
+        "storms": "kräftige Gewitter"
+      },
+      "water": {
+        "title": "Wassertemperatur",
+        "sub": "NASA GHRSST MUR · Meer und Meereis, vor 2 Tagen · {unit}"
+      },
+      "sst": {
+        "title": "Meerestemperatur",
+        "sub": "NASA GHRSST MUR · Tagesmittel vor 2 Tagen · {unit}"
+      },
+      "seaice": {
+        "title": "Meereis-Konzentration",
+        "sub": "NASA GHRSST MUR · vor 2 Tagen",
+        "low": "gering"
+      },
+      "imerg": {
+        "title": "Niederschlag Satellit",
+        "sub": "NASA IMERG · {unit}"
+      }
+    },
+    "pop": {
+      "source": "Quelle: {src}",
+      "details": "Details ↗",
+      "firms": {
+        "title": "Feuer-Hotspot",
+        "power": "Strahlungsleistung {mw} MW · Konfidenz {conf}",
+        "time": "Erfasst {t} UTC"
+      },
+      "nws": {
+        "area": "Warngebiet des National Weather Service"
+      },
+      "wx": {
+        "feels": "Gefühlt",
+        "wind": "Wind",
+        "gusts": "Böen",
+        "humidity": "Feuchte",
+        "clouds": "Wolken",
+        "pressure": "Druck",
+        "open": "Vorhersage öffnen →",
+        "route": "Route hierher →",
+        "radar": "Radar: {v}"
+      }
+    },
+    "tile": {
+      "alt": "Höhe",
+      "speed": "Tempo",
+      "course": "Kurs",
+      "vs": "Steigrate",
+      "drift": "Drift",
+      "status": "Status",
+      "last": "Letzte Meldung",
+      "direction": "Blickrichtung",
+      "image": "Bild"
+    },
+    "metric": {
+      "alt": "Höhe",
+      "speed": "Tempo",
+      "course": "Kurs",
+      "vs": "Steigrate",
+      "drift": "Drift"
+    },
+    "graph": {
+      "title": "{m} über die letzten Meldungen",
+      "to": "bis",
+      "empty": "Der Verlauf entsteht, sobald weitere Meldungen eintreffen."
+    },
+    "cat": {
+      "plane": "Flugzeug",
+      "specs": "Technische Daten",
+      "seats": "Sitzplan & Kabine",
+      "position": "Position und Signal",
+      "source": "Datenquelle",
+      "ship": "Schiff",
+      "sonde": "Radiosonde",
+      "sondePos": "Position und Telemetrie",
+      "receiver": "Bodenempfänger",
+      "cam": "Kamera"
+    },
+    "fly": {
+      "nodata": "Gerade keine Daten zu diesem Flugzeug – es ist außerhalb des Ausschnitts oder nicht mehr in Reichweite.",
+      "ground": "am Boden",
+      "photo": "Foto in voller Auflösung auf Planespotters.net ansehen",
+      "credit": "Foto: © {who} (Planespotters.net) ↗",
+      "routeLoading": "Route wird geladen …",
+      "routeUnknown": "Route unbekannt",
+      "eta": " · noch ca. {d}",
+      "rows": {
+        "operator": "Betreiber",
+        "model": "Modell",
+        "icao": "ICAO-Typ",
+        "reg": "Kennzeichen",
+        "modeS": "Mode-S (Hex)",
+        "mfr": "Hersteller",
+        "mil": "Einordnung",
+        "military": "Militär",
+        "engines": "Triebwerke",
+        "passengers": "Passagiere",
+        "range": "Reichweite",
+        "span": "Spannweite / Länge",
+        "cruise": "Reisetempo",
+        "ceiling": "Dienstgipfelhöhe",
+        "wtc": "Wirbelschleppe (WTC)",
+        "seatsCap": "Passagierkapazität",
+        "seatsVar": "Je nach Konfiguration",
+        "seatsLink": "Sitzpläne",
+        "lat": "Breitengrad",
+        "lon": "Längengrad",
+        "alt": "Höhe (baro)",
+        "squawk": "Squawk",
+        "nav": "Navigation (NIC / NACp)",
+        "inaccurate": "ungenau",
+        "emergency": "Notfall",
+        "emergencyNone": "keiner",
+        "approx": "ca. ",
+        "adsbView": "Auf adsb.lol ansehen ↗"
+      },
+      "route": "Strecke",
+      "follow": "Folgen",
+      "cockpit": "Cockpit"
+    },
+    "ship": {
+      "nodata": "Gerade keine Daten zu diesem Schiff – es ist außerhalb des Ausschnitts oder nicht mehr in Reichweite.",
+      "moving": "Unterwegs",
+      "moored": "Liegt",
+      "destNote": "Ziel laut AIS",
+      "courseNote": "Kurs {deg}° {dir}",
+      "still": "macht gerade keine Fahrt",
+      "noDest": "Kein Ziel gemeldet · {note}",
+      "statusMoving": "in Fahrt",
+      "statusMoored": "liegt",
+      "photo": "Foto in voller Auflösung auf Wikimedia Commons ansehen",
+      "symbol": "Symbolbild · {cat}",
+      "credit": "Foto: © {who} ({license}) ↗",
+      "rows": {
+        "type": "Typ",
+        "callsign": "Rufzeichen",
+        "mmsi": "MMSI",
+        "dest": "Ziel",
+        "lat": "Breitengrad",
+        "lon": "Längengrad",
+        "speed": "Geschwindigkeit",
+        "view": "Auf MarineTraffic ansehen ↗"
+      },
+      "alt": "{cat} · Symbolbild",
+      "mmsiLabel": "MMSI {mmsi}"
+    },
+    "sonde": {
+      "nodata": "Gerade keine Daten zu dieser Sonde – sie ist außerhalb des Ausschnitts, gelandet oder schweigt.",
+      "status": {
+        "landed": "Gelandet",
+        "rise": "Steigt",
+        "fall": "Fällt",
+        "float": "Schwebt (Float)"
+      },
+      "groundSub": "letzte Position am Boden",
+      "heightSub": "{h} über NN",
+      "chart": {
+        "vs": "Steigrate",
+        "sink": "Sinkrate (Fallschirm)",
+        "still": "vertikal fast still"
+      },
+      "ago": "vor {a} s",
+      "last": "Letzte Meldung {a}",
+      "rows": {
+        "type": "Typ",
+        "serial": "Seriennummer",
+        "freq": "Frequenz",
+        "frame": "Messrahmen (Frame)",
+        "position": "Position",
+        "alt": "Höhe",
+        "vertical": "Vertikal (Telemetrie)",
+        "horizontal": "Horizontal",
+        "time": "Position/Uhrzeit",
+        "receiver": "Empfänger",
+        "antenna": "Antenne",
+        "software": "Auswertesoftware",
+        "received": "Letzter Empfang"
+      },
+      "view": "Auf SondeHub ansehen ↗",
+      "ascent": "Aufstieg",
+      "title": "Sonde {serial}",
+      "fallback": "Radiosonde",
+      "courseNote": "Kurs {deg}° {dir}",
+      "driftNote": "Drift {s}"
+    },
+    "cam": {
+      "view3d": "In 3D ansehen",
+      "zoom": "Heranzoomen",
+      "edit": "Auf Karte bearbeiten",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "reset": "Zurücksetzen",
+      "sending": "Wird gesendet …",
+      "failed": "Fehlgeschlagen: {err}",
+      "pinTitle": "Ziehen, um die Kamera zu verschieben",
+      "gripTitle": "Ziehen, um die Blickrichtung zu drehen",
+      "editHint": "Die Kamera (großer Punkt) auf der Karte verschieben, den weißen Griff ziehen, um die Blickrichtung zu drehen. Die genauen Werte stehen hier.",
+      "moved": "{m} m verschoben",
+      "unknown": "unbekannt",
+      "about": "ca. {deg}° {dir}",
+      "livestream": "Livestream",
+      "still": "Standbild",
+      "noteModel": "Das Bild liegt als 3D-Ansicht auf der Straße: Boden und Horizont sitzen dort, wo die Kamera sie sieht.",
+      "noteModelTypical": "Das Bild liegt als 3D-Ansicht auf der Straße: Boden und Horizont sitzen dort, wo die Kamera sie sieht (typische Werte – „Auf Karte bearbeiten“ passt sie an).",
+      "noteBoard": "Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte.",
+      "noteBoardEst": "Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße).",
+      "noteNoDir": "Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.",
+      "noStream": "Livestream gerade nicht verfügbar",
+      "altImg": "Webcam-Bild",
+      "updated": "Aktualisiert",
+      "location": "Standort",
+      "open": "Webcam öffnen ↗",
+      "fallback": "Webcam",
+      "f": {
+        "dir": "Richtung",
+        "alt": "Höhe über Boden",
+        "down": "Neigung nach unten",
+        "roll": "Rollen",
+        "fov": "Sichtfeld (vertikal)",
+        "reach": "Reichweite"
+      }
+    },
+    "port": {
+      "size": {
+        "1": "Groß",
+        "2": "Mittel",
+        "3": "Klein",
+        "4": "Sehr klein",
+        "5": "Klein (nur UN/LOCODE)"
+      },
+      "type": {
+        "coastalNatural": "Küste, natürlich geschützt",
+        "coastalBreakwater": "Küste, mit Wellenbrecher",
+        "riverNatural": "Fluss",
+        "riverBasins": "Fluss mit Hafenbecken",
+        "riverTide": "Fluss mit Schleuse",
+        "coastalTide": "Küste mit Schleuse",
+        "roadstead": "offene Reede",
+        "canalLake": "Kanal oder See",
+        "typhoon": "Taifunhafen"
+      },
+      "shelter": {
+        "Excellent": "ausgezeichnet",
+        "Good": "gut",
+        "Fair": "mäßig",
+        "Poor": "schlecht",
+        "None": "keiner"
+      },
+      "facility": {
+        "C": "Container",
+        "R": "Ro-Ro",
+        "S": "Schüttgut",
+        "L": "Flüssiggut",
+        "B": "Stückgut",
+        "O": "Öl",
+        "G": "LNG"
+      },
+      "pilot": "Pflicht",
+      "pilotNo": "nicht vorgeschrieben"
+    },
+    "res": {
+      "cat": {
+        "oil": "Erdöl",
+        "gas": "Erdgas",
+        "coal": "Kohle",
+        "iron": "Eisenerz",
+        "gold": "Gold/Silber",
+        "copper": "Kupfer",
+        "uranium": "Uran",
+        "lithium": "Lithium",
+        "salt": "Salz/Kali",
+        "stone": "Steine & Erden",
+        "metal": "Andere Metalle",
+        "gem": "Edelsteine",
+        "other": "Bergbau"
+      },
+      "dev": {
+        "producer": "in Förderung",
+        "past": "ehemals gefördert",
+        "prospect": "Prospekt",
+        "occurrence": "Vorkommen",
+        "plant": "Aufbereitung"
+      },
+      "kind": {
+        "well": "Bohrloch",
+        "quarry": "Steinbruch/Tagebau",
+        "shaft": "Schacht",
+        "adit": "Stollen",
+        "refinery": "Raffinerie",
+        "mine": "Bergwerk"
+      },
+      "sub": {
+        "gas": "Gas",
+        "naturalGas": "Erdgas",
+        "lpg": "Flüssiggas",
+        "hydrogen": "Wasserstoff",
+        "oil": "Öl",
+        "crudeOil": "Rohöl",
+        "petroleum": "Öl",
+        "fuel": "Kraftstoff",
+        "water": "Wasser",
+        "pipe": "Pipeline"
+      },
+      "site": "Rohstoff-Fundstelle",
+      "pipeline": "{label}-Pipeline",
+      "underground": "unterirdisch"
+    },
+    "airport3d": {
+      "note2d": "nur in der flachen Kartenansicht oder auf dem Globus ab Zoomstufe 12",
+      "noteFail": "OpenStreetMap (Overpass) gerade nicht erreichbar – neuer Versuch in Kürze",
+      "noteOk": "Rollwege, Gates und Befeuerung – zum Kippen Strg + Ziehen",
+      "noteNone": "hier kein Flughafen in OpenStreetMap erfasst",
+      "noteZoom": "ab Zoomstufe {z} sichtbar – zu einem Flughafen zoomen"
+    },
+    "zoomIn": "Heranzoomen",
+    "approx": "ca. ",
+    "ago": {
+      "s": "vor {a} s",
+      "min": "vor {a} min",
+      "h": "vor {a} h"
+    },
+    "shipCat": {
+      "cargo": "Frachtschiff",
+      "tanker": "Tanker",
+      "passenger": "Passagierschiff/Fähre",
+      "fishing": "Fischereifahrzeug",
+      "tug": "Schlepper/Lotse",
+      "pleasure": "Sportboot/Segler",
+      "hsc": "Schnellfähre",
+      "special": "Behörde/Spezialschiff",
+      "other": "Schiff"
+    },
+    "rain": {
+      "l1": "Sehr leichter Regen",
+      "l2": "Leichter Regen",
+      "l3": "Mäßiger Regen",
+      "l4": "Starker Regen",
+      "l5": "Sehr starker Regen"
+    },
+    "radio": {
+      "live": "live",
+      "buffering": "puffert …",
+      "connecting": "verbindet …",
+      "state": "{live} · {place}",
+      "error": "Stream nicht abspielbar – Webseite des Senders öffnen",
+      "ariaPlay": "Abspielen",
+      "ariaPause": "Pause",
+      "ariaVol": "Lautstärke",
+      "listen": "Jetzt hören",
+      "listenTab": "Im neuen Tab hören",
+      "website": "Webseite ↗",
+      "rows": {
+        "place": "Ort",
+        "genre": "Genre",
+        "language": "Sprache",
+        "format": "Format"
+      }
+    },
+    "insp": {
+      "tile": {
+        "raster": "Rasterkacheln",
+        "dem": "Höhenkacheln",
+        "vector": "Vektorkacheln",
+        "custom": "lokales Raster"
+      },
+      "label": "Datenquellen · Rohdaten",
+      "aria": "Datenquellen und Rohdaten",
+      "sources": "Datenquellen",
+      "thisPage": "Diese Seite",
+      "all": "Alle",
+      "clearTitle": "Alle angezeigten Datenquellen entfernen",
+      "clear": "Leeren",
+      "closeEsc": "Schließen (Esc)",
+      "dragWidth": "Ziehen zum Ändern der Breite · Doppelklick: Ausgangsgröße",
+      "dragHeight": "Ziehen zum Ändern der Höhe · Doppelklick: Ausgangsgröße",
+      "dragBoth": "Ziehen: Breite und Höhe · Doppelklick: Ausgangsgröße",
+      "empty": "Auf dieser Seite wurden noch keine Daten geladen.",
+      "proxied": "Über den Daten-Proxy geladen",
+      "raw": "Rohdaten",
+      "rawHint": "Quelle oben rechts auswählen, um die Rohdaten zu sehen.",
+      "tilesHint": "Ziehen · Mausrad zoomt · Klick wählt eine Kachel",
+      "galleryHint": "{n} Bilder · Klick zeigt das Bild groß",
+      "sent": "Gesendet",
+      "recv": "Empfangen",
+      "tree": "Baum",
+      "rawTab": "Roh",
+      "copyRaw": "Rohdaten kopieren",
+      "copyBody": "Body kopieren",
+      "copiedBody": "Body kopiert",
+      "copiedRaw": "Rohdaten kopiert",
+      "copiedClip": "In die Zwischenablage kopiert",
+      "loadingFont": "Schrift wird gelesen …",
+      "unknownType": "unbekannter Typ",
+      "noPreview": "– keine Vorschau.",
+      "rawImage": "Rohbild",
+      "truncated": "Sehr große Antwort: nur die ersten {a} von {b} wurden geladen, daher kein Baum.",
+      "clearedPage": "Datenquellen dieser Seite geleert",
+      "clearedAll": "Alle Datenquellen geleert",
+      "copyFail": "Kopieren nicht möglich",
+      "errAborted": "Abgebrochen",
+      "errNetwork": "Netzwerkfehler",
+      "errError": "Fehler",
+      "errVia": "Die Anfrage ging über den Daten-Proxy: ob dieser oder die API dahinter ausgefallen ist, sagt der Browser nicht.",
+      "errTimeout": "Die Seite hat nach einer festen Zeit aufgegeben (Timeout), es kam keine Antwort an.",
+      "errAborted2": "Die Seite hat die Anfrage selbst beendet – meist weil eine neuere Anfrage sie ersetzt hat, ein Timeout griff oder die Ansicht gewechselt wurde. Eine Antwort des Servers wurde nicht mehr gelesen.",
+      "errTypeError": "Es kam keine Antwort an: Server nicht erreichbar, keine Verbindung, von CORS blockiert oder von einem Werbeblocker verworfen. Der Browser nennt den genauen Grund aus Sicherheitsgründen nicht.",
+      "kMsg": "Meldung",
+      "kErrType": "Fehlertyp",
+      "kAfter": "Nach",
+      "kStarted": "Gestartet",
+      "kMethod": "Methode",
+      "kProxy": "Proxy",
+      "kViaProxy": "Über Proxy",
+      "kPage": "Seite",
+      "req": "Anfrage",
+      "params": "Parameter ({n})",
+      "headers": "Header ({n})",
+      "noOwnHeaders": "keine eigenen Header – der Browser ergänzt seine Standard-Header.",
+      "browserLoaded": "Vom Browser selbst geladen (Bild, Textur …): Header und Body sind nicht einsehbar.",
+      "body": "Body",
+      "copyValue": "Wert kopieren",
+      "copyUrl": "URL kopieren",
+      "copyProxy": "Proxy-URL kopieren",
+      "open": "Öffnen",
+      "metaGallery": "{n} Bilder{size}",
+      "localCalc": "Orbis (lokal berechnet)",
+      "metaTiles": "{n} Kacheln · Stufe {z0}–{z1}"
+    },
+    "ctl": {
+      "zoomIn": "Hineinzoomen",
+      "zoomOut": "Herauszoomen",
+      "tilt": "Neigung",
+      "tiltAria": "Kamera neigen",
+      "north": "Norden ausrichten"
+    }
+  },
+  "layers": {
+    "aerosol": {
+      "label": "Aerosole & Staub",
+      "hint": "Dunst, Rauch, Saharastaub (AOD) – NASA MODIS"
+    },
+    "aircraft": {
+      "label": "Flugzeuge & Hubschrauber",
+      "hint": "live, ADS-B – adsb.lol, adsb.fi, OpenSky; Militär grün umrandet"
+    },
+    "airport3d": {
+      "label": "Flughafen 3D",
+      "hint": "Rollwege, Terminals und Flugzeuge in 3D ab Zoomstufe 11 – OpenStreetMap, ADS-B (zum Kippen Strg + Ziehen)"
+    },
+    "airports": {
+      "noteClick": "Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag",
+      "ele": "ü. NN",
+      "noteFail": "OpenSky gerade nicht erreichbar (Tageskontingent ohne Konto begrenzt).",
+      "loading": "Flüge vom Vortag werden geladen …",
+      "yday": "Vortag: {dep} Abflüge, {arr} Ankünfte",
+      "lastDep": "Letzte Abflüge",
+      "lastArr": "Letzte Ankünfte",
+      "noData": "Keine Flugdaten vom Vortag verfügbar."
+    },
+    "alpr": {
+      "noteHeat": "Übersicht nicht erreichbar – ab Zoomstufe 9 live aus OpenStreetMap",
+      "noteHeatOk": "Übersicht USA/Kanada · Details ab Zoomstufe 9 (weltweit)",
+      "noteFlock": "{flock} davon Flock Safety (im Ausschnitt)",
+      "noteNone": "keine Kennzeichen-Kameras im Ausschnitt erfasst",
+      "noteFail": "OpenStreetMap (Overpass) nicht erreichbar",
+      "rowBrand": "Hersteller",
+      "rowOperator": "Betreiber",
+      "rowZone": "Bereich",
+      "rowMount": "Montage",
+      "rowDirection": "Blickrichtung",
+      "rowSince": "Seit",
+      "rowRef": "Kennung",
+      "rowPosition": "Position",
+      "examplePhoto": "(Beispielfoto)",
+      "view": "Auf DeFlock ansehen ↗"
+    },
+    "aq": {
+      "label": "Luftqualität & Pollen",
+      "hint": "europäische Städte – Copernicus CAMS"
+    },
+    "aqhi": {
+      "label": "Luftqualität Kanada (Messstationen)",
+      "hint": "Air Quality Health Index, stündlich gemessen – Environment and Climate Change Canada"
+    },
+    "aurora": {
+      "note": "Vorhersage für {t}",
+      "solarSun": "Sonnenwind",
+      "goodTag": " (günstig)",
+      "xray": "Röntgen"
+    },
+    "autobahn": {
+      "label": "Autobahn: Staus & Baustellen",
+      "hint": "Verkehrsmeldungen, Sperrungen, Baustellen – Autobahn GmbH"
+    },
+    "bathymetry": {
+      "label": "Meerestiefe",
+      "hint": "Bathymetrie weltweit – GEBCO; Europa genauer – EMODnet"
+    },
+    "bikeshare": {
+      "noteZoom": "Reinzoomen (Stadt) für Stationen mit freien Rädern",
+      "noteFail": "{list} gerade nicht erreichbar",
+      "rowBikes": "Freie Räder",
+      "rowBikesOff": "Station außer Betrieb",
+      "rowEbikes": " (davon {count} E-Bikes)",
+      "rowDocks": "Freie Plätze",
+      "rowCapacity": "Stellplätze"
+    },
+    "biomass": {
+      "label": "Biomasse & Abfall",
+      "hint": "Biomasse- und Müllheizkraftwerke weltweit"
+    },
+    "blitzer": {
+      "noteBase": "Lageplan – keine Fahrwarnung (in DE verboten während der Fahrt)",
+      "noteNone": "keine Anlagen im Ausschnitt erfasst",
+      "noteFail": "OpenStreetMap (Overpass) nicht erreichbar",
+      "popupNote": "Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)"
+    },
+    "buoys": {
+      "note": "Farbe = Wellenhöhe, Zahl = Wellenhöhe in {unit} (sonst Wind in kn)"
+    },
+    "busnet": {
+      "noteZoom": "ab Stadtzoom (Zoomstufe 11) – Daten aus OpenStreetMap",
+      "noteLines": "Linien: {modes}",
+      "noteNone": "keine Linien im Ausschnitt erfasst",
+      "noteFail": "OpenStreetMap (Overpass) nicht erreichbar oder überlastet – bitte erneut verschieben"
+    },
+    "cables": {
+      "label": "Seekabel",
+      "hint": "Unterseekabel (unvollständig) – OpenStreetMap",
+      "rowOperator": "Betreiber",
+      "rowSince": "In Betrieb seit",
+      "fallback": "Seekabel",
+      "subtitle": "Unterseekabel (Telekommunikation)"
+    },
+    "cctv": {
+      "rowGuard": "Wachpersonal / Sicherheitsdienst",
+      "rowCam": "Überwachungskamera",
+      "zoomNote": "Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe {z}",
+      "zoomNoteShort": "Einzelkameras ab Zoomstufe {z}",
+      "noteFail": "Kameradaten nicht erreichbar",
+      "noteTilesFail": "{n} Kachel(n) nicht erreichbar",
+      "noteExtract": "Stand: Monatsauszug von OpenStreetMap – real gibt es deutlich mehr",
+      "noteNoCams": "keine Kameras im Ausschnitt (oder Region noch nicht im Monatsauszug)",
+      "kindPublic": "öffentlicher Raum",
+      "kindOutdoor": "außen (privat)",
+      "kindIndoor": "innen",
+      "rowZone": "Bereich",
+      "rowCtype": "Bauart",
+      "rowMount": "Montage",
+      "rowDirection": "Blickrichtung",
+      "rowOperator": "Betreiber",
+      "rowPosition": "Position"
+    },
+    "chlorophyll": {
+      "label": "Chlorophyll (Algen)",
+      "hint": "Algenblüte im Meer, Satellit – NASA VIIRS"
+    },
+    "cities": {
+      "label": "Städtewetter",
+      "hint": "aktuelles Wetter in ~200 Städten"
+    },
+    "coal": {
+      "label": "Kohlekraftwerke",
+      "hint": "Kohle- und Petrolkoks-Kraftwerke weltweit"
+    },
+    "cyclenet": {
+      "label": "Radnetz",
+      "hint": "Radfernwege & regionale Radrouten – Waymarked Trails"
+    },
+    "cyclones": {
+      "noteCone": "Kegel = Unsicherheit des Zugwegs, nicht die Sturmgröße",
+      "noteNone": "derzeit keine Stürme im Atlantik und Nordpazifik",
+      "rowWind": "Wind",
+      "rowGusts": "Böen",
+      "rowWindVal": "{speed} km/h ({kt} kt), Böen {gust} km/h",
+      "rowTime": "Zeitpunkt",
+      "rowTimeNow": "jetzt ({at})",
+      "rowTimeForecast": "{at} – Prognose +{tau} h",
+      "provider": "NOAA National Hurricane Center",
+      "storm": "Sturm",
+      "rowClass": "Einstufung",
+      "category": " · Kategorie {n}",
+      "rowPressure": "Luftdruck",
+      "rowMove": "Zugrichtung",
+      "rowReport": "Bericht",
+      "rowMoveDeg": "{deg}°",
+      "rowMoveSpeed": "mit {spd} km/h",
+      "rowReportVal": "Nr. {nr}, {at}"
+    },
+    "datacenters": {
+      "label": "Rechenzentren",
+      "hint": "Rechenzentren und Colocation-Standorte – PeeringDB (groß: viele angeschlossene Netze), OpenStreetMap"
+    },
+    "dwdnowcast": {
+      "label": "Radar-Nowcast Deutschland",
+      "hint": "Radar-Vorhersage für die nächsten 2 Stunden, 1 km – Deutscher Wetterdienst (WN-Produkt)"
+    },
+    "dwdwarn": {
+      "noteNone": "derzeit keine Warnungen",
+      "noteImage": "nur als Kartenbild verfügbar"
+    },
+    "ecradar": {
+      "label": "Radar Kanada",
+      "hint": "Regenradar Kanada, 1 km, ~6 min – Environment Canada"
+    },
+    "ecsnow": {
+      "label": "Schneeradar Kanada",
+      "hint": "Radar nur für Schneefall, 1 km – Environment Canada"
+    },
+    "fireareas": {
+      "noteNone": "derzeit keine aktiven Brandflächen"
+    },
+    "fmiradar": {
+      "label": "Radar Finnland",
+      "hint": "Regenradar Finnland, 1 km, 5 min – Finnish Meteorological Institute (CC BY 4.0)"
+    },
+    "fmirain24": {
+      "label": "Regensumme 24 h Finnland",
+      "hint": "Radar-Niederschlagssumme der letzten 24 Stunden – Finnish Meteorological Institute"
+    },
+    "gas": {
+      "label": "Gaskraftwerke",
+      "hint": "Gaskraftwerke weltweit"
+    },
+    "gauges": {
+      "note": "{high} Pegel mit Hochwasser"
+    },
+    "geldfluesse": {
+      "ordered": "Bestellt oder beauftragt",
+      "structure": "Nationale Sektion, kein Geld",
+      "note": "Durchgezogen: Geld · gestrichelt: bestellt · gepunktet: Obergrenze / kein Geld · Währungen werden nie addiert",
+      "rowArt": "Art",
+      "rowDesc": "Beschreibung",
+      "secWhat": "Was der Eintrag sagt",
+      "secNotes": "Was die Register zu diesem Land führen",
+      "money": "Geld, laut Register geflossen",
+      "ceiling": "Genehmigte Obergrenze (Maximum)",
+      "rowLines": "Zeilen",
+      "secSources": "Quellen ({n})",
+      "link": "Mehr Details auf whofundedgenocide.com",
+      "credit": "„The Entire Network“, Who Funded Genocide, Research mit Wallface (CC BY 4.0). Ein Registereintrag ist keine Anschuldigung gegen die genannten Stellen; eine Obergrenze ist kein ausgegebenes Geld.",
+      "Land": "Land im Datensatz"
+    },
+    "geology": {
+      "label": "Geologie",
+      "hint": "geologische Karten weltweit, beim Zoomen immer genauer – Macrostrat"
+    },
+    "gnss": {
+      "titleHigh": "Starke GNSS-Störung vermutet",
+      "titleMedium": "GNSS-Störung möglich",
+      "titleLow": "Keine Auffälligkeit",
+      "subtitle": "{bad} von {n} Flugzeugen mit ungenauer Navigation ({pct} % nach Abzug eines Ausreißers) · letzte 30 min",
+      "description": "Flugzeuge melden per ADS-B, wie genau sie ihre GPS-Position kennen (NIC/NACp). Häufen sich schlechte Werte, deutet das auf Störsender oder Spoofing hin – einzelne Ausreißer können auch Gerätefehler sein.",
+      "noteCells": "{cells} Zellen gesammelt – ab Zoom 5 kommen neue Messungen dazu",
+      "noteBad": "{bad} Flugzeuge melden gerade ungenaue Navigation (Ring) · {anomalies} von {cells} Zellen auffällig – Zellen füllen sich über 30 min"
+    },
+    "goesir": {
+      "label": "Wolken Amerika (GOES, 5 min)",
+      "hint": "Infrarot-Satellitenbild, alle 5 Minuten, ~2 km – NOAA GOES über nowCOAST"
+    },
+    "gvp": {
+      "note": "{recent} mit Ausbruch seit letztem Jahr (rot)"
+    },
+    "hikenet": {
+      "label": "Wandernetz",
+      "hint": "Wanderwege – Waymarked Trails"
+    },
+    "ixp": {
+      "label": "Internetknoten",
+      "hint": "Internet Exchange Points – PeeringDB"
+    },
+    "jmanowcast": {
+      "label": "Radar-Nowcast Japan",
+      "hint": "Niederschlagsprognose für die nächste Stunde – Japan Meteorological Agency"
+    },
+    "jmaradar": {
+      "label": "Radar Japan",
+      "hint": "Niederschlagsradar Japan, 5 min – Japan Meteorological Agency"
+    },
+    "landcover": {
+      "label": "Landbedeckung",
+      "hint": "Wald, Acker, Siedlung, Wasser (10 m) – ESA WorldCover"
+    },
+    "launches": {
+      "label": "Raketenstarts",
+      "hint": "nächste Starts, Countdown, Tracking & Stream – The Space Devs",
+      "track": "Tracking &amp; Stream öffnen"
+    },
+    "lightning": {
+      "noteLive": "live verbunden · {count} Blitze seit Aktivierung{delay} · weiß = jetzt, rot = bis 15 min",
+      "noteDelay": " · Verzögerung ~{d} s",
+      "noteFail": "Quelle nicht erreichbar",
+      "toastFail": "{name}: Daten konnten nicht geladen werden.",
+      "rowTime": "Zeitpunkt",
+      "rowPosition": "Position",
+      "rowDetectors": "Detektoren",
+      "rowDelay": "Verzögerung",
+      "stations": "{n} Stationen",
+      "delayVal": "~{d} s",
+      "strikeTitle": "Blitzeinschlag"
+    },
+    "lst": {
+      "label": "Bodentemperatur",
+      "hint": "Landoberflächentemperatur am Tag – NASA MODIS"
+    },
+    "ltgdensity": {
+      "label": "Blitzdichte Amerika (NOAA)",
+      "hint": "Blitze pro km² der letzten 15 min, ~8 km Raster – Amerika und Pazifik, NOAA nowCOAST"
+    },
+    "ndvi": {
+      "label": "Vegetation",
+      "hint": "Pflanzenwachstum (NDVI, 8 Tage) – NASA MODIS"
+    },
+    "nexrad": {
+      "label": "Radar USA (NEXRAD)",
+      "hint": "Regenradar Mosaik der USA, ~5 min – NOAA via Iowa Environmental Mesonet"
+    },
+    "nina": {
+      "noteNone": "derzeit keine Warnungen"
+    },
+    "noaaradar": {
+      "label": "Radar Alaska, Hawaii, Karibik, Guam",
+      "hint": "Regenradar Alaska, Hawaii, Puerto Rico und Guam – NOAA MRMS"
+    },
+    "nuclear": {
+      "label": "Kernkraftwerke",
+      "hint": "Kernkraftwerke weltweit (WRI Global Power Plant Database)"
+    },
+    "oil": {
+      "label": "Ölkraftwerke",
+      "hint": "Öl-Kraftwerke weltweit"
+    },
+    "pipelines": {
+      "note": "blau Gas · orange Öl · lila Wasserstoff",
+      "noteFail": "OpenStreetMap (Overpass) nicht erreichbar"
+    },
+    "plants": {
+      "label": "Weitere Kraftwerke",
+      "hint": "Geothermie, Speicher, Kraft-Wärme-Kopplung …"
+    },
+    "plates": {
+      "label": "Tektonische Platten",
+      "hint": "Plattengrenzen (PB2002, Bird 2003)",
+      "SUB": "Subduktionszone",
+      "OSR": "Ozeanischer Rücken",
+      "OTF": "Transformstörung",
+      "CRB": "Kontinentaler Grabenbruch",
+      "CTF": "Kontinentale Transformstörung",
+      "CCB": "Kontinentale Kollision",
+      "OCB": "Ozeanische Kollision",
+      "title": "Plattengrenze {name}"
+    },
+    "ports": {
+      "note": "Größere Häfen ab kleinem Zoom, kleinere beim Heranzoomen · Klick zeigt Hafendaten",
+      "rowSize": "Größe",
+      "rowMaxShip": "Größtes Schiff",
+      "rowMaxShipVal": "{v} m lang",
+      "rowType": "Hafentyp",
+      "rowChannel": "Fahrwassertiefe",
+      "rowPier": "Pier-Tiefe",
+      "rowDraft": "Max. Tiefgang",
+      "rowPilot": "Lotsen",
+      "rowShelter": "Schutz",
+      "rowCargo": "Umschlag",
+      "suffix": " m lang"
+    },
+    "radiation": {
+      "noteFail": "{failed} nicht erreichbar",
+      "noteFallback": "natürlicher Normalbereich: 0,04–0,20 µSv/h"
+    },
+    "radio": {
+      "noteFail": "Radio Browser nicht erreichbar",
+      "noteStart": "beliebteste Sender weltweit – reinzoomen für alle Sender der Region",
+      "notePlayable": "{count} direkt abspielbar (pink) · andere öffnen im neuen Tab"
+    },
+    "railelec": {
+      "label": "Bahn: Elektrifizierung",
+      "hint": "Stromsysteme der Strecken – OpenRailwayMap"
+    },
+    "railmap": {
+      "label": "Bahnnetz",
+      "hint": "Gleise, Bahnhöfe, Strecken – OpenRailwayMap"
+    },
+    "railspeed": {
+      "label": "Bahn: Geschwindigkeit",
+      "hint": "zulässige Streckengeschwindigkeit – OpenRailwayMap"
+    },
+    "resources": {
+      "noteWorld": "Weltübersicht (Wikidata) – reinzoomen für USGS/BGR (ab 7) und OSM (ab 10)",
+      "noteRegion": "Regional: Wikidata, USGS MRDS, BGR (DE) – ab Zoom 10 OpenStreetMap",
+      "noteLocal": "Lokal: alle Quellen inkl. OpenStreetMap"
+    },
+    "rivers": {
+      "noteGrid": "Raster {step}° – zoomen für mehr Flüsse · Farbe = Abfluss (blau klein → lila/rot sehr groß)",
+      "noteNone": "hier keine Flüsse im Modell",
+      "noteFail": "Open-Meteo Flood nicht erreichbar"
+    },
+    "roadnet": {
+      "label": "Straßennetz",
+      "hint": "Autobahnen bis Kreisstraßen mit Nummern – OpenStreetMap"
+    },
+    "sats": {
+      "noteFail": "CelesTrak nicht erreichbar",
+      "toastFail": "Satellitendaten (CelesTrak) konnten nicht geladen werden."
+    },
+    "shipping": {
+      "label": "Schiffsrouten & Fähren",
+      "hint": "Hauptschifffahrtswege, Fährlinien (OSM)"
+    },
+    "ships": {
+      "noteFintraFail": "Fintraffic nicht erreichbar",
+      "noteProxy": "außerhalb der Ostsee mit Daten-Proxy oder kostenlosem aisstream.io-Schlüssel (Einstellungen)",
+      "noteLive": "weltweit live im Kartenausschnitt (aisstream.io)"
+    },
+    "snowcover": {
+      "label": "Schneedecke (Satellit)",
+      "hint": "Schneebedeckung – NASA MODIS"
+    },
+    "solar": {
+      "label": "Solarparks",
+      "hint": "Photovoltaik-Kraftwerke"
+    },
+    "sondes": {
+      "label": "Wetterballons",
+      "hint": "Radiosonden live (SondeHub) – mit dem Flugverkehr als 3D-Modell und Detaildaten zum Klick"
+    },
+    "starlink": {
+      "label": "Starlink",
+      "hint": "tausende Satelliten – CelesTrak"
+    },
+    "tides": {
+      "note": "Klick auf einen Pegel zeigt Wasserstand & Gezeiten",
+      "rowLevel": "Wasserstand",
+      "rowLevelVal": "{v} (über MLLW) · {t}",
+      "noteNoData": "keine aktuellen Messwerte"
+    },
+    "traffic": {
+      "noteZoom": "Reinzoomen (Stadt) für fahrende Fahrzeuge",
+      "noteLiveOn": " – Verkehrslage ist schon sichtbar",
+      "noteSim": "Simulation (1,5× Tempo) – für Live-Verkehrslage TomTom-Key in den Einstellungen eintragen",
+      "noteLive": "Live-Verkehrslage (TomTom): grün frei · gelb zäh · rot Stau",
+      "noteLink": "Im TomTom-Feld steht ein Link statt des Keys – bitte den API-Key (ca. 32 Zeichen) eintragen",
+      "flowErrKey": "TomTom lehnt den Key ab (ungültig oder ohne Traffic-API)",
+      "flowErrQuota": "TomTom-Kontingent erschöpft",
+      "flowErrTiles": "TomTom-Kacheln nicht ladbar ({status})"
+    },
+    "trains": {
+      "label": "Züge live",
+      "hint": "Deutschland & Europa (Echtzeitfahrplan, Transitous), GPS: Finnland, USA (Amtrak)"
+    },
+    "transit": {
+      "label": "Busse, Trams & U-Bahn",
+      "hint": "Deutschland & Europa ab Stadtzoom (Transitous); GPS: Norwegen, Boston, Toronto, Minneapolis, Austin, Malaysia, optional Melbourne, Chicago, Schweden"
+    },
+    "tsunami": {
+      "noteNone": "keine Meldungen in den letzten 7 Tagen",
+      "noteWarn": "{count} aktive Warnung(en)!"
+    },
+    "water": {
+      "label": "Wasserkraft",
+      "hint": "Wasser- und Gezeitenkraftwerke"
+    },
+    "waves": {
+      "note": "Raster {step}° · Zahl = Wellenhöhe in {unit} – zoomen für feineres Raster",
+      "noteFail": "Open-Meteo Marine nicht erreichbar"
+    },
+    "webcams": {
+      "noteFeeds": "{list} nicht erreichbar",
+      "noteWindy": "weltweit viele weitere mit kostenlosem Windy-Schlüssel (Einstellungen)",
+      "noteWindyFail": "Windy-Webcams nicht erreichbar – Schlüssel prüfen"
+    },
+    "wind": {
+      "label": "Windkraft",
+      "hint": "Windparks, beim Zoomen einzelne Anlagen"
+    },
+    "air": {
+      "noteWorld": "Weltübersicht (OpenSky, alle 2 min; zuvor herangezoomte Gebiete aktueller) – reinzoomen für Live-Details",
+      "noteNoWorld": "Weltübersicht gerade nicht verfügbar – zum Anzeigen näher heranzoomen",
+      "noteFail": "keine Flugdatenquelle erreichbar – ggf. Daten-Proxy einrichten (README)"
+    },
+    "power": {
+      "toast": "Kraftwerksdatenbank konnte nicht geladen werden."
+    },
+    "vehicles": {
+      "noteRange": "Deutschland & Europa ab Zoomstufe 5",
+      "noteFail": "{list} nicht erreichbar",
+      "noteCity": "Fahrplan-Echtzeit (Transitous) ab Zoomstufe 10 – GPS-Regionen schon früher",
+      "notePrivTransit": "Transitous nicht erreichbar – nur GPS-Züge (Finnland, USA)",
+      "noteTransit": "Transitous nicht erreichbar",
+      "rowFrom": "Von",
+      "rowTo": "Nach",
+      "rowDelay": "Verspätung",
+      "rowArr": "Ankunft",
+      "noRt": "keine Echtzeitdaten",
+      "onTime": "pünktlich"
+    },
+    "cams": {
+      "alprZone": {
+        "traffic": "Verkehr",
+        "parking": "Parkplatz",
+        "town": "Ortschaft",
+        "building": "Gebäude",
+        "public": "Öffentlich",
+        "shop": "Geschäft"
+      },
+      "alprMount": {
+        "pole": "Mast",
+        "wall": "Wand",
+        "streetLamp": "Laterne",
+        "ceiling": "Decke",
+        "bridge": "Brücke",
+        "trafficSignals": "Ampel"
+      },
+      "card": {
+        "n": "N",
+        "ne": "NO",
+        "e": "O",
+        "se": "SO",
+        "s": "S",
+        "sw": "SW",
+        "w": "W",
+        "nw": "NW"
+      }
+    },
+    "fires": {
+      "cat": "Feuer",
+      "catHint": "Waldbrände, Satelliten-Hotspots und Brandflächen USA"
+    },
+    "floods": {
+      "cat": "Fluten & Dürren",
+      "catHint": "GDACS, EONET"
+    },
+    "ice": {
+      "cat": "Eis, Staub & Hitze",
+      "catHint": "Eisberge, Sandstürme – EONET"
+    },
+    "quakes": {
+      "cat": "Erdbeben",
+      "catHint": "7 Tage – Europa ab M1.5, weltweit ab M2.5"
+    },
+    "storms": {
+      "cat": "Stürme & Zyklone",
+      "catHint": "mit Zugbahnen – EONET, GDACS"
+    },
+    "tornado": {
+      "cat": "Tornados & Unwetter",
+      "catHint": "NWS-Warnungen, SPC-Meldungen"
+    },
+    "volcanoes": {
+      "cat": "Vulkane",
+      "catHint": "aktive Ausbrüche und alle ~1.300 Vulkane"
+    },
+    "loadFail": "{name} konnte nicht geladen werden.",
+    "toastFail": "{name}: Daten konnten nicht geladen werden."
+  }
+}

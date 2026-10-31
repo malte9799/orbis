@@ -1,4 +1,5 @@
 import { defineProvider, type Maneuver, type Route } from '../types';
+import { getLang } from '../../i18n';
 import { fetchJson } from '../../util';
 
 const PROFILE = { car: 'driving-car', bike: 'cycling-regular', foot: 'foot-walking' } as const;
@@ -26,7 +27,7 @@ export default defineProvider({
   async route(req, keys) {
     const body = {
       coordinates: req.points,
-      language: 'de',
+      language: getLang(),
       instructions: true,
       units: 'm',
       ...(req.alternatives && req.points.length === 2 ? { alternative_routes: { target_count: 2, share_factor: 0.6, weight_factor: 1.6 } } : {}),

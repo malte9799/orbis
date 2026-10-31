@@ -1,4 +1,5 @@
 import type { Feature, Point } from 'geojson';
+import { t } from '../../../i18n';
 import { defineExtra, type ExtraCtx } from '../types';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
@@ -21,7 +22,7 @@ function merge(ctx: ExtraCtx) {
   ctx.set('bikeshare', {
     loading: st.loading.size > 0,
     count: zoomedOut ? undefined : features.length || undefined,
-    note: zoomedOut ? 'Reinzoomen (Stadt) für Stationen mit freien Rädern' : st.errors.size ? `${[...st.errors].join(', ')} gerade nicht erreichbar` : undefined,
+    note: zoomedOut ? t('layers.bikeshare.noteZoom') : st.errors.size ? t('layers.bikeshare.noteFail', { list: [...st.errors].join(', ') }) : undefined,
   });
 }
 
@@ -142,10 +143,10 @@ export default defineExtra({
       return null;
     }
     const rows: [string, string][] = [
-      ['Freie Räder', p.off ? 'Station außer Betrieb' : `${p.bikes}${p.ebikes != null ? ` (davon ${p.ebikes} E-Bikes)` : ''}`],
-      ['Freie Plätze', p.docks != null ? String(p.docks) : '–'],
+      [t('layers.bikeshare.rowBikes'), p.off ? t('layers.bikeshare.rowBikesOff') : `${p.bikes}${p.ebikes != null ? t('layers.bikeshare.rowEbikes', { count: p.ebikes as number }) : ''}`],
+      [t('layers.bikeshare.rowDocks'), p.docks != null ? String(p.docks) : '–'],
     ];
-    if (p.capacity != null) rows.push(['Stellplätze', String(p.capacity)]);
+    if (p.capacity != null) rows.push([t('layers.bikeshare.rowCapacity'), String(p.capacity)]);
     const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
     return { type: 'html', html: cardHtml({ glyph: 'bike', color: COLOR, title: p.name, subtitle: p.sys, date: p.updated || undefined, source: String(p.sys).split(' · ')[0], extra }), lng: pt[0], lat: pt[1] };
   },

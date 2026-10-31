@@ -1,5 +1,6 @@
 import type { ApiKeys } from '../store';
 import { PROVIDERS, providerById } from './providers';
+import { t } from '../i18n';
 import type { Profile, Route, RouteRequest, RoutingProvider } from './types';
 
 export interface Planned {
@@ -55,7 +56,7 @@ export async function planRoute(req: RouteRequest, keys: ApiKeys, wanted?: strin
         finished = true;
         return { routes: sorted(routes), provider, failed };
       }
-      failed.push({ provider, error: 'keine Route gefunden' });
+      failed.push({ provider, error: t('routing.calc.noRouteFound') });
     } catch (e) {
       failed.push({ provider, error: e instanceof Error ? e.message : String(e) });
     }
@@ -71,7 +72,7 @@ export async function planRoute(req: RouteRequest, keys: ApiKeys, wanted?: strin
   finished = true;
   const late = await fastResult; // only reached when nothing else worked (or fast is the only provider)
   if (late) return { ...late, failed };
-  throw new Error(failed.length ? failed.map((f) => `${f.provider.label}: ${f.error}`).join(' · ') : 'Kein Routing-Anbieter verfügbar');
+  throw new Error(failed.length ? failed.map((f) => `${f.provider.label}: ${f.error}`).join(' · ') : t('routing.provider.none'));
 }
 
 export { providerById };

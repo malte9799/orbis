@@ -1,15 +1,14 @@
 /** Unit display options (settings panel → "Allgemein"). Base units are metric:
  *  temp °C, wind km/h, pressure hPa, rain mm/h, distance km, area km². */
+import { t, fmtLocale } from './i18n';
 import { beaufort, compass } from './util';
 import { store, type AppOptions } from './store';
-
-const de = 'de-DE';
 
 type Opt<K extends keyof AppOptions> = NonNullable<AppOptions[K]>;
 
 /** option as set in the settings panel */
 export const opt = <K extends keyof AppOptions>(k: K): Opt<K> => store.getOptions()[k] as Opt<K>;
-const num = (v: number, digits: number) => v.toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+const num = (v: number, digits: number) => v.toLocaleString(fmtLocale(), { maximumFractionDigits: digits, minimumFractionDigits: digits });
 
 // ---- Temperatur ------------------------------------------------------------
 export const tempUnit = () => (opt('temp') === 'f' ? '°F' : '°C');
@@ -18,8 +17,8 @@ export const tempTxt = (vC: number, digits = 1) => `${num(tempVal(vC), digits)} 
 
 // ---- Wind -------------------------------------------------------------------
 export type WindOpt = NonNullable<AppOptions['wind']>;
-const WIND_UNIT: Record<WindOpt, string> = { kmh: 'km/h', ms: 'm/s', mph: 'mph', kn: 'Knoten', bft: 'Bft' };
-export const windUnit = () => WIND_UNIT[opt('wind') ?? 'kmh'];
+const WIND_UNIT: Record<WindOpt, string | null> = { kmh: 'km/h', ms: 'm/s', mph: 'mph', kn: null, bft: 'Bft' };
+export const windUnit = () => WIND_UNIT[opt('wind') ?? 'kmh'] ?? t('units.windKn');
 export const windVal = (kmh: number): number => {
   switch (opt('wind') ?? 'kmh') {
     case 'ms': return kmh / 3.6;
@@ -72,8 +71,8 @@ export const precipSumTxt = (mm: number, digits = 1): string =>
 
 // ---- Distanz ----------------------------------------------------------------------
 export type DistOpt = NonNullable<AppOptions['dist']>;
-const DIST_UNIT: Record<DistOpt, string> = { km: 'km', mi: 'Meilen', nmi: 'Seemeilen' };
-export const distUnit = () => DIST_UNIT[opt('dist') ?? 'km'];
+const DIST_UNIT: Record<DistOpt, string | null> = { km: 'km', mi: null, nmi: null };
+export const distUnit = () => DIST_UNIT[opt('dist') ?? 'km'] ?? (opt('dist') === 'nmi' ? t('units.distNmi') : t('units.distMi'));
 export const distVal = (km: number): number => (opt('dist') === 'mi' ? km * 0.621371 : opt('dist') === 'nmi' ? km / 1.852 : km);
 export const distTxt = (km: number, digits = 1): string => `${num(distVal(km), digits)} ${distUnit()}`;
 
@@ -98,8 +97,8 @@ export const snowVal = (cm: number): number => (opt('height') === 'ft' ? cm / 2.
 
 // ---- Fläche -------------------------------------------------------------------------
 export type AreaOpt = NonNullable<AppOptions['area']>;
-const AREA_UNIT: Record<AreaOpt, string> = { km2: 'km²', mi2: 'mi²', acre: 'Acre', ha: 'Hektar' };
-export const areaUnit = (burned = false) => AREA_UNIT[(burned ? opt('burned') ?? 'km2' : opt('area') ?? 'km2')];
+const AREA_UNIT: Record<AreaOpt, string | null> = { km2: 'km²', mi2: 'mi²', acre: 'Acre', ha: null };
+export const areaUnit = (burned = false) => AREA_UNIT[(burned ? opt('burned') ?? 'km2' : opt('area') ?? 'km2')] ?? t('units.areaHa');
 export const areaVal = (km2: number, burned = false): number => {
   const sel = burned ? opt('burned') ?? 'km2' : opt('area') ?? 'km2';
   switch (sel) {
@@ -121,7 +120,7 @@ export const coordsDec = () => (opt('coords') ?? 'dec') === 'dec';
 export function coordsTxt(lat: number, lon: number): string {
   const part = (v: number) => {
     const a = Math.abs(v);
-    if (coordsDec()) return `${a.toLocaleString(de, { maximumFractionDigits: 3 })}°`;
+    if (coordsDec()) return `${a.toLocaleString(fmtLocale(), { maximumFractionDigits: 3 })}°`;
     let deg = Math.floor(a);
     const mFull = (a - deg) * 60;
     let m = Math.floor(mFull);
@@ -130,7 +129,7 @@ export function coordsTxt(lat: number, lon: number): string {
     if (m === 60) { m = 0; deg += 1; }
     return `${deg}° ${m}′ ${sec}″`;
   };
-  return `${part(lat)} ${lat >= 0 ? 'N' : 'S'}, ${part(lon)} ${lon >= 0 ? 'O' : 'W'}`;
+  return `${part(lat)} ${lat >= 0 ? 'N' : 'S'}, ${part(lon)} ${lon >= 0 ? t('units.east') : t('units.west')}`;
 }
 
 // ---- Zeit ------------------------------------------------------------------------
@@ -140,11 +139,11 @@ export const tzUtc = () => opt('tz') === 'utc';
 export const tzOpts = (): { hourCycle: 'h12' | 'h23'; timeZone?: string } => ({ hourCycle: is12() ? 'h12' : 'h23', timeZone: tzUtc() ? 'UTC' : undefined });
 /** "14:00 Uhr" · "2:00 PM" · "14:00 UTC" – absolute Zeitpunkte nach Einstellung */
 export function clockTxt(d: Date | number, seconds = false): string {
-  const s = new Date(d).toLocaleTimeString(de, { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit', second: seconds ? '2-digit' : undefined, ...tzOpts() });
-  return tzUtc() ? `${s} UTC` : is12() ? s : `${s} Uhr`;
+  const s = new Date(d).toLocaleTimeString(fmtLocale(), { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit', second: seconds ? '2-digit' : undefined, ...tzOpts() });
+  return tzUtc() ? `${s} UTC` : `${s}${is12() ? '' : t('units.oclock')}`;
 }
 /** Locale-String mit Zeitzone/12h-Einstellung (für Wochentag+Uhrzeit usw.) */
-export const dateTimeTxt = (d: Date | number, o: Intl.DateTimeFormatOptions): string => new Date(d).toLocaleString(de, { ...o, ...tzOpts() });
+export const dateTimeTxt = (d: Date | number, o: Intl.DateTimeFormatOptions): string => new Date(d).toLocaleString(fmtLocale(), { ...o, ...tzOpts() });
 /** "14:00" (Ortszeit des Ortes) → 2:00 PM */
 export function hourTxt(hhmm: string): string {
   if (!is12()) return hhmm;
@@ -185,7 +184,7 @@ const parseDe = (s: string) => Number(s.replace(/[  ]/g, '').replace(',', '.').r
 const fmtDe = (v: number): string => {
   const a = Math.abs(v);
   const digits = a >= 100 ? 0 : a >= 10 ? 1 : 2;
-  return v.toLocaleString(de, { maximumFractionDigits: digits }).replace(/\./g, ' ').replace('-', '−');
+  return v.toLocaleString(fmtLocale(), { maximumFractionDigits: digits }).replace(/\./g, ' ').replace('-', '−');
 };
 /** wandelt "12 742 km", "−173 bis +427 °C", "34 × 11 × 11 km" nach Einstellung um (Standard: unverändert) */
 export function localizeText(text: string): string {

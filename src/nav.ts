@@ -1,25 +1,26 @@
 /** Global Orbis button (top right) with the menu: views, Weltall submenu (NASA Eyes + planet maps), settings. */
+import { t } from './i18n';
 
 const LOGO = `<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="orbisG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#5b3fd6"/></linearGradient><clipPath id="orbisFront"><rect x="0" y="16" width="32" height="16"/></clipPath></defs><g transform="rotate(-24 16 16)"><ellipse cx="16" cy="16" rx="14.6" ry="4.8" fill="none" stroke="#ffc533" stroke-width="1.6" opacity=".55"/><circle cx="16" cy="16" r="9" fill="url(#orbisG)"/><path d="M10 12.5c3 1.6 6-1.4 9 .3M9.4 18c3.4 1 6.2-1.6 10.4-.2" stroke="#d6ecff" stroke-width="1.3" fill="none" stroke-linecap="round" opacity=".7"/><ellipse cx="16" cy="16" rx="14.6" ry="4.8" fill="none" stroke="#ffc533" stroke-width="1.6" clip-path="url(#orbisFront)"/><circle cx="30.4" cy="15.2" r="1.9" fill="#ffe08a"/></g></svg>`;
 
 const EYES: [string, string][] = [
-  ['earth', 'Erde'],
+  ['earth', t('nav.eyes.earth')],
   ['mrn', 'Mars'],
-  ['solar-system', 'Sonnensystem'],
-  ['asteroids', 'Asteroiden'],
-  ['exo', 'Exoplaneten'],
+  ['solar-system', t('nav.eyes.solar')],
+  ['asteroids', t('nav.eyes.asteroids')],
+  ['exo', t('nav.eyes.exo')],
 ];
 
 const BODIES: [string, [string, string][]][] = [
-  ['Planeten', [['mercury', 'Merkur'], ['venus', 'Venus'], ['mars', 'Mars']]],
+  [t('nav.bodies.planets'), [['mercury', 'Merkur'], ['venus', 'Venus'], ['mars', 'Mars']]],
   [
-    'Monde',
+    t('nav.bodies.moons'),
     [
       ['moon', 'Mond'], ['io', 'Io'], ['europa', 'Europa'], ['ganymede', 'Ganymed'], ['callisto', 'Callisto'], ['titan', 'Titan'], ['phobos', 'Phobos'],
       ['mimas', 'Mimas'], ['enceladus', 'Enceladus'], ['tethys', 'Tethys'], ['dione', 'Dione'], ['rhea', 'Rhea'], ['iapetus', 'Iapetus'],
     ],
   ],
-  ['Asteroiden', [['vesta', 'Vesta'], ['ceres', 'Ceres'], ['ryugu', 'Ryugu']]],
+  [t('nav.bodies.asteroids'), [['vesta', 'Vesta'], ['ceres', 'Ceres'], ['ryugu', 'Ryugu']]],
 ];
 
 const ICON: Record<string, string> = {
@@ -45,22 +46,22 @@ export function createNavMenu(openSettings: () => void): NavMenu {
   const root = document.createElement('div');
   root.className = 'orbis-nav';
   root.innerHTML = `
-    <button type="button" class="orbis-btn" aria-label="Menü" aria-haspopup="true" aria-expanded="false" title="Menü">${LOGO}</button>
+    <button type="button" class="orbis-btn" aria-label="${t('nav.menu.aria')}" aria-haspopup="true" aria-expanded="false" title="${t('nav.menu.title')}">${LOGO}</button>
     <div class="orbis-menu" role="menu" hidden>
-      <a role="menuitem" href="#/vorhersage" data-route="forecast">${ico('forecast')}Vorhersage</a>
-      <a role="menuitem" href="#/" data-route="globe">${ico('globe')}Karte</a>
-      <a role="menuitem" href="#/fahrplan" data-route="fahrplan">${ico('fahrplan')}Fahrplan</a>
+      <a role="menuitem" href="#/vorhersage" data-route="forecast">${ico('forecast')}${t('nav.route.forecast')}</a>
+      <a role="menuitem" href="#/" data-route="globe">${ico('globe')}${t('nav.route.globe')}</a>
+      <a role="menuitem" href="#/fahrplan" data-route="fahrplan">${ico('fahrplan')}${t('nav.route.fahrplan')}</a>
       <details class="om-space">
-        <summary data-route="space">${ico('space')}Weltall<span class="om-chev">${ico('chev')}</span></summary>
+        <summary data-route="space">${ico('space')}${t('nav.route.space')}<span class="om-chev">${ico('chev')}</span></summary>
         <div class="om-sub">
           <div class="om-h">NASA Eyes</div>
           <div class="om-chips">${EYES.map(([id, t]) => `<a role="menuitem" href="#/weltall?eyes=${id}" data-eyes="${id}">${t}</a>`).join('')}</div>
           ${BODIES.map(([cat, items]) => `<div class="om-h">${cat}</div><div class="om-chips">${items.map(([id, t]) => `<a role="menuitem" href="#/planet?body=${id}" data-body="${id}">${t}</a>`).join('')}</div>`).join('')}
         </div>
       </details>
-      <a role="menuitem" href="#/spiele" data-route="games">${ico('games')}Spiele</a>
+      <a role="menuitem" href="#/spiele" data-route="games">${ico('games')}${t('nav.route.games')}</a>
       <div class="om-sep"></div>
-      <button type="button" role="menuitem" class="om-settings">${ico('gear')}Einstellungen</button>
+      <button type="button" role="menuitem" class="om-settings">${ico('gear')}${t('nav.settings')}</button>
     </div>`;
   document.body.appendChild(root);
 

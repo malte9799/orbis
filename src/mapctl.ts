@@ -1,4 +1,5 @@
 import type { Map as MlMap } from 'maplibre-gl';
+import { t } from './i18n';
 
 /** Camera control column shared by the Earth and planet maps: zoom +/−, 2D/3D with tilt slider, compass. */
 
@@ -39,15 +40,15 @@ export function createMapCtl(hooks: MapCtlHooks): MapCtl {
   el.className = 'mapctl';
   el.innerHTML = `
     <div class="hud-cg">
-      <button type="button" data-k="zin" title="Hineinzoomen" aria-label="Hineinzoomen">${PLUS}</button>
-      <button type="button" data-k="zout" title="Herauszoomen" aria-label="Herauszoomen">${MINUS}</button>
+      <button type="button" data-k="zin" title="${t('map.ctl.zoomIn')}" aria-label="${t('map.ctl.zoomIn')}">${PLUS}</button>
+      <button type="button" data-k="zout" title="${t('map.ctl.zoomOut')}" aria-label="${t('map.ctl.zoomOut')}">${MINUS}</button>
     </div>
     <div class="hud-cg hud-tilt">
-      <button type="button" data-k="tilt" class="hud-tbtn" title="Neigung" aria-label="Kamera neigen">3D</button>
+      <button type="button" data-k="tilt" class="hud-tbtn" title="${t('map.ctl.tilt')}" aria-label="${t('map.ctl.tiltAria')}">3D</button>
       <div class="hud-tsl"><input type="range" min="0" max="100" step="1" value="${TILT_START}" aria-label="Neigung" tabindex="-1"/></div>
     </div>
     <div class="hud-cg">
-      <button type="button" data-k="north" class="hud-compass" title="Norden ausrichten" aria-label="Norden ausrichten">${compassDial()}</button>
+      <button type="button" data-k="north" class="hud-compass" title="${t('map.ctl.north')}" aria-label="${t('map.ctl.north')}">${compassDial()}</button>
     </div>`;
 
   const tiltBtn = el.querySelector<HTMLButtonElement>('.hud-tbtn')!;

@@ -2,6 +2,7 @@ import { MODE_GROUPS, planConnections, stableKey, type Itinerary, type PlanOptio
 import { delaysConfigured, planned, withDelays } from '../api/dbdelays';
 import { store, routeId, type SavedStop } from '../store';
 import { escapeHtml as esc, toast } from '../util';
+import { t as m } from '../i18n';
 import { syncPush } from '../api/pushnotify';
 import { createSavedPanel, asSaved } from './fahrplan-saved';
 import { cdTxt, dayLong, hm, itinHtml, localInput, stopField } from './fahrplan-ui';
@@ -25,42 +26,42 @@ export function createFahrplanView(): FahrplanView {
   el.hidden = true;
   el.dataset.tab = 'search';
   el.innerHTML = `
-    <nav class="fp-tabs" role="tablist" aria-label="Fahrplan">
-      <button type="button" role="tab" class="fp-tab on" data-tab="search" aria-selected="true">${ICON_SEARCH}<span>Verbindungssuche</span></button>
-      <button type="button" role="tab" class="fp-tab" data-tab="saved" aria-selected="false">${ICON_SAVED}<span>Gemerkt</span><i class="fp-count" hidden></i></button>
+    <nav class="fp-tabs" role="tablist" aria-label="${m('fp.title')}">
+      <button type="button" role="tab" class="fp-tab on" data-tab="search" aria-selected="true">${ICON_SEARCH}<span>${m('fp.tabSearch')}</span></button>
+      <button type="button" role="tab" class="fp-tab" data-tab="saved" aria-selected="false">${ICON_SAVED}<span>${m('fp.tabSaved')}</span><i class="fp-count" hidden></i></button>
     </nav>
     <div class="fp-pane fp-pane-search">
     <div class="fp-side">
-    <section class="fp-card fp-search" aria-label="Verbindungssuche">
-      <h2>Verbindung suchen</h2>
-      <div class="fp-cbar" hidden><button type="button" class="fp-compact" aria-label="Suche ändern"><span class="fp-cs"></span><span class="fp-ce">Ändern</span></button><button type="button" class="fp-ph-star" aria-label="Route merken" aria-pressed="false">${ICON_STAR}</button></div>
+    <section class="fp-card fp-search" aria-label="${m('fp.tabSearch')}">
+      <h2>${m('fp.searchTitle')}</h2>
+      <div class="fp-cbar" hidden><button type="button" class="fp-compact" aria-label="${m('fp.editSearch')}"><span class="fp-cs"></span><span class="fp-ce">${m('fp.edit')}</span></button><button type="button" class="fp-ph-star" aria-label="${m('fp.routeSave')}" aria-pressed="false">${ICON_STAR}</button></div>
       <div class="fp-form">
       <div class="fp-ft">
         <div class="fp-from"></div>
-        <button type="button" class="btn icon-btn fp-swap" title="Start und Ziel tauschen" aria-label="Start und Ziel tauschen"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></button>
+        <button type="button" class="btn icon-btn fp-swap" title="${m('fp.swap')}" aria-label="${m('fp.swap')}"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></button>
         <div class="fp-to"></div>
       </div>
       <div class="fp-opts">
-        <select class="fp-mode" aria-label="Abfahrt oder Ankunft"><option value="dep">Abfahrt</option><option value="arr">Ankunft</option></select>
-        <input type="datetime-local" class="fp-time" aria-label="Zeitpunkt"/>
-        <button type="button" class="btn small fp-now">Jetzt</button>
-        <button type="button" class="btn small fp-optbtn" aria-expanded="false">Optionen</button>
-        <button type="button" class="btn primary fp-go">Suchen</button>
+        <select class="fp-mode" aria-label="${m('fp.depOrArr')}"><option value="dep">${m('fp.dep')}</option><option value="arr">${m('fp.arr')}</option></select>
+        <input type="datetime-local" class="fp-time" aria-label="${m('fp.time')}"/>
+        <button type="button" class="btn small fp-now">${m('fp.nowBtn')}</button>
+        <button type="button" class="btn small fp-optbtn" aria-expanded="false">${m('fp.options')}</button>
+        <button type="button" class="btn primary fp-go">${m('fp.search')}</button>
       </div>
       <div class="fp-optpanel" hidden>
-        <div class="fp-og"><span class="fp-oh">Verkehrsmittel</span><div class="fp-mchips">${MODE_GROUPS.map((g) => `<button type="button" class="fp-mchip on" data-g="${g.id}" aria-pressed="true">${g.label}</button>`).join('')}</div></div>
-        <label class="fp-og"><span class="fp-oh">Umstiege</span><select class="fp-tr"><option value="">Beliebig viele</option><option value="0">Direkt</option><option value="1">Max. 1 Umstieg</option><option value="2">Max. 2 Umstiege</option></select></label>
-        <label class="fp-og"><span class="fp-oh">Umstiegszeit</span><select class="fp-xt"><option value="0">Normal</option><option value="5">+5 min</option><option value="10">+10 min</option></select></label>
-        <label class="fp-og"><span class="fp-oh">Fußweg zur Haltestelle</span><select class="fp-walk"><option value="">Standard</option><option value="5">bis 5 min</option><option value="10">bis 10 min</option><option value="20">bis 20 min</option></select></label>
-        <label class="fp-chk"><input type="checkbox" class="fp-wc"/> Stufenfrei (Rollstuhl, Kinderwagen)</label>
-        <button type="button" class="btn small fp-reset">Zurücksetzen</button>
+        <div class="fp-og"><span class="fp-oh">${m('fp.modes')}</span><div class="fp-mchips">${MODE_GROUPS.map((g) => `<button type="button" class="fp-mchip on" data-g="${g.id}" aria-pressed="true">${g.label}</button>`).join('')}</div></div>
+        <label class="fp-og"><span class="fp-oh">${m('fp.transfers')}</span><select class="fp-tr"><option value="">${m('fp.transfersAny')}</option><option value="0">${m('fp.transfers0')}</option><option value="1">${m('fp.transfers1')}</option><option value="2">${m('fp.transfers2')}</option></select></label>
+        <label class="fp-og"><span class="fp-oh">${m('fp.transferTime')}</span><select class="fp-xt"><option value="0">${m('fp.transferTimeNormal')}</option><option value="5">${m('fp.transferTime5')}</option><option value="10">${m('fp.transferTime10')}</option></select></label>
+        <label class="fp-og"><span class="fp-oh">${m('fp.walkLimit')}</span><select class="fp-walk"><option value="">${m('fp.walkStandard')}</option><option value="5">${m('fp.walk5')}</option><option value="10">${m('fp.walk10')}</option><option value="20">${m('fp.walk20')}</option></select></label>
+        <label class="fp-chk"><input type="checkbox" class="fp-wc"/> ${m('fp.stepFree')}</label>
+        <button type="button" class="btn small fp-reset">${m('fp.reset')}</button>
       </div>
       </div>
-      <div class="fp-cchips" hidden><button type="button" class="fp-chip" data-act="opts">Optionen</button><div class="fp-cgrp"><button type="button" class="fp-chip" data-act="now">Jetzt</button><button type="button" class="fp-chip fp-page" data-page="prev" hidden>Früher</button></div></div>
+      <div class="fp-cchips" hidden><button type="button" class="fp-chip" data-act="opts">${m('fp.options')}</button><div class="fp-cgrp"><button type="button" class="fp-chip" data-act="now">${m('fp.nowBtn')}</button><button type="button" class="fp-chip fp-page" data-page="prev" hidden>${m('fp.earlier')}</button></div></div>
     </section>
     </div>
-    <section class="fp-card fp-results empty" aria-label="Verbindungen">
-      <div class="fp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3l2 3M7 17l-2 3M4 11h16M8 14h.01M16 14h.01M7 3a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10"/></svg><b>Wohin soll es gehen?</b><p>Start und Ziel eingeben, Zeit wählen und „Suchen“ – die Verbindungen erscheinen hier, mit Verspätungen, Gleisen und Umstiegen.</p></div>
+    <section class="fp-card fp-results empty" aria-label="${m('fp.results')}">
+      <div class="fp-empty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3l2 3M7 17l-2 3M4 11h16M8 14h.01M16 14h.01M7 3a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h10"/></svg><b>${m('fp.emptyTitle')}</b><p>${m('fp.emptyText')}</p></div>
       <div class="fp-res" aria-live="polite"></div>
     </section>
     </div>
@@ -96,7 +97,7 @@ export function createFahrplanView(): FahrplanView {
   };
   const syncOptBtn = () => {
     const n = activeOptions();
-    optBtn.textContent = n ? `Optionen (${n})` : 'Optionen';
+    optBtn.textContent = n ? m('fp.optionsN', { count: n }, { count: n }) : m('fp.options');
     optBtn.classList.toggle('on', n > 0);
     chipOpts.textContent = optBtn.textContent;
   };
@@ -144,11 +145,11 @@ export function createFahrplanView(): FahrplanView {
   let to: Stop | null = null;
   // the last chosen stops stay filled in (a cleared field keeps the stored one until a new stop is picked)
   const remember = (key: 'from' | 'to', s: Stop) => store.setLastRoute({ ...store.getLastRoute(), [key]: { id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src } });
-  const fromField = stopField('Von: Haltestelle oder Ort', (s) => {
+  const fromField = stopField(m('fp.fromPlaceholder'), (s) => {
     from = s;
     if (s) remember('from', s);
   });
-  const toField = stopField('Nach: Haltestelle oder Ort', (s) => {
+  const toField = stopField(m('fp.toPlaceholder'), (s) => {
     to = s;
     if (s) remember('to', s);
   });
@@ -190,7 +191,7 @@ export function createFahrplanView(): FahrplanView {
     cbar.hidden = !on;
     chipsEl.hidden = !on;
     if (on) {
-      q('.fp-cs').textContent = `${from?.name ?? ''} → ${to?.name ?? ''} · ${modeSel.value === 'arr' ? 'an ' : ''}${hm(lastOpts?.time ?? Date.now())}`;
+      q('.fp-cs').textContent = `${from?.name ?? ''} → ${to?.name ?? ''} · ${modeSel.value === 'arr' ? m('fp.atTime') : ''}${hm(lastOpts?.time ?? Date.now())}`;
       syncStar();
     }
   }
@@ -201,18 +202,18 @@ export function createFahrplanView(): FahrplanView {
     const on = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
     star.classList.toggle('on', on);
     star.setAttribute('aria-pressed', String(on));
-    star.setAttribute('aria-label', on ? 'Route entfernen' : 'Route merken');
+    star.setAttribute('aria-label', m(on ? 'fp.routeRemove' : 'fp.routeSave'));
     const b = res.querySelector<HTMLElement>('[data-act="saveroute"]');
     if (b) {
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
-      b.querySelector('span')!.textContent = on ? 'Route gemerkt' : 'Route merken';
+      b.querySelector('span')!.textContent = m(on ? 'fp.routeSaved' : 'fp.routeSave');
     }
   }
   function toggleRoute() {
     if (!from || !to) return;
     const now = store.toggleRoute(asSaved(from), asSaved(to));
-    toast(now ? 'Route gemerkt' : 'Route entfernt');
+    toast(m(now ? 'fp.routeSavedToast' : 'fp.routeRemovedToast'));
     updateCount();
     syncStar();
   }
@@ -236,7 +237,7 @@ export function createFahrplanView(): FahrplanView {
 
   function renderResults() {
     if (!entries.length) {
-      res.innerHTML = '<p class="fp-hint">Keine Verbindung gefunden.</p>';
+      res.innerHTML = `<p class="fp-hint">${m('fp.noConnections')}</p>`;
       return;
     }
     let day = '';
@@ -253,8 +254,8 @@ export function createFahrplanView(): FahrplanView {
       })
       .join('');
     const routeSaved = !!from && !!to && store.isRoute(asSaved(from), asSaved(to));
-    res.innerHTML = `${loadingDelays ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${routeSaved ? 'Route gemerkt' : 'Route merken'}</span></button></div>
-      ${cursors.prev ? '<button type="button" class="btn small fp-page fp-pg-top" data-page="prev">Früher</button>' : ''}${rows}${cursors.next ? '<button type="button" class="btn small fp-page" data-page="next">Später</button>' : ''}`;
+    res.innerHTML = `${loadingDelays ? `<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>${m('fp.loadingDelays')}</p>` : ''}<div class="fp-route"><span>${esc(from?.name ?? '')} → ${esc(to?.name ?? '')}</span><button type="button" class="fp-rtbtn${routeSaved ? ' on' : ''}" data-act="saveroute" aria-pressed="${routeSaved}">${ICON_SAVED}<span>${m(routeSaved ? 'fp.routeSaved' : 'fp.routeSave')}</span></button></div>
+      ${cursors.prev ? `<button type="button" class="btn small fp-page fp-pg-top" data-page="prev">${m('fp.earlier')}</button>` : ''}${rows}${cursors.next ? `<button type="button" class="btn small fp-page" data-page="next">${m('fp.later')}</button>` : ''}`;
     chipPrev.hidden = !cursors.prev;
     fitLabels();
   }
@@ -324,7 +325,7 @@ export function createFahrplanView(): FahrplanView {
 
   async function search() {
     if (!from || !to) {
-      toast('Bitte Start und Ziel aus der Vorschlagsliste wählen.', 'error');
+      toast(m('fp.pickFromSuggestions'), 'error');
       return;
     }
     const t = timeIn.value ? new Date(timeIn.value).getTime() : Date.now();
@@ -332,7 +333,7 @@ export function createFahrplanView(): FahrplanView {
     goBtn.disabled = true;
     resSection.classList.remove('empty');
     loadingDelays = false;
-    res.innerHTML = '<p class="fp-hint">Suche läuft …</p>';
+    res.innerHTML = `<p class="fp-hint">${m('fp.searching')}</p>`;
     try {
       lastOpts = { time: t, arriveBy: modeSel.value === 'arr', maxTransfers: trSel.value === '' ? undefined : Number(trSel.value), ...planExtras() };
       const r = await planConnections(from, to, lastOpts);
@@ -346,7 +347,7 @@ export function createFahrplanView(): FahrplanView {
       setCompact(true);
       if (loadingDelays) void mergeDelays(entries, my).then(() => addDelayedEarlier(my));
     } catch {
-      if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';
+      if (my === searchSeq) res.innerHTML = `<p class="fp-hint">${m('fp.searchUnavailable')}</p>`;
     } finally {
       if (my === searchSeq) goBtn.disabled = false;
     }
@@ -380,9 +381,9 @@ export function createFahrplanView(): FahrplanView {
       void syncPush().catch(() => {}); // a removed trip must stop its notifications
       act.classList.toggle('on', now);
       act.setAttribute('aria-pressed', String(now));
-      act.querySelector('.fp-lg')!.textContent = now ? 'Verbindung gemerkt' : 'Verbindung merken';
-      act.querySelector('.fp-shrt')!.textContent = now ? 'Gemerkt' : 'Merken';
-      toast(now ? `${t.line} um ${t.hm} gemerkt (Mo–Fr) – unter „Gemerkt“ anpassen` : 'Pendler-Verbindung entfernt');
+      act.querySelector('.fp-lg')!.textContent = m(now ? 'fp.tripSaved' : 'fp.tripSave');
+      act.querySelector('.fp-shrt')!.textContent = m(now ? 'fp.tripSavedShort' : 'fp.tripSaveShort');
+      toast(m(now ? 'fp.tripSavedToast' : 'fp.tripRemovedToast', { line: t.line, hm: t.hm }));
       updateCount();
       return;
     }
@@ -411,7 +412,7 @@ export function createFahrplanView(): FahrplanView {
       if (loadingDelays) void mergeDelays(fresh, my);
     } catch {
       btn.disabled = false;
-      toast('Weitere Verbindungen konnten nicht geladen werden.', 'error');
+      toast(m('fp.pageError'), 'error');
     }
   }
   res.addEventListener('click', onClick);

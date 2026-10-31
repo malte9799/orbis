@@ -1,4 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
+import { t } from '../i18n';
+import { fmtLocale } from '../i18n';
 
 // Seaports: the NGA World Port Index (size, depths, vessel limits, facilities) plus the UN/LOCODE
 // seaports (Upply, CC BY 4.0) it does not list. Built by scripts/ports.mjs → public/data/ports.json.
@@ -6,20 +8,20 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 /** [lon, lat, name, UN/LOCODE, country, tier, type, channel depth, pier depth, max length, max draft, pilotage, shelter, facilities]; UN/LOCODE-only ports stop after the tier */
 type Row = [number, number, string, string, string, number, string?, number?, number?, number?, number?, number?, string?, string?];
 
-export const PORT_SIZE: Record<number, string> = { 1: 'Groß', 2: 'Mittel', 3: 'Klein', 4: 'Sehr klein', 5: 'Klein (nur UN/LOCODE)' };
+export const PORT_SIZE: Record<number, string> = { 1: t('map.port.size.1'), 2: t('map.port.size.2'), 3: t('map.port.size.3'), 4: t('map.port.size.4'), 5: t('map.port.size.5') };
 const TYPE: Record<string, string> = {
-  'Coastal (Natural)': 'Küste, natürlich geschützt',
-  'Coastal (Breakwater)': 'Küste, mit Wellenbrecher',
-  'River (Natural)': 'Fluss',
-  'River (Basins)': 'Fluss mit Hafenbecken',
-  'River (Tide Gates)': 'Fluss mit Schleuse',
-  'Coastal (Tide Gates)': 'Küste mit Schleuse',
-  'Open Roadstead': 'offene Reede',
-  'Canal or Lake': 'Kanal oder See',
-  'Typhoon Harbor': 'Taifunhafen',
+  'Coastal (Natural)': t('map.port.type.coastalNatural'),
+  'Coastal (Breakwater)': t('map.port.type.coastalBreakwater'),
+  'River (Natural)': t('map.port.type.riverNatural'),
+  'River (Basins)': t('map.port.type.riverBasins'),
+  'River (Tide Gates)': t('map.port.type.riverTide'),
+  'Coastal (Tide Gates)': t('map.port.type.coastalTide'),
+  'Open Roadstead': t('map.port.type.roadstead'),
+  'Canal or Lake': t('map.port.type.canalLake'),
+  'Typhoon Harbor': t('map.port.type.typhoon'),
 };
-const SHELTER: Record<string, string> = { Excellent: 'ausgezeichnet', Good: 'gut', Fair: 'mäßig', Poor: 'schlecht', None: 'keiner' };
-const FACILITY: Record<string, string> = { C: 'Container', R: 'Ro-Ro', S: 'Schüttgut', L: 'Flüssiggut', B: 'Stückgut', O: 'Öl', G: 'LNG' };
+const SHELTER: Record<string, string> = { Excellent: t('map.port.shelter.Excellent'), Good: t('map.port.shelter.Good'), Fair: t('map.port.shelter.Fair'), Poor: t('map.port.shelter.Poor'), None: t('map.port.shelter.None') };
+const FACILITY: Record<string, string> = { C: t('map.port.facility.C'), R: t('map.port.facility.R'), S: t('map.port.facility.S'), L: t('map.port.facility.L'), B: t('map.port.facility.B'), O: t('map.port.facility.O'), G: t('map.port.facility.G') };
 
 let cache: Promise<FeatureCollection<Point>> | null = null;
 
@@ -36,7 +38,7 @@ export function loadPorts(): Promise<FeatureCollection<Point>> {
           properties: {
             name,
             code,
-            country: country.length === 2 ? (new Intl.DisplayNames(['de'], { type: 'region' }).of(country.toUpperCase()) ?? country) : country,
+            country: country.length === 2 ? (new Intl.DisplayNames([fmtLocale()], { type: 'region' }).of(country.toUpperCase()) ?? country) : country,
             tier,
             size: PORT_SIZE[tier],
             type: type ? (TYPE[type] ?? type) : '',
@@ -44,7 +46,7 @@ export function loadPorts(): Promise<FeatureCollection<Point>> {
             pier: pier || '',
             length: length || '',
             draft: draft || '',
-            pilot: pilot == null || pilot < 0 ? '' : pilot ? 'Pflicht' : 'nicht vorgeschrieben',
+            pilot: pilot == null || pilot < 0 ? '' : pilot ? t('map.port.pilot') : t('map.port.pilotNo'),
             shelter: shelter ? (SHELTER[shelter] ?? '') : '',
             fac: (fac ?? '')
               .split('')

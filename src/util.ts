@@ -1,3 +1,4 @@
+import { t, fmtLocale, type MessageKey } from './i18n';
 import { tempVal, tempUnit, hourTxt, is12, tzUtc, coordsTxt } from './units';
 
 export function escapeHtml(value: unknown): string {
@@ -85,15 +86,13 @@ export async function pruneEtagCache(cacheName: string, keep: Iterable<string>):
     .forEach((req) => void cache.delete(req));
 }
 
-const de = 'de-DE';
-
 export const fmt = {
-  temp: (t: number | null | undefined, digits = 0) => {
-    if (t == null || Number.isNaN(t)) return '–';
-    const n = tempVal(t);
+  temp: (tt: number | null | undefined, digits = 0) => {
+    if (tt == null || Number.isNaN(tt)) return '–';
+    const n = tempVal(tt);
     if (Number.isNaN(n)) return '–';
-    const s = n.toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits });
-    const clean = /^-0(,0*)?$/.test(s) ? s.slice(1) : s;
+    const s = n.toLocaleString(fmtLocale(), { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    const clean = /^-0([,.]0*)?$/.test(s) ? s.slice(1) : s;
     // keep the compact bare "°" for °C, but make °F unmistakable
     return tempUnit() === '°F' ? `${clean} °F` : `${clean}°`;
   },
@@ -101,19 +100,19 @@ export const fmt = {
     n == null || Number.isNaN(n)
       ? '–'
       : // avoid "-0" for tiny negative values
-        (Math.abs(n) < 0.5 / 10 ** digits ? 0 : n).toLocaleString(de, { maximumFractionDigits: digits, minimumFractionDigits: digits }),
+        (Math.abs(n) < 0.5 / 10 ** digits ? 0 : n).toLocaleString(fmtLocale(), { maximumFractionDigits: digits, minimumFractionDigits: digits }),
   /** Open-Meteo returns local wall-clock times without offset ("2026-10-12T14:00"). */
   hour: (iso: string) => hourTxt(iso.slice(11, 16)),
   weekday: (isoDate: string, long = false) => {
     const d = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`);
-    return d.toLocaleDateString(de, { weekday: long ? 'long' : 'short', timeZone: 'UTC' });
+    return d.toLocaleDateString(fmtLocale(), { weekday: long ? 'long' : 'short', timeZone: 'UTC' });
   },
   dayMonth: (isoDate: string) => {
     const d = new Date(`${isoDate.slice(0, 10)}T12:00:00Z`);
-    return d.toLocaleDateString(de, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    return d.toLocaleDateString(fmtLocale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
   },
   dateTime: (date: Date | number | string) =>
-    new Date(date).toLocaleString(de, {
+    new Date(date).toLocaleString(fmtLocale(), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -124,7 +123,7 @@ export const fmt = {
     }),
   relative: (date: Date | number | string) => {
     const diff = (Date.now() - new Date(date).getTime()) / 1000;
-    const rtf = new Intl.RelativeTimeFormat(de, { numeric: 'auto' });
+    const rtf = new Intl.RelativeTimeFormat(fmtLocale(), { numeric: 'auto' });
     if (Math.abs(diff) < 3600) return rtf.format(-Math.round(diff / 60), 'minute');
     if (Math.abs(diff) < 86400) return rtf.format(-Math.round(diff / 3600), 'hour');
     return rtf.format(-Math.round(diff / 86400), 'day');
@@ -132,10 +131,17 @@ export const fmt = {
   coords: (lat: number, lon: number) => coordsTxt(lat, lon),
 };
 
-const DIRS = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+/** 16 compass points: the keys are language-neutral identifiers, the catalog turns them
+ *  into the local abbreviation (de "NO"/"O" vs en "NE"/"E") and keeps the order stable. */
+const DIRS: MessageKey[] = [
+  'units.compass.N', 'units.compass.NNE', 'units.compass.NE', 'units.compass.ENE',
+  'units.compass.E', 'units.compass.ESE', 'units.compass.SE', 'units.compass.SSE',
+  'units.compass.S', 'units.compass.SSW', 'units.compass.SW', 'units.compass.WSW',
+  'units.compass.W', 'units.compass.WNW', 'units.compass.NW', 'units.compass.NNW',
+];
 export function compass(deg: number | null | undefined): string {
   if (deg == null) return '–';
-  return DIRS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+  return t(DIRS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16]);
 }
 
 export function beaufort(kmh: number): number {

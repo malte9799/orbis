@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import type { Feature } from 'geojson';
 import { store } from '../../../store';
 import { OFM_CLASS, TrafficSim, linesOf, makeRoad, tomtomClass, type Coord, type Road } from '../shared/trafficsim';
@@ -70,7 +71,7 @@ function refresh(ctx: ExtraCtx) {
   if (ctx.map.getZoom() < SIM_ZOOM) {
     st.sim.clear();
     ctx.setData('traffic-cars', { type: 'FeatureCollection', features: [] });
-    ctx.set(ID, { count: undefined, note: 'Reinzoomen (Stadt) für fahrende Fahrzeuge' + (st.live ? ' – Verkehrslage ist schon sichtbar' : '') });
+    ctx.set(ID, { count: undefined, note: t('layers.traffic.noteZoom') + (st.live ? t('layers.traffic.noteLiveOn') : '') });
     return;
   }
   // Kachel-Zoomstufe gewechselt: Geometrie ist eine andere, also neu aufbauen statt Duplikate zu sammeln
@@ -86,7 +87,7 @@ function refresh(ctx: ExtraCtx) {
   st.sim.setRoads(collectRoads(ctx, st.live), near);
   ctx.set(ID, {
     count: st.sim.count || undefined,
-    note: st.flowError || (st.live ? 'Live-Verkehrslage (TomTom): grün frei · gelb zäh · rot Stau' : 'Simulation (1,5× Tempo) – für Live-Verkehrslage TomTom-Key in den Einstellungen eintragen'),
+    note: st.flowError || (st.live ? t('layers.traffic.noteLive') : t('layers.traffic.noteSim')),
   });
 }
 
@@ -101,7 +102,7 @@ function syncFlow(ctx: ExtraCtx) {
   const st = getState(ctx);
   const key = tomtomKey();
   const typed = (store.getKeys().tomtom ?? '').trim();
-  if (typed && !key) st.flowError = 'Im TomTom-Feld steht ein Link statt des Keys – bitte den API-Key (ca. 32 Zeichen) eintragen';
+  if (typed && !key) st.flowError = t('layers.traffic.noteLink');
   else if (!typed && st.flowError.startsWith('Im TomTom-Feld')) st.flowError = '';
   const m = ctx.map;
   // Ein Stilwechsel (Basiskarte) löscht Quelle und Linien: dann neu anlegen, auch bei gleichem Key
@@ -114,7 +115,7 @@ function syncFlow(ctx: ExtraCtx) {
       const err = e as { sourceId?: string; error?: { status?: number; message?: string } };
       if (err.sourceId !== FLOW_SOURCE) return;
       const status = err.error?.status;
-      st.flowError = status === 401 || status === 403 ? 'TomTom lehnt den Key ab (ungültig oder ohne Traffic-API)' : status === 429 ? 'TomTom-Kontingent erschöpft' : `TomTom-Kacheln nicht ladbar (${status ?? err.error?.message ?? 'Fehler'})`;
+      st.flowError = status === 401 || status === 403 ? t('layers.traffic.flowErrKey') : status === 429 ? t('layers.traffic.flowErrQuota') : t('layers.traffic.flowErrTiles', { status: String(status ?? err.error?.message ?? '') });
       ctx.set(ID, { note: st.flowError });
     });
   }

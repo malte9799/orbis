@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { fetchJson as fetchJsonExt } from '../../../util';
 import type { FeatureCollection } from 'geojson';
 import { cardHtml } from '../../popup';
@@ -34,10 +35,10 @@ export default defineExtra({
     });
   },
   click({ p, at }) {
-    const t = { SUB: 'Subduktionszone', OSR: 'Ozeanischer Rücken', OTF: 'Transformstörung', CRB: 'Kontinentaler Grabenbruch', CTF: 'Kontinentale Transformstörung', CCB: 'Kontinentale Kollision', OCB: 'Ozeanische Kollision' } as Record<string, string>;
+    const kind = { SUB: t('layers.plates.SUB'), OSR: t('layers.plates.OSR'), OTF: t('layers.plates.OTF'), CRB: t('layers.plates.CRB'), CTF: t('layers.plates.CTF'), CCB: t('layers.plates.CCB'), OCB: t('layers.plates.OCB') } as Record<string, string>;
     return {
       type: 'html',
-      html: cardHtml({ glyph: 'quake', color: '#ef5350', title: `Plattengrenze ${String(p.Name ?? '')}`, subtitle: [p.PlateA && p.PlateB ? `${p.PlateA} – ${p.PlateB}` : '', t[String(p.Type)] ?? p.Type].filter(Boolean).join(' · '), source: 'Bird (2003), PB2002' }),
+      html: cardHtml({ glyph: 'quake', color: '#ef5350', title: t('layers.plates.title', { name: String(p.Name ?? '') }), subtitle: [p.PlateA && p.PlateB ? `${p.PlateA} – ${p.PlateB}` : '', kind[String(p.Type)] ?? p.Type].filter(Boolean).join(' · '), source: 'Bird (2003), PB2002' }),
       lng: at.lng,
       lat: at.lat,
     };

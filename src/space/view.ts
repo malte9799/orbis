@@ -9,7 +9,9 @@ import { loadSatellites, type Sat } from '../api/tracking';
 import { escapeHtml, fmt, toast } from '../util';
 import { distTxt, distVal, distUnit, localizeText } from '../units';
 import { ASTEROIDS, BODIES, CRAFT, setPositionResolver, setSatLookup, type Body } from './bodies';
-import { COUNTRY, LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
+import { t as m, fmtLocale, type MessageKey } from '../i18n';
+const key = (str: string): MessageKey => str as MessageKey;
+import { LANDING_SITES, BodyDetail, flagDataUrl, surfaceDir, type LandingSite } from './moon';
 import { MARS_SITES, getMarsTracks, heliAt, loadMarsTracks, roverAt } from './mars';
 import { ATLAS, ATLAS_CELL, LOWRES } from './atlas';
 import { PLANET_MAPS, mapEnabled } from './planets';
@@ -42,6 +44,13 @@ const isPointModel = (b: Body) => b.kind === 'craft' || b.kind === 'asteroid';
 const SITES: LandingSite[] = [...LANDING_SITES.map((s) => ({ ...s, body: 'moon' })), ...MARS_SITES];
 const siteBody = (s: LandingSite) => s.body ?? 'moon';
 const BODY_NAME_DE: Record<string, string> = { moon: 'Mond', mars: 'Mars' };
+/** display texts of a landing site (fields hold message-key suffixes in the site data) */
+const siteTxt = (s: LandingSite, field: 'crew' | 'craft' | 'region' | 'text'): string => m(key(`space.${s.id}.${field}`));
+/** UTC date+time of a landing, in the display locale */
+const fmtSiteTime = (iso: string): string => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString(fmtLocale(), { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}, ${d.toLocaleTimeString(fmtLocale(), { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
+};
 const byId = new Map(ALL.map((b) => [b.id, b]));
 
 /** ecliptic (x, y, z) → three.js (x, z, -y) with y up = ecliptic north */
@@ -73,14 +82,8 @@ const SPEEDS: { label: string; f: number }[] = [
 ];
 const REALTIME = STEP_S.length;
 
-const KIND_LABEL: Record<string, string> = {
-  star: 'Stern',
-  planet: 'Planet',
-  dwarf: 'Zwergplanet',
-  moon: 'Mond',
-  asteroid: 'Asteroid',
-  craft: 'Raumsonde',
-};
+/** display names of the body kinds (space.kind.* catalog) */
+const kindLabel = (kind: string): string => m(`space.kind.${kind}` as MessageKey);
 
 const TRAIL_DAYS: Record<string, number> = {
   voyager1: 365 * 44,
@@ -105,32 +108,32 @@ export function createSpaceView(
     <div class="space-labels"></div>
     <aside class="space-list panel">
       <div class="sp-list-head">
-        <input class="space-filter" type="search" placeholder="Objekt suchen …" aria-label="Objekt suchen"/>
+        <input class="space-filter" type="search" placeholder="${m('space.search')}" aria-label="${m('space.searchA11y')}"/>
         <div class="sp-tabs" role="tablist">
-          <button class="sp-tab on" role="tab" data-tab="planets">Planeten</button>
-          <button class="sp-tab" role="tab" data-tab="other">Sonden &amp; Kleinkörper</button>
+          <button class="sp-tab on" role="tab" data-tab="planets">${m('space.tabPlanets')}</button>
+          <button class="sp-tab" role="tab" data-tab="other">${m('space.tabOther')}</button>
         </div>
       </div>
       <div class="sp-list-scroll"><div class="space-list-items"></div></div>
     </aside>
-    <button class="btn icon-btn space-list-toggle" aria-label="Objektliste" title="Objektliste">
+    <button class="btn icon-btn space-list-toggle" aria-label="${m('space.listToggle')}" title="${m('space.listToggle')}">
       <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button class="btn icon-btn space-opt-toggle" aria-label="Optionen" title="Optionen" aria-expanded="false">
+    <button class="btn icon-btn space-opt-toggle" aria-label="${m('space.options')}" title="${m('space.options')}" aria-expanded="false">
       <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
     </button>
     <div class="space-opts panel" hidden>
       <div class="panel-scroll">
-        <h3>Umlaufbahnen</h3>
-        <label class="row"><input type="checkbox" data-opt="orbPlanets" checked/> Planeten &amp; Monde</label>
-        <label class="row"><input type="checkbox" data-opt="orbCraft" checked/> Sonden</label>
-        <label class="row"><input type="checkbox" data-opt="orbAsteroids" checked/> Asteroiden</label>
-        <label class="row"><input type="checkbox" data-opt="orbDwarf" checked/> Zwergplaneten &amp; Sonstige</label>
-        <h3>Anzeige</h3>
-        <label class="row"><input type="checkbox" data-opt="labels" checked/> Beschriftungen</label>
-        <label class="row"><input type="checkbox" data-opt="craft" checked/> Raumsonden</label>
-        <label class="row"><input type="checkbox" data-opt="sats" checked/> Erdsatelliten (in Erdnähe)</label>
-        <label class="row"><input type="checkbox" data-opt="sites" checked/> Landestellen (Mond, Mars)</label>
+        <h3>${m('space.hOrbits')}</h3>
+        <label class="row"><input type="checkbox" data-opt="orbPlanets" checked/> ${m('space.optPlanets')}</label>
+        <label class="row"><input type="checkbox" data-opt="orbCraft" checked/> ${m('space.optCraft')}</label>
+        <label class="row"><input type="checkbox" data-opt="orbAsteroids" checked/> ${m('space.optAsteroids')}</label>
+        <label class="row"><input type="checkbox" data-opt="orbDwarf" checked/> ${m('space.optDwarf')}</label>
+        <h3>${m('space.hShow')}</h3>
+        <label class="row"><input type="checkbox" data-opt="labels" checked/> ${m('space.optLabels')}</label>
+        <label class="row"><input type="checkbox" data-opt="craft" checked/> ${m('space.optCraft')}</label>
+        <label class="row"><input type="checkbox" data-opt="sats" checked/> ${m('space.optSatellites')}</label>
+        <label class="row"><input type="checkbox" data-opt="sites" checked/> ${m('space.optSites')}</label>
         <p class="small muted">Texturen: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) ·
         Mond: NASA <a href="https://svs.gsfc.nasa.gov/4720" target="_blank" rel="noopener">CGI Moon Kit</a> (LRO LROC/LOLA) und
         <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">Moon Trek</a> ·
@@ -143,32 +146,32 @@ export function createSpaceView(
     </div>
     <section class="space-info" hidden></section>
     <div class="space-time collapsed">
-      <button class="sp-open" data-t="toggle" aria-label="Time controls">
-        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg><span>TIME CONTROLS</span>
+      <button class="sp-open" data-t="toggle" aria-label="${m('space.timeA11y')}">
+        <svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg><span>${m('space.timeControls')}</span>
       </button>
       <div class="sp-tc">
         <div class="sp-tc-top">
-          <button class="sp-live" data-t="now" title="Back to live"><i></i>LIVE</button>
-          <button class="sp-when sp-date" data-t="pick" aria-label="Pick date"></button>
+          <button class="sp-live" data-t="now" title="${m('space.liveTitle')}"><i></i>LIVE</button>
+          <button class="sp-when sp-date" data-t="pick" aria-label="${m('space.pickDate')}"></button>
           <div class="sp-rate"></div>
-          <button class="sp-when sp-clock" data-t="pick" aria-label="Pick time"></button>
+          <button class="sp-when sp-clock" data-t="pick" aria-label="${m('space.pickTime')}"></button>
         </div>
         <div class="sp-ctl">
-          <button class="sp-cbtn" data-t="slower" title="Rewind / slower" aria-label="Rewind">
+          <button class="sp-cbtn" data-t="slower" title="${m('space.rewind')}" aria-label="${m('space.rewind')}">
             <svg viewBox="0 0 24 24"><path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z"/></svg></button>
-          <button class="sp-cbtn sp-play" data-t="play" title="Pause" aria-label="Pause">
+          <button class="sp-cbtn sp-play" data-t="play" title="${m('space.pause')}" aria-label="${m('space.pause')}">
             <svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg></button>
-          <button class="sp-cbtn" data-t="faster" title="Fast forward / faster" aria-label="Fast forward">
+          <button class="sp-cbtn" data-t="faster" title="${m('space.ffwd')}" aria-label="${m('space.ffwd')}">
             <svg viewBox="0 0 24 24"><path d="M13 6l7 6-7 6zM4 6l7 6-7 6z"/></svg></button>
-          <button class="sp-overview" data-t="overview" title="Whole solar system">OVERVIEW</button>
+          <button class="sp-overview" data-t="overview" title="${m('space.overviewTitle')}">${m('space.overview')}</button>
         </div>
-        <div class="sp-arc" aria-label="Speed">
+        <div class="sp-arc" aria-label="${m('space.speedA11y')}">
           <svg viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 19 Q50 -9 100 19"/></svg>
           <i class="sp-knob"></i>
         </div>
-        <button class="sp-close-tc" data-t="toggle" aria-label="Collapse time controls">
+        <button class="sp-close-tc" data-t="toggle" aria-label="${m('space.collapseA11y')}">
           <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-        <input type="datetime-local" class="sp-date-input" aria-label="Pick date and time" tabindex="-1"/>
+        <input type="datetime-local" class="sp-date-input" aria-label="${m('space.pickDateTime')}" tabindex="-1"/>
       </div>
     </div>`;
 
@@ -349,7 +352,7 @@ export function createSpaceView(
     loadChip.innerHTML = [...loading]
       .map(
         ([id, f]) =>
-          `<div><span>${escapeHtml(byId.get(id)?.name ?? id)} · Detailmodell wird geladen${f > 0 ? ` … ${Math.round(f * 100)} %` : ' …'}</span><i style="width:${Math.round(f * 100)}%"></i></div>`,
+          `<div><span>${escapeHtml(byId.get(id)?.name ?? id)}${m('space.detailLoading')}${f > 0 ? ` ${Math.round(f * 100)} %` : ''}</span><i style="width:${Math.round(f * 100)}%"></i></div>`,
       )
       .join('');
   }
@@ -730,7 +733,7 @@ export function createSpaceView(
     if (b.surface) return openSurfaceCraft(b);
     const p = resolve(id, simTime);
     if (!p) {
-      toast(`${b.name} existiert zum gewählten Zeitpunkt noch nicht (oder die Position ist unbekannt).`);
+      toast(m('space.notYet', { name: b.name }));
       return;
     }
     const from = origin;
@@ -1141,7 +1144,7 @@ export function createSpaceView(
         sats = s;
         satById = new Map(s.map((x) => [x.id, x]));
       })
-      .catch(() => toast('Satellitendaten (CelesTrak) konnten nicht geladen werden.'))
+      .catch(() => toast(m('space.satsError')))
       .finally(() => (satsLoading = false));
   }
   let satById = new Map<string, Sat>();
@@ -1190,11 +1193,11 @@ export function createSpaceView(
     const p = satPositions[i];
     const h = p ? len(p) * AU_KM - 6371 : 0;
     info.hidden = false;
-    info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
-      <div class="sp-kind">Erdsatellit · NORAD ${escapeHtml(s.id)}</div>
+    info.innerHTML = `<button class="sp-close" aria-label="${escapeHtml(m('common.close'))}">×</button>
+      <div class="sp-kind">${m('space.earthSatellite', { id: s.id })}</div>
       <h2>${escapeHtml(s.name)}</h2>
-      <dl><dt>Höhe</dt><dd>${fmt.num(h, 0)} km</dd></dl>
-      <p class="small muted">Bahndaten: CelesTrak. Auf der Wetterkarte (Ebene „Satelliten“) ist auch die Bodenspur sichtbar.</p>`;
+      <dl><dt>${m('space.satAltLabel')}</dt><dd>${fmt.num(h, 0)} km</dd></dl>
+      <p class="small muted">${m('space.satNote')}</p>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => renderInfo());
   }
 
@@ -1292,7 +1295,7 @@ export function createSpaceView(
     playBtn.innerHTML = p
       ? '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
       : '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
-    playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play');
+    playBtn.setAttribute('aria-label', m(p ? 'space.pause' : 'space.play'));
     clockText = '';
   }
 
@@ -1390,8 +1393,9 @@ export function createSpaceView(
   }
 
   const blurb = (b: Body) => {
-    const d = b.description?.split(/(?<=[.!])\s/)[0];
-    return d ? localizeText(d) : KIND_LABEL[b.kind] || '';
+    if (!b.description) return kindLabel(b.kind);
+    const d = m(`space.${b.id}.desc` as MessageKey).split(/(?<=[.!])\s/)[0];
+    return localizeText(d || '') || kindLabel(b.kind);
   };
 
   function rowHtml(b: Body, child = false) {
@@ -1403,7 +1407,7 @@ export function createSpaceView(
       : `<span class="sp-thumb ${b.kind}" style="--c:${b.color}">${b.kind === 'craft' ? CRAFT_ICON : ''}</span>`;
     // bodies with a detailed map (Earth weather map, planet maps)
     const detail = b.id === 'earth' || mapEnabled(b.id);
-    const badge = detail ? `<span class="sp-badge" title="Detailkarte verfügbar">${MAP_ICON}</span>` : '';
+    const badge = detail ? `<span class="sp-badge" title="${m('space.detailBadge')}">${MAP_ICON}</span>` : '';
     return `<button class="sp-row ${child ? 'child' : ''} ${detail ? 'has-detail' : ''} ${b.id === focusId ? 'on' : ''}" data-id="${b.id}"><span class="sp-thumb-wrap">${th}${badge}</span><span class="sp-txt"><b>${escapeHtml(b.name)}</b><small>${escapeHtml(blurb(b))}</small></span></button>`;
   }
 
@@ -1415,7 +1419,7 @@ export function createSpaceView(
       html = ALL.filter((b) => b.name.toLowerCase().includes(q))
         .map((b) => rowHtml(b))
         .join('');
-      if (!html) html = '<p class="small muted sp-empty">Nichts gefunden.</p>';
+      if (!html) html = `<p class="small muted sp-empty">${m('space.notFound')}</p>`;
     } else {
       const focusParent = byId.get(focusId)?.parent;
       const open = (id: string) => id === focusId || id === focusParent;
@@ -1431,9 +1435,9 @@ export function createSpaceView(
       } else {
         const sec = (title: string, items: Body[]) => (items.length ? `<h4>${title}</h4>${items.map((b) => entry(b, false)).join('')}` : '');
         html =
-          sec('Raumsonden', CRAFT.filter((c) => !c.surface && c.parent !== 'earth')) +
-          sec('Zwergplaneten', BODIES.filter((b) => b.kind === 'dwarf')) +
-          sec('Asteroiden', ASTEROIDS);
+          sec(escapeHtml(m('space.secCraft')), CRAFT.filter((c) => !c.surface && c.parent !== 'earth')) +
+          sec(escapeHtml(m('space.secDwarf')), BODIES.filter((b) => b.kind === 'dwarf')) +
+          sec(escapeHtml(m('space.secAsteroids')), ASTEROIDS);
       }
     }
     listEl.innerHTML = html;
@@ -1446,9 +1450,9 @@ export function createSpaceView(
     listEl.querySelector('.sp-row.on')?.scrollIntoView({ block: 'nearest' });
   }
 
-  function distanceText(au: number) {
+  function distanceText(au: number): string {
     if (au < 0.01) return distTxt(au * AU_KM, 0);
-    return `${fmt.num(au, au < 10 ? 3 : 1)} AE (${fmt.num(distVal(au * AU_KM) / 1e6, au < 10 ? 1 : 0)} Mio. ${distUnit()})`;
+    return `${fmt.num(au, au < 10 ? 3 : 1)} ${m('space.au')} (${fmt.num(distVal(au * AU_KM) / 1e6, au < 10 ? 1 : 0)} ${m('space.million')} ${distUnit()})`;
   }
 
   function lightTime(au: number) {
@@ -1462,27 +1466,27 @@ export function createSpaceView(
     const s = SITES.find((x) => x.id === id)!;
     const bodyId = siteBody(s);
     const dt = new Date(s.date);
-    const when = `${dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}, ${dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC`;
-    const coord = `${fmt.num(Math.abs(s.lat), 2)}° ${s.lat >= 0 ? 'N' : 'S'}, ${fmt.num(Math.abs(s.lon), 2)}° ${s.lon >= 0 ? 'O' : 'W'}`;
+    const when = fmtSiteTime(s.date);
+    const coord = `${fmt.num(Math.abs(s.lat), 2)}° ${s.lat >= 0 ? m('space.dirNorth') : m('space.dirSouth')}, ${fmt.num(Math.abs(s.lon), 2)}° ${s.lon >= 0 ? m('space.dirEast') : m('space.dirWest')}`;
     const rows: [string, string][] = [
-      ['Landung', when],
-      ['Nation', COUNTRY[s.flag]],
-      ...(s.crew ? [['Besatzung', s.crew] as [string, string]] : []),
-      ...(s.craft ? [[s.crewed ? 'Fahrzeug' : 'Mission', s.craft] as [string, string]] : []),
-      ['Ort', s.region],
-      ['Koordinaten', (s.approx ? '≈ ' : '') + coord],
+      [m('space.rowLanding'), when],
+      [m('space.rowNation'), m(`space.country.${s.flag}` as MessageKey)],
+      ...(s.crew ? [[m('space.rowCrew'), siteTxt(s, 'crew')] as [string, string]] : []),
+      ...(s.craft ? [[m(s.crewed ? 'space.rowVehicle' : 'space.rowMission'), siteTxt(s, 'craft')] as [string, string]] : []),
+      [m('space.rowRegion'), siteTxt(s, 'region')],
+      [m('space.rowCoords'), (s.approx ? '≈ ' : '') + coord],
     ];
     const years = (Date.now() - dt.getTime()) / (365.25 * 86400000);
     info.hidden = false;
-    info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
-      <div class="sp-kind">${bodyId === 'mars' ? 'Marslandung (robotisch)' : s.crewed ? 'Bemannte Mondlandung' : 'Mondlandung (robotisch)'}</div>
-      <h2 class="sp-site-title"><img class="sp-flag" src="${flagDataUrl(s.flag)}" alt="Flagge ${escapeHtml(COUNTRY[s.flag])}"/>${escapeHtml(s.name)}</h2>
-      <p>${escapeHtml(s.text)}</p>
+    info.innerHTML = `<button class="sp-close" aria-label="${escapeHtml(m('common.close'))}">×</button>
+      <div class="sp-kind">${bodyId === 'mars' ? m('space.kindSiteMarsRobotic') : s.crewed ? m('space.kindSiteMoonCrewed') : m('space.kindSiteMoonRobotic')}</div>
+      <h2 class="sp-site-title"><img class="sp-flag" src="${flagDataUrl(s.flag)}" alt="${escapeHtml(m(`space.country.${s.flag}` as MessageKey))}"/>${escapeHtml(s.name)}</h2>
+      <p>${escapeHtml(siteTxt(s, 'text'))}</p>
       <dl>${rows.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-      ${simTime < dt.getTime() ? '<p class="small note">Zum gewählten Zeitpunkt ist hier noch niemand gelandet.</p>' : years >= 1 ? `<p class="small muted">Vor ${fmt.num(years, 0)} Jahren.</p>` : ''}
+      ${simTime < dt.getTime() ? `<p class="small note">${m('space.notLanded')}</p>` : years >= 1 ? `<p class="small muted">${m('space.yearsAgo', undefined, { count: Math.floor(years) })}</p>` : ''}
       <div class="sp-actions">
-        <button class="btn small" data-a="moon">← ${BODY_NAME_DE[bodyId] ?? 'Zurück'}</button>
-        ${mapEnabled(bodyId) ? `<button class="btn small" data-a="map">Planetenkarte</button>` : ''}
+        <button class="btn small" data-a="moon">← ${BODY_NAME_DE[bodyId] ?? m('space.back')}</button>
+        ${mapEnabled(bodyId) ? `<button class="btn small" data-a="map">${m('space.planetMapBtn')}</button>` : ''}
         <a class="btn small" href="https://de.wikipedia.org/w/index.php?search=${encodeURIComponent(s.name.replace(/ \(.*\)$/, ''))}" target="_blank" rel="noopener">Wikipedia ↗</a>
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1512,32 +1516,32 @@ export function createSpaceView(
     const extLink = trek
       ? `<a class="btn small" href="${trek[0]}" target="_blank" rel="noopener">Detailkarte (${trek[1]}) ↗</a>`
       : '';
-    info.innerHTML = `<button class="sp-close" aria-label="Schließen">×</button>
-      <div class="sp-kind">${KIND_LABEL[b.kind]}${b.parent ? ` · ${escapeHtml(byId.get(b.parent)?.name ?? '')}` : ''}</div>
+    info.innerHTML = `<button class="sp-close" aria-label="${escapeHtml(m('common.close'))}">×</button>
+      <div class="sp-kind">${kindLabel(b.kind)}${b.parent ? ` · ${escapeHtml(byId.get(b.parent)?.name ?? '')}` : ''}</div>
       <h2>${escapeHtml(b.name)}</h2>
-      ${b.description ? `<p>${escapeHtml(localizeText(b.description))}</p>` : ''}
+      ${b.description ? `<p>${escapeHtml(localizeText(m(`space.${b.id}.desc` as MessageKey)))}</p>` : ''}
       <dl class="sp-live"></dl>
-      ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(localizeText(v))}</dd>`).join('')}</dl>` : ''}
-      ${b.approx ? '<p class="small note">Position/Flugbahn angenähert.</p>' : ''}
+      ${b.facts ? `<dl>${b.facts.map(([k, v]) => `<dt>${escapeHtml(m(`space.${k}` as MessageKey))}</dt><dd>${escapeHtml(localizeText(m(`space.${v}` as MessageKey)))}</dd>`).join('')}</dl>` : ''}
+      ${b.approx ? `<p class="small note">${m('space.approxNote')}</p>` : ''}
       ${
         b.id === 'moon' || b.id === 'mars'
-          ? `<h3 class="sp-sub">Landestellen</h3><div class="sp-sites">${SITES.filter((s) => siteBody(s) === b.id)
+          ? `<h3 class="sp-sub">${m('space.sitesH')}</h3><div class="sp-sites">${SITES.filter((s) => siteBody(s) === b.id)
               .map((s) => `<button class="sp-site${s.crewed ? ' crewed' : ''}" data-site="${s.id}"><img src="${flagDataUrl(s.flag)}" alt=""/>${escapeHtml(s.name)}</button>`)
               .join('')}</div>`
           : ''
       }
       ${
         b.id === 'mars'
-          ? `<h3 class="sp-sub">Fahrzeuge</h3><div class="sp-sites">${['perseverance', 'ingenuity', 'curiosity']
+          ? `<h3 class="sp-sub">${m('space.vehiclesH')}</h3><div class="sp-sites">${['perseverance', 'ingenuity', 'curiosity']
               .map((c) => `<button class="sp-site" data-craft="${c}">${escapeHtml(byId.get(c)!.name)}</button>`)
               .join('')}</div>`
           : ''
       }
-      ${b.model ? `<p class="small muted">3D-Modell: ${escapeHtml(b.model.source ?? 'NASA 3D Resources')}${b.model.note ? ` · ${escapeHtml(b.model.note)}` : ''}${
-        crafts.get(b.id)?.state === 'loading' ? ' · wird geladen …' : crafts.get(b.id)?.state === 'error' ? ' · konnte nicht geladen werden' : crafts.get(b.id)?.detail === 'loading' ? ' · Detailmodell wird geladen …' : ''
+      ${b.model ? `<p class="small muted">${m('space.modelPrefix')}${escapeHtml(b.model.source ?? 'NASA 3D Resources')}${b.model.note ? ` · ${escapeHtml(m(`space.${b.id}.modelNote` as MessageKey))}` : ''}${
+        crafts.get(b.id)?.state === 'loading' ? m('space.modelLoading') : crafts.get(b.id)?.state === 'error' ? m('space.modelError') : crafts.get(b.id)?.detail === 'loading' ? m('space.detailLoading') : ''
       }</p>` : ''}
       <div class="sp-actions">
-        ${b.id === 'earth' ? '<button class="btn small" data-a="map">Wetterkarte öffnen</button>' : mapEnabled(b.id) ? '<button class="btn small" data-a="map">Planetenkarte öffnen</button>' : ''}
+        ${b.id === 'earth' ? `<button class="btn small" data-a="map">${m('space.openWxBtn')}</button>` : mapEnabled(b.id) ? `<button class="btn small" data-a="map">${m('space.openMapBtn')}</button>` : ''}
         ${extLink}
       </div>`;
     info.querySelector('.sp-close')!.addEventListener('click', () => (info.hidden = true));
@@ -1555,10 +1559,10 @@ export function createSpaceView(
     if (!p) return;
     const earth = resolve('earth', simTime)!;
     const rows: [string, string][] = [];
-    if (b.kind !== 'star') rows.push(['Abstand zur Sonne', distanceText(len(p))]);
+    if (b.kind !== 'star') rows.push([m('space.rowSunDist'), distanceText(len(p))]);
     if (b.id !== 'earth') {
       const d = len(sub(p, earth));
-      rows.push(['Abstand zur Erde', distanceText(d)], ['Lichtlaufzeit von der Erde', lightTime(d)]);
+      rows.push([m('space.rowEarthDist'), distanceText(d)], [m('space.rowLightTime'), lightTime(d)]);
     }
     dl.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
   }

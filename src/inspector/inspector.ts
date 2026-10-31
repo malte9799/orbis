@@ -1,4 +1,5 @@
 import { toast } from '../util';
+import { t } from '../i18n';
 import { clearCaptures, currentRoute, getCaptures, onCaptures, rawFetch, type Capture } from './capture';
 import { isGlyphUrl } from './glyphs';
 import { createGlbView, type GlbView } from './glb';
@@ -11,9 +12,9 @@ import { providerOf } from './sources';
 //   top right    every data source the page used
 //   bottom half  the raw response of the selected source (JSON tree / text / image)
 
-const ROUTE_LABEL: Record<string, string> = { forecast: 'Vorhersage', globe: 'Karte', space: 'Weltall', games: 'Spiele' };
+const ROUTE_LABEL: Record<string, string> = { forecast: t('nav.route.forecast'), globe: t('nav.route.globe'), space: t('nav.route.space'), games: t('nav.route.games') };
 const KIND_LABEL: Record<Capture['kind'], string> = { json: 'JSON', xml: 'XML', text: 'TXT', image: 'IMG', model: '3D', binary: 'BIN' };
-const TILE_LABEL: Record<TileGroup['kind'], string> = { raster: 'Rasterkacheln', dem: 'Höhenkacheln', vector: 'Vektorkacheln', custom: 'lokales Raster' };
+const TILE_LABEL: Record<TileGroup['kind'], string> = { raster: t('map.insp.tile.raster'), dem: t('map.insp.tile.dem'), vector: t('map.insp.tile.vector'), custom: t('map.insp.tile.custom') };
 const PAGE = 100;
 const MAX_TEXT = 300_000;
 const parsed = new WeakMap<Capture, unknown>();
@@ -44,7 +45,7 @@ let stop: (() => void) | null = null;
 
 const ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7 3 12l5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>';
 const CHEVRON = '<svg viewBox="0 0 24 24" aria-hidden="true" class="rdi-chev"><path d="M9 6l6 6-6 6"/></svg>';
-const LABEL = 'Datenquellen · Rohdaten';
+const LABEL = t('map.insp.label');
 
 export type RawDataVariant =
   /** fixed round icon at the bottom right, label slides out on hover */
@@ -104,17 +105,17 @@ function open() {
   overlay = document.createElement('div');
   overlay.className = 'rdi';
   overlay.setAttribute('role', 'dialog');
-  overlay.setAttribute('aria-label', 'Datenquellen und Rohdaten');
+  overlay.setAttribute('aria-label', t('map.insp.aria'));
   overlay.innerHTML = `
     <section class="rdi-list">
       <header>
-        <h2>Datenquellen <small class="muted" data-r="count"></small></h2>
+        <h2>${t('map.insp.sources')} <small class="muted" data-r="count"></small></h2>
         <div class="rdi-seg" role="group" aria-label="Umfang">
-          <button type="button" data-scope="page" class="on">Diese Seite</button>
-          <button type="button" data-scope="all">Alle</button>
+          <button type="button" data-scope="page" class="on">${t('map.insp.thisPage')}</button>
+          <button type="button" data-scope="all">${t('map.insp.all')}</button>
         </div>
-        <button type="button" class="rdi-btn rdi-clear" data-r="clear" title="Alle angezeigten Datenquellen entfernen">${TRASH_ICON}Leeren</button>
-        <button type="button" class="rdi-x" data-r="close" aria-label="Schließen" title="Schließen (Esc)">
+        <button type="button" class="rdi-btn rdi-clear" data-r="clear" title="${t('map.insp.clearTitle')}">${TRASH_ICON}${t('map.insp.clear')}</button>
+        <button type="button" class="rdi-x" data-r="close" aria-label="${t('hud.close')}" title="${t('map.insp.closeEsc')}">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </header>
       <div class="rdi-scroll" data-r="list"></div>
@@ -124,9 +125,9 @@ function open() {
       <div class="rdi-statusbar" data-r="status" hidden></div>
       <div class="rdi-scroll rdi-rawbody" data-r="rawbody"></div>
     </section>
-    <div class="rdi-gut rdi-gut-v" data-g="v" title="Ziehen zum Ändern der Breite · Doppelklick: Ausgangsgröße"></div>
-    <div class="rdi-gut rdi-gut-h" data-g="h" title="Ziehen zum Ändern der Höhe · Doppelklick: Ausgangsgröße"></div>
-    <div class="rdi-gut rdi-gut-x" data-g="x" title="Ziehen: Breite und Höhe · Doppelklick: Ausgangsgröße"></div>`;
+    <div class="rdi-gut rdi-gut-v" data-g="v" title="${t('map.insp.dragWidth')}"></div>
+    <div class="rdi-gut rdi-gut-h" data-g="h" title="${t('map.insp.dragHeight')}"></div>
+    <div class="rdi-gut rdi-gut-x" data-g="x" title="${t('map.insp.dragBoth')}"></div>`;
   const $ = <T extends HTMLElement>(r: string) => overlay!.querySelector<T>(`[data-r=${r}]`)!;
   const listEl = $('list');
   const rawHead = $('rawhead');
@@ -239,7 +240,7 @@ function open() {
       e.bad = !!last.error || !last.ok;
       if (gallery) {
         const total = e.caps.reduce((n, c) => n + (c.size ?? 0), 0);
-        e.meta = `${e.count} Bilder${total ? ` · ${fmtSize(total)}` : ''}`;
+        e.meta = t('map.insp.metaGallery', { n: String(e.count), size: total ? ` · ${fmtSize(total)}` : '' });
       }
       else e.meta = `${last.error ? errorTitle(last) : last.status ? `${last.status}${last.statusText ? ` ${last.statusText}` : ''}` : '…'} · ${last.size == null && (last.skipped || last.kind === 'model') ? '–' : fmtSize(last.size)} · ${last.ms} ms${scope === 'all' ? ` · ${ROUTE_LABEL[last.route] ?? last.route}` : ''}`;
     }
@@ -249,10 +250,10 @@ function open() {
       const label = TILE_LABEL[g.kind];
       out.set(`t:${g.key}`, {
         id: `t:${g.key}`,
-        provider: g.host ? providerOf(g.host) : 'Orbis (lokal berechnet)',
+        provider: g.host ? providerOf(g.host) : t('map.insp.localCalc'),
         kind: 'tiles',
         label: `${g.sourceId} · ${label}`,
-        meta: `${g.tiles.size} Kacheln · Stufe ${Math.min(...zs)}–${Math.max(...zs)}`,
+        meta: t('map.insp.metaTiles', { n: String(g.tiles.size), z0: String(Math.min(...zs)), z1: String(Math.max(...zs)) }),
         bad: false,
         proxied: false,
         caps: [],
@@ -284,7 +285,7 @@ function open() {
     if (!items.length) {
       rowEls.clear();
       groupEls.clear();
-      listEl.innerHTML = `<p class="muted rdi-empty">Auf dieser Seite wurden noch keine Daten geladen.</p>`;
+      listEl.innerHTML = `<p class="muted rdi-empty">${t('map.insp.empty')}</p>`;
       return;
     }
     const liveRows = new Set<string>();
@@ -310,9 +311,9 @@ function open() {
           row.innerHTML = `<button type="button" class="rdi-item-main">
               <span class="rdi-kind"></span>
               <span class="rdi-path"><span class="rdi-label"></span><i class="rdi-count" hidden></i></span>
-              <span class="rdi-meta"><span class="rdi-badge rdi-badge-proxy" hidden title="Über den Daten-Proxy geladen">PROXY</span><span class="rdi-meta-text"></span></span>
+              <span class="rdi-meta"><span class="rdi-badge rdi-badge-proxy" hidden title="${t('map.insp.proxied')}">PROXY</span><span class="rdi-meta-text"></span></span>
             </button>
-            <button type="button" class="rdi-ibtn rdi-copy" data-copy="url" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button>`;
+            <button type="button" class="rdi-ibtn rdi-copy" data-copy="url" aria-label="${t('map.insp.copyUrl')}" title="${t('map.insp.copyUrl')}">${COPY_ICON}</button>`;
           row.querySelector('.rdi-item-main')!.addEventListener('click', () => select(e.id));
           rowEls.set(e.id, row);
         }
@@ -364,8 +365,8 @@ function open() {
     statusEl.hidden = true;
     if (!e) {
       destroyTm();
-      rawHead.innerHTML = `<h2>Rohdaten</h2>`;
-      rawBody.innerHTML = `<p class="muted rdi-empty">Quelle oben rechts auswählen, um die Rohdaten zu sehen.</p>`;
+      rawHead.innerHTML = `<h2>${t('map.insp.raw')}</h2>`;
+      rawBody.innerHTML = `<p class="muted rdi-empty">${t('map.insp.rawHint')}</p>`;
       return;
     }
 
@@ -374,7 +375,7 @@ function open() {
       destroyTm();
       rawSig = '';
       rawHead.innerHTML = `${urlBox('KACHELN', e.tiles.template)}
-        <div class="rdi-actions"><span class="rdi-hint">Ziehen · Mausrad zoomt · Klick wählt eine Kachel</span></div>`;
+        <div class="rdi-actions"><span class="rdi-hint">${t('map.insp.tilesHint')}</span></div>`;
       rawBody.replaceChildren();
       rawBody.classList.add('is-map');
       tm = { key: e.id, view: createTileMap(e.tiles) };
@@ -383,7 +384,7 @@ function open() {
     }
     if (e.caps.length > 1 && e.caps.every((c) => c.imgUrl)) {
       const dir = new URL(e.caps[0].url).pathname.replace(/[^/]*$/, '');
-      const hint = `${e.count} Bilder · Klick zeigt das Bild groß`;
+      const hint = t('map.insp.galleryHint', { n: String(e.count) });
       // same folder as before: add what is new, keep scroll position and selection
       if (galleryView && galleryKey === e.id) {
         galleryView.update(e.caps);
@@ -413,11 +414,11 @@ function open() {
     rawHead.innerHTML = `
       ${urlBox(c.method, apiUrl(c), c.target ? c.url : undefined)}
       <div class="rdi-actions">
-        <div class="rdi-seg" role="group" aria-label="Richtung"><button type="button" data-side="sent" class="${side === 'sent' ? 'on' : ''}">Gesendet</button><button type="button" data-side="recv" class="${side === 'recv' ? 'on' : ''}">Empfangen</button></div>
+        <div class="rdi-seg" role="group" aria-label="Richtung"><button type="button" data-side="sent" class="${side === 'sent' ? 'on' : ''}">${t('map.insp.sent')}</button><button type="button" data-side="recv" class="${side === 'recv' ? 'on' : ''}">${t('map.insp.recv')}</button></div>
         ${n > 1 ? `<div class="rdi-seg rdi-step" role="group" aria-label="Anfrage wählen"><button type="button" data-step="-1" aria-label="Vorherige Anfrage" ${capIdx === 0 ? 'disabled' : ''}>‹</button><span>${capIdx + 1} / ${n}</span><button type="button" data-step="1" aria-label="Nächste Anfrage" ${capIdx === n - 1 ? 'disabled' : ''}>›</button></div>` : ''}
-        ${canTree && side === 'recv' ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}">Baum</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}">Roh</button></div>` : ''}
-        ${side === 'recv' && c.text ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Rohdaten kopieren</button>` : ''}
-        ${side === 'sent' && c.reqBody ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}Body kopieren</button>` : ''}
+        ${canTree && side === 'recv' ? `<div class="rdi-seg"><button type="button" data-mode="tree" class="${rawMode === 'tree' ? 'on' : ''}"${''}${t('map.insp.tree')}</button><button type="button" data-mode="raw" class="${rawMode === 'raw' ? 'on' : ''}"${''}${t('map.insp.rawTab')}</button></div>` : ''}
+        ${side === 'recv' && c.text ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}${t('map.insp.copyRaw')}</button>` : ''}
+        ${side === 'sent' && c.reqBody ? `<button type="button" class="rdi-btn" data-r="copy">${COPY_ICON}${t('map.insp.copyBody')}</button>` : ''}
       </div>`;
     rawHead.querySelectorAll<HTMLButtonElement>('[data-side]').forEach((b) =>
       b.addEventListener('click', () => {
@@ -438,7 +439,7 @@ function open() {
       }),
     );
     rawHead.querySelector('[data-r=copy]')?.addEventListener('click', () => {
-      void copyText(side === 'sent' ? c.reqBody ?? '' : c.text ?? '', side === 'sent' ? 'Body kopiert' : 'Rohdaten kopiert');
+      void copyText(side === 'sent' ? c.reqBody ?? '' : c.text ?? '', side === 'sent' ? t('map.insp.copiedBody') : t('map.insp.copiedRaw'));
     });
 
     rawBody.replaceChildren();
@@ -456,7 +457,7 @@ function open() {
       return;
     }
     if (isGlyphUrl(c.url)) {
-      rawBody.innerHTML = `<p class="muted rdi-empty">Schrift wird gelesen …</p>`;
+      rawBody.innerHTML = `<p class="muted rdi-empty">${t('map.insp.loadingFont')}</p>`;
       const token = ++glyphToken;
       void import('./glyphs').then((m) => m.loadGlyphView(c.url)).then(
         (v) => token === glyphToken && rawBody.replaceChildren(v),
@@ -465,9 +466,9 @@ function open() {
       return;
     }
     if (c.error) rawBody.append(errorView(c));
-    else if (c.skipped) rawBody.innerHTML = `<p class="muted rdi-empty">${esc(c.skipped)} (${esc(c.mime || 'unbekannter Typ')}, ${fmtSize(c.size)}) – keine Vorschau.</p>`;
-    else if (c.objectUrl || c.imgUrl) rawBody.innerHTML = `<div class="rdi-img"><img src="${esc(c.objectUrl ?? c.imgUrl!)}" alt="Rohbild"></div>`;
-    else if (c.text == null) rawBody.innerHTML = `<p class="muted rdi-empty">Wird geladen …</p>`;
+    else if (c.skipped) rawBody.innerHTML = `<p class="muted rdi-empty">${esc(c.skipped)} (${esc(c.mime || t('map.insp.unknownType'))}, ${fmtSize(c.size)}) ${t('map.insp.noPreview')}</p>`;
+    else if (c.objectUrl || c.imgUrl) rawBody.innerHTML = `<div class="rdi-img"><img src="${esc(c.objectUrl ?? c.imgUrl!)}" alt="${t('map.insp.rawImage')}"></div>`;
+    else if (c.text == null) rawBody.innerHTML = `<p class="muted rdi-empty">${t('map.loading')}</p>`;
     else if (canTree && rawMode === 'tree') {
       try {
         if (!parsed.has(c)) parsed.set(c, JSON.parse(c.text));
@@ -476,7 +477,7 @@ function open() {
         rawBody.append(pre(c.text));
       }
     } else {
-      if (c.truncated) rawBody.insertAdjacentHTML('beforeend', `<p class="rdi-note">Sehr große Antwort: nur die ersten ${fmtSize(c.truncated)} von ${fmtSize(c.size)} wurden geladen, daher kein Baum.</p>`);
+      if (c.truncated) rawBody.insertAdjacentHTML('beforeend', `<p class="rdi-note">${t('map.insp.truncated', { a: fmtSize(c.truncated), b: fmtSize(c.size) })}</p>`);
       // pretty-printing a multi-MB document would block the page: show it as received
       if (c.kind === 'json' && !c.truncated && c.text.length < 1_500_000) {
         try {
@@ -536,7 +537,7 @@ function open() {
     e.stopPropagation();
     const kind = b.dataset.copy;
     const text = kind === 'url' ? b.closest<HTMLElement>('[data-url]')?.dataset.url : kind === 'val' ? jsonText(b.closest<HTMLElement>('.j-row')) : b.dataset.text;
-    if (text) void copyText(text, 'In die Zwischenablage kopiert', b);
+    if (text) void copyText(text, t('map.insp.copiedClip'), b);
   });
 
   overlay.querySelectorAll<HTMLButtonElement>('[data-scope]').forEach((b) =>
@@ -556,7 +557,7 @@ function open() {
     rawSig = '';
     renderList();
     renderRaw(true);
-    toast(scope === 'page' ? 'Datenquellen dieser Seite geleert' : 'Alle Datenquellen geleert');
+    toast(scope === 'page' ? t('map.insp.clearedPage') : t('map.insp.clearedAll'));
   });
   statusEl.addEventListener('click', (e) => {
     if (!(e.target as HTMLElement).closest('[data-hdr]')) return;
@@ -617,8 +618,8 @@ const apiUrl = (c: Capture) => c.target ?? c.url;
 function urlBox(label: string, url: string, proxyUrl?: string) {
   const link = /^https?:/.test(url) ? `<a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(url)}">${esc(url)}</a>` : `<span title="${esc(url)}">${esc(url)}</span>`;
   return `<div class="rdi-urlbox">
-    <div class="rdi-url"><b>${esc(label)}</b>${link}<button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(url)}" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button></div>
-    ${proxyUrl ? `<div class="rdi-url rdi-url-sub"><span class="rdi-badge rdi-badge-proxy">PROXY</span><span title="${esc(proxyUrl)}">${esc(proxyUrl)}</span><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(proxyUrl)}" aria-label="Proxy-URL kopieren" title="Proxy-URL kopieren">${COPY_ICON}</button></div>` : ''}
+    <div class="rdi-url"><b>${esc(label)}</b>${link}<button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(url)}" aria-label="${t('map.insp.copyUrl')}" title="${t('map.insp.copyUrl')}">${COPY_ICON}</button></div>
+    ${proxyUrl ? `<div class="rdi-url rdi-url-sub"><span class="rdi-badge rdi-badge-proxy">PROXY</span><span title="${esc(proxyUrl)}">${esc(proxyUrl)}</span><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(proxyUrl)}" aria-label="${t('map.insp.copyProxy')}" title="${t('map.insp.copyProxy')}">${COPY_ICON}</button></div>` : ''}
   </div>`;
 }
 
@@ -645,7 +646,7 @@ async function copyText(text: string, done: string, btn?: HTMLElement) {
     btn.classList.add('done');
     setTimeout(() => btn.classList.remove('done'), 1200);
   }
-  toast(ok ? done : 'Kopieren nicht möglich', ok ? 'info' : 'error');
+  toast(ok ? done : t('map.insp.copyFail'), ok ? 'info' : 'error');
 }
 
 const TRASH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5A1.5 1.5 0 0 0 8.5 21h7a1.5 1.5 0 0 0 1.5-1.5L18 7M9 7V4.5h6V7"/></svg>';
@@ -654,14 +655,14 @@ const fmtTime = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour12:
 
 /** short name of what went wrong */
 function errorTitle(c: Capture) {
-  return c.aborted ? 'Abgebrochen' : c.errorName === 'TypeError' ? 'Netzwerkfehler' : 'Fehler';
+  return c.aborted ? t('map.insp.errAborted') : c.errorName === 'TypeError' ? t('map.insp.errNetwork') : t('map.insp.errError');
 }
 
 function errorExplain(c: Capture) {
-  const via = c.target ? ' Die Anfrage ging über den Daten-Proxy: ob dieser oder die API dahinter ausgefallen ist, sagt der Browser nicht.' : '';
-  if (c.errorName === 'TimeoutError') return `Die Seite hat nach einer festen Zeit aufgegeben (Timeout), es kam keine Antwort an.${via}`;
-  if (c.aborted) return `Die Seite hat die Anfrage selbst beendet – meist weil eine neuere Anfrage sie ersetzt hat, ein Timeout griff oder die Ansicht gewechselt wurde. Eine Antwort des Servers wurde nicht mehr gelesen.${via}`;
-  if (c.errorName === 'TypeError') return `Es kam keine Antwort an: Server nicht erreichbar, keine Verbindung, von CORS blockiert oder von einem Werbeblocker verworfen. Der Browser nennt den genauen Grund aus Sicherheitsgründen nicht.${via}`;
+  const via = c.target ? ` ${t('map.insp.errVia')}` : '';
+  if (c.errorName === 'TimeoutError') return `${t('map.insp.errTimeout')}${via}`;
+  if (c.aborted) return `${t('map.insp.errAborted2')}${via}`;
+  if (c.errorName === 'TypeError') return `${t('map.insp.errTypeError')}${via}`;
   return via.trim();
 }
 
@@ -677,13 +678,13 @@ function errorView(c: Capture) {
   d.innerHTML = `<h3>${esc(errorTitle(c))}</h3>
     <p>${esc(errorExplain(c))}</p>
     ${kv([
-      ['Meldung', msg, true],
-      ['Fehlertyp', c.errorName ?? '–'],
-      ['Nach', `${c.ms} ms`],
-      ['Gestartet', fmtTime(c.t)],
-      ['Methode', c.method],
+      [t('map.insp.kMsg'), msg, true],
+      [t('map.insp.kErrType'), c.errorName ?? '–'],
+      [t('map.insp.kAfter'), `${c.ms} ms`],
+      [t('map.insp.kStarted'), fmtTime(c.t)],
+      [t('map.insp.kMethod'), c.method],
       ['URL', apiUrl(c), true],
-      ...(c.target ? ([['Proxy', c.url, true]] as [string, string, boolean][]) : []),
+      ...(c.target ? ([[t('map.insp.kProxy'), c.url, true]] as [string, string, boolean][]) : []),
     ])}`;
   return d;
 }
@@ -711,10 +712,10 @@ function sentView(c: Capture) {
   }
   const sec = (title: string, body: string) => `<section><h4>${title}</h4>${body}</section>`;
   d.innerHTML =
-    sec('Anfrage', kv([['Methode', c.method], ['URL', apiUrl(c), true], ...(c.target ? ([['Über Proxy', c.url, true]] as [string, string, boolean][]) : []), ['Gestartet', fmtTime(c.t)], ['Seite', ROUTE_LABEL[c.route] ?? c.route]])) +
-    (params.length ? sec(`Parameter (${params.length})`, kv(params.map(([k, v]) => [k, v, true] as [string, string, boolean]))) : '') +
-    (c.reqHeaders ? sec(`Header (${c.reqHeaders.length})`, c.reqHeaders.length ? kv(c.reqHeaders.map(([k, v]) => [k, v, true] as [string, string, boolean])) : '<p class="muted">keine eigenen Header – der Browser ergänzt seine Standard-Header.</p>') : '<p class="muted">Vom Browser selbst geladen (Bild, Textur …): Header und Body sind nicht einsehbar.</p>');
-  if (c.reqBody) d.insertAdjacentHTML('beforeend', sec('Body', ''));
+    sec(t('map.insp.req'), kv([[t('map.insp.kMethod'), c.method], ['URL', apiUrl(c), true], ...(c.target ? ([[t('map.insp.kViaProxy'), c.url, true]] as [string, string, boolean][]) : []), [t('map.insp.kStarted'), fmtTime(c.t)], [t('map.insp.kPage'), ROUTE_LABEL[c.route] ?? c.route]])) +
+    (params.length ? sec(t('map.insp.params', { n: String(params.length) }), kv(params.map(([k, v]) => [k, v, true] as [string, string, boolean]))) : '') +
+    (c.reqHeaders ? sec(t('map.insp.headers', { n: String(c.reqHeaders.length) }), c.reqHeaders.length ? kv(c.reqHeaders.map(([k, v]) => [k, v, true] as [string, string, boolean])) : `<p class="muted">${t('map.insp.noOwnHeaders')}</p>`) : `<p class="muted">${t('map.insp.browserLoaded')}</p>`);
+  if (c.reqBody) d.insertAdjacentHTML('beforeend', sec(t('map.insp.body'), ''));
   if (c.reqBody) d.lastElementChild!.append(pre(c.reqBody));
   return d;
 }
@@ -725,7 +726,7 @@ function jsonText(row: HTMLElement | null) {
   const v = jsonValues.get(row);
   return typeof v === 'string' ? v : typeof v === 'object' && v !== null ? JSON.stringify(v, null, 2) : String(v);
 }
-const JSON_COPY = `<button type="button" class="rdi-ibtn j-copy" data-copy="val" aria-label="Wert kopieren" title="Wert kopieren">${COPY_ICON}</button>`;
+const JSON_COPY = `<button type="button" class="rdi-ibtn j-copy" data-copy="val" aria-label="${t('map.insp.copyValue')}" title="${t('map.insp.copyValue')}">${COPY_ICON}</button>`;
 
 /** host + path with counters (tile numbers, glyph ranges …) replaced by "*", so repeated requests collapse into one entry */
 function endpointPath(c: Capture) {
@@ -778,7 +779,7 @@ function gallery(initial: Capture[]): { el: HTMLElement; update(caps: Capture[])
     }
     remember(bigCache, c.url, img, BIG_MAX);
     big.replaceChildren(img);
-    big.insertAdjacentHTML('beforeend', `<div class="rdi-gal-cap"><b>${esc(name(c))}</b><span>${c.size ? `${fmtSize(c.size)} · ` : ''}${c.ms} ms</span><a href="${esc(c.url)}" target="_blank" rel="noopener">Öffnen</a><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(c.url)}" aria-label="URL kopieren" title="URL kopieren">${COPY_ICON}</button></div>`);
+    big.insertAdjacentHTML('beforeend', `<div class="rdi-gal-cap"><b>${esc(name(c))}</b><span>${c.size ? `${fmtSize(c.size)} · ` : ''}${c.ms} ms</span><a href="${esc(c.url)}" target="_blank" rel="noopener">${t('map.insp.open')}</a><button type="button" class="rdi-ibtn" data-copy="text" data-text="${esc(c.url)}" aria-label="${t('map.insp.copyUrl')}" title="${t('map.insp.copyUrl')}">${COPY_ICON}</button></div>`);
   };
 
   let dead = false;

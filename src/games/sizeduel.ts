@@ -1,6 +1,7 @@
 import type { Geometry, Position } from 'geojson';
 import { loadData, SCOPES, scopeOf, type Feat } from './data';
 import { escapeHtml } from '../util';
+import { t as m, fmtLocale } from '../i18n';
 import { areaVal, areaUnit } from '../units';
 import { flagUrl, outlineSvg } from './quizitems';
 
@@ -56,13 +57,14 @@ export async function sizeItems(scope: string, metric: Metric): Promise<SizeItem
 }
 
 const shuffle = <T>(a: T[]): T[] => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map((x) => x[1]);
-const nf = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 });
-const cf = new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 });
-const ratioF = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 });
+/** locale-aware number formatters (built per call: the language can change) */
+const nf = () => new Intl.NumberFormat(fmtLocale(), { maximumFractionDigits: 0 });
+const cf = () => new Intl.NumberFormat(fmtLocale(), { notation: 'compact', maximumFractionDigits: 1 });
+const ratioF = () => new Intl.NumberFormat(fmtLocale(), { maximumFractionDigits: 1 });
 
 export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () => void): SizeDuel {
   const val = (i: SizeItem) => (o.metric === 'area' ? i.area : i.pop!);
-  const fmt = (i: SizeItem) => (o.metric === 'area' ? `${nf.format(Math.round(areaVal(i.area)))} ${areaUnit()}` : `${cf.format(i.pop!)} Einwohner`);
+  const fmt = (i: SizeItem) => (o.metric === 'area' ? `${nf().format(Math.round(areaVal(i.area)))} ${areaUnit()}` : `${cf().format(i.pop!)} ${m('games.residents', { count: i.pop! }, { count: i.pop! })}`);
   const total = o.rounds > 0 ? Math.min(o.rounds, Math.floor(o.items.length / 2)) : 0;
   const used = new Set<string>();
 
@@ -72,15 +74,15 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
     <div class="gm-hud fg-hud">
       <div class="gm-stats"><span class="sd-score"></span><span class="sd-time">0:00</span></div>
       <div class="fg-stage">
-        <div class="fg-text"><small>${o.metric === 'area' ? 'Welches Gebiet ist größer?' : 'Wo leben mehr Menschen?'}</small></div>
+        <div class="fg-text"><small>${o.metric === 'area' ? m('games.askArea') : m('games.askPop')}</small></div>
         <div class="sd-cards"></div>
         <div class="gm-feedback" aria-live="polite"></div>
-        <button class="btn btn-primary sd-next" type="button" hidden>Weiter</button>
-        <small class="gm-note sd-hint">Die Umrisse sind nicht maßstäblich zueinander.</small>
+        <button class="btn btn-primary sd-next" type="button" hidden>${m('games.next')}</button>
+        <small class="gm-note sd-hint">${m('games.silhouetteNote')}</small>
       </div>
       <div class="gm-actions">
-        <button class="btn sd-giveup" type="button">Aufgeben</button>
-        <button class="btn sd-menu" type="button">Menü</button>
+        <button class="btn sd-giveup" type="button">${m('games.giveUp')}</button>
+        <button class="btn sd-menu" type="button">${m('games.menu')}</button>
       </div>
     </div>`;
   host.append(root);
@@ -105,7 +107,7 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
   };
   const timer = window.setInterval(clock, 500);
   const score = () => {
-    $('.sd-score').textContent = `${total ? `${round} / ${total} · ` : ''}${right} richtig${streak > 1 ? ` · 🔥 ${streak}` : ''}`;
+    $('.sd-score').textContent = `${total ? `${round} / ${total} · ` : ''}${m('games.rightCount', { count: right })}${streak > 1 ? ` · 🔥 ${streak}` : ''}`;
   };
   const say = (t: string, kind: '' | 'ok' | 'bad' = '') => {
     msg.textContent = t;
@@ -157,13 +159,13 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
       v.hidden = false;
     });
     const [big, small] = win === 0 ? [a, b] : [b, a];
-    const x = ratioF.format(val(big) / val(small));
-    const detail = `${big.name} ist ${x}× so ${o.metric === 'area' ? 'groß' : 'bevölkerungsreich'} wie ${small.name}.`;
+    const x = ratioF().format(val(big) / val(small));
+    const detail = o.metric === 'area' ? m('games.duelDetailArea', { a: big.name, x, b: small.name }) : m('games.duelDetailPop', { a: big.name, x, b: small.name });
     if (ok) {
       right++;
       streak++;
       best = Math.max(best, streak);
-      say(`Richtig! ${detail}`, 'ok');
+      say(`${m('games.correctCheer')} ${detail}`, 'ok');
     } else {
       streak = 0;
       wrong.push([big, small]);
@@ -188,11 +190,11 @@ export function startSizeDuel(host: HTMLElement, o: SizeDuelOptions, onExit: () 
     const s = Math.round((Date.now() - t0) / 1000);
     root.innerHTML = `
       <div class="gm-result">
-        <h2>${gaveUp ? 'Aufgegeben' : total ? 'Geschafft!' : 'Serie vorbei'}</h2>
-        <div class="gm-big">${right}${total ? ` / ${total}` : ''} <span>${total ? `(${Math.round((right / Math.max(total, 1)) * 100)} %)` : 'richtig in Folge'}</span></div>
-        <p>Zeit ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} · längste Serie ${best}</p>
-        ${wrong.length ? `<details open><summary>${wrong.length} falsch</summary><p class="gm-missed">${wrong.map(([big, small]) => `${escapeHtml(big.name)} &gt; ${escapeHtml(small.name)}`).join(' · ')}</p></details>` : ''}
-        <div class="gm-actions"><button class="btn btn-primary sd-again" type="button">Nochmal</button><button class="btn sd-menu" type="button">Menü</button></div>
+        <h2>${gaveUp ? m('games.gaveUp') : total ? m('games.done') : m('games.streakOver')}</h2>
+        <div class="gm-big">${right}${total ? ` / ${total}` : ''} <span>${total ? `(${Math.round((right / Math.max(total, 1)) * 100)} %)` : m('games.streakDone')}</span></div>
+        <p>${m('games.timeShort', { when: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })} · ${m('games.longestStreak', { n: best })}</p>
+        ${wrong.length ? `<details open><summary>${m('games.wrongCount', { count: wrong.length })}</summary><p class="gm-missed">${wrong.map(([big, small]) => `${escapeHtml(big.name)} &gt; ${escapeHtml(small.name)}`).join(' · ')}</p></details>` : ''}
+        <div class="gm-actions"><button class="btn btn-primary sd-again" type="button">${m('games.again')}</button><button class="btn sd-menu" type="button">${m('games.menu')}</button></div>
       </div>`;
     root.querySelector('.sd-again')!.addEventListener('click', () => {
       destroy();

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 // tiny localStorage stand-in: store.ts reads the options from there
+// ('orbis.lang' = 'de' is seeded before the import, since i18n detects the language at module load
+// and this suite asserts the German unit/output texts)
 const mem = new Map<string, string>();
+mem.set('orbis.lang', 'de');
 (globalThis as { localStorage?: unknown }).localStorage = {
   getItem: (k: string) => mem.get(k) ?? null,
   setItem: (k: string, v: string) => void mem.set(k, v),

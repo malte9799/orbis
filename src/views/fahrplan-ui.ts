@@ -3,13 +3,14 @@ import { rufbusInfo, telHref } from '../api/rufbus';
 import { modeStyle } from '../api/transit';
 import { store } from '../store';
 import { debounce, escapeHtml as esc } from '../util';
+import { t as m, fmtLocale } from '../i18n';
 
 // Building blocks of the Fahrplan view that are shared between the search and the saved tab.
 
-export const hm = (t: number) => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+export const hm = (t: number) => new Date(t).toLocaleTimeString(fmtLocale(), { hour: '2-digit', minute: '2-digit' });
 /** "Donnerstag, 29.10." – the weekday written out, for the day headings of the connections */
-export const dayLong = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'numeric' });
-export const dayTxt = (t: number) => new Date(t).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+export const dayLong = (t: number) => new Date(t).toLocaleDateString(fmtLocale(), { weekday: 'long', day: 'numeric', month: 'numeric' });
+export const dayTxt = (t: number) => new Date(t).toLocaleDateString(fmtLocale(), { weekday: 'short', day: 'numeric', month: 'numeric' });
 /** value of an <input type="datetime-local"> for a timestamp (local time) */
 export const localInput = (t: number) => {
   const d = new Date(t - new Date(t).getTimezoneOffset() * 60000);
@@ -30,10 +31,10 @@ function stopMemory(q: string, list?: Stop[]): Stop[] | null {
 }
 
 /** stop picker: text box with suggestions; `pick` is called with the chosen stop */
-export function stopField(label: string, onPick: (s: Stop | null) => void) {
+export function stopField(placeholder: string, onPick: (s: Stop | null) => void) {
   const root = document.createElement('div');
   root.className = 'fp-field';
-  root.innerHTML = `<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(label)}" aria-label="${esc(label)}" role="combobox" aria-expanded="false" aria-autocomplete="list"/><ul class="suggestions" role="listbox" hidden></ul>`;
+  root.innerHTML = `<input type="text" autocomplete="off" spellcheck="false" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}" role="combobox" aria-expanded="false" aria-autocomplete="list"/><ul class="suggestions" role="listbox" hidden></ul>`;
   const input = root.querySelector('input')!;
   const list = root.querySelector('ul')!;
   let results: Stop[] = [];
@@ -52,7 +53,7 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
     results = r.slice(0, 8);
     list.innerHTML = results.length
       ? results.map((s, i) => `<li role="option" data-i="${i}"><span class="s-name">${esc(s.name)}</span><span class="s-meta">${esc(s.area ?? '')}</span></li>`).join('')
-      : '<li class="empty">Keine Haltestelle gefunden</li>';
+      : `<li class="empty">${m('fp.noStopFound')}</li>`;
     list.hidden = false;
     input.setAttribute('aria-expanded', 'true');
   };
@@ -67,7 +68,7 @@ export function stopField(label: string, onPick: (s: Stop | null) => void) {
       if (my === seq) show(r);
     } catch {
       if (my === seq && !known) {
-        list.innerHTML = '<li class="empty">Suche nicht verfügbar</li>';
+        list.innerHTML = `<li class="empty">${m('fp.searchUnavailable')}</li>`;
         list.hidden = false;
       }
     }
@@ -116,10 +117,10 @@ const timeCell = (actual: number, sched: number, delay: number | null) => {
   return delay === 0 ? `<span class="fp-tm"><b class="${cls}">${hm(actual)}</b></span>` : `<span class="fp-tm"><b>${hm(sched)}</b><b class="${cls}">${hm(actual)}</b></span>`;
 };
 const stationRow = (name: string, track: string | undefined, actual: number, sched: number, delay: number | null, color: string, changed = false) =>
-  `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small class="fp-gl-badge${changed ? ' changed' : ''}" title="Gleis ${esc(track)}${changed ? ' (Gleiswechsel)' : ''}">Gl. ${esc(track)}</small>` : ''}</div></div>`;
+  `<div class="fp-row" style="--c:${color}">${timeCell(actual, sched, delay)}<span class="fp-dot"></span><div class="fp-st"><b>${esc(name)}</b>${track ? `<small class="fp-gl-badge${changed ? ' changed' : ''}" title="${m('fp.trackTitle', { track: track, changed: changed ? m('fp.trackChanged') : '' })}">Gl. ${esc(track)}</small>` : ''}</div></div>`;
 const walkTxt = (legs: Leg[]) => {
   const w = legs.reduce((n, l) => n + (l.walkM ?? 0), 0);
-  return `Fußweg${w ? ` · ${w} m` : ''} · ${durationTxt(legs.reduce((n, l) => n + (l.arr - l.dep), 0))}`;
+  return `${m('fp.walk')}${w ? ` · ${w} m` : ''} · ${durationTxt(legs.reduce((n, l) => n + (l.arr - l.dep), 0))}`;
 };
 const gap = (cls: string, color: string, label: string, mins: string, icon: string) =>
   `<div class="fp-gap ${cls}" style="--c:${color}"><span class="fp-gm">${esc(mins)}</span><span class="fp-gl"></span><div class="fp-gb"><span class="fp-gi">${icon}</span>${esc(label)}</div></div>`;
@@ -132,17 +133,17 @@ const bookingHtml = (l: Leg) => {
   const b = l.mode === 'ODM' || l.mode === 'FLEX' ? rufbusInfo(l.agency, l.reservation) : null;
   if (!b) return '';
   const call = b.tel ? ` <a class="fp-tel" href="${telHref(b.tel)}">${ICON_PHONE}${esc(b.tel)}</a>` : '';
-  const when = b.leadMin ? `<p class="fp-nach">Anruf ${b.leadMin} min vor Abfahrt</p>` : b.tel ? '' : '<p class="fp-nach">Anmeldung erforderlich</p>';
+  const when = b.leadMin ? `<p class="fp-nach">${m('fp.callBefore', { n: b.leadMin }, { count: b.leadMin })}</p>` : b.tel ? '' : `<p class="fp-nach">${m('fp.registrationNeeded')}</p>`;
   return `${call}${when}`;
 };
 
 const legBody = (l: Leg) => {
   const stops = l.via.length
-    ? `<details class="fp-stops"><summary>${l.via.length} Haltestelle${l.via.length > 1 ? 'n' : ''}</summary><ul>${l.via
+    ? `<details class="fp-stops"><summary>${m('fp.nStops', { count: l.via.length }, { count: l.via.length })}</summary><ul>${l.via
         .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
         .join('')}</ul></details>`
     : '';
-  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
+  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ` <small class="fp-late">${m('fp.cancelled')}</small>` : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">${m('fp.towards', { to: esc(l.headsign) })}</p>` : ''}${stops}</div>`;
 };
 
 /** the connection as a timeline: station rows, the ride between them and the transfers */
@@ -164,7 +165,7 @@ export const timeline = (it: Itinerary) => {
     const c = legColor(l);
     if (prev) {
       const wait = Math.max(0, l.dep - prev.arr);
-      out.push(gap('swap', '#8a93a8', walks.length ? walkTxt(walks) : 'Umstieg', durationTxt(wait), walks.length ? ICON_WALK : ICON_SWAP));
+      out.push(gap('swap', '#8a93a8', walks.length ? walkTxt(walks) : m('fp.transfer'), durationTxt(wait), walks.length ? ICON_WALK : ICON_SWAP));
     } else if (walks.length) {
       out.push(stationRow(walks[0].from, undefined, walks[0].dep, walks[0].schedDep, null, '#8a93a8'), gap('walk', '#8a93a8', walkTxt(walks), '', ICON_WALK));
     }
@@ -179,25 +180,25 @@ export const timeline = (it: Itinerary) => {
 };
 
 /** summary line of a status: "+14 min" red / "pünktlich" green, empty without real-time data */
-export const delayTxt = (d: number | null | undefined) => (d == null ? '' : d > 0 ? `<span class="${d <= 5 ? 'fp-ok' : 'fp-late'}">+${d} min</span>` : '<span class="fp-ok">pünktlich</span>');
+export const delayTxt = (d: number | null | undefined) => (d == null ? '' : d > 0 ? `<span class="${d <= 5 ? 'fp-ok' : 'fp-late'}">+${d} min</span>` : `<span class="fp-ok">${m('fp.onTime')}</span>`);
 
 /** tiny mark next to a delay: where the real-time data comes from (DB timetable data or Transitous) */
 export const srcIcon = (src?: DelaySource) => `<i class="fp-src${src === 'db' ? ' db' : ''}" title="Echtzeit: ${src === 'db' ? 'DB' : 'Transitous'}" aria-label="Echtzeit: ${src === 'db' ? 'DB' : 'Transitous'}">${src === 'db' ? 'DB' : 'T'}</i>`;
 
 export const depRow = (d: Departure) => {
-  const late = d.delayMin != null && d.delayMin > 0 ? `<span class="fp-late">+${d.delayMin}</span>` : d.delayMin === 0 ? '<span class="fp-ok">pünktlich</span>' : '';
+  const late = d.delayMin != null && d.delayMin > 0 ? `<span class="fp-late">+${d.delayMin}</span>` : d.delayMin === 0 ? `<span class="fp-ok">${m('fp.onTime')}</span>` : '';
   const src = d.delayMin != null ? srcIcon(d.delaySrc) : '';
   return `<li class="fp-dep${d.cancelled ? ' cancelled' : ''}" style="--c:${modeStyle(d.mode).color}">
     <span class="fp-in">${d.cancelled ? '–' : esc(inTxt(d.time))}</span>
     <span class="fp-badge" style="${fg(d.mode)}">${esc(lineName(d.mode, d.line))}</span>
-    <span class="fp-to-txt">${esc(d.headsign)}${d.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}</span>
+    <span class="fp-to-txt">${esc(d.headsign)}${d.cancelled ? ` <small class="fp-late">${m('fp.cancelled')}</small>` : ''}</span>
     <span class="fp-at">${hm(d.time)} ${late}${src}${d.track ? `<small${d.trackChanged ? ' class="fp-gl-chg"' : ''}>Gl. ${esc(d.track)}</small>` : ''}</span>
   </li>`;
 };
 
 /** button that saves / removes a connection as a commuter trip (state is toggled in place by the caller) */
 /** label of the save button: the long text where there is room, the short one otherwise (see .fp-dh) */
-export const tripTxt = (saved: boolean) => `<span class="fp-lg">${saved ? 'Verbindung gemerkt' : 'Verbindung merken'}</span><span class="fp-shrt">${saved ? 'Gemerkt' : 'Merken'}</span>`;
+export const tripTxt = (saved: boolean) => `<span class="fp-lg">${m(saved ? 'fp.tripSaved' : 'fp.tripSave')}</span><span class="fp-shrt">${m(saved ? 'fp.tripSavedShort' : 'fp.tripSaveShort')}</span>`;
 export const tripBtn = (key: string, saved: boolean) =>
   `<button type="button" class="fp-trip${saved ? ' on' : ''}" data-act="savetrip" data-key="${esc(key)}" aria-pressed="${saved}">${BOOKMARK}${tripTxt(saved)}</button>`;
 
@@ -207,7 +208,7 @@ const fg = (mode: string) => (mode === 'ODM' || mode === 'FLEX' ? 'color:#2b2300
 export const lineName = (mode: string, line: string) => {
   if (!line) return modeStyle(mode).label;
   if (mode === 'BUS' && !/^bus/i.test(line)) return `Bus ${line}`;
-  return mode === 'ODM' || mode === 'FLEX' ? 'RUF' : line; // on-demand buses: just "RUF"
+  return mode === 'ODM' || mode === 'FLEX' ? m('fp.ondemandLine') : line; // on-demand buses: just "RUF"
 };
 
 /** bar label: "RE8 (13188)" → the train number wraps to a clipped second line when it does not fit, so it disappears instead of ending in "…" */
@@ -219,9 +220,9 @@ const segLabel = (line: string) => {
 
 /** "in 12 min" / "in 1 h 05" / "jetzt" / "abgefahren" for an instant */
 export const cdTxt = (t: number, now = Date.now()) => {
-  if (Math.round((t - now) / 60000) < -1) return 'abgefahren';
+  if (Math.round((t - now) / 60000) < -1) return m('fp.gone');
   const x = inTxt(t, now);
-  return x === 'jetzt' ? x : `in ${x}`;
+  return x === 'jetzt' ? m('fp.now') : m('fp.inPrefix', { when: x });
 };
 
 /** one connection as an expandable card; `trip` adds the commuter button inside, `hero` makes it the big "next connection" card (phone) */
@@ -239,13 +240,13 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
     .map((l) => {
       const w = Math.max(6, ((l.arr - l.dep) / total) * 100);
       return l.mode === 'WALK'
-        ? `<span class="fp-seg walk" title="Fußweg" aria-label="Fußweg">${ICON_WALK}</span>`
+        ? `<span class="fp-seg walk" title="${m('fp.walk')}" aria-label="${m('fp.walk')}">${ICON_WALK}</span>`
         : `<span class="fp-seg" style="flex:${w};--c:${legColor(l)};${fg(l.mode)}">${segLabel(lineName(l.mode, l.line))}</span>`;
     })
     .join('');
   const cancelled = it.legs.some((l) => l.cancelled);
   const dl = first?.delayMin;
-  const rawTag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
+  const rawTag = cancelled ? `<span class="fp-dtag late">${m('fp.cancelled')}</span>` : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : `<span class="fp-dtag ok">${m('fp.onTime')}</span>`;
   const src = !cancelled && dl != null ? srcIcon(first?.delaySrc) : '';
   // the icon sits in the time line (list) and in the status tag (big card, where the time line is hidden)
   const tag = src ? rawTag.replace(/<\/span>$/, `${src}</span>`) : rawTag;
@@ -253,13 +254,13 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
   const startT = first?.dep ?? it.dep;
   return `<details class="fp-itin${hero ? ' fp-hero' : ''}" data-k="${esc(stableKey(it))}">
     <summary>
-      ${hero ? '<span class="fp-hero-lbl">Nächste Verbindung</span>' : ''}${first?.track ? `<small class="fp-gl-badge fp-sum-gl${hero ? ' fp-hero-gl' : ''}${first.trackChanged ? ' changed' : ''}" title="Gleis ${esc(first.track)}${first.trackChanged ? ' (Gleiswechsel)' : ''}">Gl. ${esc(first.track)}</small>` : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
+      ${hero ? `<span class="fp-hero-lbl">${m('fp.nextConnection')}</span>` : ''}${first?.track ? `<small class="fp-gl-badge fp-sum-gl${hero ? ' fp-hero-gl' : ''}${first.trackChanged ? ' changed' : ''}" title="${m('fp.trackTitle', { track: esc(first.track), changed: first.trackChanged ? m('fp.trackChanged') : '' })}">Gl. ${esc(first.track)}</small>` : ''}<span class="fp-cd" data-t="${startT}">${esc(cdTxt(startT))}</span>
       <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
       ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${src}</span>` : ''}
       <span class="fp-bar">${bar}</span>
-      <span class="fp-von">von ${esc(first?.from ?? '')}</span>
+      <span class="fp-von">${m('fp.fromWord', { from: esc(first?.from ?? '') })}</span>
     </summary>
     <div class="fp-detail"><div class="fp-dh"><span>${esc(dayLong(it.dep))}</span><span><span class="fp-dl">Dauer: </span>${esc(durationTxt(planArr - planDep))}</span>${trip ? tripBtn(trip.key, trip.saved) : ''}</div>${timeline(it)}</div>
   </details>`;

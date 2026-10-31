@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import type { FeatureCollection } from 'geojson';
 import { empty } from '../shared/geo';
 import { FONT_REGULAR } from '../../vector';
@@ -62,7 +63,7 @@ function merge(ctx: ExtraCtx) {
   const features = [...st.wd.features, ...st.mrds.features, ...st.osm.features];
   ctx.setData('resources', { type: 'FeatureCollection', features });
   const z = ctx.map.getZoom();
-  const level = z < 7 ? 'Weltübersicht (Wikidata) – reinzoomen für USGS/BGR (ab 7) und OSM (ab 10)' : z < 10 ? 'Regional: Wikidata, USGS MRDS, BGR (DE) – ab Zoom 10 OpenStreetMap' : 'Lokal: alle Quellen inkl. OpenStreetMap';
+  const level = z < 7 ? t('layers.resources.noteWorld') : z < 10 ? t('layers.resources.noteRegion') : t('layers.resources.noteLocal');
   if (features.length || !ctx.info('resources')?.loading) ctx.set('resources', { count: features.length, note: level });
 }
 

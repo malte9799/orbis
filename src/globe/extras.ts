@@ -14,7 +14,8 @@ import { vehiclesApi } from './layers/shared/vehicles';
 import { launchesApi } from './layers/defs/launches';
 import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
-import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
+import { CLICK_HANDLERS, EXTRAS, LAYERS, tx, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
+import { t } from '../i18n';
 import { cardHtml } from './popup';
 import { heightNum } from '../units';
 import { OPTIONS_EVENT } from '../store';
@@ -443,8 +444,9 @@ export class ExtraLayers {
         .then((r) => this.set(id, { loading: false, at: Date.now(), ...(r ?? {}) }))
         .catch((e) => {
           console.warn(id, e);
-          this.set(id, { loading: false, at: Date.now(), note: 'Quelle nicht erreichbar' });
-          this.hooks.toast(`${EXTRAS.find((d) => d.id === id)!.label}: Daten konnten nicht geladen werden.`);
+          this.set(id, { loading: false, at: Date.now(), note: t('layers.lightning.noteFail') });
+          const def0 = EXTRAS.find((d) => d.id === id)!;
+          this.hooks.toast(t('layers.toastFail', { name: tx(`layers.${id}.label`, def0.label) }));
         });
     };
     const at = this.info[id]?.at ?? 0;
