@@ -410,6 +410,13 @@
   font-size: 0.9rem;
   padding: 6px 9px;
 }
+.fp-legbody .fp-badge svg {
+  width: 15px;
+  height: 15px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  display: inline-block;
+}
 .fp-nach {
   margin: 6px 0 0;
   color: var(--text-2);

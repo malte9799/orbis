@@ -1,6 +1,6 @@
 import { durationTxt, inTxt, legColor, searchStops, stableKey, type DelaySource, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { rufbusInfo, telHref } from '../api/rufbus';
-import { modeStyle } from '../api/transit';
+import { MODE_ICONS, modeStyle } from '../api/transit';
 import { store } from '../store';
 import { debounce, escapeHtml as esc } from '../util';
 
@@ -136,13 +136,19 @@ const bookingHtml = (l: Leg) => {
   return `${call}${when}`;
 };
 
+/** vehicle glyph in front of the line name: one tile per type (ICE/IC/RE/S/U/Tram/Bus/RUF/ship), drawn in the badge's text color */
+const modeIconSvg = (mode: string) => {
+  const d = MODE_ICONS[mode];
+  return d ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>` : '';
+};
+
 const legBody = (l: Leg) => {
   const stops = l.via.length
     ? `<details class="fp-stops"><summary>${l.via.length} Haltestelle${l.via.length > 1 ? 'n' : ''}</summary><ul>${l.via
         .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
         .join('')}</ul></details>`
     : '';
-  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
+  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${modeIconSvg(l.mode)}${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
 };
 
 /** the connection as a timeline: station rows, the ride between them and the transfers */
