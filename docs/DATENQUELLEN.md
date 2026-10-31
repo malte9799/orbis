@@ -245,6 +245,23 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [ESA SPICE-Daten](https://spiftp.esac.esa.int/data/SPICE/) | JUICE, BepiColombo (Modelle & Bahn) | © ESA |
 | [CelesTrak](https://celestrak.org) | Erdsatelliten (TLE) | 🟢 |
 
+### Sterne (Ansicht `#/sterne`)
+
+| Quelle | Verwendung | Lizenz |
+|---|---|---|
+| [NASA SVS „Deep Star Maps 2020"](http://svs.gsfc.nasa.gov/4851) | Basis-Himmel: position/Helligkeit/Farbe von 1,7 Mrd. Sternen (Hipparcos-2, Tycho-2, Gaia DR2), plattkartiert J2000; 4k-Textur (`textures/starmap_2020_4k.jpg`) | gemeinfrei (NASA/GSFC SVS, Ernie Wright) |
+| [CDS HiPS „DSS2 color"](https://alasky.cds.unistra.fr/DSS/DSSColor) | Detailtiefe beim Hineinzoomen (bis 0,229″/px): progressive JPEG-Kacheln aus dem HEALPix-Raster nach dem [IVOA-HiPS-Standard](https://ivoa.net/documents/HiPS/) | HiPS-Paket: [ODbL-1.0](https://opendatacommons.org/licenses/odbl/) (CNRS/Unistra); zugrunde liegende Platten: **© AAO, © UK SERC/PPARC/AATB, © Caltech/Palomar, © AURA** ([STScI-Copyright](https://archive.stsci.edu/dss/copyright.html)) – nicht-kommerzielle Nutzung mit Quellenangabe frei; **kommerziell nur mit Lizenz** (Ersatz: 2MASS/AllWISE, US-Regierung, gemeinfrei) |
+| [CDS HiPS „SDSS9 color"](https://alasky.cds.unistra.fr/SDSS/DR9/color) | Alternative Himmelskarte (g/r/i-Komposit, nur überdeckter Himmelsteil), Auswahl in `#/sterne` | HiPS-Paket: CDS; Daten: [Sloan Digital Sky Survey DR9](https://www.sdss.org/dr9/) – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „PanSTARRS DR1 color"](https://alasky.cds.unistra.fr/Pan-STARRS/DR1/color-i-r-g) | Alternative Himmelskarte (i/r/g-Komposit, Deklination > ca. −30°) | HiPS-Paket: CDS; Daten: © PS1 Science Consortium ([PS1-Datenpolitik](https://panstarrs.stsci.edu/)) – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „DESI Legacy Surveys DR10 color“](https://alasky.cds.unistra.fr/DESI-legacy-surveys/DR10/CDS_P_DESI-Legacy-Surveys_DR10_color) | Himmelskarte (g/r/i/z), ca. 2/3 des Himmels; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: [DESI Legacy Imaging Surveys](https://www.legacysurvey.org/acknowledgment/) – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „DECaPS DR1 color“](https://alasky.cds.unistra.fr/DECaPS/DR1/color) | Himmelskarte, südliche Milchstraßenebene; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: DECam Plane Survey (NOIRLab/CTIO) – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „SkyMapper DR4 color“](https://alasky.cds.unistra.fr/Skymapper/DR4/CDS_P_Skymapper_DR4_color) | Himmelskarte (i/r/g), Südhimmel; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: © Australian National University, [SkyMapper DR4](https://skymapper.anu.edu.au/) (CC BY 4.0) |
+| [CDS HiPS „2MASS color“](https://alasky.cds.unistra.fr/2MASS/Color) | Infrarotkarte J/H/K, ganzer Himmel; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: Univ. of Massachusetts & IPAC/Caltech, NASA/NSF – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „AllWISE color“](https://alasky.cds.unistra.fr/AllWISE/RGB-W4-W2-W1) | Infrarotkarte W1/W2/W4, ganzer Himmel; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: NASA/JPL-Caltech/UCLA, IPAC – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „unWISE color“](https://alasky.cds.unistra.fr/unWISE/color-W2-W1W2-W1) | Infrarotkarte W1/W2 (NEOWISE-Neuberechnung), ganzer Himmel; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: IPAC/NASA, D. Lang – frei nutzbar mit Quellenangabe |
+| [CDS HiPS „GALEX GR6/7 color“](https://alasky.cds.unistra.fr/GALEX/GALEXGR6_7_color) | Ultraviolettkarte, ca. 79 % des Himmels; Auswahl in `#/sterne`; HiPS-Paket: CDS | Daten: NASA/STScI (MAST) – frei nutzbar mit Quellenangabe |
+| [HEALPix](http://healpix.sourceforge.net) (chealpix.c) | Referenz für die Kachelaufteilung (nested) | GPL-2+ |
+
 ### Texturen
 
 | Quelle | Verwendung | Lizenz |

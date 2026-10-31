@@ -59,7 +59,7 @@ in einer App und nahtlos per Zoom verbunden.**
 > 📚 **Woher kommen die Daten?** Die vollständige Liste aller Quellen mit Links, Lizenzen und Verwendung:
 > **[docs/DATENQUELLEN.md](docs/DATENQUELLEN.md)**
 
-## 🧭 Die drei Ansichten
+## 🧭 Die vier Ansichten
 
 ### 🌦️ Vorhersage
 
@@ -163,6 +163,18 @@ kostenlose, browsertaugliche Bahndaten-API gibt. Asteroiden nutzen Bahnelemente 
 [JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html) in Zweikörper-Näherung.
 
 </details>
+
+### 🌌 Sterne
+
+`#/sterne` – der Himmel von innen, als Globus oder als Karte, mit DSS2-HiPS-Kacheln (CDS/alasky).
+
+| | |
+|---|---|
+| 🌠 **Ansichten** | Himmel (frei drehbar, kein festes Oben), Kugel, 2D-Plattkarte, Ganzhimmel (Hammer-Aitoff) |
+| 🔭 **Zehn Durchmusterungen** | DSS2 color als Unterlage, darüber SDSS, Pan-STARRS, DESI Legacy, DECaPS, SkyMapper, 2MASS, AllWISE, unWISE und GALEX |
+| 🧩 **Progressives Laden** | HEALPix-nested-Kacheln mit LOD, Eltern-Fallback, Spiegel-Fallback, LRU-Cache und Fade-in |
+| 🗺️ **Deep Star Map** | NASA-SVS-Karte (Hipparcos-2, Tycho-2, Gaia DR2) als Basis, sofort sichtbar und Rückfall bei CDS-Ausfall |
+| 🔗 **Direktlinks** | z. B. `#/sterne?ra=266&dec=-25&fov=70&mode=himmel&quelle=sdss` |
 
 ## 🗂️ Ebenen der Karte
 
