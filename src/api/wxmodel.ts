@@ -1,6 +1,7 @@
 import type { Bounds, ModelVar, WxGrid } from './model';
 import { decodeOwxRaw, type OwxHeader, type RawTile } from './owx';
 import { decodeOffThread } from './owxpool';
+import { yieldToMain } from '../yield';
 
 export { decodeOwxRaw };
 
@@ -80,7 +81,8 @@ class FloatGrid implements WxGrid {
 
 /** Detail mosaic held as 16-bit numbers; a time step is expanded to Float32 when it is needed (small LRU). */
 class QuantGrid implements WxGrid {
-  private cache = new Map<number, Float32Array>();
+  // two time steps are in use at any moment (before and after the shown time); four slots leave room while playing, and avoid map lookups per sample
+  private slots: { t: number; a: Float32Array }[] = [];
   readonly lat0: number;
   readonly lon0: number;
   readonly dx: number;
@@ -94,17 +96,15 @@ class QuantGrid implements WxGrid {
   }
   step(t: number): Float32Array {
     const i = Math.max(0, Math.min(this.nt - 1, t));
-    let a = this.cache.get(i);
-    if (a) {
-      this.cache.delete(i);
-    } else {
-      const n = this.nx * this.ny;
-      a = dequantize(this.h, this.q, i * n, n);
-      if (this.cache.size >= 6) this.cache.delete(this.cache.keys().next().value!);
-    }
-    this.cache.set(i, a);
+    const slots = this.slots;
+    for (let k = 0; k < slots.length; k++) if (slots[k].t === i) return slots[k].a;
+    const n = this.nx * this.ny;
+    const a = dequantize(this.h, this.q, i * n, n);
+    if (slots.length < 4) slots.push({ t: i, a });
+    else slots[(this.slotNext = (this.slotNext + 1) % 4)] = { t: i, a };
     return a;
   }
+  private slotNext = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +200,24 @@ export function tilesFor(b: Bounds, max = MAX_DETAIL_TILES): { c0: number; c1: n
 
 /** Stitches tiles (one cell of overlap) into one rectangular grid held as 16-bit numbers. */
 export function mosaic(tiles: RawTile[][]): WxGrid {
+  const m = startMosaic(tiles);
+  for (let r = 0; r < tiles.length; r++) for (let c = 0; c < tiles[0].length; c++) m.copy(r, c);
+  return m.done();
+}
+
+/** Same as mosaic(), but copies tile by tile with the browser getting a turn in between (up to 80 MB are moved). */
+export async function mosaicYielding(tiles: RawTile[][]): Promise<WxGrid> {
+  const m = startMosaic(tiles);
+  for (let r = 0; r < tiles.length; r++) {
+    for (let c = 0; c < tiles[0].length; c++) {
+      m.copy(r, c);
+      await yieldToMain();
+    }
+  }
+  return m.done();
+}
+
+function startMosaic(tiles: RawTile[][]) {
   const rows = tiles.length;
   const cols = tiles[0].length;
   const h0 = tiles[0][0].header;
@@ -209,8 +227,8 @@ export function mosaic(tiles: RawTile[][]): WxGrid {
   const nx = cols * cells + 1;
   const ny = rows * cells + 1;
   const q = new Int16Array(nt * ny * nx);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
+  return {
+    copy(r: number, c: number) {
       const src = tiles[r][c].q;
       for (let t = 0; t < nt; t++) {
         for (let y = 0; y < tn; y++) {
@@ -218,9 +236,9 @@ export function mosaic(tiles: RawTile[][]): WxGrid {
           q.set(src.subarray(from, from + tn), (t * ny + r * cells + y) * nx + c * cells);
         }
       }
-    }
-  }
-  return new QuantGrid({ ...h0, nx, ny }, q);
+    },
+    done: (): WxGrid => new QuantGrid({ ...h0, nx, ny }, q),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +315,7 @@ export class WxLayer {
         Promise.all(Array.from({ length: sel.c1 - sel.c0 + 1 }, (_, i) => loadRaw(path(sel.c0 + i, sel.r0 + j)))),
       ),
     );
-    return mosaic(rows);
+    return mosaicYielding(rows);
   }
 
   /**

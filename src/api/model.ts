@@ -440,7 +440,9 @@ export class ModelSampler {
     readonly t: number,
     /** ICON fields: used for the variables they contain (where their time range covers the moment) */
     readonly wx: WxLayer | null = null,
-  ) {}
+  ) {
+    this.wxF = this.computeWxPosition();
+  }
 
   private detailT = new Map<number, number>();
 
@@ -484,37 +486,47 @@ export class ModelSampler {
 
   /** current moment as a (fractional) index into the ICON time steps; NaN when their time range does not cover it */
   private wxPosition(): number {
-    const wx = this.wx!;
+    return this.wxF;
+  }
+
+  private computeWxPosition(): number {
+    const wx = this.wx;
+    if (!wx?.times?.length) return NaN;
     const f = (this.time - wx.times[0]) / wx.stepMs;
     return f >= -1e-6 && f <= wx.times.length - 1 + 1e-6 ? f : NaN;
   }
 
+  /** the sampler never changes its moment, so the position in the ICON time steps is worked out once (in the constructor: field initialisers run before the parameter properties are set) */
+  private wxF = NaN;
+
+  /** one time step of a variable: the overview, mixed with the detail grid where there is one (no allocations: runs per pixel and per particle) */
+  private wxAt(base: WxGrid, detail: WxGrid | undefined, w: number, v: ModelVar, t: number, lat: number, lon: number): number {
+    let r = smoothArr(base, transformArray(base.step(t), v), 0, lat, lon);
+    if (w > 0) {
+      const dv = smoothArr(detail!, transformArray(detail!.step(t), v), 0, lat, lon);
+      if (dv === dv) r = r !== r ? dv : dv * w + r * (1 - w);
+    }
+    return r;
+  }
+
   /** value from the ICON fields at the current moment, NaN where they do not cover it */
   private sampleWx(v: ModelVar, lat: number, lon: number): number {
+    const f = this.wxF;
+    if (f !== f) return NaN;
     const wx = this.wx!;
     const base = wx.overviewOf(v)!;
-    const f = this.wxPosition();
     const last = wx.times.length - 1;
-    if (Number.isNaN(f)) return NaN;
     const i = Math.max(0, Math.min(Math.floor(f), Math.max(0, last - 1)));
     const fr = Math.min(1, Math.max(0, f - i));
     const detail = wx.detail.get(v);
     const w = detail ? featherWeight(detail, lat, lon) : 0;
-    const at = (t: number) => {
-      let r = smoothArr(base, transformArray(base.step(t), v), 0, lat, lon);
-      if (w > 0) {
-        const dv = smoothArr(detail!, transformArray(detail!.step(t), v), 0, lat, lon);
-        if (!Number.isNaN(dv)) r = Number.isNaN(r) ? dv : dv * w + r * (1 - w);
-      }
-      return r;
-    };
-    let r = at(i);
+    let r = this.wxAt(base, detail, w, v, i, lat, lon);
     if (fr > 1e-6 && i + 1 <= last) {
-      const r2 = at(i + 1);
-      r = Number.isNaN(r) ? r2 : Number.isNaN(r2) ? r : r + (r2 - r) * fr;
+      const r2 = this.wxAt(base, detail, w, v, i + 1, lat, lon);
+      r = r !== r ? r2 : r2 !== r2 ? r : r + (r2 - r) * fr;
     }
     const tf = TRANSFORMS[v];
-    return tf && !Number.isNaN(r) ? tf[1](r) : r;
+    return tf && r === r ? tf[1](r) : r;
   }
 
   /**
@@ -555,7 +567,18 @@ export class ModelSampler {
 
   /** a variable straight from the ICON fields (NaN if it is not loaded or outside their time range) */
   private wxVar(v: ModelVar, lat: number, lon: number): number {
-    return this.wx!.has(v) ? this.sampleWx(v, lat, lon) : NaN;
+    return this.wxHas(v) ? this.sampleWx(v, lat, lon) : NaN;
+  }
+
+  /** WxLayer.has() looks at the clock; a sampler lives for one moment, so each variable is asked only once */
+  private wxHasCache = new Map<ModelVar, boolean>();
+  private wxHas(v: ModelVar): boolean {
+    let h = this.wxHasCache.get(v);
+    if (h === undefined) {
+      h = this.wx!.has(v);
+      this.wxHasCache.set(v, h);
+    }
+    return h;
   }
 
   /**
@@ -563,33 +586,35 @@ export class ModelSampler {
    * like the Open-Meteo ones did (wind speed/direction, humidity, apparent temperature). NaN where they are not available.
    */
   private sampleFromWx(v: ModelVar, lat: number, lon: number, terrain: boolean): number {
-    const delta = terrain ? this.terrainDelta(lat, lon) : 0;
-    const temp = () => this.wxVar('temperature_2m', lat, lon) + delta;
-    const dew = () => this.wxVar('dew_point_2m', lat, lon) + delta * TD_LAPSE_RATIO;
-    const wind = () => Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon));
     switch (v) {
       case 'temperature_2m':
-        return temp();
+        return this.wxVar(v, lat, lon) + (terrain ? this.terrainDelta(lat, lon) : 0);
       case 'dew_point_2m':
-        return dew();
+        return this.wxVar(v, lat, lon) + (terrain ? this.terrainDelta(lat, lon) * TD_LAPSE_RATIO : 0);
       case 'wind_speed_10m':
-        return wind() * 3.6;
+        return Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon)) * 3.6;
       case 'wind_direction_10m':
         return ((Math.atan2(-this.wxVar('u', lat, lon), -this.wxVar('v', lat, lon)) * 180) / Math.PI + 360) % 360;
-      case 'relative_humidity_2m': {
-        const t = temp();
-        const d = Math.min(dew(), t);
-        return Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
-      }
+      case 'relative_humidity_2m':
+        return this.wxHumidity(lat, lon, terrain);
       case 'apparent_temperature': {
-        const t = temp();
-        const d = Math.min(dew(), t);
-        const rh = Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
-        return apparent(t, rh, wind());
+        const rh = this.wxHumidity(lat, lon, terrain);
+        return apparent(this.wxT, rh, Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon)));
       }
       default:
         return this.wxVar(v, lat, lon);
     }
+  }
+
+  /** the (terrain-corrected) temperature of the last wxHumidity() call, so apparent temperature needs no second lookup */
+  private wxT = NaN;
+
+  private wxHumidity(lat: number, lon: number, terrain: boolean): number {
+    const delta = terrain ? this.terrainDelta(lat, lon) : 0;
+    const t = this.wxVar('temperature_2m', lat, lon) + delta;
+    const d = Math.min(this.wxVar('dew_point_2m', lat, lon) + delta * TD_LAPSE_RATIO, t);
+    this.wxT = t;
+    return Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
   }
 
   /** @param terrain add the terrain correction (readouts); tile rendering applies it per pixel itself */
