@@ -104,6 +104,14 @@ export const DWD_RADAR_WMS =
 export const DWD_WMS =
   'https://maps.dwd.de/geoserver/dwd/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=dwd:Warnungen_Gemeinden_vereinigt&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256';
 
+/**
+ * From this zoom MapLibre has fully blended the globe projection into the flat 2D map: 3D layers
+ * (models, terrain-accurate placement) work the same in both projection modes then. The blend
+ * runs from zoom 6 on — patched in maplibre-gl (the default was 11 → 12) so the map flattens
+ * earlier and the 3D models can take over sooner.
+ */
+export const GLOBE_FLAT_ZOOM = 7;
+
 const empty = { type: 'geojson' as const, data: { type: 'FeatureCollection' as const, features: [] } };
 
 /**

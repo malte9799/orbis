@@ -211,6 +211,10 @@ pnpm preview   # Build lokal ansehen
 eigenes Kachel-Protokoll (`wxfield://`) im Browser gerendert, der Wind als Partikelanimation auf einem Canvas über der
 Karte gezeichnet, Isobaren per Marching Squares.
 
+MapLibre wird per Patch (`pnpm patches/maplibre-gl@6.14.0.patch`) angepasst: die Globus-Projektion flacht schon mit
+Zoom 6 → 7 auf die flache 2D-Karte ab statt 11 → 12, damit die 3D-Modelle der Hauptkarte (KFZ, Schiffe, Flugzeuge)
+früher einsetzen können (`GLOBE_FLAT_ZOOM` in `src/globe/style.ts`).
+
 | Ordner | Inhalt |
 |---|---|
 | `src/views/` | Ansichten: Vorhersage, Karte, Planetenkarte |
