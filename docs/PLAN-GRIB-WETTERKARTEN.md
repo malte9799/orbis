@@ -1,6 +1,6 @@
 # Plan: Wetterkarten aus Modell-Rohdaten (DWD ICON, GRIB2) statt Open-Meteo-Punktraster
 
-Stand: 2026-10-31 · Status: **Schritte 1–3 umgesetzt** (alle zehn Felder, Geländekorrektur Temperatur/Taupunkt); ICON-EU zurückgestellt, Hosting R2, Horizont 72 h
+Stand: 2026-10-31 · Status: **Schritte 1–4 umgesetzt** (alle zehn Felder, Geländekorrektur Temperatur/Taupunkt, ICON ist Standard und trägt auch die Vorhersage-Seitenkarte, Open-Meteo nur Rückfall); ICON-EU zurückgestellt, Hosting R2, Horizont 72 h
 
 Umsetzungsnotizen Schritt 1: Format siehe [WETTERDATEN-FORMAT.md](WETTERDATEN-FORMAT.md). Abweichungen vom Plan: Läufe liegen unter `v1/<lauf>/…` (unveränderlich, lange cachebar) statt überschriebener Pfade; `latest.json` ist der einzige kurz gecachte Eintrag. Gemessen: Temperatur 39,8 MB für 33 Dateien; Prädiktor „Plane + Zeitdifferenz“ spart gegenüber reiner Zeilen-Differenz ~15–40 %. Punktprobe gegen Open-Meteo `icon_global`: München ±0,5 K; Lhasa/La Paz weichen um 1–3,5 K ab, weil Open-Meteo auf die echte Höhe herunterskaliert (→ Höhenkorrektur, Schritt 5).
 
@@ -99,7 +99,7 @@ Neue Datei `src/api/wxmodel.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` beh�
 |---|---|---|---|
 | 0 | **Spike** (lokal, kein PR): ein Lauf herunterladen, Remapping prüfen (gegen `T_2M` Punktprobe vs. Open-Meteo-ICON), OWX-Größen je Variable/Auflösung messen, Entscheidung Branch vs. R2 | 0,5–1 Tag | Zahlen für Abschnitt 5, Qualität der Nearest/IDW-Remap |
 | 1 | `scripts/wx-icon.py` + `wx.yml` + Format-Spezifikation; **nur Temperatur** (+ `latest.json`), Branch `data-wx` | 1,5 Tage | Daten vorhanden, App unverändert |
-| 2 | Client-Sampler: `wxmodel.ts`, `ensure`, Überblick+Kacheln, Fallback; **Feld Temperatur** hinter Schalter (`?wx=1` / Einstellung) | 2 Tage | zoom.earth-Vergleich möglich |
+| 2 | Client-Sampler: `wxmodel.ts`, `ensure`, Überblick+Kacheln, Fallback; **Feld Temperatur** (zunächst hinter `?wx=1`, jetzt Standard, `?wx=0` schaltet aus) | 2 Tage | zoom.earth-Vergleich möglich |
 | 3 | Übrige Felder in der Pipeline (Td, u/v, Böe-Max, Niederschlag-Rate, Bewölkung, PMSL, Schnee, CAPE) + Client-Abhängigkeitstabelle; Windpartikel/Isobaren prüfen | 2–3 Tage | alle Karten |
 | 4 | `fcmap`-Region aus Kacheln, Schalter entfernen (Standard), Open-Meteo-Raster nur noch Fallback, Docs (`DATENQUELLEN.md`, Attribution, `STRUKTUR.md`) | 1 Tag | Umschaltung |
 | 5 | Optional: Höhenkorrektur T (HSURF + DEM), ICON-EU-Kacheln 0,0625° für Europa, Böen aus Stundendateien | 2–4 Tage | Feinschliff |

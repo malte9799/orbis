@@ -344,11 +344,11 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
   const lut = lutOf(def);
   const deltas = await terrainDeltas(s, z, x, y, N, sl);
   for (let py = 0; py < N; py++) {
-    const fj = ((py + 0.5) / N) * Nc;
+    const fj = (py / (N - 1)) * Nc;
     const j = Math.min(Nc - 1, Math.floor(fj));
     const wy = fj - j;
     for (let px = 0; px < N; px++) {
-      const fi = ((px + 0.5) / N) * Nc;
+      const fi = (px / (N - 1)) * Nc;
       const i = Math.min(Nc - 1, Math.floor(fi));
       const wx = fi - i;
       const o = j * (Nc + 1) + i;
@@ -359,6 +359,10 @@ async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: n
   }
   return toBitmap(img);
 }
+
+// Sample positions of a tile: the outermost pixels lie exactly ON the tile edge (px / (N - 1), not the pixel centre).
+// The GPU holds the edge pixel's value up to the border, so with centre samples two neighbouring tiles would meet with a
+// step as large as the field changes over one pixel – a hard seam where the field is steep. Now both give the same value there.
 
 /** while the timeline plays, tiles are drawn coarser (and cheaper); standing still they get the full resolution */
 let quality: 'full' | 'low' = 'full';
@@ -441,9 +445,9 @@ async function terrainDeltas(s: ModelSampler, z: number, x: number, y: number, N
   } else {
     d = new Float32Array(N * N);
     const lons = new Float64Array(N);
-    for (let px = 0; px < N; px++) lons[px] = tile2lon(x + (px + 0.5) / N, z);
+    for (let px = 0; px < N; px++) lons[px] = tile2lon(x + px / (N - 1), z);
     for (let py = 0; py < N; py++) {
-      const lat = tile2lat(y + (py + 0.5) / N, z);
+      const lat = tile2lat(y + py / (N - 1), z);
       for (let px = 0; px < N; px++) d[py * N + px] = s.terrainDelta(lat, lons[px]);
       await sl.tick();
     }
@@ -493,9 +497,9 @@ async function renderField(url: string, signal?: AbortSignal | null): Promise<{ 
     const img = new ImageData(N, N);
     const lut = def.phase ? null : lutOf(def);
     for (let py = 0; py < N; py++) {
-      const lat = tile2lat(y + (py + 0.5) / N, z);
+      const lat = tile2lat(y + py / (N - 1), z);
       for (let px = 0; px < N; px++) {
-        const lon = tile2lon(x + (px + 0.5) / N, z);
+        const lon = tile2lon(x + px / (N - 1), z);
         const v = def.organic && !wxData ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
         const o = (py * N + px) * 4;
         if (lut) {

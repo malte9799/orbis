@@ -29,14 +29,12 @@ export interface WxMeta {
   vars: Record<string, { scale: number; offset: number; unit: string; static?: boolean }>;
 }
 
-/** Switched on with ?wx=1 (off: ?wx=0); the choice is remembered. */
+/** The ICON fields are the default; ?wx=0 switches them off (Open-Meteo only), for comparing and debugging. */
 export function wxEnabled(): boolean {
   try {
-    const q = new URLSearchParams(location.search).get('wx');
-    if (q === '1' || q === '0') localStorage.setItem('wg.wx', q);
-    return localStorage.getItem('wg.wx') === '1';
+    return new URLSearchParams(location.search).get('wx') !== '0';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -164,6 +162,17 @@ function getOverview(run: string, variable: string): Promise<WxGrid> {
     while (overviewCache.size > 8) overviewCache.delete(overviewCache.keys().next().value!);
   }
   return p;
+}
+
+/** Overviews of several variables; each succeeds or fails on its own (a failed one stays with Open-Meteo, the others are kept). */
+async function loadOverviews(run: string, vars: ModelVar[]): Promise<[ModelVar, WxGrid][]> {
+  const results = await Promise.allSettled(vars.map((v) => getOverview(run, v)));
+  const ok: [ModelVar, WxGrid][] = [];
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') ok.push([vars[i], r.value]);
+    else console.warn(`Wetterdaten (ICON): ${vars[i]} nicht verfügbar`, r.reason);
+  });
+  return ok;
 }
 
 /** Variables the ICON fields hold themselves (the others are derived from them in ModelSampler). */
@@ -294,13 +303,7 @@ export class WxLayer {
     try {
       const meta = await getWxMeta();
       const layer = new WxLayer(meta);
-      await Promise.all(
-        vars
-          .filter((v) => v in meta.vars)
-          .map(async (v) => {
-            layer.overview.set(v, await getOverview(meta.run, v));
-          }),
-      );
+      for (const [v, g] of await loadOverviews(meta.run, vars.filter((v) => v in meta.vars))) layer.overview.set(v, g);
       return layer;
     } catch (e) {
       console.warn('Wetterdaten (ICON) nicht verfügbar', e);
@@ -334,15 +337,10 @@ export class WxLayer {
     const wantOverview = [...new Set([...overview, ...detail])].filter((v) => v in this.meta.vars);
     const missing = wantOverview.filter((v) => !this.overview.has(v));
     if (missing.length) {
-      try {
-        const loaded = await Promise.all(missing.map(async (v) => [v, await getOverview(this.meta.run, v)] as const));
-        if (token !== this.viewToken) return false;
-        for (const [v, g] of loaded) this.overview.set(v, g);
-        changed = true;
-      } catch (e) {
-        console.warn('Wetterdaten (ICON) nicht verfügbar', e);
-        return false;
-      }
+      const loaded = await loadOverviews(this.meta.run, missing);
+      if (token !== this.viewToken) return false;
+      for (const [v, g] of loaded) this.overview.set(v, g);
+      changed = loaded.length > 0;
     }
     for (const v of [...this.overview.keys()]) {
       if (!wantOverview.includes(v)) {

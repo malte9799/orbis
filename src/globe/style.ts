@@ -183,7 +183,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         tiles: ['wxfield://temp/0/{z}/{x}/{y}'],
         tileSize: 256,
         maxzoom: 5,
-        attribution: 'Modelldaten: <a href="https://open-meteo.com/">Open-Meteo</a>, <a href="https://www.dwd.de/">DWD ICON</a> (CC BY 4.0), Höhen: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen Terrain Tiles</a>',
+        attribution: 'Modelldaten: <a href="https://www.dwd.de/">DWD ICON</a> (CC BY 4.0, verändert), Rückfall <a href="https://open-meteo.com/">Open-Meteo</a>, Höhen: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen Terrain Tiles</a>',
       },
       'sat-ir': {
         type: 'raster',

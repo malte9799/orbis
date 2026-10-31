@@ -238,3 +238,42 @@ describe('wxActive', () => {
     expect(new ModelSampler(global, null, 0, null).wxActive('precipitation')).toBe(false);
   });
 });
+
+describe('independent overviews', () => {
+  const H = 3600_000;
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the variables that loaded when another one fails', async () => {
+    const T0 = Date.now() + 100 * 60_000 * 24; // far ahead of every earlier test's clock: never the cached metadata
+    const meta = {
+      v: 1, run: '2026103199', issued: T0, times: [T0, T0 + 3 * H], attribution: '',
+      vars: { temperature_2m: { scale: 0.1, offset: -5, unit: '°C' }, u: { scale: 0.1, offset: 0, unit: 'm/s' } },
+    };
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url.endsWith('latest.json')) return { ok: true, json: async () => meta };
+      if (url.includes('/u/')) return { ok: false, status: 503 };
+      return { ok: true, arrayBuffer: async () => Uint8Array.from(atob(FIXTURE), (c) => c.charCodeAt(0)).buffer };
+    });
+    vi.useFakeTimers({ now: T0, toFake: ['Date'] });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const l = (await WxLayer.load(['temperature_2m', 'u']))!;
+    vi.useRealTimers();
+    warn.mockRestore();
+    expect(l.has('temperature_2m')).toBe(true);
+    expect(l.overviewOf('temperature_2m')).toBeDefined();
+    expect(l.overviewOf('u')).toBeUndefined();
+  });
+});
+
+describe('terrain correction of the dew point', () => {
+  const H = 3600_000;
+  const T0 = Date.UTC(2026, 9, 30, 0);
+  const grid = { lat0: 50, lon0: 5, dx: 1, dy: 1, nx: 11, ny: 11, wrap: false, step: () => new Float32Array(121) };
+  const layer = { terrain: { hs: grid, dem: grid }, has: () => true, overviewOf: () => grid, detail: new Map(), times: [T0 + 3 * H, T0 + 6 * H], stepMs: 3 * H } as unknown as WxLayer;
+  const global = { lat0: 90, lon0: -180, dx: 1, dy: 1, nx: 3, ny: 3, wrap: false, times: [T0, T0 + 3 * H, T0 + 6 * H, T0 + 9 * H], data: {} } as unknown as ModelGrid;
+
+  it('is not applied to Open-Meteo values outside the ICON time range', () => {
+    expect(new ModelSampler(global, null, 1, layer).hasTerrain('dew_point_2m')).toBe(true);
+    expect(new ModelSampler(global, null, 3, layer).hasTerrain('dew_point_2m')).toBe(false); // the tile renderer then draws the plain Open-Meteo values
+  });
+});

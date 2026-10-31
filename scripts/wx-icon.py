@@ -297,6 +297,8 @@ def main():
     ap.add_argument('--selftest', action='store_true', help='geschriebene Kacheln dekodieren und vergleichen')
     args = ap.parse_args()
 
+    if args.hours < STEP:
+        sys.exit(f'--hours muss mindestens {STEP} sein (die Niederschlagsrate braucht zwei Zeitschritte)')
     HOURS = args.hours
     names = [v for v in args.vars.split(',') if v]
     for n in names:
