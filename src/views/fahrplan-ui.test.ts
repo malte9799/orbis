@@ -42,10 +42,11 @@ describe('on-demand bus in the timeline', () => {
 describe('type icons in the timeline', () => {
   it('shows the vehicle glyph in front of the line name', () => {
     const html = timeline(itin(leg({ mode: 'REGIONAL_RAIL', line: 'RE8 (13188)' })));
-    expect(html).toMatch(/<span class="fp-badge" style=""><svg[^>]*><path /);
+    expect(html).toMatch(/<span class="fp-badge fp-mi" style=""><svg[^>]*><path /);
     expect(html).toContain('viewBox="0 0 24 24"');
   });
-  it('keeps walking legs free of a vehicle glyph', () => {
+  it('badges without a known type get no oversize glyph', () => {
+    expect(timeline(itin(leg({ mode: 'GONDOLA', line: '' })))).not.toContain('fp-mi');
     expect(timeline(itin(leg({ mode: 'WALK' })))).not.toContain('path fill="currentColor"');
   });
 });

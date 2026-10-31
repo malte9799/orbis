@@ -148,7 +148,8 @@ const legBody = (l: Leg) => {
         .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
         .join('')}</ul></details>`
     : '';
-  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${modeIconSvg(l.mode)}${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
+  const icon = modeIconSvg(l.mode);
+  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge${icon ? ' fp-mi' : ''}" style="${fg(l.mode)}">${icon}${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
 };
 
 /** the connection as a timeline: station rows, the ride between them and the transfers */

@@ -410,12 +410,19 @@
   font-size: 0.9rem;
   padding: 6px 9px;
 }
-.fp-legbody .fp-badge svg {
-  width: 15px;
-  height: 15px;
-  margin-right: 4px;
-  vertical-align: -2px;
-  display: inline-block;
+/* the vehicle glyph is bigger than the badge and reaches over its padding/rounded corners */
+.fp-legbody .fp-badge.fp-mi {
+  position: relative;
+  padding-left: 38px;
+}
+.fp-legbody .fp-badge.fp-mi svg {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 .fp-nach {
   margin: 6px 0 0;
