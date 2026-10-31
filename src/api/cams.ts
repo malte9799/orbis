@@ -134,15 +134,22 @@ export async function loadWindyWebcams(lat: number, lon: number, radiusKm: numbe
   const key = store.getKeys().windy;
   if (!key) return { type: 'FeatureCollection', features: [] };
   const r = Math.max(5, Math.min(250, Math.round(radiusKm)));
-  const json = await fetchJson<{ webcams: WindyCam[] }>(
+  const res = await fetch(
     `https://api.windy.com/webcams/api/v3/webcams?nearby=${lat.toFixed(3)},${lon.toFixed(3)},${r}&limit=50&include=images,location,player,urls&lang=de`,
-    { headers: { 'x-windy-api-key': key } },
-    15000,
+    { headers: { 'x-windy-api-key': key }, signal: AbortSignal.timeout(15000) },
   );
+  // Windy sends no CORS headers on error responses, so the browser replaces the
+  // real status with an origin error – surface the status explicitly instead.
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Windy-Schlüssel ungültig (api.windy.com/keys)');
+    if (res.status === 403) throw new Error('Windy-Schlüssel ohne Webcams-API-Freigabe (api.windy.com/keys)');
+    throw new Error(`Windy HTTP ${res.status}`);
+  }
+  const json = (await res.json()) as { webcams?: WindyCam[] };
   return {
     type: 'FeatureCollection',
-    features: json.webcams
-      .filter((w) => w.location)
+    features: (json.webcams ?? [])
+      .filter((w) => w && w.location)
       .map((w) =>
         point(w.location!.longitude, w.location!.latitude, {
           id: `windy-${w.webcamId}`,
