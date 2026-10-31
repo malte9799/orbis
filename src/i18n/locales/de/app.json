@@ -127,5 +127,12 @@
         }
       }
     }
+  },
+  "meta": {
+    "tagline": "Orbis – Wetter, Erde & Weltall",
+    "description": "Orbis – Wettervorhersage, Live-Weltkarte (2D/3D) mit Radar, Wind, Unwettern, Erdbeben, Flugzeugen, Satelliten und Infrastruktur sowie ein interaktives 3D-Sonnensystem mit Planeten und Raumsonden.",
+    "noscript": "Diese App benötigt JavaScript.",
+    "manifestName": "Orbis – Wetter, Erde & Weltall",
+    "manifestDescription": "Wettervorhersage, Live-Weltkarte und interaktives 3D-Sonnensystem"
   }
 }

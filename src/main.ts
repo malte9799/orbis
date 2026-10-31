@@ -6,6 +6,7 @@ import { installCapture } from './inspector/capture';
 import { setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import './i18n';
+import { initHeadI18n } from './i18n/head';
 import { store, type Place } from './store';
 import { createForecastView } from './views/forecast';
 import { createGlobeView } from './views/globe';
@@ -13,6 +14,7 @@ import { createNavMenu, type NavRoute } from './nav';
 import { createSettingsPanel } from './views/settings';
 
 installCapture();
+initHeadI18n();
 
 // Bundlers move the library, so tell MapLibre explicitly where its worker lives.
 setWorkerUrl(workerUrl);

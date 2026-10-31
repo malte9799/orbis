@@ -127,5 +127,12 @@
         }
       }
     }
+  },
+  "meta": {
+    "tagline": "Orbis – Weather, Earth & Space",
+    "description": "Orbis – weather forecast, live world map (2D/3D) with radar, wind, storms, earthquakes, aircraft, satellites and infrastructure, plus an interactive 3D solar system with planets and space probes.",
+    "noscript": "This app requires JavaScript.",
+    "manifestName": "Orbis – Weather, Earth & Space",
+    "manifestDescription": "Weather forecast, live world map and interactive 3D solar system"
   }
 }
