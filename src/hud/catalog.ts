@@ -93,8 +93,8 @@ export const BASE_GRADIENT: Record<BaseId, string> = {
   nasa: 'linear-gradient(135deg,#243b57,#4c6b46 40%,#1a2f52 41%,#2a4c7a)',
   blue: 'linear-gradient(135deg,#1c4d8a,#3b7a48 40%,#14407a 41%,#1f5a9c)',
   night: 'linear-gradient(135deg,#05060c,#1b1405 40%,#04050a 41%,#0b0c14)',
-  dark: 'linear-gradient(135deg,#141a2a,#1d2438 45%,#0a0f1c 46%)',
-  light: 'linear-gradient(135deg,#e7e3da,#f1eee7 45%,#bcd3e6 46%)',
+  dark: 'linear-gradient(135deg,#1f1f1f,#26262a 45%,#31353f 46%)',
+  light: 'linear-gradient(135deg,#e2dfda,#dcd9d3 45%,#80deea 46%)',
 };
 
 function miniMap(land: string, water: string, road: string, border: string) {
@@ -154,8 +154,8 @@ export function baseThumb(id: BaseId): string {
     return `<img alt="" loading="lazy" src="${thumbs[url] ?? url}"/>`;
   }
   switch (id) {
-    case 'dark': return miniMap('#111827', '#0b1a2e', '#3a4767', '#56638a');
-    case 'light': return miniMap('#f3f0ea', '#a9cce9', '#f7d9a0', '#9c87b5');
+    case 'dark': return miniMap('#1f1f1f', '#31353f', '#474747', '#5b6374');
+    case 'light': return miniMap('#e2dfda', '#80deea', '#ffffff', '#adadad');
     default: return '';
   }
 }

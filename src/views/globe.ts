@@ -48,6 +48,7 @@ import {
   FIELDS,
   isobars,
   nightImage,
+  nightShade,
   registerFieldProtocol,
   setActiveSampler,
   setFieldQuality,
@@ -494,16 +495,21 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       else if (l.id.startsWith('lbl-')) vis(l.id, state.labels);
     }
     applyBuildings();
-    // dark text on the light map, white text everywhere else
-    const c = labelPaint(state.base === 'light' ? 'onLight' : 'onDark');
+    // Protomaps label colors on the two OSM bases, bright labels over the imagery bases
+    const c = labelPaint(state.base === 'light' ? 'onLight' : state.base === 'dark' ? 'onBaseDark' : 'onDark');
     for (const l of layers) {
       if (!l.id.startsWith('lbl-')) continue;
-      if (l.type === 'symbol' && l.id !== 'lbl-water') {
-        map.setPaintProperty(l.id, 'text-color', c.color);
+      if (l.type === 'symbol') {
+        const color = l.id === 'lbl-water' ? c.water : l.id === 'lbl-state' ? c.state : l.id === 'lbl-country' ? c.country : l.id === 'lbl-town' ? c.subplace : c.color;
+        map.setPaintProperty(l.id, 'text-color', color);
         map.setPaintProperty(l.id, 'text-halo-color', c.halo);
-      } else if (l.id === 'lbl-border-country' || l.id === 'lbl-border-water') map.setPaintProperty(l.id, 'line-color', c.border);
-      else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.state);
+      } else if (l.id === 'lbl-border-country') map.setPaintProperty(l.id, 'line-color', c.border);
+      else if (l.id === 'lbl-border-water') map.setPaintProperty(l.id, 'line-color', c.waterBorder);
+      else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.stateBorder);
     }
+    // The night shading differs between drawn bases (flat shade) and imagery bases (night photo)
+    if (state.night === 'auto') updateNight();
+    applyHillshade();
   }
 
   function applyNight() {
@@ -519,21 +525,52 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function applyBuildings() {
     if (!map?.getLayer('buildings-3d')) return;
     vis('buildings-3d', state.buildings3d);
-    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#ddd6cb' : '#1c2538');
+    map.setPaintProperty('buildings-3d', 'fill-extrusion-color', state.base === 'light' ? '#cccccc' : '#111111');
   }
 
   /** 3D-Gelände: only lifts the real elevation model when the camera is tilted – top-down it stays flat. */
   function applyTerrain() {
     const tilted = !!map && map.getPitch() > 10;
     extras?.setTerrain(state.terrain3d && tilted);
+    applyHillshade();
   }
 
-  /** The terminator follows the forecast timeline when one is shown. */
+  /** Relief shading (Schatten) for the drawn bases dunkel/hell: their flat colours show no relief at
+   *  all – even the real 3D model cannot be read from them. Drawn above the base, below night & weather. */
+  function applyHillshade() {
+    const m = map;
+    if (!m || !m.getSource('terrain-dem')) return;
+    const on = (state.base === 'dark' || state.base === 'light') && state.terrain3d;
+    if (!m.getLayer('hillshade')) {
+      if (!on) return;
+      // next weather/night layer: the shade sits above the OSM base map, below everything else
+      const before = ['hd', 'night', 'night-full', 'field', 'anchor-weather'].find((id) => m.getLayer(id));
+      m.addLayer({ id: 'hillshade', type: 'hillshade', source: 'terrain-dem', layout: { visibility: 'none' } }, before);
+    }
+    vis('hillshade', on);
+    if (on) {
+      // subtle darkening on the dark map, warm shadows + mild highlights on the light one
+      const paint =
+        state.base === 'light'
+          ? { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(70,60,45,0.45)', 'hillshade-highlight-color': 'rgba(255,255,255,0.5)' }
+          : { 'hillshade-exaggeration': 0.3, 'hillshade-shadow-color': 'rgba(0,0,0,0.7)', 'hillshade-highlight-color': 'rgba(255,255,255,0.12)' };
+      for (const key of ['hillshade-exaggeration', 'hillshade-shadow-color', 'hillshade-highlight-color'] as const) {
+        m.setPaintProperty('hillshade', key, paint[key]);
+      }
+    }
+  }
+
+  /** The terminator follows the forecast timeline when one is shown. On the drawn bases (dark/light)
+   *  the night half is a simple translucent shade; elsewhere it is the Black Marble night photo. */
   function updateNight() {
     if (state.night !== 'auto') return;
     const at = timelineMode() === 'model' && sampler ? new Date(sampler.time) : new Date();
     const seq = ++nightSeq;
-    nightImage((z, x, y) => BLACK_MARBLE.replace('{z}', String(z)).replace('{y}', String(y)).replace('{x}', String(x)), at).then((url) => {
+    const done =
+      state.base === 'dark' || state.base === 'light'
+        ? Promise.resolve(nightShade('#060a12', state.base === 'light' ? 0.6 : 0.5, at))
+        : nightImage((z, x, y) => BLACK_MARBLE.replace('{z}', String(z)).replace('{y}', String(y)).replace('{x}', String(x)), at);
+    void done.then((url) => {
       if (seq === nightSeq) (map?.getSource('night') as ImageSource | undefined)?.updateImage({ url });
     });
   }

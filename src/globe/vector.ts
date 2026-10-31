@@ -14,32 +14,42 @@ export const FONT_ITALIC = ['Noto Sans Italic'];
 
 export type Theme = 'dark' | 'light';
 
+// Colours follow the Protomaps basemap flavors (github.com/protomaps/basemaps, styles/src/flavors.ts):
+// flat, unsaturated land tone for both themes, water as the strongest color, roads only levelled
+// by lightness (white on light, near-dark grey on dark) with a slightly wider casing underneath.
+// "background" is the land tone: the background layer paints everything, water polygons sit on top.
 const PALETTE = {
   dark: {
-    background: '#111827',
-    water: '#0b1a2e',
-    waterway: '#12304f',
-    ice: '#1d2638',
-    wood: '#14201f',
-    grass: '#161f22',
-    residential: '#182032',
-    road: '#2a3550',
-    roadMajor: '#3a4767',
-    building: '#1c2538',
-    border: '#56638a',
+    background: '#1f1f1f', // earth
+    water: '#31353f',
+    ice: '#2b2b2b',
+    wood: '#1c2925', // landcover forest
+    grass: '#1e291f', // landcover grassland
+    residential: '#1c1c1c', // landcover urban_area
+    industrial: '#222222',
+    road: '#3d3d3d', // secondary/tertiary (minor_b)
+    roadSmall: '#333333', // minor/street
+    roadMajor: '#3d3d3d', // major roads
+    highway: '#474747', // motorway
+    roadCasing: '#1f1f1f',
+    building: '#111111',
+    border: '#5b6374',
   },
   light: {
-    background: '#f3f0ea',
-    water: '#a9cce9',
-    waterway: '#8fbde3',
-    ice: '#ffffff',
-    wood: '#d3e5c3',
-    grass: '#e2eed3',
-    residential: '#ebe6dd',
-    road: '#ffffff',
-    roadMajor: '#f7d9a0',
-    building: '#ddd6cb',
-    border: '#9c87b5',
+    background: '#e2dfda', // earth
+    water: '#80deea',
+    ice: '#e7e7e7',
+    wood: '#c4e7d2', // landcover forest
+    grass: '#d2efcf', // landcover grassland
+    residential: '#e6e6e6', // landcover urban_area
+    industrial: '#d1dde1',
+    road: '#ffffff', // secondary/tertiary (minor_b)
+    roadSmall: '#ebebeb', // minor/street
+    roadMajor: '#ffffff', // major roads
+    highway: '#ffffff', // motorway
+    roadCasing: '#e0e0e0',
+    building: '#cccccc',
+    border: '#adadad',
   },
 };
 
@@ -69,7 +79,7 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       layout: hidden,
       paint: {
         'fill-color': ['match', ['get', 'class'], 'ice', c.ice, 'wood', c.wood, 'forest', c.wood, c.grass],
-        'fill-opacity': ['match', ['get', 'class'], 'ice', 0.9, 'wood', 0.7, 'forest', 0.7, 0.4],
+        'fill-opacity': ['match', ['get', 'class'], 'ice', 0.9, 0.85],
       },
     },
     {
@@ -80,7 +90,10 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       minzoom: 8,
       filter: ['in', ['get', 'class'], ['literal', ['residential', 'suburb', 'neighbourhood', 'commercial', 'industrial']]],
       layout: hidden,
-      paint: { 'fill-color': c.residential, 'fill-opacity': 0.8 },
+      paint: {
+        'fill-color': ['match', ['get', 'class'], 'commercial', c.industrial, 'industrial', c.industrial, c.residential],
+        'fill-opacity': 0.8,
+      },
     },
     {
       id: id('waterway'),
@@ -89,7 +102,7 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       'source-layer': 'waterway',
       minzoom: 6,
       layout: hidden,
-      paint: { 'line-color': c.waterway, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 14, 3] },
+      paint: { 'line-color': c.water, 'line-width': ['interpolate', ['linear'], ['zoom'], 6, 0.5, 14, 3] },
     },
     { id: id('water'), type: 'fill', source: 'ofm', 'source-layer': 'water', layout: hidden, paint: { 'fill-color': c.water } },
     {
@@ -102,6 +115,26 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       paint: { 'fill-color': c.building },
     },
     {
+      id: id('roads-minor-casing'),
+      type: 'line',
+      source: 'ofm',
+      'source-layer': 'transportation',
+      minzoom: 11,
+      filter: ['in', ['get', 'class'], ['literal', ['secondary', 'tertiary', 'minor', 'street']]],
+      layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': c.roadCasing, 'line-width': roadWidth(1.05) },
+    },
+    {
+      id: id('roads-major-casing'),
+      type: 'line',
+      source: 'ofm',
+      'source-layer': 'transportation',
+      minzoom: 5,
+      filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
+      layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': c.roadCasing, 'line-width': roadWidth(1.6) },
+    },
+    {
       id: id('roads-minor'),
       type: 'line',
       source: 'ofm',
@@ -109,7 +142,10 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       minzoom: 11,
       filter: ['in', ['get', 'class'], ['literal', ['secondary', 'tertiary', 'minor', 'street']]],
       layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': c.road, 'line-width': roadWidth(0.6) },
+      paint: {
+        'line-color': ['match', ['get', 'class'], 'minor', c.roadSmall, 'street', c.roadSmall, c.road],
+        'line-width': roadWidth(0.6),
+      },
     },
     {
       id: id('roads-major'),
@@ -119,7 +155,10 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       minzoom: 5,
       filter: ['in', ['get', 'class'], ['literal', ['motorway', 'trunk', 'primary']]],
       layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': c.roadMajor, 'line-width': roadWidth(1) },
+      paint: {
+        'line-color': ['match', ['get', 'class'], 'motorway', c.highway, c.roadMajor],
+        'line-width': roadWidth(1),
+      },
     },
   ];
 }
@@ -131,8 +170,8 @@ const NAME: ExpressionSpecification = ['coalesce', ['get', 'name:de'], ['get', '
 export function labelLayers(): LayerSpecification[] {
   const hidden = { visibility: 'none' as const };
   const text = {
-    'text-color': '#ffffff',
-    'text-halo-color': 'rgba(0,0,0,0.75)',
+    'text-color': '#7a7a7a', // city_label (Protomaps DARK)
+    'text-halo-color': 'rgba(33,33,33,0.9)', // city_label_halo
     'text-halo-width': 1.3,
   };
   return [
@@ -143,7 +182,7 @@ export function labelLayers(): LayerSpecification[] {
       'source-layer': 'boundary',
       filter: ['all', ['==', ['get', 'admin_level'], 2], ['!=', ['get', 'maritime'], 1]],
       layout: { ...hidden, 'line-join': 'round' },
-      paint: { 'line-color': 'rgba(255,255,255,0.55)', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
+      paint: { 'line-color': '#5b6374', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
     },
     {
       id: 'lbl-border-state',
@@ -153,7 +192,7 @@ export function labelLayers(): LayerSpecification[] {
       minzoom: 4,
       filter: ['all', ['==', ['get', 'admin_level'], 4], ['!=', ['get', 'maritime'], 1]],
       layout: { ...hidden, 'line-join': 'round' },
-      paint: { 'line-color': 'rgba(255,255,255,0.3)', 'line-width': 0.8, 'line-dasharray': [3, 2] },
+      paint: { 'line-color': 'rgba(91,99,116,0.45)', 'line-width': 0.8, 'line-dasharray': [3, 2] },
     },
     {
       id: 'lbl-border-water',
@@ -162,7 +201,7 @@ export function labelLayers(): LayerSpecification[] {
       'source-layer': 'water',
       filter: ['==', ['get', 'class'], 'ocean'],
       layout: { ...hidden, 'line-join': 'round' },
-      paint: { 'line-color': 'rgba(255,255,255,0.55)', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
+      paint: { 'line-color': 'rgba(160,170,190,0.4)', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
     },
     {
       id: 'lbl-water',
@@ -171,7 +210,7 @@ export function labelLayers(): LayerSpecification[] {
       'source-layer': 'water_name',
       filter: ['in', ['get', 'class'], ['literal', ['ocean', 'sea']]],
       layout: { ...hidden, 'text-field': NAME, 'text-font': FONT_ITALIC, 'text-size': 12, 'text-max-width': 6 },
-      paint: { ...text, 'text-color': 'rgba(190,215,255,0.85)', 'text-halo-width': 0.8 },
+      paint: { ...text, 'text-color': '#717784', 'text-halo-width': 0.8 }, // ocean_label
     },
     {
       id: 'lbl-town',
@@ -223,7 +262,7 @@ export function labelLayers(): LayerSpecification[] {
         'text-transform': 'uppercase',
         'text-letter-spacing': 0.1,
       },
-      paint: { ...text, 'text-color': 'rgba(255,255,255,0.7)' },
+      paint: { ...text, 'text-color': '#4a4a4a' }, // state_label, a bit lifted from #3d3d3d for readability
     },
     {
       id: 'lbl-country',
@@ -282,9 +321,45 @@ export function labelLayers(): LayerSpecification[] {
   ];
 }
 
-/** Text colours for the label layers depending on the base map. */
-export function labelPaint(theme: 'onDark' | 'onLight') {
-  return theme === 'onDark'
-    ? { color: '#ffffff', halo: 'rgba(0,0,0,0.75)', border: 'rgba(255,255,255,0.55)', state: 'rgba(255,255,255,0.3)' }
-    : { color: '#2b2f3a', halo: 'rgba(255,255,255,0.9)', border: 'rgba(90,70,120,0.6)', state: 'rgba(90,70,120,0.35)' };
+/** Text colours for the label layers depending on the base map. `onBaseDark` is the Protomaps dark
+ *  flavor (city_label #7a7a7a, country #5c5c5c, boundaries #5b6374 …); `onDark` keeps bright labels
+ *  for the imagery bases (satellite, NASA, …). */
+export function labelPaint(theme: 'onDark' | 'onBaseDark' | 'onLight') {
+  if (theme === 'onBaseDark') {
+    return {
+      color: '#7a7a7a', // city_label
+      halo: 'rgba(33,33,33,0.9)', // city_label_halo
+      water: '#717784', // ocean_label
+      subplace: '#6a6a6a',
+      state: '#4a4a4a', // state_label, a bit lifted from #3d3d3d for readability
+      country: '#5c5c5c',
+      border: '#5b6374', // boundaries
+      waterBorder: 'rgba(160,170,190,0.4)',
+      stateBorder: 'rgba(91,99,116,0.45)',
+    };
+  }
+  if (theme === 'onLight') {
+    return {
+      color: '#5c5c5c', // city_label
+      halo: 'rgba(224,224,224,0.9)', // city_label_halo
+      water: '#728dd4', // ocean_label
+      subplace: '#8f8f8f', // subplace_label
+      state: '#b3b3b3',
+      country: '#a3a3a3',
+      border: '#adadad', // boundaries
+      waterBorder: 'rgba(140,155,175,0.5)',
+      stateBorder: 'rgba(173,173,173,0.5)',
+    };
+  }
+  return {
+    color: '#ffffff',
+    halo: 'rgba(0,0,0,0.75)',
+    water: 'rgba(190,215,255,0.85)',
+    subplace: '#ffffff',
+    state: 'rgba(255,255,255,0.7)',
+    country: '#ffffff',
+    border: 'rgba(255,255,255,0.55)',
+    waterBorder: 'rgba(255,255,255,0.55)',
+    stateBorder: 'rgba(255,255,255,0.3)',
+  };
 }
