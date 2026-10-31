@@ -28,9 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -66,7 +66,7 @@ jobs:
           ALBERTA_511_API_KEY: ${{ secrets.ALBERTA_511_API_KEY }}
           MAPILLARY_TOKEN: ${{ secrets.MAPILLARY_TOKEN || vars.MAPILLARY_TOKEN }}
         run: |
-          npx esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
+          pnpm exec esbuild scripts/fetch-data.ts --bundle --platform=node --format=esm --outfile=../fetch-data.mjs --log-level=warning
           node ../fetch-data.mjs ../data-out ../data-prev
       - name: Publish data branch
         working-directory: ../data-out

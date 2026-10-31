@@ -36,6 +36,9 @@ importers:
       '@types/three':
         specifier: ^0.183.1
         version: 0.183.1
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

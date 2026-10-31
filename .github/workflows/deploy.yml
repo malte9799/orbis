@@ -31,7 +31,7 @@ jobs:
       SHA: ${{ github.sha }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Names
         id: n
         run: |
@@ -43,8 +43,8 @@ jobs:
       - name: 'Status: Abhängigkeiten installieren'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Abhängigkeiten installieren"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -56,11 +56,11 @@ jobs:
       - name: Cache Moon textures
         if: github.ref == 'refs/heads/main'
         id: moon-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: public/textures/moon
           key: moon-textures-${{ hashFiles('scripts/moon-textures.py') }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: github.ref == 'refs/heads/main' && steps.moon-cache.outputs.cache-hit != 'true'
         with:
           python-version: '3.12'
@@ -76,7 +76,7 @@ jobs:
       - name: Cache detailed ISS model
         if: github.ref == 'refs/heads/main'
         id: iss-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: public/models/iss-detail.glb
           key: iss-detail-${{ hashFiles('scripts/iss-model.sh') }}
