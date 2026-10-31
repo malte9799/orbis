@@ -34,10 +34,15 @@ async function fetchProps(base: string): Promise<HiPSProps> {
     const v = Number(pick(k)[0]);
     return Number.isFinite(v) ? v : def;
   };
+  const hostOf = (u: string) => { try { return new URL(u).host; } catch { return ''; } };
+  const baseHost = hostOf(base);
   return {
     // ohne echte Liste: die eigene Basis-URL ist der Master-Server; ggf. bekannte
-    // Spiegel (alaskybis/ESA) hinzufügen, falls der properties-Block sie nennt
-    serviceUrls: pick('hips_service_url').length ? pick('hips_service_url') : [base],
+    // Spiegel (alaskybis/ESA) hinzufügen, falls der properties-Block sie nennt.
+    // Einige Server (z. B. ESAC/JWST) nennen nur http:// im properties-Block – auf https
+    // anheben, wenn derselbe Host auch die Basis (also die properties) ausliefert hat.
+    serviceUrls: (pick('hips_service_url').length ? pick('hips_service_url') : [base])
+      .map((u) => u.startsWith('http://') && hostOf(u) === baseHost ? `https://${u.slice(7)}` : u),
     order: num('hips_order', 0),
     orderMin: num('hips_order_min', 0),
     tileWidth: num('hips_tile_width', 512),

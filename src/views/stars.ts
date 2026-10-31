@@ -14,7 +14,7 @@ export type StarsMode = 'himmel' | 'kugel' | 'karte' | 'allsky';
 
 export interface StarsView {
   el: HTMLElement;
-  activate(opts?: { ra?: number; dec?: number; fov?: number; mode?: StarsMode; survey?: string }): void;
+  activate(opts?: { ra?: number; dec?: number; fov?: number; mode?: StarsMode; survey?: string; detail?: string }): void;
   deactivate(): void;
 }
 
@@ -111,6 +111,48 @@ const SURVEYS = [
 ] as const;
 export type SurveyId = (typeof SURVEYS)[number]['id'];
 
+// Detailaufnahmen: kleine HiPS-Ausschnitte berühmter Instrumente (JWST, Euclid, Chandra, Herschel),
+// die unter der Durchmusterung liegen und beim starken Hineinzoomen als Patchwork erscheinen.
+// Alle gleichberechtigt, mehrere gleichzeitig an (Checkbox-Verhalten statt Survey-Wechsel).
+// Alle Server mit CORS * (geprüft 2026-10-31); Euclid ist statisch, JWST wird live generiert.
+const ESAC = 'https://skies.esac.esa.int';
+const EUCLID = 'https://cdn.skies.esac.esa.int';
+const CXC = 'https://cdaftp.cfa.harvard.edu';
+const DETAIL_LAYERS = [
+  {
+    id: 'jwst', label: 'JWST',
+    tiles: [{ url: `${ESAC}/JWST/NIRCam_Imaging`, maxOrder: 15 }],
+    credit: 'JWST NIRCam HiPS (ESA/Webb, NASA/STScI)',
+    note: 'James Webb Space Telescope (NIRCam): berühmte Aufnahmen als HiPS. Nur kleine Himmelsausschnitte – erscheint beim Hineinzoomen und kann tief (live generiert) träge sein.',
+  },
+  {
+    id: 'euclid', label: 'Euclid Q1',
+    // drei getrennte Deep-Field-HiPS, liegen disjunkt am Himmel (Süd, Fornax, Nord)
+    tiles: ['S', 'F', 'N'].map((f) => ({ url: `${EUCLID}/Q1-EDF${f}-R4-PNG-RGB_HIPS`, maxOrder: 12 })),
+    credit: 'Euclid Q1 Deep Fields (ESA/Euclid Consortium/NASA)',
+    note: 'Euclid Q1 Deep Fields (Süd, Fornax, Nord): Farbaufnahmen größter Tiefe aus der ersten Euclid-Datenfreigabe.',
+  },
+  {
+    id: 'chandra', label: 'Chandra',
+    tiles: [{ url: `${CXC}/cxc-hips`, maxOrder: 11 }],
+    credit: 'Chandra HiPS (NASA/CXC/SAO)',
+    note: 'Chandra Röntgenteleskop: Komposit der Beobachtungen (2 % des Himmels).',
+  },
+  {
+    id: 'herschel', label: 'Herschel',
+    tiles: [{ url: `${ESAC}/Herschel/color`, maxOrder: 8 }],
+    credit: 'Herschel HiPS (ESA/Herschel/PACS/SPIRE)',
+    note: 'Herschel Weltraumteleskop: Ferninfrarot, vor allem Streifen entlang der Milchstraße.',
+  },
+] as const;
+export type DetailId = (typeof DETAIL_LAYERS)[number]['id'];
+
+// Detailaufnahmen erscheinen erst bei starker Hineinzoomung (sichtbare Spanne im Zoom-Gate,
+// mit Hysterese gegen Flackern an der Schwelle); die Kachelauflösung der Durchmusterung
+// steuert weiter allein den minZoom.
+const DETAIL_SPAN_IN = Math.PI / 180;
+const DETAIL_SPAN_OUT = 1.45 * Math.PI / 180;
+
 const D2R = Math.PI / 180;
 
 export function createStarsView(): StarsView {
@@ -128,6 +170,9 @@ export function createStarsView(): StarsView {
       <div class="stars-modes" role="group" aria-label="Himmelskarte">
         ${SURVEYS.map((v) => `<button type="button" data-survey="${v.id}" title="${v.note}">${v.label}</button>`).join('')}
       </div>
+      <div class="stars-modes" role="group" aria-label="Detailaufnahmen">
+        ${DETAIL_LAYERS.map((d) => `<button type="button" data-detail="${d.id}" title="${d.note}" aria-pressed="false">${d.label}</button>`).join('')}
+      </div>
     </div>
     <div class="stars-hint" role="status"></div>
     <div class="stars-credit"></div>
@@ -137,6 +182,7 @@ export function createStarsView(): StarsView {
   const creditEl = el.querySelector<HTMLElement>('.stars-credit')!;
   const modeBtns = [...el.querySelectorAll<HTMLButtonElement>('button[data-mode]')];
   const surveyBtns = [...el.querySelectorAll<HTMLButtonElement>('button[data-survey]')];
+  const detailBtns = [...el.querySelectorAll<HTMLButtonElement>('button[data-detail]')];
   const gridBtn = el.querySelector<HTMLButtonElement>('button[data-grid]')!;
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -232,9 +278,7 @@ export function createStarsView(): StarsView {
     }
     zoom = clampZoom(zoom);
     targetZoom = clampZoom(targetZoom);
-    const sv = SURVEYS.find((x) => x.id === survey)!;
-    creditEl.textContent = (SHOW_BASE_MAP ? `${BASE_CREDIT} · ` : '') + (survey === 'dss' ? '' : `${sv.credit} · `) + SURVEYS[0].credit;
-    creditEl.title = sv.note;
+    updateCredit();
     surveyBtns.forEach((b) => {
       const on = b.dataset.survey === survey;
       b.classList.toggle('on', on);
@@ -249,6 +293,108 @@ export function createStarsView(): StarsView {
     if (id !== 'dss') jobs.push(loadSurvey(id));
     Promise.allSettled(jobs).then(applySurvey);
   }
+
+  // ---- Detailaufnahmen (JWST, Euclid, Chandra, Herschel) --------------------------------------
+  // Mehrere Ebenen gleichzeitig (Checkbox-Verhalten); erscheinen erst bei starker Hineinzoomung.
+  const detailSubs = new Map<DetailId, HiPSLayer[]>();
+  const detailLoading = new Set<DetailId>();
+  const detailOn = new Set<DetailId>();
+  let detailNear = false; // Zoom-Gate: Spanne unterhalb der Schwelle?
+
+  function loadDetail(id: DetailId): Promise<void> {
+    const d = DETAIL_LAYERS.find((x) => x.id === id)!;
+    if (detailSubs.has(id) || detailLoading.has(id)) return Promise.resolve();
+    detailLoading.add(id);
+    const base = 40 + DETAIL_LAYERS.findIndex((x) => x.id === id) * 10; // über den Survey-Überlagerungen (30)
+    return Promise.all(
+      d.tiles.map((t) => createHiPSLayer(t.url, t.maxOrder).then((l) => {
+        l.renderBase = base;
+        scene.add(l.group);
+        return l;
+      })),
+    )
+      .then((subs) => {
+        detailLoading.delete(id);
+        detailSubs.set(id, subs);
+        applyDetail();
+      })
+      .catch((err) => {
+        // Ebene fehlt (Netzwerk/Server/CORS): nichts weiter kaputt, Klick-Erneut versucht es erneut
+        detailLoading.delete(id);
+        detailOn.delete(id);
+        applyDetail();
+        hint.textContent = `${d.label}: Detailaufnahmen nicht erreichbar (Netzwerk oder Server) – nochmal klicken versucht es erneut.`;
+        showHint();
+        console.warn(`Detailaufnahmen ${d.label} konnten nicht geladen werden`, err);
+      });
+  }
+
+  function applyDetail() {
+    for (const [id, subs] of detailSubs) {
+      for (const l of subs) l.setActive(detailOn.has(id) && detailNear);
+    }
+    updateDetailBtns();
+    updateCredit();
+  }
+
+  function updateDetailBtns() {
+    detailBtns.forEach((b) => {
+      const on = detailOn.has(b.dataset.detail as DetailId);
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+  }
+
+  // Ein/aus für Deep-Links und Knöpfe (idempotent); lädt fehlende Ebenen nach
+  function setDetails(ids: DetailId[]) {
+    const wanted = new Set(ids);
+    for (const id of wanted) {
+      if (!detailOn.has(id)) {
+        detailOn.add(id);
+        loadDetail(id);
+      }
+    }
+    for (const id of [...detailOn]) {
+      if (!wanted.has(id)) detailOn.delete(id);
+    }
+    applyDetail();
+  }
+
+  function toggleDetail(id: DetailId) {
+    if (detailOn.has(id)) {
+      detailOn.delete(id);
+      applyDetail();
+      return;
+    }
+    detailOn.add(id);
+    applyDetail();
+    loadDetail(id);
+  }
+
+  // Zoom-Gate: Detailaufnahmen erst aus dem Mikro-Zoom hervortreten lassen (wie Kachel-Fade-in
+  // wirken sie beim Hereinzoomen); Hysterese gegen Flackern an der Schwelle. Aufruf je Frame.
+  function updateDetailGate() {
+    const s = spanRad();
+    const near = detailNear ? s < DETAIL_SPAN_OUT : s < DETAIL_SPAN_IN;
+    if (near === detailNear) return;
+    detailNear = near;
+    applyDetail();
+  }
+
+  function updateCredit() {
+    const sv = SURVEYS.find((x) => x.id === survey)!;
+    const parts: string[] = [];
+    if (SHOW_BASE_MAP) parts.push(BASE_CREDIT);
+    if (survey !== 'dss') parts.push(sv.credit);
+    parts.push(SURVEYS[0].credit);
+    for (const id of detailOn) {
+      const d = DETAIL_LAYERS.find((x) => x.id === id);
+      if (d) parts.push(d.credit);
+    }
+    creditEl.textContent = parts.join(' · ');
+    creditEl.title = sv.note;
+  }
+
 
   // ---- Zustand --------------------------------------------------------------------------------
   let mode: StarsMode = 'himmel';
@@ -494,6 +640,13 @@ export function createStarsView(): StarsView {
     zoom *= Math.pow(targetZoom / zoom, Math.min(1, dt / 100));
     applyCamera();
     for (const l of layers.values()) l.update(hipsView);
+    updateDetailGate();
+    if (detailNear) {
+      for (const [id, subs] of detailSubs) {
+        if (!detailOn.has(id)) continue;
+        for (const l of subs) l.update(hipsView);
+      }
+    }
     renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
   }
@@ -573,6 +726,7 @@ export function createStarsView(): StarsView {
     if (!b) return;
     if (b.dataset.mode) applyMode(b.dataset.mode as StarsMode);
     else if (b.dataset.survey) setSurvey(b.dataset.survey as SurveyId);
+    else if (b.dataset.detail) toggleDetail(b.dataset.detail as DetailId);
     else if (b.hasAttribute('data-grid')) toggleGrid();
   });
   function toggleGrid() {
@@ -656,6 +810,9 @@ export function createStarsView(): StarsView {
       // Quelle bei jedem Aktivieren anwenden: ein Deep-Link #/sterne?quelle=sdss darf auch dann
       // greifen, wenn die Ansicht vorher schon einmal offen war (setSurvey ist idempotent).
       setSurvey(SURVEYS.find((x) => x.id === opts?.survey)?.id ?? survey);
+      // Detailaufnahmen jedes Mal anwenden (Deep-Link #/sterne?detail=jwst,euclid), idempotent
+      const wantedDetails = (opts?.detail ?? '').split(',').map((s) => s.trim()).filter((s): s is DetailId => DETAIL_LAYERS.some((d) => d.id === s));
+      setDetails(wantedDetails);
       applyCamera();
       renderer.render(scene, camera);
       lastT = performance.now();
@@ -669,6 +826,7 @@ export function createStarsView(): StarsView {
       clearTimeout(hintTimer);
       // Wartende Kachel-Downloads verwerfen; die Ansicht ist unsichtbar
       for (const l of layers.values()) l.cancelPending();
+      for (const subs of detailSubs.values()) for (const l of subs) l.cancelPending();
     },
   };
 }

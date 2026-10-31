@@ -175,8 +175,10 @@ function route() {
       const f = parseFloat(params.get('fov') ?? '');
       const ansicht = params.get('ansicht');
       const quelle = params.get('quelle');
+      const detail = params.get('detail');
       v.activate({
         survey: quelle ?? undefined,
+        detail: detail ?? undefined,
         mode: ansicht === 'kugel' || ansicht === 'karte' || ansicht === 'allsky' || ansicht === 'himmel' ? ansicht : undefined,
         ra: Number.isFinite(ra) ? ra : undefined,
         dec: Number.isFinite(dec) ? dec : undefined,
