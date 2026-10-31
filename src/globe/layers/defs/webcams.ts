@@ -114,7 +114,7 @@ function loadNow(ctx: ExtraCtx) {
         .catch((e) => {
           console.warn('Windy', e);
           st.windyKey = '';
-          ctx.set('webcams', { note: 'Windy-Webcams nicht erreichbar – Schlüssel prüfen' });
+          ctx.set('webcams', { note: e instanceof Error ? e.message : 'Windy-Webcams nicht erreichbar – Schlüssel prüfen' });
         });
     }
   }
