@@ -2,7 +2,7 @@ import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type
 import { emptyModelGrid, getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid, type ModelVar } from '../api/model';
 import { WxLayer, wxEnabled } from '../api/wxmodel';
 import type { Forecast } from '../api/openmeteo';
-import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
+import { FIELDS, PRECIP_STOPS, PRECIP_TICKS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
 import { regionsGeoJSON } from '../globe/regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
 import { loadRadarFrames, radarForecastSteps } from '../api/events';
@@ -484,7 +484,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     const def = (id: FieldId) => FIELDS[id];
     legendEl.innerHTML =
       mode === 'precip'
-        ? bar(PRECIP_STOPS, 'Regen', [0.1, 3, 10, 20, 40], rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
+        ? bar(PRECIP_STOPS, 'Regen', PRECIP_TICKS, rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
         : mode === 'radar'
           ? ''
           : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);
