@@ -627,6 +627,8 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .globe-view[data-layout='desktop'] .timeline .tl-play { grid-area: play; width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
 .globe-view[data-layout='desktop'] .timeline .tl-play:hover { background: rgba(255, 255, 255, 0.22); }
 .globe-view[data-layout='desktop'] .timeline .tl-play svg { width: 14px; height: 14px; }
+/* the date header belongs to the desktop time card only; elsewhere (phone portrait, landscape) the compact row has its own time label */
+.tl-head { display: none; }
 .globe-view[data-layout='desktop'] .tl-head { grid-area: head; display: flex; flex-direction: column; gap: 0; min-width: 0; line-height: 1.25; }
 .globe-view[data-layout='desktop'] .tl-head b { font-size: 0.9rem; font-weight: 700; color: #fff; }
 .globe-view[data-layout='desktop'] .tl-head span { font-size: 0.8rem; font-weight: 500; color: rgba(255, 255, 255, 0.55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
