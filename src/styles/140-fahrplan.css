@@ -115,6 +115,10 @@
 .fp-l2 .late {
   color: var(--danger);
 }
+/* the real-time source badge is shown once, far right behind the last time */
+.fp-l2 .fp-src {
+  margin-left: auto;
+}
 .fp-src {
   display: inline-flex;
   align-items: center;
@@ -409,6 +413,32 @@
   display: inline-block;
   font-size: 0.9rem;
   padding: 6px 9px;
+}
+/* the vehicle glyph is bigger than the badge and reaches over its padding/rounded corners (icon | separator | line name) */
+.fp-legbody .fp-badge.fp-mi {
+  position: relative;
+  padding-left: 40px;
+}
+.fp-legbody .fp-badge.fp-mi svg {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.fp-legbody .fp-badge.fp-mi::after {
+  content: "";
+  position: absolute;
+  left: 33px;
+  top: 18%;
+  bottom: 18%;
+  width: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
+  pointer-events: none;
 }
 .fp-nach {
   margin: 6px 0 0;
@@ -743,7 +773,7 @@
     align-self: start;
   }
   .fp-itin > summary .fp-l2 {
-    grid-column: 1;
+    grid-column: 1 / -1; /* over both columns: the real-time badge aligns right with the platform badge, not with the column boundary */
     grid-row: 2;
   }
   .fp-itin > summary .fp-bar {

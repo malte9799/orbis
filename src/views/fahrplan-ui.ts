@@ -1,6 +1,6 @@
 import { durationTxt, inTxt, legColor, searchStops, stableKey, type DelaySource, type Departure, type Itinerary, type Leg, type Stop } from '../api/connections';
 import { rufbusInfo, telHref } from '../api/rufbus';
-import { modeStyle } from '../api/transit';
+import { MODE_ICONS, modeStyle } from '../api/transit';
 import { store } from '../store';
 import { debounce, escapeHtml as esc } from '../util';
 
@@ -136,13 +136,20 @@ const bookingHtml = (l: Leg) => {
   return `${call}${when}`;
 };
 
+/** vehicle glyph in front of the line name: one tile per type (ICE/IC/RE/S/U/Tram/Bus/RUF/ship), drawn in the badge's text color */
+const modeIconSvg = (mode: string) => {
+  const d = MODE_ICONS[mode];
+  return d ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>` : '';
+};
+
 const legBody = (l: Leg) => {
   const stops = l.via.length
     ? `<details class="fp-stops"><summary>${l.via.length} Haltestelle${l.via.length > 1 ? 'n' : ''}</summary><ul>${l.via
         .map((v) => `<li><span class="fp-tm"><b${v.delayMin != null ? ` class="${v.delayMin <= 5 ? 'ok' : 'late'}"` : ''}>${Number.isFinite(v.time) ? hm(v.time) : ''}</b></span><span>${esc(v.name)}</span></li>`)
         .join('')}</ul></details>`
     : '';
-  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge" style="${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
+  const icon = modeIconSvg(l.mode);
+  return `<div class="fp-legbody${l.cancelled ? ' cancelled' : ''}"><span class="fp-badge${icon ? ' fp-mi' : ''}" style="${fg(l.mode)}">${icon}${esc(lineName(l.mode, l.line))}</span>${l.cancelled ? ' <small class="fp-late">entfällt</small>' : ''}${bookingHtml(l)}${l.headsign ? `<p class="fp-nach">nach ${esc(l.headsign)}</p>` : ''}${stops}</div>`;
 };
 
 /** the connection as a timeline: station rows, the ride between them and the transfers */
@@ -248,6 +255,8 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
   const rawTag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
   const depSrc = !cancelled && dl != null ? srcIcon(first?.delaySrc) : '';
   const arrSrc = !cancelled && last?.arrDelayMin != null ? srcIcon(last?.arrDelaySrc) : '';
+  // one info badge for the real-time data: same source twice is redundant, so it is shown once (far right behind the last time)
+  const src = [...new Set([depSrc, arrSrc].filter(Boolean))].join('');
   // the icon sits in the time line (list) and in the status tag (big card, where the time line is hidden)
   const tag = depSrc ? rawTag.replace(/<\/span>$/, `${depSrc}</span>`) : rawTag;
   const lines = rides.map((l) => `<span class="fp-badge" style="--c:${legColor(l)};${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>`).join('');
@@ -258,7 +267,7 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
       <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
-      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b>${depSrc}<b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${arrSrc}</span>` : ''}
+      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${src}</span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}</span>
     </summary>
