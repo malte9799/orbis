@@ -410,10 +410,10 @@
   font-size: 0.9rem;
   padding: 6px 9px;
 }
-/* the vehicle glyph is bigger than the badge and reaches over its padding/rounded corners */
+/* the vehicle glyph is bigger than the badge and reaches over its padding/rounded corners (icon | separator | line name) */
 .fp-legbody .fp-badge.fp-mi {
   position: relative;
-  padding-left: 35px;
+  padding-left: 38px;
 }
 .fp-legbody .fp-badge.fp-mi svg {
   position: absolute;
@@ -422,6 +422,18 @@
   width: 30px;
   height: 30px;
   transform: translateY(-50%);
+  pointer-events: none;
+}
+.fp-legbody .fp-badge.fp-mi::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  top: 18%;
+  bottom: 18%;
+  width: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0.45;
   pointer-events: none;
 }
 .fp-nach {
