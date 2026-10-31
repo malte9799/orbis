@@ -48,6 +48,8 @@ FORMAT_VERSION = 1
 # Variablen: Schlüssel = Orbis-Name (ModelVar in src/api/model.ts), `icon` = Verzeichnis/Kürzel beim DWD
 VARS = {
     'temperature_2m': dict(icon='t_2m', convert=lambda v: v - 273.15, scale=0.1, offset=0.0, unit='°C'),
+    # Höhe der Modelloberfläche (zeitinvariant): Grundlage der Geländekorrektur der Temperatur im Client
+    'hsurf': dict(icon='hsurf', static=True, convert=lambda v: v, scale=1.0, offset=0.0, unit='m'),
 }
 
 
@@ -71,7 +73,10 @@ def exists(url):
         return False
 
 
-def grib_url(run, hour, icon):
+def grib_url(run, hour, v):
+    icon = v['icon']
+    if v.get('static'):
+        return invariant_url(run, icon)
     return f'{BASE}/{run[8:]}/{icon}/icon_global_icosahedral_single-level_{run}_{hour:03d}_{icon.upper()}.grib2.bz2'
 
 
@@ -99,7 +104,9 @@ def fetch(url, dest, tries=4):
             time.sleep(3 * (i + 1))
 
 
-def hours():
+def hours(v=None):
+    if v and v.get('static'):
+        return [0]
     return list(range(0, HOURS + 1, STEP))
 
 
@@ -110,12 +117,12 @@ def candidate_runs(now):
     return [(base - dt.timedelta(hours=6 * k)).strftime('%Y%m%d%H') for k in range(4)]
 
 
-def run_ready(run, icons):
+def run_ready(run, names):
     # Dateien erscheinen in Stundenreihenfolge → die letzte Datei zeigt, dass alles da ist
-    return all(exists(grib_url(run, HOURS, i)) for i in icons)
+    return all(exists(grib_url(run, hours(VARS[n])[-1], VARS[n])) for n in names)
 
 
-def pick_run(args, icons):
+def pick_run(args, names):
     published = None
     if args.published and os.path.exists(args.published):
         with open(args.published) as f:
@@ -125,7 +132,7 @@ def pick_run(args, icons):
     deadline = time.time() + args.wait * 60
     while True:
         cands = candidate_runs(dt.datetime.now(dt.timezone.utc))
-        ready = next((c for c in cands if run_ready(c, icons)), None)
+        ready = next((c for c in cands if run_ready(c, names)), None)
         if ready == cands[0] or time.time() >= deadline:
             return ready, published
         print(f'Lauf {cands[0]} noch nicht vollständig, warte …', flush=True)
@@ -263,11 +270,10 @@ def main():
     for n in names:
         if n not in VARS:
             sys.exit(f'Unbekannte Variable {n} (bekannt: {", ".join(VARS)})')
-    icons = [VARS[n]['icon'] for n in names]
     work = args.work or os.path.join(args.out, '..', 'wx-work')
     os.makedirs(work, exist_ok=True)
 
-    run, published = pick_run(args, icons)
+    run, published = pick_run(args, names)
     if not run:
         print('Kein vollständiger ICON-Lauf gefunden – nichts zu tun.')
         return 0
@@ -286,11 +292,11 @@ def main():
         v = VARS[name]
         files = {}
         with cf.ThreadPoolExecutor(6) as ex:
-            futs = {h: ex.submit(fetch, grib_url(run, h, v['icon']), f"{work}/{v['icon']}_{run}_{h:03d}.grib2") for h in hours()}
+            futs = {h: ex.submit(fetch, grib_url(run, h, v), f"{work}/{v['icon']}_{run}_{h:03d}.grib2") for h in hours(v)}
             for h, f in futs.items():
                 files[h] = f.result()
         full, over = [], []
-        for h in hours():
+        for h in hours(v):
             vals, _ = read_values(files[h])
             f = remap(v['convert'](vals), idx, w)
             full.append(quantize(f, v))
@@ -323,7 +329,7 @@ def main():
         valid = full[full != NODATA].astype(np.float32) * v['scale'] + v['offset']
         meta_vars[name] = dict(
             icon=v['icon'].upper(), scale=v['scale'], offset=v['offset'], unit=v['unit'],
-            min=float(valid.min()), max=float(valid.max()), bytes=total,
+            min=float(valid.min()), max=float(valid.max()), bytes=total, static=bool(v.get('static')),
         )
 
     latest = dict(

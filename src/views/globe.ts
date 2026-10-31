@@ -24,7 +24,9 @@ import {
   nearestSubIndex,
   SUBSTEPS,
   type ModelGrid,
+  type ModelVar,
 } from '../api/model';
+import { WxLayer, wxEnabled } from '../api/wxmodel';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
@@ -71,6 +73,8 @@ type LiveId = 'radar' | 'dwd-radar' | 'sat-hd' | 'sat-ir' | 'sat-storm' | 'imerg
 type OverlayId = 'none' | FieldId | LiveId | `owm-${string}`;
 
 const isField = (o: string): o is FieldId => o in FIELDS;
+/** variables available from the ICON fields (src/api/wxmodel.ts) – grows with the migration */
+const WX_VARS: ModelVar[] = ['temperature_2m'];
 
 const OWM_LAYERS: { id: string; label: string }[] = [
   { id: 'temp_new', label: 'Temperatur (OWM)' },
@@ -175,6 +179,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let globalModel: ModelGrid | null = null;
   let detailModel: ModelGrid | null = null;
   let detailKey = '';
+  let wxLayer: WxLayer | null = null;
   let modelLoading = false;
   let timeIdx = -1;
   let sampler: ModelSampler | null = null;
@@ -544,6 +549,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderLegend();
   }
 
+  /** ICON fields load in the background: the map shows the Open-Meteo data first and switches over when they arrive. */
+  let wxLoading = false;
+  function loadWx() {
+    if (wxLayer?.expired) wxLayer = null;
+    if (!wxEnabled() || wxLayer || wxLoading) return;
+    wxLoading = true;
+    void WxLayer.load(WX_VARS)
+      .then((l) => {
+        wxLoading = false;
+        if (!l) return;
+        wxLayer = l;
+        if (globalModel && needsModel()) {
+          updateSampler();
+          refreshDetail();
+        }
+      })
+      .catch(() => {
+        wxLoading = false;
+      });
+  }
+
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
     if (modelLoading) {
@@ -556,10 +582,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (g !== globalModel) {
         const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[timeIdx] : Date.now();
         globalModel = g;
+        wxLayer = null; // reload together with the Open-Meteo grid (new ICON run)
         timeIdx = nearestSubIndex(g.times, prevTime);
         detailModel = null;
         detailKey = '';
       }
+      loadWx();
       return true;
     } catch (e) {
       modelError(e);
@@ -574,10 +602,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function updateSampler() {
     if (!map || !globalModel || timeIdx < 0) return;
-    sampler = new ModelSampler(globalModel, detailModel, timeIdx);
+    sampler = new ModelSampler(globalModel, detailModel, timeIdx, wxLayer);
     setActiveSampler(sampler);
     if (isField(state.overlay)) {
-      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey.replace(/[^\w]/g, '_') || 'g'}`;
+      // the field protocol only accepts [\w-] in the version: a fractional step ("7.333…") would make every tile fail
+      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey || 'g'}-${wxLayer?.version ?? ''}`.replace(/[^\w-]/g, '_');
       (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${state.overlay}/${version}/{z}/{x}/{y}`]);
       vis('field', true);
     }
@@ -613,6 +642,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const refreshDetail = debounce(() => {
     if (!map || !globalModel || !needsModel()) return;
     const b = map.getBounds();
+    if (wxLayer) {
+      // 0.125° ICON tiles for the view, only while the shown field comes from them
+      const def = isField(state.overlay) ? FIELDS[state.overlay] : null;
+      const use = def && (wxLayer.has(def.variable) || def.phase) ? WX_VARS : [];
+      void wxLayer
+        .setView(use.length ? { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() } : null, use)
+        .then((changed) => changed && updateSampler());
+    }
     const req = detailRequest({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
     if (!req) {
       pendingDetail = '';

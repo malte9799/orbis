@@ -1,4 +1,5 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
+import type { WxLayer } from './wxmodel';
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
@@ -38,6 +39,21 @@ export interface ModelGrid {
   /** layout: [(t * ny + y) * nx + x] */
   data: Record<ModelVar, Float32Array>;
 }
+
+/** One variable of the ICON fields (src/api/wxmodel.ts) on a regular grid. */
+export interface WxGrid {
+  lat0: number;
+  lon0: number;
+  dx: number;
+  dy: number;
+  nx: number;
+  ny: number;
+  wrap: boolean;
+  /** values of one time step, [y * nx + x]; a grid with a single step answers every t with it */
+  step(t: number): Float32Array;
+}
+
+type Geo = Pick<ModelGrid, 'lat0' | 'lon0' | 'dx' | 'dy' | 'nx' | 'ny' | 'wrap'>;
 
 export { OpenMeteoLimitError as ModelLimitError };
 
@@ -288,7 +304,7 @@ export function getDetailModel(req: NonNullable<ReturnType<typeof detailRequest>
 // ---------------------------------------------------------------------------
 // Sampling
 
-function bilinear(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bilinear(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   let y = (g.lat0 - lat) / g.dy;
   if (g.wrap) {
@@ -322,7 +338,7 @@ function bspline(t: number, w: Float64Array) {
 const WX = new Float64Array(4);
 const WY = new Float64Array(4);
 
-function bicubic(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bicubic(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   const y = Math.max(0, Math.min(g.ny - 1, (g.lat0 - lat) / g.dy));
   if (g.wrap) x = ((x % g.nx) + g.nx) % g.nx;
@@ -357,7 +373,9 @@ const TRANSFORMS: Partial<Record<ModelVar, [(x: number) => number, (y: number) =
 };
 const transformed = new WeakMap<Float32Array, Float32Array>();
 function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
-  const src = g.data[v];
+  return transformArray(g.data[v], v);
+}
+function transformArray(src: Float32Array, v: ModelVar): Float32Array {
   const tf = TRANSFORMS[v];
   if (!tf) return src;
   let out = transformed.get(src);
@@ -369,11 +387,37 @@ function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
   return out;
 }
 
-function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
-  const arr = fieldArray(g, v);
+function smoothArr(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let r = bicubic(g, arr, t, lat, lon);
   if (Number.isNaN(r)) r = bilinear(g, arr, t, lat, lon); // NaN neighbour (e.g. no data over sea)
   return r;
+}
+
+function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
+  return smoothArr(g, fieldArray(g, v), t, lat, lon);
+}
+
+const LAPSE_K_PER_M = 0.0065;
+const MAX_LAPSE_DELTA = 15;
+
+/** 1 inside a grid, fading to 0 over `deg` degrees towards its edge */
+function edgeWeight(g: Geo, lat: number, lon: number, deg: number): number {
+  const x = (lon - g.lon0) / g.dx;
+  const y = (g.lat0 - lat) / g.dy;
+  if (x < 0 || y < 0 || x > g.nx - 1 || y > g.ny - 1) return 0;
+  const f = Math.min(1, Math.min(x * g.dx, y * g.dy, (g.nx - 1 - x) * g.dx, (g.ny - 1 - y) * g.dy) / deg);
+  return f * f * (3 - 2 * f);
+}
+
+/** Weight of a detail grid at this point (0 outside, 1 well inside), feathered so resolutions blend without a frame. */
+function featherWeight(d: Geo, lat: number, lon: number): number {
+  const x = (lon - d.lon0) / d.dx;
+  const y = (d.lat0 - lat) / d.dy;
+  if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
+  const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
+  const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
+  const f = Math.min(1, edge / feather);
+  return f * f * (3 - 2 * f);
 }
 
 /** Combined sampler: detail grid where available (feathered edges), global grid elsewhere. */
@@ -383,6 +427,8 @@ export class ModelSampler {
     readonly detail: ModelGrid | null,
     /** time index into global.times; between two steps (e.g. 1.5) the neighbours are mixed */
     readonly t: number,
+    /** ICON fields: used for the variables they contain (where their time range covers the moment) */
+    readonly wx: WxLayer | null = null,
   ) {}
 
   private detailT = new Map<number, number>();
@@ -396,16 +442,7 @@ export class ModelSampler {
 
   /** Weight of the detail grid at this point (0 outside, 1 well inside). */
   private detailWeight(lat: number, lon: number): number {
-    const d = this.detail;
-    if (!d) return 0;
-    const x = (lon - d.lon0) / d.dx;
-    const y = (d.lat0 - lat) / d.dy;
-    if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
-    const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
-    // wide feather so the two resolutions blend without a visible frame
-    const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
-    const f = Math.min(1, edge / feather);
-    return f * f * (3 - 2 * f);
+    return this.detail ? featherWeight(this.detail, lat, lon) : 0;
   }
 
   /** Effective grid spacing [deg] at this point – used to scale cosmetic detail. */
@@ -434,7 +471,71 @@ export class ModelSampler {
     return r;
   }
 
-  sample(v: ModelVar, lat: number, lon: number): number {
+  /** current moment as a (fractional) index into the ICON time steps; NaN when their time range does not cover it */
+  private wxPosition(): number {
+    const wx = this.wx!;
+    const f = (this.time - wx.times[0]) / wx.stepMs;
+    return f >= -1e-6 && f <= wx.times.length - 1 + 1e-6 ? f : NaN;
+  }
+
+  /** value from the ICON fields at the current moment, NaN where they do not cover it */
+  private sampleWx(v: ModelVar, lat: number, lon: number): number {
+    const wx = this.wx!;
+    const base = wx.overviewOf(v)!;
+    const f = this.wxPosition();
+    const last = wx.times.length - 1;
+    if (Number.isNaN(f)) return NaN;
+    const i = Math.max(0, Math.min(Math.floor(f), Math.max(0, last - 1)));
+    const fr = Math.min(1, Math.max(0, f - i));
+    const detail = wx.detail.get(v);
+    const w = detail ? featherWeight(detail, lat, lon) : 0;
+    const at = (t: number) => {
+      let r = smoothArr(base, transformArray(base.step(t), v), 0, lat, lon);
+      if (w > 0) {
+        const dv = smoothArr(detail!, transformArray(detail!.step(t), v), 0, lat, lon);
+        if (!Number.isNaN(dv)) r = Number.isNaN(r) ? dv : dv * w + r * (1 - w);
+      }
+      return r;
+    };
+    let r = at(i);
+    if (fr > 1e-6 && i + 1 <= last) {
+      const r2 = at(i + 1);
+      r = Number.isNaN(r) ? r2 : Number.isNaN(r2) ? r : r + (r2 - r) * fr;
+    }
+    const tf = TRANSFORMS[v];
+    return tf && !Number.isNaN(r) ? tf[1](r) : r;
+  }
+
+  /**
+   * true while terrain heights are loaded for the view and the ICON temperature answers at the current moment
+   * (otherwise the Open-Meteo values are shown, which must not get the correction)
+   */
+  hasTerrain(): boolean {
+    const wx = this.wx;
+    return !!wx?.terrain && wx.has('temperature_2m') && !Number.isNaN(this.wxPosition());
+  }
+
+  /**
+   * Temperature correction [K] for the difference between the model's smoothed surface and the real terrain
+   * (standard lapse rate): colder on peaks, warmer in valleys. Fades out over 2° at the edge of the loaded area.
+   */
+  terrainDelta(lat: number, lon: number): number {
+    const t = this.wx?.terrain;
+    if (!t) return 0;
+    const w = edgeWeight(t.dem, lat, lon, 2);
+    if (w <= 0) return 0;
+    const hs = bilinear(t.hs, t.hs.step(0), 0, lat, lon);
+    const dem = bilinear(t.dem, t.dem.step(0), 0, lat, lon);
+    if (Number.isNaN(hs) || Number.isNaN(dem)) return 0;
+    return w * Math.max(-MAX_LAPSE_DELTA, Math.min(MAX_LAPSE_DELTA, LAPSE_K_PER_M * (hs - dem)));
+  }
+
+  /** @param terrain add the terrain correction (readouts); tile rendering applies it per pixel itself */
+  sample(v: ModelVar, lat: number, lon: number, terrain = true): number {
+    if (this.wx?.has(v)) {
+      const r = this.sampleWx(v, lat, lon);
+      if (!Number.isNaN(r)) return terrain && v === 'temperature_2m' ? r + this.terrainDelta(lat, lon) : r;
+    }
     const w = this.detailWeight(lat, lon);
     const i = Math.min(Math.floor(this.t), this.global.times.length - 1);
     const fr = this.t - i;
