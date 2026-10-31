@@ -41,54 +41,70 @@ const BASE_CREDIT = 'Deep Star Maps 2020 · NASA/GSFC SVS (Hipparcos, Tycho-2, G
 const CDS = 'https://alasky.cds.unistra.fr';
 // Alle Karten: CDS-HiPS-Pakete; Daten frei nutzbar mit Quellenangabe (Mellinger u. a. mit Rechtevorbehalt fehlen bewusst).
 // maxOrder = native Kachelstufe (0,8″/px bei 9, je Stufe halb so groß); DSS2 liegt immer als Unterlage darunter.
+// Mirrors der HiPS-Pakete (Stand 2026-10-31, aus der MocServer-Registrie, CORS-geprüft):
+// fällt der Master aus (CDS-Ausfall am 30./31.10.2026 – Server nah keine Verbindungen an),
+// laden Unterlage und Überlagerungen von den Spiegeln weiter. IPAC sendet bewusst keine
+// CORS-Header (Browser-Fetch blockiert) und taucht deshalb nicht auf.
+const MIRROR_STSCI = 'https://stpubdata.s3.us-east-1.amazonaws.com/mast/skybackgrounds';
+
 const SURVEYS = [
   {
     id: 'dss', label: 'DSS2', url: `${CDS}/DSS/DSSColor`, maxOrder: 9,
+    mirrors: [`${MIRROR_STSCI}/DSSColor`, 'https://skies.esac.esa.int/DSSColor', 'https://casda.csiro.au/hips/DSS2/color'],
     credit: 'DSS2 © STScI/AAO/Caltech/AURA (CDS HiPS)',
     note: 'DSS2 color: The Digitized Sky Surveys, Space Telescope Science Institute; Platten © AAO, UK SERC/PPARC/AATB, Caltech/Palomar, AURA. Ganzer Himmel, optisch.',
   },
   {
     id: 'sdss', label: 'SDSS DR9', url: `${CDS}/SDSS/DR9/color`, maxOrder: 10,
+    mirrors: ['https://skies.esac.esa.int/SDSS9Color'],
     credit: 'SDSS DR9 (Sloan Digital Sky Survey, CDS HiPS)',
     note: 'Sloan Digital Sky Survey DR9, Farbkomposit g/r/i. Nur der überdeckte Himmelsteil (vor allem Norden), sonst DSS2.',
   },
   {
     id: 'panstarrs', label: 'Pan-STARRS', url: `${CDS}/Pan-STARRS/DR1/color-i-r-g`, maxOrder: 11,
+    mirrors: [`${MIRROR_STSCI}/PanSTARRS`],
     credit: 'Pan-STARRS DR1 (PS1 Science Consortium, CDS HiPS)',
     note: 'Pan-STARRS DR1, Farbkomposit i/r/g. Deklination über etwa −30°, sonst DSS2.',
   },
   {
     id: 'desi', label: 'DESI Legacy', url: `${CDS}/DESI-legacy-surveys/DR10/CDS_P_DESI-Legacy-Surveys_DR10_color`, maxOrder: 11,
+    mirrors: [],
     credit: 'DESI Legacy Imaging Surveys DR10 (legacysurvey.org, CDS HiPS)',
     note: 'DESI Legacy Imaging Surveys DR10, g/r/i/z-Farbe, sehr scharf. Etwa zwei Drittel des Himmels (Nord und Süd, ohne Milchstraßenebene), sonst DSS2.',
   },
   {
     id: 'decaps', label: 'DECaPS', url: `${CDS}/DECaPS/DR1/color`, maxOrder: 11,
+    mirrors: [],
     credit: 'DECaPS DR1 (DECam Plane Survey, NOIRLab/CTIO, CDS HiPS)',
     note: 'DECam Plane Survey DR1, Farbe. Nur die südliche Milchstraßenebene, sonst DSS2.',
   },
   {
     id: 'skymapper', label: 'SkyMapper', url: `${CDS}/Skymapper/DR4/CDS_P_Skymapper_DR4_color`, maxOrder: 10,
+    mirrors: [],
     credit: 'SkyMapper DR4 (Australian National University, CDS HiPS)',
     note: 'SkyMapper Southern Survey DR4, i/r/g-Farbe. Südhimmel, sonst DSS2.',
   },
   {
     id: 'twomass', label: '2MASS (IR)', url: `${CDS}/2MASS/Color`, maxOrder: 9,
+    mirrors: ['https://skies.esac.esa.int/2MASSColor'],
     credit: '2MASS © Univ. of Massachusetts & IPAC/Caltech (CDS HiPS)',
     note: '2MASS, Nahinfrarot J/H/K. Ganzer Himmel; sieht durch den Staub der Milchstraße.',
   },
   {
     id: 'allwise', label: 'AllWISE (IR)', url: `${CDS}/AllWISE/RGB-W4-W2-W1`, maxOrder: 8,
+    mirrors: ['https://skies.esac.esa.int/AllWISEColor'],
     credit: 'AllWISE (WISE, NASA/JPL-Caltech/UCLA, IPAC, CDS HiPS)',
     note: 'AllWISE, Mittelinfrarot W1/W2/W4. Ganzer Himmel; zeigt Staub und Sternentstehung.',
   },
   {
     id: 'unwise', label: 'unWISE (IR)', url: `${CDS}/unWISE/color-W2-W1W2-W1`, maxOrder: 8,
+    mirrors: [],
     credit: 'unWISE (IPAC/NASA, D. Lang, CDS HiPS)',
     note: 'unWISE, Mittelinfrarot W1/W2, tiefere Neuberechnung der WISE-Daten. Ganzer Himmel.',
   },
   {
     id: 'galex', label: 'GALEX (UV)', url: `${CDS}/GALEX/GALEXGR6_7_color`, maxOrder: 9,
+    mirrors: [`${MIRROR_STSCI}/GALEXColor`],
     credit: 'GALEX GR6/7 © NASA/STScI (CDS HiPS)',
     note: 'GALEX, Ultraviolett (FUV/NUV-Komposit). Rund 79 % des Himmels, sonst DSS2.',
   },
@@ -160,6 +176,12 @@ export function createStarsView(): StarsView {
   occluder.visible = false;
   scene.add(occluder);
 
+  // Basiskarte als Globus-Unterlage in der Kugelansicht (gleiche Textur wie der Himmel),
+  // minimal unter den Kacheln (Radius 1) liegend; erscheint erst, wenn die Textur geladen ist.
+  const baseKugel = new THREE.Mesh(new THREE.SphereGeometry(0.999, 96, 64), new THREE.MeshBasicMaterial());
+  baseKugel.visible = false;
+  scene.add(baseKugel);
+
   // Koordinatengitter (RA alle 30°, Deklination alle 15°), je Projektion neu aufgebaut
   const grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x7fa0d8, transparent: true, opacity: 0.4, depthWrite: false }));
   grid.renderOrder = 100;
@@ -177,7 +199,11 @@ export function createStarsView(): StarsView {
     const sv = SURVEYS.find((x) => x.id === id)!;
     const pending = loading.get(id);
     if (pending) return pending;
-    const p = createHiPSLayer(sv.url, sv.maxOrder)
+    const p = createHiPSLayer([sv.url, ...(sv.mirrors ?? [])], sv.maxOrder, (msg) => {
+      // Kachel-Versagen melden (z. B. Spiegel alle gestört) – statt still schwarz zu bleiben
+      hint.textContent = `${sv.label}: ${msg}`;
+      showHint();
+    })
       .then((l) => {
         l.renderBase = sv.id === 'dss' ? 10 : 30;
         layers.set(id, l);
@@ -359,6 +385,7 @@ export function createStarsView(): StarsView {
     camera = isFlat() ? ortho : persp;
     const p = projOf(mode);
     sky.visible = SHOW_BASE_MAP && mode === 'himmel';
+    baseKugel.visible = SHOW_BASE_MAP && mode === 'kugel' && baseTexReady;
     baseFlat.visible = SHOW_BASE_MAP && mode === 'karte';
     occluder.visible = mode === 'kugel';
     for (const l of layers.values()) l.setProjection(p, mode === 'himmel' ? THREE.BackSide : THREE.FrontSide);
@@ -577,6 +604,7 @@ export function createStarsView(): StarsView {
   window.addEventListener('keydown', onKey);
 
   let baseMapTried = false;
+  let baseTexReady = false;
   function loadTexture() {
     new THREE.TextureLoader().load(
       TEX_URL,
@@ -584,6 +612,11 @@ export function createStarsView(): StarsView {
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
         sky.material = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide });
+        // gleiche Abbildung wie die Kacheln (Osten links) – von außen wie ein Himmelsglobus
+        baseKugel.scale.z = -1;
+        baseKugel.material = new THREE.MeshBasicMaterial({ map: tex });
+        baseTexReady = true;
+        if (mode === 'kugel') baseKugel.visible = true;
       },
       undefined,
       () => {

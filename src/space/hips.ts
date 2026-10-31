@@ -49,13 +49,28 @@ async function fetchProps(base: string): Promise<HiPSProps> {
   };
 }
 
-export async function createHiPSLayer(base: string, maxUseOrder?: number): Promise<HiPSLayer> {
-  const p = await fetchProps(base);
+export async function createHiPSLayer(bases: string | string[], maxUseOrder?: number, onLoadError?: (msg: string) => void): Promise<HiPSLayer> {
+  const kandidaten = Array.isArray(bases) ? bases : [bases];
+  // properties von jedem Spiegel versuchen – fällt der Master aus (kommt vor: CDS-Ausfall
+  // 2026-10-30/31), wissen wir sonst nie, dass es Spiegel gibt
+  let p: HiPSProps | null = null;
+  let base = '';
+  let letzterFehler: unknown;
+  for (const b of kandidaten) {
+    try {
+      p = await fetchProps(b);
+      base = b;
+      break;
+    } catch (e) { letzterFehler = e; }
+  }
+  if (!p) throw letzterFehler instanceof Error ? letzterFehler : new Error(`HiPS properties nicht ladebar (${kandidaten[0]})`);
   // Ordnung 0 ist gültig (12 Kacheln) – nur ein fehlender/ungültiger Wert ist ein Fehler
   if (!Number.isFinite(p.order) || p.order < 0) throw new Error(`hips_order fehlt in ${base}`);
   // Das Raster ist äquatorial; galaktische Pakete müssten erst gedreht werden
   if (p.frame !== 'equatorial') throw new Error(`HiPS-Rahmen ${p.frame} wird nicht unterstützt (${base})`);
-  const l = new HiPSLayer(p, maxUseOrder);
+  // den erreichbaren Host nach vorn (die properties eines Spiegels können den Master zuerst nennen)
+  p.serviceUrls = [base, ...p.serviceUrls.filter((u) => u !== base)];
+  const l = new HiPSLayer(p, maxUseOrder, onLoadError);
   return l;
 }
 
@@ -93,10 +108,14 @@ export class HiPSLayer {
   private proj: Projection = sphereProjection;
   private side: THREE.Side = THREE.BackSide;
   private dirty = false; // Kachel fertig geladen -> Sichtbarkeit neu bestimmen, auch ohne Kamerabewegung
+  onLoadError?: (msg: string) => void; // Meldung bei hartnäckigem Kachel-Versagen (Ansicht zeigt Hinweis)
+  private tileFehler = 0;
+  private tileFehlerGemeldet = 0;
 
-  constructor(props: HiPSProps, maxUseOrder?: number) {
+  constructor(props: HiPSProps, maxUseOrder?: number, onLoadError?: (msg: string) => void) {
     this.props = props;
     this.maxUseOrder = Math.min(maxUseOrder ?? props.order, props.order);
+    this.onLoadError = onLoadError;
     this.group.visible = false;
   }
 
@@ -303,6 +322,7 @@ export class HiPSLayer {
         cell.mat.map = tex;
         cell.mat.needsUpdate = true;
         cell.ready = true;
+        this.tileFehler = 0; // Server antwortet wieder
         this.dirty = true;
         this.fadeIn(cell);
       } else {
@@ -317,6 +337,12 @@ export class HiPSLayer {
       // dauerhaft fehlend: Zelle unsichtbar lassen (Eltern/Base zeigt durch)
       cell.ready = false;
       cell.mesh.visible = false;
+      // einzelne Lücken (404 außerhalb der Abdeckung) sind normal; häufen sie sich, meldet die Ebene
+      this.tileFehler++;
+      if (this.onLoadError && this.tileFehler >= 24 && this.tileFehler > this.tileFehlerGemeldet) {
+        this.tileFehlerGemeldet = this.tileFehler;
+        this.onLoadError(`${this.tileFehler} Kacheln konnten nicht geladen werden – Kartendienst gestört?`);
+      }
     }
     this.busy--;
     if (this.busy < 0) this.busy = 0;
