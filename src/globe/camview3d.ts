@@ -9,8 +9,10 @@ import type { CamPose } from '../api/camdircloud';
 // direction. Mount height and view angle are typical values, the direction mostly the road's
 // direction of travel – the board shows roughly where the camera looks, it is not calibrated.
 // With a known pose of the camera (tilt, height, roll, field of view – worked out in the direction editor) the
-// picture is laid onto the ground exactly where the camera sees it: a floor with a wall behind it, built from the
-// rays of the picture, so the road in the picture lies on the road of the map.
+// picture is laid onto the ground exactly where the camera sees it. Every picture ray is followed until it
+// meets the ground – the *real* terrain, if 3D terrain is switched on, sampled from the loaded DEM tiles and
+// exaggerated just like the map mesh. Without terrain the ground stays flat at the camera's height, with a wall
+// behind it where the picture continues upright and fades out.
 // Built lazily on the first selection; gone again once the popup that opened it is closed.
 
 const MOUNT_M = 10;
@@ -55,6 +57,8 @@ export class CamViewLayer implements CustomLayerInterface {
   private aspect = 16 / 9;
   private watch = 0;
   private proj = new THREE.Matrix4();
+  /** the last layout followed the 3D terrain: then a check keeps laying it flat again after the terrain went off */
+  private terrainLaid = false;
 
   constructor() {
     // built for distance 1 in front of the camera (+y), scaled per frame; a unit plane in x/z facing
@@ -105,19 +109,31 @@ export class CamViewLayer implements CustomLayerInterface {
     mat.needsUpdate = true;
   }
 
-  /** the picture as floor + wall: every grid point sits on its own ray, at the ground or at the maximum distance */
+  /** the picture as floor + wall: every grid point sits on its own ray, on the real terrain (with 3D terrain)
+   * or at the flat ground of the pose / the maximum distance of the wall behind it */
   private layoutPose(pose: CamPose) {
-    const NX = 32;
-    const NY = 48;
+    const NX = 48;
+    const NY = 64;
     const reach = this.view?.reach ?? WALL_M;
-    // the wall fades out with its height above the ground; the higher the reach, the higher it still shows
+    // with 3D terrain every picture ray is slid onto the elevation of the loaded DEM tiles; without it the
+    // floor stays flat at the camera's ground level, and the wall fades out with its height above the ground
+    const v = this.view;
+    const map = this.map;
+    if (!v || !map) return;
+    const terrainOn = !!map.getTerrain();
+    const elevCam = terrainOn ? (map.queryTerrainElevation([v.lon, v.lat]) ?? 0) : 0;
+    // the higher the reach, the higher the wall still shows
     const fadeH = Math.max(15, reach * 0.35);
     const pos: number[] = [];
     const uv: number[] = [];
     const col: number[] = [];
     for (let j = 0; j <= NY; j++)
       for (let i = 0; i <= NX; i++) {
-        const [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, reach);
+        let [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, reach);
+        if (terrainOn) {
+          const on = this.onTerrain(pose, x, y, z, elevCam, v.lon, v.lat, reach);
+          if (on) [x, y, z] = on;
+        }
         col.push(1, 1, 1, clamp01(1 - Math.max(0, z + pose.alt - 0.5) / fadeH));
         // unit of the scene is DIST_M metres, the local frame has y north: the heading is applied by the matrix
         pos.push(x / DIST_M, y / DIST_M, z / DIST_M);
@@ -150,6 +166,50 @@ export class CamViewLayer implements CustomLayerInterface {
     for (const [i, j] of [[0, 0], [NX, 0], [NX, NY], [0, NY]]) edge.push([0, 0, 0], at(i, j));
     this.frame.geometry.setAttribute('position', new THREE.Float32BufferAttribute(edge.flat(), 3));
     this.frame.geometry.computeBoundingSphere();
+    this.terrainLaid = terrainOn;
+  }
+
+  /** Slides a picture-ray point from the flat ground of the pose onto the real terrain: the point keeps its
+   * place in the picture and only moves along its ray until the ray meets the terrain elevation, sampled from
+   * the loaded DEM tiles (exaggerated just like the map mesh renders them). The ray keeps its angle, so only
+   * the distance along it changes: the point is scaled (x, y, z) by a factor found with a few damped steps –
+   * near flat ground the first sample is already right, in hills and valleys it swings in over 2–3 samples.
+   * Returns null when there is no terrain, no elevation data at that distance (tiles not loaded yet), or the
+   * terrain lies beyond what the ray can reach: the point then stays where it was. */
+  private onTerrain(
+    pose: CamPose,
+    x0: number,
+    y0: number,
+    z0: number,
+    elevCam: number,
+    lon0: number,
+    lat0: number,
+    reach: number,
+  ): [number, number, number] | null {
+    const map = this.map;
+    if (!map || !map.getTerrain()) return null;
+    const d0 = Math.hypot(x0, y0);
+    // straight-ahead rays have nothing to slide along, straight-down rays need no slide; meters per degree of
+    // longitude shrink towards the poles
+    const mLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+    if (d0 < 0.5 || Math.abs(z0) < 0.25 || mLon < 1) return null;
+    const maxLam = Math.max(reach * 3.5, 500) / d0; // never stretch the picture to absurd distances
+    const mLat = 111320;
+    let lam = 1;
+    for (let it = 0; it < 3; it++) {
+      const h = map.queryTerrainElevation([lon0 + (x0 * lam) / mLon, lat0 + (y0 * lam) / mLat]);
+      if (h == null) break; // beyond the loaded terrain tiles: keep the previous point
+      // the vertex height above the camera's ground must become the terrain height minus that same ground
+      const next = Math.min(maxLam, Math.max(0.05, (h - elevCam - pose.alt) / z0));
+      if (Math.abs(next - lam) < 1e-3) {
+        lam = next;
+        break;
+      }
+      lam += (next - lam) * 0.8; // damped: grazing rays over hills would otherwise swing back and forth
+    }
+    if (lam === 1) return null;
+    // a hand's width above the terrain, so the picture does not flicker against the map mesh
+    return [x0 * lam, y0 * lam, z0 * lam + 0.5];
   }
 
   /** same view again with changed values (direction, pose, position, reach) – keeps the picture's texture */
@@ -184,6 +244,12 @@ export class CamViewLayer implements CustomLayerInterface {
     const v = this.view;
     if (!v) return;
     if (!v.anchor.isConnected || v.anchor.hidden) return this.hide();
+    // terrain tiles stream in asynchronously and the 3D terrain may be switched on or off: lay the picture
+    // onto the ground again, so it follows the terrain once its tiles have arrived
+    if (v.pose && this.map && (this.map.getTerrain() || this.terrainLaid)) {
+      this.layout();
+      this.map.triggerRepaint();
+    }
     // the stream failed and the popup fell back to the still image
     if (v.video && !v.video.isConnected) {
       v.video = undefined;

@@ -281,7 +281,7 @@ Sichtfeld und die Reichweite des projizierten Bildes (dahinter blendet die „Wa
 4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
 5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
 
-Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld) und verschobener Position speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Ein älterer Worker-Code speichert nur die Richtung – für Pose und Position den Worker neu deployen.
+Mit gesetzter Pose (Neigung, Höhe, Rollen, Sichtfeld) und verschobener Position speichert der Worker sie mit; die 3D-Ansicht legt das Kamerabild dann so auf den Boden, wie die Kamera ihn sieht. Bei aktiviertem 3D-Gelände folgt die Projektion dabei dem echten Gelände: jeder Bildstrahl wird auf die Geländehöhe geschoben (nur dort, wo die Höhen-Tiles schon geladen sind – sonst bleibt der Punkt auf dem flachen Boden). Ein älterer Worker-Code speichert nur die Richtung – für Pose und Position den Worker neu deployen.
 
 Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Moderation, Ratenbegrenzung) sind im Worker vorbereitet, aber noch nicht eingebaut.
 
