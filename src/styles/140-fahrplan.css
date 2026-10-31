@@ -115,6 +115,11 @@
 .fp-l2 .late {
   color: var(--danger);
 }
+/* the real-time source badge is shown once, far right behind the last time */
+.fp-l2 .fp-src {
+  margin-left: auto;
+  margin-right: 2px;
+}
 .fp-src {
   display: inline-flex;
   align-items: center;

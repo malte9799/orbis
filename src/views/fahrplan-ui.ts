@@ -255,6 +255,8 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
   const rawTag = cancelled ? '<span class="fp-dtag late">entfällt</span>' : dl == null ? '' : dl > 0 ? `<span class="fp-dtag ${dl <= 5 ? 'ok' : 'late'}">+${dl} min</span>` : '<span class="fp-dtag ok">pünktlich</span>';
   const depSrc = !cancelled && dl != null ? srcIcon(first?.delaySrc) : '';
   const arrSrc = !cancelled && last?.arrDelayMin != null ? srcIcon(last?.arrDelaySrc) : '';
+  // one info badge for the real-time data: same source twice is redundant, so it is shown once (far right behind the last time)
+  const src = [...new Set([depSrc, arrSrc].filter(Boolean))].join('');
   // the icon sits in the time line (list) and in the status tag (big card, where the time line is hidden)
   const tag = depSrc ? rawTag.replace(/<\/span>$/, `${depSrc}</span>`) : rawTag;
   const lines = rides.map((l) => `<span class="fp-badge" style="--c:${legColor(l)};${fg(l.mode)}">${esc(lineName(l.mode, l.line))}</span>`).join('');
@@ -265,7 +267,7 @@ export const itinHtml = (it: Itinerary, trip?: { key: string; saved: boolean }, 
       <span class="fp-rt"><span>${esc(hm(startT))} ${esc(first?.from ?? '')}</span><span class="fp-rt-to">${esc(hm(last?.arr ?? it.arr))} ${esc(last?.to ?? '')}</span></span>
       <span class="fp-lines">${lines}</span>${tag}
       <span class="fp-l1"><b>${hm(planDep)} – ${hm(planArr)}</b><span>| ${esc(durationTxt(planArr - planDep))}${it.transfers ? ` | ${it.transfers} Umst.` : ''}</span></span>
-      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b>${depSrc}<b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${arrSrc}</span>` : ''}
+      ${live ? `<span class="fp-l2"><b class="${cls(first?.delayMin)}">${hm(first?.dep ?? it.dep)}</b><b class="${cls(last?.arrDelayMin)}">${hm(last?.arr ?? it.arr)}</b>${src}</span>` : ''}
       <span class="fp-bar">${bar}</span>
       <span class="fp-von">von ${esc(first?.from ?? '')}</span>
     </summary>
