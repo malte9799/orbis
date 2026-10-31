@@ -509,6 +509,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
     // The night shading differs between drawn bases (flat shade) and imagery bases (night photo)
     if (state.night === 'auto') updateNight();
+    applyHillshade();
   }
 
   function applyNight() {
@@ -531,6 +532,32 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   function applyTerrain() {
     const tilted = !!map && map.getPitch() > 10;
     extras?.setTerrain(state.terrain3d && tilted);
+    applyHillshade();
+  }
+
+  /** Relief shading (Schatten) for the drawn bases dunkel/hell: their flat colours show no relief at
+   *  all – even the real 3D model cannot be read from them. Drawn above the base, below night & weather. */
+  function applyHillshade() {
+    const m = map;
+    if (!m || !m.getSource('terrain-dem')) return;
+    const on = (state.base === 'dark' || state.base === 'light') && state.terrain3d;
+    if (!m.getLayer('hillshade')) {
+      if (!on) return;
+      // next weather/night layer: the shade sits above the OSM base map, below everything else
+      const before = ['hd', 'night', 'night-full', 'field', 'anchor-weather'].find((id) => m.getLayer(id));
+      m.addLayer({ id: 'hillshade', type: 'hillshade', source: 'terrain-dem', layout: { visibility: 'none' } }, before);
+    }
+    vis('hillshade', on);
+    if (on) {
+      // subtle darkening on the dark map, warm shadows + mild highlights on the light one
+      const paint =
+        state.base === 'light'
+          ? { 'hillshade-exaggeration': 0.35, 'hillshade-shadow-color': 'rgba(70,60,45,0.45)', 'hillshade-highlight-color': 'rgba(255,255,255,0.5)' }
+          : { 'hillshade-exaggeration': 0.3, 'hillshade-shadow-color': 'rgba(0,0,0,0.7)', 'hillshade-highlight-color': 'rgba(255,255,255,0.12)' };
+      for (const key of ['hillshade-exaggeration', 'hillshade-shadow-color', 'hillshade-highlight-color'] as const) {
+        m.setPaintProperty('hillshade', key, paint[key]);
+      }
+    }
   }
 
   /** The terminator follows the forecast timeline when one is shown. On the drawn bases (dark/light)
