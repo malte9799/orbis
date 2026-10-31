@@ -413,14 +413,14 @@
 /* the vehicle glyph is bigger than the badge and reaches over its padding/rounded corners */
 .fp-legbody .fp-badge.fp-mi {
   position: relative;
-  padding-left: 38px;
+  padding-left: 35px;
 }
 .fp-legbody .fp-badge.fp-mi svg {
   position: absolute;
   left: 3px;
   top: 50%;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   transform: translateY(-50%);
   pointer-events: none;
 }
