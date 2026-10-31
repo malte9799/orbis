@@ -34,6 +34,7 @@ const PALETTE = {
     roadCasing: '#1f1f1f',
     building: '#111111',
     border: '#5b6374',
+    rail: '#525252', // railway lines, slightly above the roads so they stay readable
   },
   light: {
     background: '#e2dfda', // earth
@@ -50,6 +51,7 @@ const PALETTE = {
     roadCasing: '#e0e0e0',
     building: '#cccccc',
     border: '#adadad',
+    rail: '#a7b1b3', // railway lines (Protomaps flavour)
   },
 };
 
@@ -113,6 +115,17 @@ export function baseLayers(theme: Theme): LayerSpecification[] {
       minzoom: 14,
       layout: hidden,
       paint: { 'fill-color': c.building },
+    },
+    {
+      // rail & transit lines: only roads were drawn so far, tracks vanished on the drawn bases
+      id: id('rails'),
+      type: 'line',
+      source: 'ofm',
+      'source-layer': 'transportation',
+      minzoom: 7,
+      filter: ['all', ['in', ['get', 'class'], ['literal', ['rail', 'transit']]], ['!=', ['get', 'brunnel'], 'tunnel']],
+      layout: hidden,
+      paint: { 'line-color': c.rail, 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.4, 12, 1, 18, 3] },
     },
     {
       id: id('roads-minor-casing'),

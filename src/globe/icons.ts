@@ -36,7 +36,8 @@ export type ExtraGlyph =
   | 'vessel'
   | 'radio'
   | 'vehicle'
-  | 'bike';
+  | 'bike'
+  | 'markings';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -135,6 +136,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   ],
   vehicle: [{ mode: 'fill', d: SILHOUETTES.vehicle! }],
   bike: [{ mode: 'stroke', width: 2, d: 'M5.5 13.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7M18.5 13.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7M5.5 17l4-7h6l3 7M9.5 10l3 7M8 6h3M15 6h2l-1.5 4' }],
+  markings: [{ mode: 'stroke', width: 2.4, d: 'M7 3v18M12 3v18M17 3v18' }],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px

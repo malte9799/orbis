@@ -507,6 +507,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       else if (l.id === 'lbl-border-water') map.setPaintProperty(l.id, 'line-color', c.waterBorder);
       else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.stateBorder);
     }
+    // Straßenmarkierungen: helle Streifen auf der dunklen Basis, dunkelgrau auf der hellen Karte
+    const mc = state.base === 'light' ? '#a0a0a0' : '#e5e5e5';
+    for (const l of layers) {
+      if (!l.id.startsWith('rm-')) continue;
+      if (l.type === 'line') map.setPaintProperty(l.id, 'line-color', mc);
+      else if (l.type === 'fill') map.setPaintProperty(l.id, 'fill-color', mc);
+    }
     // The night shading differs between drawn bases (flat shade) and imagery bases (night photo)
     if (state.night === 'auto') updateNight();
     applyHillshade();
