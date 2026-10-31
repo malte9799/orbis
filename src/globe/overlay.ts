@@ -893,13 +893,9 @@ function loadNightTiles(urlFor: (z: number, x: number, y: number) => string): Pr
   return nightTiles;
 }
 
-/**
- * Night side of the earth: the Black Marble image whose alpha follows the sun's elevation, so the
- * night map shows only in the dark half and fades out smoothly across the terminator.
- * Returns a PNG data URL for an image source covering NIGHT_COORDS.
- */
-export async function nightImage(urlFor: (z: number, x: number, y: number) => string, date = new Date()): Promise<string> {
-  const src = await loadNightTiles(urlFor);
+/** Base geometry of the terminator, measured per pixel of the NIGHT_SIZE mercator image: 0 at day,
+ *  0–1 through twilight over to 1 at night (with a smooth step so the terminator has a soft edge). */
+function solarFade(date: Date): Float32Array {
   const rad = Math.PI / 180;
   const dayOfYear = (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - Date.UTC(date.getUTCFullYear(), 0, 0)) / 86400000;
   // Approximate solar declination & equation of time
@@ -913,8 +909,7 @@ export async function nightImage(urlFor: (z: number, x: number, y: number) => st
 
   const sinD = Math.sin(decl);
   const cosD = Math.cos(decl);
-  const out = new ImageData(new Uint8ClampedArray(src.data), NIGHT_SIZE, NIGHT_SIZE);
-  const d = out.data;
+  const fade = new Float32Array(NIGHT_SIZE * NIGHT_SIZE);
   const cosHa = new Float32Array(NIGHT_SIZE);
   for (let x = 0; x < NIGHT_SIZE; x++) cosHa[x] = Math.cos(((x + 0.5) / NIGHT_SIZE) * 360 * rad - Math.PI - subLon * rad);
   for (let y = 0; y < NIGHT_SIZE; y++) {
@@ -925,8 +920,46 @@ export async function nightImage(urlFor: (z: number, x: number, y: number) => st
       const elev = a + b * cosHa[x]; // sin(sun elevation)
       // Day (>= +0.05) → 0, deep twilight (<= -0.25, about -14°) → 1.
       const t = Math.min(1, Math.max(0, (0.05 - elev) / 0.3));
-      d[(y * NIGHT_SIZE + x) * 4 + 3] = Math.round(src.data[(y * NIGHT_SIZE + x) * 4 + 3] * t * t * (3 - 2 * t));
+      fade[y * NIGHT_SIZE + x] = t * t * (3 - 2 * t);
     }
+  }
+  return fade;
+}
+
+/**
+ * Night side of the earth: the Black Marble image whose alpha follows the sun's elevation, so the
+ * night map shows only in the dark half and fades out smoothly across the terminator.
+ * Returns a PNG data URL for an image source covering NIGHT_COORDS.
+ */
+export async function nightImage(urlFor: (z: number, x: number, y: number) => string, date = new Date()): Promise<string> {
+  const src = await loadNightTiles(urlFor);
+  const fade = solarFade(date);
+  const out = new ImageData(new Uint8ClampedArray(src.data), NIGHT_SIZE, NIGHT_SIZE);
+  const d = out.data;
+  for (let i = 0; i < NIGHT_SIZE * NIGHT_SIZE; i++) d[i * 4 + 3] = Math.round(src.data[i * 4 + 3] * fade[i]);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = NIGHT_SIZE;
+  cv.getContext('2d')!.putImageData(out, 0, 0);
+  return cv.toDataURL('image/png');
+}
+
+/**
+ * Simple night shading without imagery: one flat, translucent color whose alpha follows the sun.
+ * Used over the drawn map bases (dark/light), where the night photography would look out of place.
+ */
+export function nightShade(color: string, maxAlpha = 0.55, date = new Date()): string {
+  const fade = solarFade(date);
+  const r = parseInt(color.slice(1, 3), 16);
+  const g = parseInt(color.slice(3, 5), 16);
+  const b = parseInt(color.slice(5, 7), 16);
+  const out = new ImageData(new Uint8ClampedArray(NIGHT_SIZE * NIGHT_SIZE * 4), NIGHT_SIZE, NIGHT_SIZE);
+  const d = out.data;
+  const a = maxAlpha * 255;
+  for (let i = 0; i < NIGHT_SIZE * NIGHT_SIZE; i++) {
+    d[i * 4] = r;
+    d[i * 4 + 1] = g;
+    d[i * 4 + 2] = b;
+    d[i * 4 + 3] = Math.round(fade[i] * a);
   }
   const cv = document.createElement('canvas');
   cv.width = cv.height = NIGHT_SIZE;

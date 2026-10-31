@@ -510,7 +510,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         minzoom: 14,
         layout: { visibility: 'none' },
         paint: {
-          'fill-extrusion-color': '#1c2538', // the dark building colour of the map
+          'fill-extrusion-color': '#111111', // the dark building colour of the map
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
           'fill-extrusion-opacity': 0.8,
