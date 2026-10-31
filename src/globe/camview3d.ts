@@ -130,11 +130,15 @@ export class CamViewLayer implements CustomLayerInterface {
     for (let j = 0; j <= NY; j++)
       for (let i = 0; i <= NX; i++) {
         let [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, reach);
+        let fade = false; // no known terrain along the ray: the picture part is better not shown
         if (terrainOn) {
-          const on = this.onTerrain(pose, x, y, z, elevCam, v.lon, v.lat, reach);
-          if (on) [x, y, z] = on;
+          const on = this.onTerrain(pose, v.dir, x, y, z, elevCam, v.lon, v.lat, reach);
+          if (on) {
+            [x, y, z] = on;
+            fade = on.length > 3;
+          }
         }
-        col.push(1, 1, 1, clamp01(1 - Math.max(0, z + pose.alt - 0.5) / fadeH));
+        col.push(1, 1, 1, fade ? 0 : clamp01(1 - Math.max(0, z + pose.alt - 0.5) / fadeH));
         // unit of the scene is DIST_M metres, the local frame has y north: the heading is applied by the matrix
         pos.push(x / DIST_M, y / DIST_M, z / DIST_M);
         uv.push(i / NX, j / NY);
@@ -171,13 +175,16 @@ export class CamViewLayer implements CustomLayerInterface {
 
   /** Slides a picture-ray point from the flat ground of the pose onto the real terrain: the point keeps its
    * place in the picture and only moves along its ray until the ray meets the terrain elevation, sampled from
-   * the loaded DEM tiles (exaggerated just like the map mesh renders them). The ray keeps its angle, so only
-   * the distance along it changes: the point is scaled (x, y, z) by a factor found with a few damped steps –
-   * near flat ground the first sample is already right, in hills and valleys it swings in over 2–3 samples.
-   * Returns null when there is no terrain, no elevation data at that distance (tiles not loaded yet), or the
-   * terrain lies beyond what the ray can reach: the point then stays where it was. */
+   * the loaded DEM tiles (exaggerated just like the map mesh renders them). The x / y of a picture ray are
+   * right of the heading / ahead (the map applies the heading by rotation), so the sample point is built from
+   * east = x·cos + y·sin and north = −x·sin + y·cos (see project() in camfit.ts). The distance is found by
+   * bracketing the first crossing of ray and terrain (walking outwards or inwards from the flat ground) and
+   * bisection, which stays exact even for grazing rays along slopes. Returns null when there is no terrain,
+   * or no elevation data anywhere along the ray (tiles not loaded yet): the point then stays as it was; the
+   * fourth element marks points whose ray reaches no known terrain either (they fade out in layoutPose). */
   private onTerrain(
     pose: CamPose,
+    dir: number,
     x0: number,
     y0: number,
     z0: number,
@@ -185,7 +192,7 @@ export class CamViewLayer implements CustomLayerInterface {
     lon0: number,
     lat0: number,
     reach: number,
-  ): [number, number, number] | null {
+  ): [number, number, number] | [number, number, number, number] | null {
     const map = this.map;
     if (!map || !map.getTerrain()) return null;
     const d0 = Math.hypot(x0, y0);
@@ -195,19 +202,76 @@ export class CamViewLayer implements CustomLayerInterface {
     if (d0 < 0.5 || Math.abs(z0) < 0.25 || mLon < 1) return null;
     const maxLam = Math.max(reach * 3.5, 500) / d0; // never stretch the picture to absurd distances
     const mLat = 111320;
-    let lam = 1;
-    for (let it = 0; it < 3; it++) {
-      const h = map.queryTerrainElevation([lon0 + (x0 * lam) / mLon, lat0 + (y0 * lam) / mLat]);
-      if (h == null) break; // beyond the loaded terrain tiles: keep the previous point
-      // the vertex height above the camera's ground must become the terrain height minus that same ground
-      const next = Math.min(maxLam, Math.max(0.05, (h - elevCam - pose.alt) / z0));
-      if (Math.abs(next - lam) < 1e-3) {
-        lam = next;
+    const c = Math.cos((dir * Math.PI) / 180);
+    const s = Math.sin((dir * Math.PI) / 180);
+    const at = (lam: number): [number, number] => {
+      const x = x0 * lam;
+      const y = y0 * lam;
+      return [lon0 + (x * c + y * s) / mLon, lat0 + (y * c - x * s) / mLat];
+    };
+    // gap: ray height minus terrain height, both in metres above the camera's ground; positive = ray above
+    const gap = (lam: number): number | null => {
+      const h = map.queryTerrainElevation(at(lam));
+      return h == null ? null : z0 * lam - (h - elevCam - pose.alt);
+    };
+    // a starting point with known terrain: the flat ground first, otherwise nearby along the ray
+    let start = 0;
+    let gapStart = 0;
+    for (const p of [1, 0.5, 2, 0.25, 4, 0.1]) {
+      if (p > maxLam) continue;
+      const g = gap(p);
+      if (g != null) {
+        start = p;
+        gapStart = g;
         break;
       }
-      lam += (next - lam) * 0.8; // damped: grazing rays over hills would otherwise swing back and forth
     }
-    if (lam === 1) return null;
+    if (!start) return null; // no DEM tiles along the picture ray: the point keeps the flat ground
+    let lo = 0; // ray above the terrain
+    let hi = 0; // ray below or at it
+    if (gapStart > 0) {
+      lo = start;
+      let crossed = false;
+      for (let lam = start, i = 0; i < 12; i++) {
+        const cand = Math.min(maxLam, lam * 1.6);
+        if (cand === lam) break; // at the distance cap without a crossing
+        const g = gap(cand);
+        if (g == null) break; // the terrain data ends: no crossing inside it
+        lam = cand;
+        if (g <= 0) {
+          hi = lam;
+          crossed = true;
+          break;
+        }
+        lo = lam;
+      }
+      // never below known terrain, ray ends over an unmapped distance: fade this picture part out
+      if (!crossed) return [x0 * lo, y0 * lo, z0 * lo, 1];
+    } else {
+      hi = start;
+      let found = false;
+      for (let lam = start, i = 0; i < 12; i++) {
+        lam /= 1.6;
+        if (lam < 0.05) break;
+        const g = gap(lam);
+        if (g == null) continue;
+        if (g > 0) {
+          lo = lam;
+          found = true;
+          break;
+        }
+        hi = lam;
+      }
+      if (!found) return null; // terrain right up to the camera: the point keeps the flat ground
+    }
+    for (let i = 0; i < 14; i++) {
+      const mid = (lo + hi) / 2;
+      const g = gap(mid);
+      if (g == null) break;
+      if (g > 0) lo = mid;
+      else hi = mid;
+    }
+    const lam = (lo + hi) / 2;
     // a hand's width above the terrain, so the picture does not flicker against the map mesh
     return [x0 * lam, y0 * lam, z0 * lam + 0.5];
   }
