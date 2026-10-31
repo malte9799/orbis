@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { FONT_BOLD } from '../../vector';
 import { loadRadiation } from '../../../api/earth';
 
@@ -45,7 +46,7 @@ export default defineExtra({
     ctx.loadOnce('radiation', 60 * 60000, async () => {
       const r = await loadRadiation();
       ctx.setData('radiation', r.fc);
-      return { count: r.fc.features.length, note: r.failed.length ? `${r.failed.join(', ')} nicht erreichbar` : 'natürlicher Normalbereich: 0,04–0,20 µSv/h' };
+      return { count: r.fc.features.length, note: r.failed.length ? t('layers.radiation.noteFail', { failed: r.failed.join(', ') }) : t('layers.radiation.noteFallback') };
     });
   },
   click({ p, pt, html }) {

@@ -4,11 +4,11 @@ export default defineKey({
   id: 'cta',
   order: 90,
   group: 'transit',
-  tip: 'Chicago „L“: Zug-Positionen & Ankünfte.',
+  tip: 'tip',
   steps: [
-    { t: '1. Antragsformular ausfüllen (kostenlos, wird kurz geprüft)', u: 'https://www.transitchicago.com/developers/traintrackerapply/' },
-    { t: '2. Key per E-Mail erhalten und hier einfügen' },
+    { t: '1', u: 'https://www.transitchicago.com/developers/traintrackerapply/' },
+    { t: '2' },
   ],
-  label: 'CTA Train Tracker',
-  placeholder: 'API-Key',
+  label: 'label',
+  placeholder: 'placeholder',
 });

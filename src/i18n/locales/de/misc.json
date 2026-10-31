@@ -1,0 +1,1454 @@
+{
+  "keys": {
+    "group": {
+      "weather": "Wetter, Feuer & Radar",
+      "webcams": "Webcams & Schiffe",
+      "transit": "Verkehr & Nahverkehr",
+      "routing": "Routenplanung",
+      "snapshot": "Schon mit Daten im Repo (Fallback-Snapshot)"
+    },
+    "adsbProxy": {
+      "label": "Daten-Proxy",
+      "tip": "Cloudflare-Worker für Flugdaten & OpenStreetMap.",
+      "placeholder": "https://mein-proxy.workers.dev/",
+      "steps": {
+        "1": "Worker-Vorlage aus dem README deployen",
+        "2": "Auf workers.cloudflare.com (Free-Tier) anlegen",
+        "3": "Worker-URL (https://…workers.dev) hier eintragen"
+      },
+      "tipBuiltIn": "Cloudflare-Worker für Flugdaten & OpenStreetMap. Leer lassen = eingebauter Proxy."
+    },
+    "aisstream": {
+      "label": "aisstream.io",
+      "tip": "Schiffe weltweit live.",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Anmelden / registrieren (kostenlos)",
+        "2": "Im Dashboard „API Keys“ → Create",
+        "3": "Key hier einfügen"
+      }
+    },
+    "alaska511": {
+      "label": "Alaska 511",
+      "tip": "Verkehrskameras Alaska 511 (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "alberta511": {
+      "label": "511 Alberta",
+      "tip": "Verkehrskameras Alberta.",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Kostenlos registrieren / anmelden",
+        "2": "Key unter „Developers“ nach dem Login kopieren",
+        "3": "Key hier einfügen"
+      }
+    },
+    "arizona511": {
+      "label": "AZ511",
+      "tip": "Verkehrskameras AZ511 (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "camdirToken": {
+      "label": "Kamera-Richtungen: Token",
+      "tip": "Admin-Token, mit dem du Blickrichtungen von Kameras ändern darfst (nur du kennst ihn).",
+      "placeholder": "Admin-Token",
+      "steps": {
+        "1": "Im Worker das Secret ADMIN_TOKEN setzen (lange Zufallszeichenfolge)",
+        "2": "Dieselbe Zeichenfolge hier einfügen – sie bleibt nur in diesem Browser"
+      }
+    },
+    "camdirWorker": {
+      "label": "Kamera-Richtungen (Worker)",
+      "tip": "Eigener Cloudflare-Worker mit korrigierten Kamera-Blickrichtungen.",
+      "placeholder": "https://meine-kamerarichtungen.workers.dev",
+      "steps": {
+        "1": "proxy/camdir-worker.js als Cloudflare-Worker deployen, KV-Namespace als CAMDIR binden (siehe README „Kamera-Richtungen“)",
+        "2": "Worker-URL (https://…workers.dev) hier eintragen"
+      },
+      "tipBuiltIn": "Eigener Cloudflare-Worker mit korrigierten Kamera-Blickrichtungen. Leer lassen = eingebauter Worker."
+    },
+    "cta": {
+      "label": "CTA Train Tracker",
+      "tip": "Chicago „L“: Zug-Positionen & Ankünfte.",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Antragsformular ausfüllen (kostenlos, wird kurz geprüft)",
+        "2": "Key per E-Mail erhalten und hier einfügen"
+      }
+    },
+    "firms": {
+      "label": "NASA FIRMS MAP_KEY",
+      "tip": "Aktuellere Feuer-Hotspots (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "MAP_KEY",
+      "steps": {
+        "1": "Formular ausfüllen (Name, E-Mail)",
+        "2": "Bestätigungs-Mail anklicken",
+        "3": "MAP_KEY wird angezeigt – hier einfügen"
+      }
+    },
+    "georgia511": {
+      "label": "Georgia 511",
+      "tip": "Verkehrskameras Georgia 511 (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "googleRoutes": {
+      "label": "Google Routes",
+      "tip": "Routenplanung mit Google Routes (Live-Verkehr, beste Abdeckung). Ohne Key nutzt Orbis kostenlose OpenStreetMap-Dienste.",
+      "placeholder": "AIza…",
+      "steps": {
+        "1": "In der Google Cloud Console ein Projekt mit Abrechnung anlegen (es gibt ein monatliches Gratis-Kontingent)",
+        "2": "„Routes API“ aktivieren",
+        "3": "Unter „Anmeldedaten“ einen API-Key erstellen und auf „HTTP-Referrer“ (diese Seite) sowie auf die Routes API beschränken",
+        "4": "Key hier einfügen – danach unter Route planen „Google Routes“ wählen"
+      }
+    },
+    "graphhopper": {
+      "label": "GraphHopper",
+      "tip": "Routenplanung mit GraphHopper (500 Routen/Tag gratis).",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Kostenloses Konto bei GraphHopper anlegen",
+        "2": "Im Dashboard unter „API Keys“ einen Key erzeugen",
+        "3": "Key hier einfügen"
+      }
+    },
+    "idaho511": {
+      "label": "Idaho 511",
+      "tip": "Verkehrskameras Idaho 511 (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "louisiana511": {
+      "label": "Louisiana 511",
+      "tip": "Verkehrskameras Louisiana 511 (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "mapbox": {
+      "label": "Mapbox Satellit",
+      "tip": "Schärfere Satelliten-Grundkarte (Mapbox).",
+      "placeholder": "pk.…",
+      "steps": {
+        "1": "Mapbox-Account erstellen (kostenloses Kontingent)",
+        "2": "Öffentlichen Token (pk.…) kopieren",
+        "3": "Hier einfügen – danach unter Grundkarte „Mapbox Satellit“ wählen"
+      }
+    },
+    "maptiler": {
+      "label": "MapTiler Satellit",
+      "tip": "Schärfere Satelliten-Grundkarte (MapTiler).",
+      "placeholder": "Key",
+      "steps": {
+        "1": "MapTiler-Account erstellen (kostenloser Plan, nicht-kommerziell)",
+        "2": "API-Key kopieren",
+        "3": "Hier einfügen – danach unter Grundkarte „MapTiler Satellit“ wählen"
+      }
+    },
+    "nevada511": {
+      "label": "NVRoads",
+      "tip": "Verkehrskameras NVRoads (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "nps": {
+      "label": "US National Park Service",
+      "tip": "Webcams der US-Nationalparks (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail",
+        "2": "Key hier einfügen"
+      }
+    },
+    "ohgo": {
+      "label": "OHGO (Ohio)",
+      "tip": "Verkehrskameras Ohio (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Key abrufen",
+        "3": "Key hier einfügen"
+      }
+    },
+    "ontario511": {
+      "label": "511 Ontario",
+      "tip": "Verkehrskameras Ontario.",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Kostenlos registrieren / anmelden („My Account“)",
+        "2": "Key nach der Registrierung im Account kopieren",
+        "3": "Key hier einfügen"
+      }
+    },
+    "ors": {
+      "label": "OpenRouteService",
+      "tip": "Routenplanung mit OpenRouteService (gute Rad- und Fußrouten, 2 000 Routen/Tag gratis).",
+      "placeholder": "Token",
+      "steps": {
+        "1": "Kostenloses Konto bei OpenRouteService anlegen",
+        "2": "Im Dashboard einen Token („Standard“) erzeugen",
+        "3": "Token hier einfügen"
+      }
+    },
+    "owm": {
+      "label": "OpenWeatherMap",
+      "tip": "Zusätzliche hochauflösende Wetterkarten.",
+      "placeholder": "appid",
+      "steps": {
+        "1": "Account erstellen (kostenlos)",
+        "2": "API-Key kopieren",
+        "3": "Hier einfügen – der Key kann bis zu 1 Std. inaktiv bleiben"
+      }
+    },
+    "pennsylvania511": {
+      "label": "511PA",
+      "tip": "Verkehrskameras 511PA (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "pushWorker": {
+      "label": "Fahrplan-Worker (Verspätungen & Push)",
+      "tip": "Eigener Cloudflare-Worker für den Fahrplan: Bahn-Verspätungen (DB-Daten) und Benachrichtigungen für Pendler-Verbindungen.",
+      "placeholder": "https://mein-fahrplan-push.workers.dev",
+      "steps": {
+        "1": "proxy/fahrplan-push-worker.js als Cloudflare-Worker deployen, KV und Schlüssel einrichten (siehe README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“)",
+        "2": "Worker-URL (https://…workers.dev) hier eintragen"
+      },
+      "tipBuiltIn": "Eigener Cloudflare-Worker für den Fahrplan: Bahn-Verspätungen (DB-Daten) und Benachrichtigungen für Pendler-Verbindungen. Leer lassen = eingebauter Worker."
+    },
+    "qldtraffic": {
+      "label": "QLDTraffic",
+      "tip": "Straßenkameras Queensland (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "API-Key laut Spezifikation (PDF) bzw. Anforderung verwenden",
+        "3": "Key hier einfügen"
+      }
+    },
+    "radarHost": {
+      "label": "Radar-Server",
+      "tip": "Eigener RainViewer-kompatibler Server statt der begrenzten RainViewer-Quelle.",
+      "placeholder": "https://radar.example.org",
+      "steps": {
+        "1": "LibreWXR selbst hosten (open source, RainViewer- Ersatz)",
+        "2": "Server-URL (https://…) hier eintragen – kein Schlüssel nötig"
+      }
+    },
+    "tomtom": {
+      "label": "TomTom Traffic",
+      "tip": "Live-Verkehrslage (Stau/Fluss) für die Verkehrssimulation. Ohne Key fahren die Fahrzeuge mit Normaltempo.",
+      "placeholder": "API-Key (optional – sonst Simulation ohne Verkehrslage)",
+      "steps": {
+        "1": "Kostenloses Konto bei TomTom Developer anlegen",
+        "2": "Unter „Keys“ einen API-Key mit „Traffic API“ kopieren (Free: 2.500 Anfragen/Tag)",
+        "3": "Key hier einfügen"
+      }
+    },
+    "trafiklab": {
+      "label": "Trafiklab",
+      "tip": "Busse & Bahnen in Schweden (GTFS Regional Realtime).",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Kostenloses Konto erstellen",
+        "2": "Projekt anlegen → API „GTFS Regional Realtime“ hinzufügen → Key",
+        "3": "Key hier einfügen"
+      }
+    },
+    "trafikverket": {
+      "label": "Trafikverket",
+      "tip": "Straßenkameras in Schweden (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto bei Trafikverket anlegen",
+        "2": "Autorisierungsschlüssel (Authentication key) kopieren",
+        "3": "Key hier einfügen"
+      }
+    },
+    "utah511": {
+      "label": "UDOT Traffic",
+      "tip": "Verkehrskameras UDOT Traffic (ohne Key: gemeinsamer Snapshot).",
+      "placeholder": "API-Key (optional – sonst gemeinsamer Snapshot)",
+      "steps": {
+        "1": "Kostenloses Konto anlegen und anmelden",
+        "2": "Developer-Key im Account unter „Developers“ anfordern",
+        "3": "Key hier einfügen"
+      }
+    },
+    "victoria": {
+      "label": "Transport Victoria",
+      "tip": "Melbourne: Züge, Trams, Busse.",
+      "placeholder": "KeyId",
+      "steps": {
+        "1": "kostenlosen Account im Open-Data-Portal erstellen",
+        "2": "Im Profil API-Key (KeyId) erzeugen und hier einfügen"
+      }
+    },
+    "windy": {
+      "label": "Windy Webcams",
+      "tip": "Zehntausende Webcams weltweit.",
+      "placeholder": "API-Key",
+      "steps": {
+        "1": "Windy-Account erstellen (kostenlos)",
+        "2": "„Webcams API“-Key anfordern",
+        "3": "Key hier einfügen"
+      }
+    }
+  },
+  "launch": {
+    "status": {
+      "go": "Startbereit",
+      "tbd": "Termin offen",
+      "tbc": "Termin unbestätigt",
+      "hold": "Angehalten",
+      "flight": "Im Flug",
+      "debris": "Rückstufe",
+      "success": "Erfolgreich",
+      "failure": "Fehlgeschlagen"
+    },
+    "statusUnknown": "Status offen",
+    "noRocket": "Rakete",
+    "watchLive": "▶ Livestream ansehen",
+    "openYt": "▶ Livestream auf YouTube öffnen ↗",
+    "streamTitle": "Livestream",
+    "splitTitle": "Stream und Daten nebeneinander",
+    "splitHint": "Splitscreen über „⤢“ im Kopf aktivieren",
+    "mission": "Mission",
+    "noMissionDesc": "Keine Missionsbeschreibung.",
+    "liveData": "Live-Daten (Simulation)",
+    "alt": "Höhe",
+    "speed": "Tempo",
+    "downrange": "Über Grund",
+    "follow": "Rakete auf der Karte folgen",
+    "followStop": "Folgen stoppen",
+    "remind": "Erinnerung",
+    "remindA11y": "Erinnerung",
+    "remindNone": "Keine Erinnerung",
+    "remindAt": "Bei Start (T-0)",
+    "remind10": "10 min vorher",
+    "remind30": "30 min vorher",
+    "remind10At": "10 min vorher + bei Start",
+    "pad": "Startplatz",
+    "toPad": "Zum Startplatz",
+    "win": "Startfenster",
+    "netTime": "Startzeit",
+    "orbit": "Zielorbit",
+    "ramp": "Rampe",
+    "place": "Ort",
+    "incl": "Inklination",
+    "probability": "Startwahrscheinlichkeit",
+    "simNote": "Bahndaten sind keine Telemetrie: Höhe, Tempo und Spur sind ein Simulationsmodell aus Startzeit und Zielorbit ({orbit}). Echte Positionsdaten gibt es öffentlich nicht.",
+    "sourceLabel": "Quelle: The Space Devs (Launch Library 2)·",
+    "details": "Details ↗",
+    "permOk": "✅ Mitteilungen erlaubt – auch bei geschlossenem Orbis",
+    "permAsk": "Mitteilungen erlauben",
+    "permNo": "Der Browser unterstützt keine Mitteilungen; Erinnerungen erscheinen nur als Hinweis in Orbis.",
+    "remindOn": {
+      "one": "Erinnerung aktiviert: {list}",
+      "other": "Erinnerung aktiviert: {list}"
+    },
+    "remindOff": "Erinnerung deaktiviert.",
+    "atStart": "bei Start",
+    "startIn": "Start {when}",
+    "orbitPrefix": "Ziel {orbit}",
+    "cutoff": "Brennschluss ca. T+{t}",
+    "orbitReached": "Orbit erreicht 🛰️",
+    "secondary": "Sekundär zu {orbit}",
+    "inOrbit": "in Orbit",
+    "countdownNote": "Noch {when} – die Live-Spur erscheint bei T-0 auf der Karte.",
+    "trackNote": "Spur: {place} → {orbit} (angenähert)",
+    "coastNote": "Brennschluss bei T+{t} · die Rakete ist in der Zielbahn",
+    "lessThanMin": "weniger als einer Minute",
+    "goingUp": "🚀 {name} hebt jetzt ab!",
+    "upcoming": "⏳ {name} startet in {when}",
+    "notifGo": "🚀 Start: {name}",
+    "notifPrefix": "⏳ Start in {when}",
+    "openStream": "Livestream in Orbis öffnen …",
+    "tfDay": "T",
+    "orbitNone": "Orbit",
+    "remind3010": "30 + 10 min vorher + bei Start"
+  },
+  "games": {
+    "hubTitle": "Spiele",
+    "hubSub": "Teste dein Weltwissen – such dir einen Modus aus.",
+    "play": "Spielen →",
+    "allGames": "Alle Spiele",
+    "skip": "Überspringen",
+    "giveUp": "Aufgeben",
+    "menu": "Menü",
+    "again": "Nochmal",
+    "done": "Geschafft!",
+    "gaveUp": "Aufgegeben",
+    "ok": "OK",
+    "next": "Weiter",
+    "whereIs": "Wo liegt …",
+    "whereCont": "Wo liegt der Kontinent …",
+    "flagQ": "Zu welchem Land gehört diese Flagge?",
+    "typeName": "Name eintippen …",
+    "card": {
+      "quiz": {
+        "label": "Länder-Rater",
+        "tag": "Karte",
+        "blurb": "Ein Name erscheint – klick das Land auf der Weltkarte an. Oder tipp alle Namen aus dem Kopf. Auch Kontinente und Regionen.",
+        "chip1": "Anklicken",
+        "chip2": "Eintippen",
+        "chip3": "Regionen"
+      },
+      "flags": {
+        "label": "Flaggen-Rater",
+        "tag": "Flaggen",
+        "blurb": "Welche Flagge gehört zu welchem Land?",
+        "chip1": "Auswahl",
+        "chip2": "Eintippen",
+        "chip3": "Karte"
+      },
+      "capitals": {
+        "label": "Hauptstädte",
+        "tag": "Städte",
+        "blurb": "Land zur Hauptstadt – oder umgekehrt.",
+        "chip1": "Auswahl",
+        "chip2": "Eintippen"
+      },
+      "outline": {
+        "label": "Umrisse",
+        "tag": "Formen",
+        "blurb": "Erkennst du ein Land oder eine Region nur an ihrer Form?",
+        "chip1": "Auswahl",
+        "chip2": "Eintippen"
+      },
+      "size": {
+        "label": "Größenvergleich",
+        "tag": "Maßstab",
+        "blurb": "Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.",
+        "chip1": "Maßstab",
+        "chip2": "Higher Lower"
+      },
+      "street": {
+        "label": "Straßen-Rater",
+        "tag": "360°",
+        "blurb": "Echte 360°-Straßenfotos – schau dich um und tippe auf der Karte, wo du stehst. 5 Runden, bis zu 5000 Punkte.",
+        "chip1": "360°",
+        "chip2": "5 Runden",
+        "chip3": "Punkte"
+      }
+    },
+    "quizTitle": "Länder-Rater",
+    "quizLead": "Kennst du alle Namen? Wähle Spielart und Gebiet.",
+    "flagsTitle": "Flaggen-Rater",
+    "flagsLead": "Welche Flagge gehört zu welchem Land?",
+    "capitalsTitle": "Hauptstädte-Rater",
+    "capitalsLead": "Land zur Hauptstadt – oder umgekehrt.",
+    "outlineTitle": "Umrisse-Rater",
+    "outlineLead": "Erkennst du das Land – oder die Region – an seiner Form?",
+    "sizeTitle": "Größenvergleich",
+    "sizeLead": "Wie groß ist ein Land im Vergleich zu einem anderen? Bei Higher Lower werden die Paare mit der Zeit immer knapper; im Maßstab ziehst du ein Gebiet auf die richtige Größe.",
+    "streetTitle": "Straßen-Rater",
+    "streetLead": "Du stehst mitten in einer 360°-Aufnahme, schaust dich um und tippst auf der Karte, wo du bist. 5 Runden, bis zu 5000 Punkte pro Runde.",
+    "fLabel": "Spielart",
+    "areaLabel": "Gebiet",
+    "roundsLabel": "Runden",
+    "answersLabel": "Antworten",
+    "questionLabel": "Frage",
+    "metricLabel": "Vergleich",
+    "moveLabel": "Bewegung",
+    "start": "Spiel starten",
+    "all": "Alle",
+    "optClick": "Anklicken",
+    "optClickSub": "Ein Name erscheint, du klickst ihn an",
+    "optType": "Eintippen",
+    "optTypeSub": "Alle Namen aus dem Kopf eintippen",
+    "optMapType": "Karte & Eingabe",
+    "optMapTypeSub": "Land anklicken oder Namen tippen – beides immer möglich",
+    "optChoice": "Zusätzlich Auswahl",
+    "optChoiceSub": "Dazu 4 Antworten zum Antippen",
+    "optChoice2": "Auswahl",
+    "optChoice2Sub": "4 Antworten",
+    "optType2": "Eintippen",
+    "optType2Sub": "Name selbst schreiben",
+    "optCountryCap": "Land → Hauptstadt",
+    "optCountryCapSub": "Wie heißt die Hauptstadt?",
+    "optCapCountry": "Hauptstadt → Land",
+    "optCapCountrySub": "Zu welchem Land gehört sie?",
+    "optScale": "Maßstab",
+    "optScaleSub": "Ein Gebiet fest, das andere ziehst du auf die richtige Größe",
+    "optDuel": "Higher Lower",
+    "optDuelSub": "Zwei Gebiete – welches ist größer?",
+    "optArea": "Fläche",
+    "optAreaSub": "Welches ist größer?",
+    "optPop": "Einwohner",
+    "optPopSub": "Wo leben mehr Menschen?",
+    "optFree": "Frei",
+    "optFreeSub": "Du kannst dich umsehen und weiterfahren",
+    "optLocked": "Gesperrt",
+    "optLockedSub": "Nur umschauen und zoomen",
+    "untilMiss": "Bis zum ersten Fehler (Higher Lower)",
+    "areaOnlyNote": "Bei Regionen eines Landes und im Maßstab-Modus zählt nur die Fläche.",
+    "sizeNote": "Flächen aus den Grenzdaten berechnet (Natural Earth), daher nur ungefähr.",
+    "earthNote": "Kartendaten: Natural Earth (gemeinfrei).",
+    "flagsNote": "Flaggen: flag-icons (MIT).",
+    "capitalsNote": "Hauptstädte: Natural Earth (gemeinfrei).",
+    "outlineNote": "Grenzen: Natural Earth (gemeinfrei). Sehr kleine Länder fehlen.",
+    "streetNote": "Fotos: Mapillary-Mitwirkende (CC BY-SA).",
+    "tokenFree": "Mapillary-Token (kostenlos)",
+    "tokenOptional": "Mapillary-Token (optional)",
+    "tokenNote": "Client-Token aus ",
+    "tokenRegister": "Anwendung registrieren",
+    "tokenLocalNote": " Bleibt nur in diesem Browser gespeichert.",
+    "tokenBuiltInNote": " Ohne eigenen Token nutzt das Spiel den Token dieser Seite.",
+    "needToken": "Bitte zuerst einen Mapillary-Token eintragen.",
+    "scope": {
+      "world": "Welt",
+      "Europe": "Europa",
+      "Asia": "Asien",
+      "Africa": "Afrika",
+      "Oceania": "Ozeanien",
+      "regions": "Regionen eines Landes …",
+      "northamerica": "Nordamerika",
+      "southamerica": "Südamerika"
+    },
+    "scopeRegional": "Regional",
+    "searchCountry": "Land suchen …",
+    "noCountry": "Kein Land gefunden.",
+    "regionListError": "Regionsliste konnte nicht geladen werden",
+    "nRegions": {
+      "one": "1 Region",
+      "other": "{count} Regionen"
+    },
+    "nFlags": {
+      "one": "1 Flagge",
+      "other": "{count} Flaggen"
+    },
+    "nQuestions": {
+      "one": "1 Frage",
+      "other": "{count} Fragen"
+    },
+    "nOutlines": {
+      "one": "1 Umriss",
+      "other": "{count} Umrisse"
+    },
+    "nRounds": {
+      "one": "1 Runde",
+      "other": "{count} Runden"
+    },
+    "rightCount": {
+      "one": "1 richtig",
+      "other": "{count} richtig"
+    },
+    "points": {
+      "one": "1 Punkt",
+      "other": "{count} Punkte"
+    },
+    "ptsAbbr": {
+      "one": "1 P.",
+      "other": "{count} P."
+    },
+    "wrongCount": {
+      "one": "1 falsch",
+      "other": "{count} falsch"
+    },
+    "missedCount": {
+      "one": "1 nicht gewusst",
+      "other": "{count} nicht gewusst"
+    },
+    "firstTry": {
+      "one": "1 auf Anhieb",
+      "other": "{count} auf Anhieb"
+    },
+    "wrongClicks": {
+      "one": "1 Fehlklick",
+      "other": "{count} Fehlklicks"
+    },
+    "correctSlow": {
+      "one": "Richtig – nach 1 Versuch.",
+      "other": "Richtig – nach {count} Versuchen."
+    },
+    "residents": {
+      "one": "Einwohner",
+      "other": "Einwohner"
+    },
+    "waiting": {
+      "one": "1 Name wartet auf dich.",
+      "other": "{count} Namen warten auf dich."
+    },
+    "correct": "Richtig: {name}",
+    "wouldBe": "Richtig wäre: {name}",
+    "correctCheer": "Richtig!",
+    "dontKnow": "„{name}“ kenne ich nicht.",
+    "wrongPick": "{name} ist falsch.",
+    "already": "{name} hattest du schon.",
+    "continentsDone": "Kontinente geschafft – jetzt die Länder!",
+    "tooFew": "zu wenige Einträge in diesem Gebiet",
+    "tooFewAreas": "zu wenige Gebiete",
+    "couldNotStart": "Konnte nicht starten:",
+    "capPlaceholder": "Welche Hauptstadt?",
+    "countryPlaceholder": "Welches Land?",
+    "outlinePlaceholder": "Wie heißt das?",
+    "outlineA11y": "Umriss",
+    "flagA11y": "Flagge",
+    "capOf": "Hauptstadt von",
+    "capOfCountry": "Hauptstadt von welchem Land?",
+    "scoreFirst": "{found} / {targets} · {first} auf Anhieh",
+    "scoreFound": "{found} / {targets} gefunden",
+    "timeShort": "Zeit {when}",
+    "longestStreak": "längste Serie {n}",
+    "askArea": "Welches Gebiet ist größer?",
+    "askPop": "Wo leben mehr Menschen?",
+    "silhouetteNote": "Die Umrisse sind nicht maßstäblich zueinander.",
+    "duelDetailArea": "{a} ist {x}× so groß wie {b}.",
+    "duelDetailPop": "{a} ist {x}× so bevölkerungsreich wie {b}.",
+    "streakOver": "Serie vorbei",
+    "streakDone": "richtig in Folge",
+    "areaShort": "Fläche",
+    "sizeA11y": "Größenvergleich",
+    "check": "Prüfen",
+    "perfect": "Volltreffer!",
+    "close": "Nah dran.",
+    "slightlyOff": "Knapp daneben.",
+    "far": "Weit daneben.",
+    "scaleBigger": "{b} ist {factor} so groß wie {a} – bei dir waren es {mine}.",
+    "scaleSmaller": "{b} ist nur {factor} so groß wie {a} – bei dir waren es {mine}.",
+    "scoreOf": "von {total} Punkten ({pct} %)",
+    "yourRounds": "Deine Runden",
+    "tooBig": "zu groß",
+    "tooSmall": "zu klein",
+    "exit": "Beenden",
+    "searchPhoto": "Suche ein Foto …",
+    "placeGuess": "Tipp setzen",
+    "result": "Ergebnis",
+    "nextRound": "Nächste Runde",
+    "roundOf": "Runde {i} / {n}",
+    "kmOff": "{km} km daneben",
+    "noPhoto": "Kein Foto gefunden – in diesem Gebiet gibt es offenbar wenig Mapillary-Abdeckung.",
+    "tokenRejected": "Mapillary lehnt den Token ab (bitte prüfen).",
+    "pointsOf": "{total} Punkte",
+    "roundN": "Runde {i}: {s}"
+  },
+  "space": {
+    "facts": {
+      "diameter": "Durchmesser",
+      "mass": "Masse",
+      "surfaceTemp": "Oberflächentemperatur",
+      "age": "Alter",
+      "orbit": "Umlaufzeit",
+      "dayLength": "Tageslänge",
+      "temp": "Temperatur",
+      "gravity": "Schwerkraft",
+      "moons": "Mond",
+      "pressure": "Luftdruck",
+      "meanTemp": "Mittlere Temperatur",
+      "earthDistance": "Entfernung zur Erde",
+      "axialTilt": "Achsneigung",
+      "wind": "Windgeschwindigkeit",
+      "visit": "Besuch",
+      "size": "Größe",
+      "rotation": "Rotation",
+      "orbitHeight": "Bahnhöhe",
+      "speed": "Geschwindigkeit",
+      "crew": "Besatzung",
+      "launch": "Start",
+      "mirror": "Spiegel",
+      "status": "Status",
+      "plutoFlyby": "Pluto-Vorbeiflug",
+      "arrokothFlyby": "Arrokoth-Vorbeiflug",
+      "location": "Ort",
+      "sunProximity": "Sonnennähe",
+      "topSpeed": "Höchstgeschwindigkeit",
+      "arrivalJupiter": "Ankunft am Jupiter",
+      "landing": "Landung",
+      "task": "Aufgabe",
+      "firstFlight": "Erstflug",
+      "flights": "Flüge",
+      "route": "Route",
+      "arrivalMercury": "Ankunft am Merkur"
+    },
+    "sun": {
+      "fact.diameter": "1 392 684 km (109 × Erde)",
+      "fact.mass": "333 000 × Erde",
+      "fact.surfaceTemp": "≈ 5 500 °C",
+      "fact.age": "≈ 4,6 Mrd. Jahre",
+      "desc": "Unser Stern – ein gelber Zwerg, der 99,86 % der Masse des Sonnensystems enthält."
+    },
+    "mercury": {
+      "fact.diameter": "4 879 km",
+      "fact.orbit": "88 Tage",
+      "fact.dayLength": "176 Erdtage (Sonnentag)",
+      "fact.temp": "−173 bis +427 °C",
+      "fact.gravity": "3,7 m/s²",
+      "fact.moons": "keine",
+      "desc": "Der kleinste und sonnennächste Planet, ohne nennenswerte Atmosphäre."
+    },
+    "venus": {
+      "fact.diameter": "12 104 km",
+      "fact.orbit": "225 Tage",
+      "fact.dayLength": "117 Erdtage, rückläufig",
+      "fact.temp": "≈ 464 °C",
+      "fact.pressure": "92 bar (CO₂)",
+      "fact.moons": "keine",
+      "desc": "Der heißeste Planet – eine dichte CO₂-Atmosphäre sorgt für einen extremen Treibhauseffekt."
+    },
+    "earth": {
+      "fact.diameter": "12 742 km",
+      "fact.orbit": "365,25 Tage",
+      "fact.dayLength": "24 h",
+      "fact.meanTemp": "≈ 15 °C",
+      "fact.gravity": "9,81 m/s²",
+      "fact.moons": "1",
+      "desc": "Unser Heimatplanet. Hineinzoomen öffnet die Wetterkarte."
+    },
+    "moon": {
+      "fact.diameter": "3 474 km",
+      "fact.earthDistance": "≈ 384 400 km",
+      "fact.orbit": "27,3 Tage",
+      "fact.gravity": "1,62 m/s²",
+      "desc": "Der Erdmond zeigt uns wegen der gebundenen Rotation immer dieselbe Seite."
+    },
+    "mars": {
+      "fact.diameter": "6 779 km",
+      "fact.orbit": "687 Tage",
+      "fact.dayLength": "24 h 37 min",
+      "fact.temp": "≈ −65 °C",
+      "fact.gravity": "3,71 m/s²",
+      "fact.moons": "2 (Phobos, Deimos)",
+      "desc": "Der rote Planet mit dem höchsten Vulkan (Olympus Mons) und dem größten Canyon des Sonnensystems."
+    },
+    "jupiter": {
+      "fact.diameter": "139 820 km (11 × Erde)",
+      "fact.orbit": "11,9 Jahre",
+      "fact.dayLength": "9 h 56 min",
+      "fact.temp": "≈ −110 °C (Wolkenobergrenze)",
+      "fact.gravity": "24,8 m/s²",
+      "fact.moons": "95",
+      "desc": "Der größte Planet – ein Gasriese mit dem Großen Roten Fleck, einem seit Jahrhunderten tobenden Sturm."
+    },
+    "saturn": {
+      "fact.diameter": "116 460 km",
+      "fact.orbit": "29,5 Jahre",
+      "fact.dayLength": "10 h 39 min",
+      "fact.temp": "≈ −140 °C",
+      "fact.gravity": "10,4 m/s²",
+      "fact.moons": "146",
+      "desc": "Der Ringplanet – seine Ringe bestehen aus Eisbrocken und sind nur etwa 10 m bis 1 km dick."
+    },
+    "uranus": {
+      "fact.diameter": "50 724 km",
+      "fact.orbit": "84 Jahre",
+      "fact.dayLength": "17 h 14 min, rückläufig",
+      "fact.temp": "≈ −195 °C",
+      "fact.axialTilt": "98° – rollt um die Sonne",
+      "fact.moons": "28",
+      "desc": "Ein Eisriese, der praktisch auf der Seite liegend um die Sonne läuft."
+    },
+    "neptune": {
+      "fact.diameter": "49 244 km",
+      "fact.orbit": "165 Jahre",
+      "fact.dayLength": "16 h 6 min",
+      "fact.temp": "≈ −200 °C",
+      "fact.wind": "bis 2 100 km/h",
+      "fact.moons": "16",
+      "desc": "Der äußerste Planet – mit den schnellsten Winden im Sonnensystem."
+    },
+    "pluto": {
+      "fact.diameter": "2 377 km",
+      "fact.orbit": "248 Jahre",
+      "fact.temp": "≈ −225 °C",
+      "fact.moons": "5 (u. a. Charon)",
+      "desc": "Zwergplanet im Kuipergürtel, 2015 von New Horizons besucht."
+    },
+    "ceres": {
+      "fact.diameter": "939 km",
+      "fact.orbit": "4,6 Jahre",
+      "fact.dayLength": "9,1 h",
+      "fact.visit": "Dawn (2015–2018)",
+      "desc": "Der größte Körper im Asteroidengürtel und der einzige Zwergplanet im inneren Sonnensystem – 2015 von der Sonde Dawn erkundet."
+    },
+    "vesta": {
+      "fact.diameter": "≈ 525 km",
+      "fact.orbit": "3,6 Jahre",
+      "fact.dayLength": "5,3 h",
+      "fact.visit": "Dawn (2011–2012)",
+      "desc": "Zweitgrößter Körper des Asteroidengürtels mit dem riesigen Rheasilvia-Einschlagbecken am Südpol – von Dawn 2011/12 kartiert."
+    },
+    "eris": {
+      "fact.diameter": "≈ 2 326 km",
+      "fact.orbit": "≈ 559 Jahre",
+      "fact.moons": "Dysnomia",
+      "desc": "Massereichster bekannter Zwergplanet jenseits von Neptun, 2005 entdeckt – ihre Entdeckung führte zur Neudefinition des Planetenbegriffs. Keine Oberflächenkarte vorhanden."
+    },
+    "haumea": {
+      "fact.diameter": "≈ 1 600 × 1 000 km",
+      "fact.orbit": "≈ 283 Jahre",
+      "fact.dayLength": "3,9 h",
+      "desc": "Schnell rotierender, eiförmiger Zwergplanet im Kuipergürtel mit Ring und zwei Monden. Keine Oberflächenkarte vorhanden."
+    },
+    "makemake": {
+      "fact.diameter": "≈ 1 430 km",
+      "fact.orbit": "≈ 305 Jahre",
+      "fact.moons": "S/2015 (136472) 1",
+      "desc": "Heller, rötlicher Zwergplanet im Kuipergürtel. Keine Oberflächenkarte vorhanden."
+    },
+    "eros": {
+      "fact.size": "34 × 11 × 11 km",
+      "fact.visit": "NEAR Shoemaker (2000–2001)",
+      "fact.orbit": "1,8 Jahre",
+      "fact.rotation": "5,3 h",
+      "desc": "Erdnaher Asteroid, 1898 entdeckt und von NEAR Shoemaker 2000/01 umkreist – der erste Asteroid, auf dem eine Sonde landete."
+    },
+    "bennu": {
+      "fact.size": "≈ 490 m",
+      "fact.visit": "OSIRIS-REx (2018–2021)",
+      "fact.orbit": "1,2 Jahre",
+      "fact.rotation": "4,3 h",
+      "desc": "Kohlenstoffreicher, erdnaher Asteroid – OSIRIS-REx nahm hier 2020 eine Probe und brachte sie 2023 zur Erde."
+    },
+    "itokawa": {
+      "fact.size": "535 × 294 × 209 m",
+      "fact.visit": "Hayabusa (2005)",
+      "fact.orbit": "1,5 Jahre",
+      "fact.rotation": "12,1 h",
+      "desc": "Erdnaher, erdnussförmiger Asteroid – von Hayabusa 2005 besucht, 2010 kamen erstmals Asteroidenproben zur Erde."
+    },
+    "kleopatra": {
+      "fact.size": "≈ 217 × 94 × 81 km",
+      "fact.orbit": "4,7 Jahre",
+      "fact.rotation": "5,4 h",
+      "desc": "Knochenförmiger Metall-Asteroid im Hauptgürtel mit zwei kleinen Monden."
+    },
+    "geographos": {
+      "fact.size": "≈ 5,1 × 1,8 km",
+      "fact.orbit": "1,4 Jahre",
+      "fact.rotation": "5,2 h",
+      "desc": "Extrem länglicher erdnaher Asteroid – einer der am stärksten gestreckten Körper des Sonnensystems."
+    },
+    "toutatis": {
+      "fact.size": "≈ 4,6 × 2,3 km",
+      "fact.visit": "Chang'e 2 (2012, Vorbeiflug)",
+      "fact.orbit": "4,0 Jahre",
+      "fact.rotation": "7 Tage",
+      "desc": "Erdnaher Asteroid mit chaotischer Taumelbewegung; 2012 flog Chinas Chang'e 2 vorbei."
+    },
+    "mithra": {
+      "fact.size": "≈ 2,7 km",
+      "fact.orbit": "3,3 Jahre",
+      "fact.rotation": "3 Tage",
+      "desc": "Erdnaher Apollo-Asteroid, per Radar vermessen."
+    },
+    "golevka": {
+      "fact.size": "≈ 530 m",
+      "fact.orbit": "3,9 Jahre",
+      "fact.rotation": "6,0 h",
+      "desc": "Kleiner erdnaher Asteroid – an ihm wurde der Yarkovsky-Effekt (Bahnänderung durch Wärmeabstrahlung) erstmals gemessen."
+    },
+    "hw1": {
+      "fact.size": "≈ 3,8 km",
+      "fact.orbit": "2,9 Jahre",
+      "fact.rotation": "8,8 h",
+      "desc": "Doppelasteroid-ähnlicher „Kontaktbinär“ aus zwei verschmolzenen Körpern, per Radar vermessen."
+    },
+    "iss": {
+      "fact.orbitHeight": "≈ 420 km",
+      "fact.speed": "≈ 27 600 km/h",
+      "fact.crew": "seit November 2000 dauerhaft bewohnt",
+      "desc": "Die Internationale Raumstation – Position live aus aktuellen Bahndaten (CelesTrak)."
+    },
+    "hubble": {
+      "fact.launch": "24. April 1990",
+      "fact.orbitHeight": "≈ 515 km",
+      "fact.mirror": "2,4 m",
+      "desc": "Das berühmte Weltraumteleskop – Position live aus aktuellen Bahndaten (CelesTrak)."
+    },
+    "voyager1": {
+      "fact.launch": "5. September 1977",
+      "fact.status": "aktiv, im interstellaren Raum",
+      "fact.speed": "≈ 61 000 km/h relativ zur Sonne",
+      "desc": "Das am weitesten entfernte menschengemachte Objekt. Besuchte Jupiter und Saturn."
+    },
+    "voyager2": {
+      "fact.launch": "20. August 1977",
+      "fact.status": "aktiv, im interstellaren Raum",
+      "desc": "Einzige Sonde, die alle vier Gasriesen besucht hat (Jupiter, Saturn, Uranus, Neptun)."
+    },
+    "newhorizons": {
+      "fact.launch": "19. Januar 2006",
+      "fact.plutoFlyby": "14. Juli 2015",
+      "fact.arrokothFlyby": "1. Januar 2019",
+      "desc": "Erkundete Pluto und das Kuipergürtel-Objekt Arrokoth."
+    },
+    "pioneer10": {
+      "fact.launch": "3. März 1972",
+      "fact.status": "Kontakt 2003 verloren",
+      "desc": "Erste Sonde, die den Asteroidengürtel durchquerte und Jupiter besuchte."
+    },
+    "pioneer11": {
+      "fact.launch": "6. April 1973",
+      "fact.status": "Kontakt 1995 verloren",
+      "modelNote": "Modell: Pioneer 10 (baugleich)"
+    },
+    "jwst": {
+      "fact.launch": "25. Dezember 2021",
+      "fact.location": "Lagrange-Punkt L2, 1,5 Mio. km von der Erde",
+      "desc": "Das größte Weltraumteleskop, beobachtet im Infrarot."
+    },
+    "soho": {
+      "fact.launch": "2. Dezember 1995",
+      "fact.location": "Lagrange-Punkt L1 zwischen Erde und Sonne",
+      "desc": "Sonnenobservatorium von ESA und NASA."
+    },
+    "parker": {
+      "fact.launch": "12. August 2018",
+      "fact.sunProximity": "6,2 Mio. km – näher als je ein Objekt zuvor",
+      "fact.topSpeed": "≈ 690 000 km/h",
+      "desc": "Fliegt durch die Korona der Sonne."
+    },
+    "juno": {
+      "fact.launch": "5. August 2011",
+      "fact.arrivalJupiter": "5. Juli 2016",
+      "desc": "Umkreist Jupiter auf einer polaren Bahn."
+    },
+    "perseverance": {
+      "craft": "Rover Perseverance, Hubschrauber Ingenuity",
+      "region": "Jezero-Krater",
+      "text": "Sammelt Gesteinsproben für eine spätere Rückführung zur Erde. Der mitgebrachte Hubschrauber Ingenuity absolvierte 72 Flüge (2021–2024)."
+    },
+    "ingenuity": {
+      "fact.firstFlight": "19. April 2021 – erster Motorflug auf einem anderen Planeten",
+      "fact.flights": "72 (letzter: 18. Januar 2024)",
+      "fact.status": "Mission beendet, Rotorblatt beschädigt",
+      "desc": "Der Mars-Hubschrauber – die Karte zeigt alle Flugrouten, der Punkt markiert seinen letzten Landeplatz."
+    },
+    "lro": {
+      "fact.launch": "18. Juni 2009",
+      "fact.orbitHeight": "≈ 50–200 km über dem Mond",
+      "desc": "Kartiert den Mond in höchster Auflösung."
+    },
+    "europaclipper": {
+      "fact.launch": "14. Oktober 2024",
+      "fact.arrivalJupiter": "April 2030",
+      "fact.route": "Mars-Vorbeiflug 2025, Erd-Vorbeiflug 2026",
+      "desc": "Soll Jupitermond Europa auf Bewohnbarkeit untersuchen."
+    },
+    "juice": {
+      "fact.launch": "14. April 2023 (ESA)",
+      "fact.arrivalJupiter": "Juli 2031",
+      "desc": "ESA-Mission zu den Eismonden Ganymed, Kallisto und Europa."
+    },
+    "bepicolombo": {
+      "fact.launch": "20. Oktober 2018 (ESA/JAXA)",
+      "fact.arrivalMercury": "November 2026",
+      "desc": "Europäisch-japanische Merkur-Mission."
+    },
+    "apollo11": {
+      "crew": "Neil Armstrong, Buzz Aldrin (im Orbit: Michael Collins)",
+      "craft": "Mondfähre „Eagle“",
+      "region": "Mare Tranquillitatis (Meer der Ruhe)",
+      "text": "Die erste bemannte Mondlandung. „Das ist ein kleiner Schritt für einen Menschen, aber ein riesiger Sprung für die Menschheit.“ Der Laser-Reflektor wird bis heute zur Entfernungsmessung genutzt."
+    },
+    "apollo12": {
+      "crew": "Pete Conrad, Alan Bean",
+      "craft": "Mondfähre „Intrepid“",
+      "region": "Oceanus Procellarum (Ozean der Stürme)",
+      "text": "Punktlandung nur 180 m neben der Sonde Surveyor 3 – Teile davon nahm die Crew mit zur Erde."
+    },
+    "apollo14": {
+      "crew": "Alan Shepard, Edgar Mitchell",
+      "craft": "Mondfähre „Antares“",
+      "region": "Fra-Mauro-Hochland",
+      "text": "Alan Shepard schlug hier mit einem improvisierten Schläger zwei Golfbälle."
+    },
+    "apollo15": {
+      "crew": "David Scott, James Irwin",
+      "craft": "Mondfähre „Falcon“, erstes Mondauto",
+      "region": "Hadley-Rille am Fuß der Mond-Apenninen",
+      "text": "Erstmals mit Mondauto. David Scott ließ Hammer und Feder gleichzeitig fallen – ohne Luft kamen beide gleichzeitig am Boden an."
+    },
+    "apollo16": {
+      "crew": "John Young, Charles Duke",
+      "craft": "Mondfähre „Orion“",
+      "region": "Descartes-Hochland",
+      "text": "Einzige Landung im zentralen Hochland. Charles Duke ließ ein Foto seiner Familie auf dem Mond zurück."
+    },
+    "apollo17": {
+      "crew": "Eugene Cernan, Harrison Schmitt",
+      "craft": "Mondfähre „Challenger“",
+      "region": "Taurus-Littrow-Tal",
+      "text": "Die bisher letzten Menschen auf dem Mond. Harrison Schmitt war als Geologe der erste Wissenschaftler dort."
+    },
+    "luna9": {
+      "region": "Oceanus Procellarum",
+      "text": "Erste weiche Landung auf einem anderen Himmelskörper und erste Fotos von der Mondoberfläche."
+    },
+    "surveyor1": {
+      "region": "Oceanus Procellarum",
+      "text": "Erste weiche Mondlandung der USA – Generalprobe für Apollo."
+    },
+    "luna16": {
+      "region": "Mare Fecunditatis",
+      "text": "Erste robotische Probenrückführung: 101 g Mondboden kamen zur Erde."
+    },
+    "luna17": {
+      "craft": "Rover Lunochod 1",
+      "region": "Mare Imbrium",
+      "text": "Brachte Lunochod 1 – das erste ferngesteuerte Fahrzeug auf einem anderen Himmelskörper."
+    },
+    "luna21": {
+      "craft": "Rover Lunochod 2",
+      "region": "Krater Le Monnier",
+      "text": "Lunochod 2 fuhr rund 39 km weit – Rekord bis 2014."
+    },
+    "luna24": {
+      "region": "Mare Crisium",
+      "text": "Letzte sowjetische Mondmission, brachte 170 g Bohrkern zur Erde."
+    },
+    "change3": {
+      "craft": "Rover Yutu („Jadehase“)",
+      "region": "Mare Imbrium",
+      "text": "Die erste weiche Mondlandung seit 37 Jahren."
+    },
+    "change4": {
+      "craft": "Rover Yutu-2",
+      "region": "Von-Kármán-Krater (Rückseite)",
+      "text": "Erste Landung auf der Mondrückseite. Funkkontakt zur Erde nur über den Relaissatelliten Queqiao."
+    },
+    "change5": {
+      "region": "Mons Rümker, Oceanus Procellarum",
+      "text": "Brachte 1,7 kg Proben zur Erde – das jüngste bisher untersuchte Mondgestein (≈ 2 Mrd. Jahre)."
+    },
+    "change6": {
+      "region": "Apollo-Becken (Rückseite)",
+      "text": "Erste Gesteinsproben von der Mondrückseite (1,9 kg)."
+    },
+    "chandrayaan3": {
+      "craft": "Lander Vikram, Rover Pragyan",
+      "region": "Südpolregion",
+      "text": "Indien landete als vierte Nation auf dem Mond – und als erste nahe dem Südpol."
+    },
+    "slim": {
+      "region": "Krater Shioli",
+      "text": "Japans „Mondscharfschütze“ landete auf etwa 10 m genau – allerdings kopfüber."
+    },
+    "im1": {
+      "craft": "Intuitive Machines",
+      "region": "Malapert A, Südpolregion",
+      "text": "Erste private Mondlandung; der Lander kippte dabei auf die Seite."
+    },
+    "blueghost1": {
+      "craft": "Firefly Aerospace",
+      "region": "Mons Latreille, Mare Crisium",
+      "text": "Erste vollständig gelungene private Mondlandung; filmte einen Sonnenuntergang auf dem Mond."
+    },
+    "im2": {
+      "craft": "Intuitive Machines",
+      "region": "Mons Mouton, Südpolregion",
+      "text": "Landete am südlichsten Punkt aller bisherigen Missionen, kippte aber in einem Krater um."
+    },
+    "viking1": {
+      "region": "Chryse Planitia",
+      "text": "Erste erfolgreiche Landung auf dem Mars: Der Lander arbeitete über sechs Jahre und schickte die ersten Farbbilder von der Oberfläche."
+    },
+    "viking2": {
+      "region": "Utopia Planitia",
+      "text": "Zweiter Viking-Lander; seine Kamera zeigte erstmals Raureif auf dem Marsboden."
+    },
+    "pathfinder": {
+      "craft": "Rover Sojourner",
+      "region": "Ares Vallis",
+      "text": "Brachte mit „Sojourner“ den ersten Rover auf den Mars und landete – airbaggedämpft – in einer Mündungsebene."
+    },
+    "spirit": {
+      "craft": "Mars Exploration Rover",
+      "region": "Gusev-Krater",
+      "text": "Sollte 90 Tage arbeiten und fuhr über sechs Jahre, bis er in weichem Sand stecken blieb (2010)."
+    },
+    "opportunity": {
+      "craft": "Mars Exploration Rover",
+      "region": "Meridiani Planum",
+      "text": "Fuhr fast 45 km – Rekord für ein außerirdisches Fahrzeug – und fand Hinweise auf früheres flüssiges Wasser. Kontakt 2018 nach einem Staubsturm verloren."
+    },
+    "phoenix": {
+      "region": "Vastitas Borealis (Nordpolarebene)",
+      "text": "Grub im Nordpolargebiet und bestätigte Wassereis dicht unter dem Marsboden."
+    },
+    "curiosity": {
+      "craft": "Rover Curiosity",
+      "region": "Gale-Krater, Aeolis Palus",
+      "text": "Der atomgetriebene Rover erkundet seit 2012 den Mount Sharp im Gale-Krater und fand organische Moleküle sowie Spuren eines früheren Sees."
+    },
+    "insight": {
+      "region": "Elysium Planitia",
+      "text": "Stationärer Lander mit Seismometer: zeichnete über 1 300 Marsbeben auf und vermaß den Aufbau des Planeteninneren."
+    },
+    "zhurong": {
+      "craft": "Rover Zhurong",
+      "region": "Utopia Planitia",
+      "text": "Chinas erste Marslandung gelang gleich im ersten Anlauf; der Rover fuhr rund 1,9 km."
+    },
+    "layer": {
+      "marsColor": "Farbmosaik (Viking, 232 m)",
+      "ctx": "Kontextkamera (CTX, ≈ 5 m)",
+      "moonWac": "LRO-Mosaik (WAC, ≈ 100 m)",
+      "mercuryBdr": "MESSENGER-Mosaik (166 m)",
+      "mercuryColor": "Farbkontrast (665 m)",
+      "lolaDem": "LRO-Höhenmodell (LOLA)",
+      "enceladusDem": "Cassini-Höhenmodell (375 m)",
+      "lolaClrShade": "Relief (LOLA, farbig)",
+      "mercuryShade": "Relief (MESSENGER-DEM)",
+      "titanCassini": "Cassini-Farbmosaik (≈ 2 km)",
+      "mimasCassini": "Cassini-Mosaik (DLR, ≈ 150 m)",
+      "enceladusCassini": "Cassini-Mosaik (110 m)",
+      "tethysCassini": "Cassini-Mosaik (293 m)",
+      "dioneCassini": "Cassini/Voyager-Mosaik (154 m)",
+      "rheaDlr": "Cassini-Mosaik (DLR, ≈ 600 m)",
+      "iapetusCassini": "Cassini/Voyager-Mosaik (783 m)",
+      "vestaGrand": "Dawn GRaND, Eisenverteilung",
+      "ceresDawn": "Dawn-Mosaik (DLR, ≈ 140 m)"
+    },
+    "kind": {
+      "star": "Stern",
+      "planet": "Planet",
+      "dwarf": "Zwergplanet",
+      "moon": "Mond",
+      "asteroid": "Asteroid",
+      "craft": "Raumsonde",
+      "mare": "Mare (Lavaebene)",
+      "basin": "Einschlagbecken",
+      "crater": "Krater",
+      "mountain": "Gebirge",
+      "valley": "Tal / Rille",
+      "dome": "Berg"
+    },
+    "country": {
+      "us": "USA",
+      "su": "Sowjetunion",
+      "cn": "China",
+      "in": "Indien",
+      "jp": "Japan",
+      "eu": "Europa"
+    },
+    "search": "Objekt suchen …",
+    "searchA11y": "Objekt suchen",
+    "tabPlanets": "Planeten",
+    "tabOther": "Sonden & Kleinkörper",
+    "listToggle": "Objektliste",
+    "options": "Optionen",
+    "hOrbits": "Umlaufbahnen",
+    "hShow": "Anzeige",
+    "optPlanets": "Planeten & Monde",
+    "optCraft": "Sonden",
+    "optAsteroids": "Asteroiden",
+    "optDwarf": "Zwergplaneten & Sonstige",
+    "optLabels": "Beschriftungen",
+    "optSatellites": "Erdsatelliten (in Erdnähe)",
+    "optSites": "Landestellen (Mond, Mars)",
+    "timeControls": "ZEITSTEUERUNG",
+    "timeA11y": "Zeitsteuerung",
+    "liveTitle": "Zurück ins Jetzt",
+    "pickDate": "Datum wählen",
+    "pickTime": "Zeit wählen",
+    "pickDateTime": "Datum und Uhrzeit wählen",
+    "rewind": "Zurückspulen",
+    "pause": "Pause",
+    "play": "Abspielen",
+    "ffwd": "Vorspulen",
+    "overview": "ÜBERSICHT",
+    "overviewTitle": "Ganzes Sonnensystem",
+    "speedA11y": "Geschwindigkeit",
+    "collapseA11y": "Zeitsteuerung einklappen",
+    "paused": "PAUSE",
+    "secCraft": "Raumsonden",
+    "secDwarf": "Zwergplaneten",
+    "secAsteroids": "Asteroiden",
+    "notFound": "Nichts gefunden.",
+    "detailBadge": "Detailkarte verfügbar",
+    "notYet": "{name} existiert zum gewählten Zeitpunkt noch nicht (oder die Position ist unbekannt).",
+    "satsError": "Satellitendaten (CelesTrak) konnten nicht geladen werden.",
+    "rowLanding": "Landung",
+    "rowNation": "Nation",
+    "rowCrew": "Besatzung",
+    "rowVehicle": "Fahrzeug",
+    "rowMission": "Mission",
+    "rowRegion": "Ort",
+    "rowCoords": "Koordinaten",
+    "kindSiteMarsRobotic": "Marslandung (robotisch)",
+    "kindSiteMoonCrewed": "Bemannte Mondlandung",
+    "kindSiteMoonRobotic": "Mondlandung (robotisch)",
+    "notLanded": "Zum gewählten Zeitpunkt ist hier noch niemand gelandet.",
+    "yearsAgo": {
+      "one": "Vor 1 Jahr.",
+      "other": "Vor {count} Jahren."
+    },
+    "planetMapBtn": "Planetenkarte",
+    "sitesH": "Landestellen",
+    "vehiclesH": "Fahrzeuge",
+    "approxNote": "Position/Flugbahn angenähert.",
+    "modelPrefix": "3D-Modell: ",
+    "modelLoading": " · wird geladen …",
+    "modelError": " · konnte nicht geladen werden",
+    "detailLoading": " · Detailmodell wird geladen …",
+    "detailLink": "Detailkarte ({name}) ↗",
+    "openWxBtn": "Wetterkarte öffnen",
+    "openMapBtn": "Planetenkarte öffnen",
+    "rowSunDist": "Abstand zur Sonne",
+    "rowEarthDist": "Abstand zur Erde",
+    "rowLightTime": "Lichtlaufzeit von der Erde",
+    "au": "AE",
+    "million": "Mio.",
+    "earthSatellite": "Erdsatellit · NORAD {id}",
+    "satAltLabel": "Höhe",
+    "satNote": "Bahndaten: CelesTrak. Auf der Wetterkarte (Ebene „Satelliten“) ist auch die Bodenspur sichtbar.",
+    "backArrow": "← ",
+    "dirNorth": "N",
+    "dirSouth": "S",
+    "dirEast": "O",
+    "dirWest": "W",
+    "pmSearch": "Ort oder Rover suchen …",
+    "pmSearchA11y": "Suchen",
+    "layersA11y": "Ebenen",
+    "activeA11y": "Angezeigte Ebenen",
+    "pmLayers": "Ebenen",
+    "pmPlaces": "Orte",
+    "bodiesA11y": "Himmelskörper",
+    "markersH": "Markierungen",
+    "tSites": "Landestellen",
+    "tModels": "3D-Modelle",
+    "tFeatures": "Mondformationen",
+    "tTerrain": "Relief (Höhenmodell)",
+    "tTracks": "Rover-Spuren",
+    "tHeli": "Ingenuity",
+    "tLabels": "Namen",
+    "overlaysH": "Überlagerungen",
+    "overlaysNote": "Überlagerungen liegen halbtransparent über der gewählten Karte. Regionale (Mineralien) gelten nur in ihrem Gebiet.",
+    "auto": "Automatisch",
+    "baseHeightShade": "Höhe & Tiefe (MOLA/HRSC, 200 m)",
+    "baseInfrared": "Infrarot (THEMIS, 100 m)",
+    "ovGeology": "Geologie",
+    "ovValleys": "Täler",
+    "ovSmectite": "Smektit (CRISM)",
+    "ovSulfate": "Sulfat (CRISM)",
+    "chipBaseTitle": "Aktuelle Karte",
+    "chipHideTitle": "Ausblenden",
+    "gSites": "Landestellen",
+    "gRover": "Rover",
+    "gMares": "Meere & Becken",
+    "gCraters": "Krater",
+    "gMountains": "Gebirge & Täler",
+    "gRegions": "Regionen",
+    "infoSite": "Landestelle",
+    "infoRover": "Rover",
+    "infoHeli": "Hubschrauber",
+    "pmRowLanding": "Landung",
+    "pmRowNation": "Nation",
+    "pmRowRegion": "Ort",
+    "pmRowCrew": "Besatzung",
+    "pmRowMission": "Mission",
+    "rowLength": "Länge",
+    "rowDiameter": "Durchmesser",
+    "rowSol": "Marstag (Sol)",
+    "rowDistance": "Gefahrene Strecke",
+    "siteModelNote": "Beim Heranzoomen erscheint das 3D-Modell von Lander{flags} und Fahrzeugen – vergrößert, damit man es erkennt, und mit dem Zoom mitskalierend.",
+    "siteModelFlags": ", Flagge",
+    "roverNote": "Die Linie zeigt die bisherige Fahrstrecke (NASA MMGIS), der Punkt die letzte bekannte Position. Beim Heranzoomen erscheint das 3D-Modell – vergrößert und mit dem Zoom mitskalierend.",
+    "heliNote": "Ingenuity flog zwischen April 2021 und Januar 2024 72-mal. Der Punkt markiert den letzten Landeplatz.",
+    "rowFlights": "Flüge",
+    "rowFlown": "Flugstrecke gesamt",
+    "zoomIn": "Heranzoomen",
+    "mapLabel": "Karte",
+    "mapTitle": "Karte wählen",
+    "toSpace": "Ins Sonnensystem",
+    "autoMars": "Automatisch (Farbe → 5 m → HiRISE)",
+    "autoMoon": "Automatisch (WAC → LROC-NAC)",
+    "us": "USA",
+    "su": "Sowjetunion",
+    "cn": "China",
+    "jp": "Japan",
+    "eu": "Europa",
+    "back": "Zurück",
+    "tTerrainShort": "Relief"
+  },
+  "fp": {
+    "title": "Fahrplan",
+    "tabSearch": "Verbindungssuche",
+    "tabSaved": "Gemerkt",
+    "searchTitle": "Verbindung suchen",
+    "editSearch": "Suche ändern",
+    "edit": "Ändern",
+    "routeSave": "Route merken",
+    "routeRemove": "Route entfernen",
+    "routeSaved": "Route gemerkt",
+    "routeSavedToast": "Route gemerkt",
+    "routeRemovedToast": "Route entfernt",
+    "swap": "Start und Ziel tauschen",
+    "depOrArr": "Abfahrt oder Ankunft",
+    "dep": "Abfahrt",
+    "arr": "Ankunft",
+    "time": "Zeitpunkt",
+    "nowBtn": "Jetzt",
+    "options": "Optionen",
+    "optionsN": "Optionen ({count})",
+    "search": "Suchen",
+    "modes": "Verkehrsmittel",
+    "transfers": "Umstiege",
+    "transfersAny": "Beliebig viele",
+    "transfers0": "Direkt",
+    "transfers1": "Max. 1 Umstieg",
+    "transfers2": "Max. 2 Umstiege",
+    "transferTime": "Umstiegszeit",
+    "transferTimeNormal": "Normal",
+    "transferTime5": "+5 min",
+    "transferTime10": "+10 min",
+    "walkLimit": "Fußweg zur Haltestelle",
+    "walkStandard": "Standard",
+    "walk5": "bis 5 min",
+    "walk10": "bis 10 min",
+    "walk20": "bis 20 min",
+    "stepFree": "Stufenfrei (Rollstuhl, Kinderwagen)",
+    "reset": "Zurücksetzen",
+    "earlier": "Früher",
+    "later": "Später",
+    "results": "Verbindungen",
+    "emptyTitle": "Wohin soll es gehen?",
+    "emptyText": "Start und Ziel eingeben, Zeit wählen und „Suchen“ – die Verbindungen erscheinen hier, mit Verspätungen, Gleisen und Umstiegen.",
+    "fromPlaceholder": "Von: Haltestelle oder Ort",
+    "toPlaceholder": "Nach: Haltestelle oder Ort",
+    "atTime": "an ",
+    "noConnections": "Keine Verbindung gefunden.",
+    "loadingDelays": "Verspätungen der Bahn werden geladen …",
+    "pickFromSuggestions": "Bitte Start und Ziel aus der Vorschlagsliste wählen.",
+    "searching": "Suche läuft …",
+    "searchUnavailable": "Verbindungssuche nicht erreichbar – bitte später erneut versuchen.",
+    "stopSearchUnavailable": "Suche nicht verfügbar",
+    "noStopFound": "Keine Haltestelle gefunden",
+    "pageError": "Weitere Verbindungen konnten nicht geladen werden.",
+    "trackTitle": "Gleis {track}{changed}",
+    "trackChanged": " (Gleiswechsel)",
+    "walk": "Fußweg",
+    "callBefore": {
+      "one": "Anruf 1 min vor Abfahrt",
+      "other": "Anruf {count} min vor Abfahrt"
+    },
+    "registrationNeeded": "Anmeldung erforderlich",
+    "nStops": {
+      "one": "1 Haltestelle",
+      "other": "{count} Haltestellen"
+    },
+    "cancelled": "entfällt",
+    "towards": "nach {to}",
+    "transfer": "Umstieg",
+    "onTime": "pünktlich",
+    "onSchedule": "planmäßig",
+    "tripSaved": "Verbindung gemerkt",
+    "tripSave": "Verbindung merken",
+    "tripSavedShort": "Gemerkt",
+    "tripSaveShort": "Merken",
+    "tripSavedToast": "{line} um {hm} gemerkt (Mo–Fr) – unter „Gemerkt“ anpassen",
+    "tripRemovedToast": "Pendler-Verbindung entfernt",
+    "tripRemove": "Pendler-Verbindung entfernen",
+    "tripSavedLabel": "Verbindung gemerkt",
+    "ondemandLine": "RUF",
+    "gone": "abgefahren",
+    "now": "jetzt",
+    "inPrefix": "in {when}",
+    "nextConnection": "Nächste Verbindung",
+    "transfersShort": {
+      "one": "{count} Umst.",
+      "other": "{count} Umst."
+    },
+    "fromWord": "von {from}",
+    "duration": "Dauer:",
+    "day1": "Mo",
+    "day2": "Di",
+    "day3": "Mi",
+    "day4": "Do",
+    "day5": "Fr",
+    "day6": "Sa",
+    "day0": "So",
+    "everyDay": "täglich",
+    "never": "nie",
+    "weekdays": "Mo–Fr",
+    "monSat": "Mo–Sa",
+    "weekend": "Sa, So",
+    "noDayChosen": "kein Tag gewählt",
+    "unreachable": "nicht erreichbar",
+    "notFound": "nicht gefunden",
+    "offline": "offline",
+    "savedAt": "Gespeichert um {when}",
+    "savedAtFull": "Offline – gespeichert um {when}",
+    "statusLine": "Stand {when} · aktualisiert sich jede Minute",
+    "subTrips": "Verbindungen",
+    "subRoutes": "Routen",
+    "subStops": "Haltestellen",
+    "subTripsHeading": "Pendler-Verbindungen",
+    "subRoutesHeading": "Routen",
+    "subStopsHeading": "Haltestellen",
+    "hintTrips": "Wähle links eine Verbindung – hier siehst du den aktuellen Stand deines Zuges.",
+    "hintRoutes": "Tippe auf eine Route, um sie mit der aktuellen Uhrzeit zu suchen.",
+    "hintStops": "Wähle eine Haltestelle – hier siehst du, was als Nächstes abfährt.",
+    "journey": "Fahrt",
+    "notifyLead": "Nachricht {leads} min vorher",
+    "searchNow": "Jetzt suchen",
+    "stopRemove": "Haltestelle entfernen",
+    "stopSave": "Haltestelle merken",
+    "stopUnsave": "Nicht mehr merken",
+    "stopSavedToast": "„{name}“ gemerkt",
+    "stopRemovedToast": "„{name}“ entfernt",
+    "emptyTrips": "Noch keine Pendler-Verbindung. Suche eine Verbindung, öffne sie und tippe auf „Verbindung merken“ – hier siehst du dann täglich auf einen Blick, ob dein Zug pünktlich ist.",
+    "emptyRoutes": "Noch keine Route. Nach einer Suche kannst du Start und Ziel mit „Route merken“ speichern – die Uhrzeit wählst du jedes Mal neu.",
+    "emptyStops": "Noch keine Haltestelle. Such oben eine Haltestelle und tippe auf das Herz.",
+    "pushUnsupported": "Dieser Browser kann keine Push-Nachrichten. Auf dem iPhone muss Orbis erst zum Home-Bildschirm hinzugefügt werden.",
+    "pushUnconfigured": "Der Push-Dienst ist noch nicht eingerichtet (README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“).",
+    "pushDenied": "Benachrichtigungen sind im Browser blockiert – in den Seiteneinstellungen erlauben.",
+    "pushUnreachable": "Der Push-Dienst ist gerade nicht erreichbar.",
+    "notifyBeforeDeparture": "Vor der Abfahrt benachrichtigen",
+    "leadsGroup": "Minuten vor Abfahrt",
+    "onlyIfDelayed": "Nur bei Verspätung oder Ausfall",
+    "testPush": "Test-Nachricht senden",
+    "testPushSent": "Test-Nachricht ist unterwegs.",
+    "testPushFailed": "Test fehlgeschlagen – ist der Push-Dienst erreichbar?",
+    "notesWhenClosed": "Die Nachrichten kommen auch, wenn die App geschlossen ist.",
+    "weekdaysGroup": "Wochentage",
+    "openInSearch": "In Suche öffnen",
+    "loadingConnection": "Lade Verbindung …",
+    "chooseWeekday": "Wähle mindestens einen Wochentag.",
+    "today": "Heute",
+    "nextRun": "Nächste Fahrt",
+    "timetableUnreachable": "Fahrplan gerade nicht erreichbar.",
+    "tripNotInTimetable": "Die Fahrt wurde im Fahrplan nicht gefunden (kein Verkehr an dem Tag oder die Linie hat sich geändert).",
+    "loadingDepartures": "Lade Abfahrten …",
+    "noDepartures": "Keine Abfahrten in nächster Zeit.",
+    "departuresUnreachable": "Abfahrten nicht erreichbar – bitte später erneut versuchen.",
+    "addStopPlaceholder": "Haltestelle suchen und merken",
+    "nearStops": "Haltestellen in meiner Nähe",
+    "noNearbyStop": "Keine Haltestelle in der Nähe gefunden.",
+    "noLocation": "Standort nicht verfügbar.",
+    "notificationsOn": "Benachrichtigung ist an – du bekommst eine Nachricht 30 und 10 min vor Abfahrt.",
+    "notificationsError": "Benachrichtigung konnte nicht eingerichtet werden."
+  }
+}

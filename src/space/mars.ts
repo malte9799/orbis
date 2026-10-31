@@ -100,7 +100,7 @@ export const MARS_SITES: LandingSite[] = [
     lat: 22.27,
     lon: -47.95,
     region: 'Chryse Planitia',
-    text: 'Erste erfolgreiche Landung auf dem Mars: Der Lander arbeitete über sechs Jahre und schickte die ersten Farbbilder von der Oberfläche.',
+    text: 'text',
   },
   {
     id: 'viking2',
@@ -111,7 +111,7 @@ export const MARS_SITES: LandingSite[] = [
     lat: 47.67,
     lon: 134.26,
     region: 'Utopia Planitia',
-    text: 'Zweiter Viking-Lander; seine Kamera zeigte erstmals Raureif auf dem Marsboden.',
+    text: 'text',
   },
   {
     id: 'pathfinder',
@@ -123,7 +123,7 @@ export const MARS_SITES: LandingSite[] = [
     lon: -33.22,
     craft: 'Rover Sojourner',
     region: 'Ares Vallis',
-    text: 'Brachte mit „Sojourner“ den ersten Rover auf den Mars und landete – airbaggedämpft – in einer Mündungsebene.',
+    text: 'text',
   },
   {
     id: 'spirit',
@@ -134,8 +134,8 @@ export const MARS_SITES: LandingSite[] = [
     lat: -14.57,
     lon: 175.47,
     craft: 'Mars Exploration Rover',
-    region: 'Gusev-Krater',
-    text: 'Sollte 90 Tage arbeiten und fuhr über sechs Jahre, bis er in weichem Sand stecken blieb (2010).',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'opportunity',
@@ -147,7 +147,7 @@ export const MARS_SITES: LandingSite[] = [
     lon: -5.53,
     craft: 'Mars Exploration Rover',
     region: 'Meridiani Planum',
-    text: 'Fuhr fast 45 km – Rekord für ein außerirdisches Fahrzeug – und fand Hinweise auf früheres flüssiges Wasser. Kontakt 2018 nach einem Staubsturm verloren.',
+    text: 'text',
   },
   {
     id: 'phoenix',
@@ -157,8 +157,8 @@ export const MARS_SITES: LandingSite[] = [
     date: '2008-05-25T23:53Z',
     lat: 68.22,
     lon: -125.7,
-    region: 'Vastitas Borealis (Nordpolarebene)',
-    text: 'Grub im Nordpolargebiet und bestätigte Wassereis dicht unter dem Marsboden.',
+    region: 'region',
+    text: 'text',
   },
   {
     id: 'curiosity',
@@ -169,9 +169,9 @@ export const MARS_SITES: LandingSite[] = [
     lat: -4.5895,
     lon: 137.4417,
     craft: 'Rover Curiosity',
-    region: 'Gale-Krater, Aeolis Palus',
+    region: 'region',
     hideFlag: true,
-    text: 'Der atomgetriebene Rover erkundet seit 2012 den Mount Sharp im Gale-Krater und fand organische Moleküle sowie Spuren eines früheren Sees.',
+    text: 'text',
   },
   {
     id: 'insight',
@@ -182,7 +182,7 @@ export const MARS_SITES: LandingSite[] = [
     lat: 4.502,
     lon: 135.623,
     region: 'Elysium Planitia',
-    text: 'Stationärer Lander mit Seismometer: zeichnete über 1 300 Marsbeben auf und vermaß den Aufbau des Planeteninneren.',
+    text: 'text',
   },
   {
     id: 'perseverance',
@@ -193,9 +193,9 @@ export const MARS_SITES: LandingSite[] = [
     lat: 18.4446,
     lon: 77.4509,
     craft: 'Rover Perseverance, Hubschrauber Ingenuity',
-    region: 'Jezero-Krater',
+    region: 'region',
     hideFlag: true,
-    text: 'Sammelt Gesteinsproben für eine spätere Rückführung zur Erde. Der mitgebrachte Hubschrauber Ingenuity absolvierte 72 Flüge (2021–2024).',
+    text: 'text',
   },
   {
     id: 'zhurong',
@@ -207,7 +207,7 @@ export const MARS_SITES: LandingSite[] = [
     lon: 109.925,
     craft: 'Rover Zhurong',
     region: 'Utopia Planitia',
-    text: 'Chinas erste Marslandung gelang gleich im ersten Anlauf; der Rover fuhr rund 1,9 km.',
+    text: 'text',
   },
 ];
 

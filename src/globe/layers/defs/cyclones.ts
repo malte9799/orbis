@@ -1,4 +1,5 @@
 import type { ExpressionSpecification } from 'maplibre-gl';
+import { t } from '../../../i18n';
 import { defineExtra } from '../types';
 import { cardHtml } from '../../popup';
 import { escapeHtml, fmt } from '../../../util';
@@ -72,24 +73,24 @@ export default defineExtra({
       const fc = await loadCyclones();
       ctx.setData('cyclones', fc);
       const storms = new Set(fc.features.filter((f) => f.properties?.part === 'point').map((f) => f.properties?.binnumber)).size;
-      return { count: storms, note: storms ? 'Kegel = Unsicherheit des Zugwegs, nicht die Sturmgröße' : 'derzeit keine Stürme im Atlantik und Nordpazifik' };
+      return { count: storms, note: storms ? t('layers.cyclones.noteCone') : t('layers.cyclones.noteNone') };
     });
   },
   click({ p, pt }) {
     const kt = Number(p.maxwind);
-    const kind = KIND[String(p.dvlbl)] ?? String(p.tcdvlp ?? 'Sturm');
+    const kind = KIND[String(p.dvlbl)] ?? String(p.tcdvlp ?? t('layers.cyclones.storm'));
     const cat = Number(p.cat);
     const rows: [string, string][] = [
-      ['Einstufung', `${kind}${cat ? ` · Kategorie ${cat}` : ''}`],
-      ['Wind', `${fmt.num(Math.round(kt * 1.852))} km/h (${kt} kt), Böen ${fmt.num(Math.round(Number(p.gust) * 1.852))} km/h`],
-      ['Luftdruck', p.mslp ? `${p.mslp} hPa` : '–'],
-      ['Zeitpunkt', Number(p.tau) === 0 ? `jetzt (${p.datelbl})` : `${p.datelbl} – Prognose +${p.tau} h`],
+      [t('layers.cyclones.rowClass'), `${kind}${cat ? t('layers.cyclones.category', { n: cat }) : ''}`],
+      [t('layers.cyclones.rowWind'), t('layers.cyclones.rowWindVal', { speed: fmt.num(Math.round(kt * 1.852)), kt: String(kt), gust: fmt.num(Math.round(Number(p.gust) * 1.852)) })],
+      [t('layers.cyclones.rowPressure'), p.mslp ? `${p.mslp} hPa` : '–'],
+      [t('layers.cyclones.rowTime'), Number(p.tau) === 0 ? t('layers.cyclones.rowTimeNow', { at: String(p.datelbl) }) : t('layers.cyclones.rowTimeForecast', { at: String(p.datelbl), tau: Number(p.tau) })],
     ];
-    if (Number(p.tau) === 0 && p.tcspd != null) rows.push(['Zugrichtung', `${p.tcdir}° mit ${fmt.num(Math.round(Number(p.tcspd) * 1.609))} km/h`]);
-    rows.push(['Bericht', `Nr. ${p.advisnum}, ${p.advdate}`]);
+    if (Number(p.tau) === 0 && p.tcspd != null) rows.push([t('layers.cyclones.rowMove'), t('layers.cyclones.rowMoveDeg', { deg: String(p.tcdir) }) + ' ' + t('layers.cyclones.rowMoveSpeed', { spd: fmt.num(Math.round(Number(p.tcspd) * 1.609)) })]);
+    rows.push([t('layers.cyclones.rowReport'), t('layers.cyclones.rowReportVal', { nr: String(p.advisnum), at: String(p.advdate) })]);
     const extra = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
     const url = String(p.basin) === 'CP' ? 'https://www.nhc.noaa.gov/?cpac' : String(p.basin) === 'EP' ? 'https://www.nhc.noaa.gov/?epac' : 'https://www.nhc.noaa.gov/?atlc';
-    return { type: 'html', html: cardHtml({ glyph: 'storm', color: COLOR, title: String(p.stormname), subtitle: 'NOAA National Hurricane Center', source: 'NOAA NHC/CPHC', url, extra }), lng: pt[0], lat: pt[1] };
+    return { type: 'html', html: cardHtml({ glyph: 'storm', color: COLOR, title: String(p.stormname), subtitle: t('layers.cyclones.provider'), source: 'NOAA NHC/CPHC', url, extra }), lng: pt[0], lat: pt[1] };
   },
   layers: ['cyclones-cone', 'cyclones-cone-line', 'cyclones-past', 'cyclones-fcst', 'cyclones-pastpt', 'cyclones', 'cyclones-label'],
   clickLayers: ['cyclones'],

@@ -1,4 +1,6 @@
 import { escapeHtml } from '../util';
+import { fmtLocale } from '../i18n';
+import { t } from '../i18n';
 import { clockTxt, tzOpts } from '../units';
 
 // Building blocks shared by the flight panel and the ship panel (right-hand side, design B):
@@ -14,11 +16,11 @@ export function distKm(lon1: number, lat1: number, lon2: number, lat2: number): 
 }
 
 /** "ca. 14:05", with the date ("24.10.") when it is not today. */
-export function clock(t: number): string {
-  const d = new Date(t);
+export function clock(ms: number): string {
+  const d = new Date(ms);
   const time = clockTxt(d);
-  const date = d.toDateString() === new Date().toDateString() ? '' : `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', ...tzOpts() })}. `;
-  return `ca. ${date}${time}`;
+  const date = d.toDateString() === new Date().toDateString() ? '' : `${d.toLocaleDateString(fmtLocale(), { day: '2-digit', month: '2-digit', ...tzOpts() })}. `;
+  return `${t('map.approx')}${date}${time}`;
 }
 
 /** "28 min" / "1 h 05 min" */
@@ -58,8 +60,8 @@ export const tile = (label: string, value: string, o: { metric?: string; on?: bo
 
 /** Line chart of the values of the reports seen so far, the last one marked. */
 export function graph(title: string, values: number[], unit: string, color: string): string {
-  const head = `<div class="sp-k"><span>${title}</span>${values.length > 1 ? `<span>${fmtNum(Math.min(...values))} bis ${fmtNum(Math.max(...values))} ${unit}</span>` : ''}</div>`;
-  if (values.length < 3) return `<div class="sp-chart">${head}<div class="sp-empty">Der Verlauf entsteht, sobald weitere Meldungen eintreffen.</div></div>`;
+  const head = `<div class="sp-k"><span>${title}</span>${values.length > 1 ? `<span>${fmtNum(Math.min(...values))} ${t('map.graph.to')} ${fmtNum(Math.max(...values))} ${unit}</span>` : ''}</div>`;
+  if (values.length < 3) return `<div class="sp-chart">${head}<div class="sp-empty">${t('map.graph.empty')}</div></div>`;
   const W = 280;
   const H = 56;
   const lo = Math.min(...values);

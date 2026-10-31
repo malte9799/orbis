@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadTsunami } from '../../../api/earth';
 
 export default defineExtra({
@@ -38,7 +39,7 @@ export default defineExtra({
       const fc = await loadTsunami();
       ctx.setData('tsunami', fc);
       const warn = fc.features.filter((f) => f.properties?.level === 'warning').length;
-      return { count: fc.features.length, note: !fc.features.length ? 'keine Meldungen in den letzten 7 Tagen' : warn ? `${warn} aktive Warnung(en)!` : undefined };
+      return { count: fc.features.length, note: !fc.features.length ? t('layers.tsunami.noteNone') : warn ? t('layers.tsunami.noteWarn', { count: warn }) : undefined };
     });
   },
   click({ p, pt, html }) {

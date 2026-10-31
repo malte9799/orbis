@@ -4,12 +4,12 @@ export default defineKey({
   id: 'aisstream',
   order: 40,
   group: 'webcams',
-  tip: 'Schiffe weltweit live.',
+  tip: 'tip',
   steps: [
-    { t: '1. Anmelden / registrieren (kostenlos)', u: 'https://aisstream.io' },
-    { t: '2. Im Dashboard „API Keys“ → Create', u: 'https://dashboard.aisstream.io' },
-    { t: '3. Key hier einfügen' },
+    { t: '1', u: 'https://aisstream.io' },
+    { t: '2', u: 'https://dashboard.aisstream.io' },
+    { t: '3' },
   ],
-  label: 'aisstream.io',
-  placeholder: 'API-Key',
+  label: 'label',
+  placeholder: 'placeholder',
 });

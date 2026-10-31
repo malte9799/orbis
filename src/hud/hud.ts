@@ -1,10 +1,12 @@
 import type { EventKind } from '../api/events';
 import { glyphSvg } from '../globe/icons';
 import { availableBases } from '../globe/style';
+import { tx } from '../globe/layers';
 import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
 import { store, type Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
+import { t as t0 } from '../i18n';
 import {
   BASE_GRADIENT,
   BASE_LABEL,
@@ -87,6 +89,10 @@ export interface HudHost {
 
 export type Layout = 'desktop' | 'portrait' | 'landscape';
 
+/** translated label/hint of a catalog entry (layer defs: layers.<id>*; event groups: layers.<id>.cat*) */
+const catLabelOf = (c: CatalogEntry): string => (c.kind === 'group' ? tx(`layers.${c.id}.cat`, c.label) : catLabelOf(c));
+const catHintOf = (c: CatalogEntry): string => (c.kind === 'group' ? tx(`layers.${c.id}.catHint`, c.hint) : catHintOf(c));
+
 export interface Hud {
   el: HTMLElement;
   current(): Karte;
@@ -118,7 +124,7 @@ export interface Hud {
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
-  return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
+  return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([v, t]) => tx(`hud.filter.${l.id}.${v}`, t)).join(', ');
 };
 
 /** volume of the strike tick sounds ("Blitze Live"): stored as a vol-n token in the layer filter */
@@ -145,14 +151,16 @@ function suggestionsFor(k: Karte): [string, string][] {
   const cats = k.layers.map((l) => catalogOf(l.id)?.cat);
   const traffic = cats.filter((c) => c === 'verkehr').length >= 2;
   const hazard = cats.filter((c) => c === 'gefahr').length >= 3;
-  if (k.main && !traffic) return [['lightning', 'Gewitter und Einschläge live'], ['aq', 'Luftqualität und Pollenflug'], ['gauges', 'Pegelstände in Deutschland']];
-  if (hazard) return [['radiation', 'Messnetz in ganz Europa'], ['lightning', 'Gewitter live'], ['rivers', 'Hochwasser an Flüssen']];
-  if (traffic) return [['transit', 'Busse und Bahnen im Stadtverkehr'], ['railmap', 'Strecken unter den Zügen'], ['airports', 'Flughäfen mit Abflügen']];
-  return [['webcams', 'Live-Webcams weltweit'], ['lightning', 'Blitze Live'], ['aircraft', 'Flugzeuge live']];
+  if (k.main && !traffic) return [['lightning', t0('hud.sug.lightning1')], ['aq', t0('hud.sug.aq')], ['gauges', t0('hud.sug.gauges')]];
+  if (hazard) return [['radiation', t0('hud.sug.radiation')], ['lightning', t0('hud.sug.lightning2')], ['rivers', t0('hud.sug.rivers')]];
+  if (traffic) return [['transit', t0('hud.sug.transit')], ['railmap', t0('hud.sug.railmap')], ['airports', t0('hud.sug.airports')]];
+  return [['webcams', t0('hud.sug.webcams')], ['lightning', tx('layers.lightning.label', 'Blitze Live')], ['aircraft', t0('hud.sug.aircraft')]];
 }
 
 const isStd = (k: Karte) => !!k.std;
-const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.relative(t));
+/** the name of a standard Karte is a stored value: translate the three fixed ids at display time */
+const kname = (k: Karte): string => (isStd(k) ? tx(`hud.kn.${k.id}`, k.name) : k.name);
+const rel = (t?: number) => (!t || Date.now() - t < 60000 ? t0('hud.justNow') : fmt.relative(t));
 
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
@@ -181,14 +189,14 @@ export function createHud(host: HudHost): Hud {
     <div class="hud-r" data-r="gallery"></div>
     <div class="hud-r" data-r="content"></div>
     <div class="hud-tr">
-      <div class="hud-sx"><button type="button" class="hud-sxb" data-act="search" title="Suchen ( / )" aria-label="Suchen"></button></div>
-      <button type="button" class="hud-scx" data-act="search">Abbrechen</button>
+      <div class="hud-sx"><button type="button" class="hud-sxb" data-act="search" title="${t0('hud.search.title')}" aria-label="${t0('hud.search.aria')}"></button></div>
+      <button type="button" class="hud-scx" data-act="search">${t0('hud.cancel')}</button>
     </div>
     <div class="hud-ctl">
       <div class="hud-cg">
-        <button type="button" data-act="basepick" title="Grundkarte" aria-label="Grundkarte wählen" aria-expanded="false">${ico('earth')}</button>
-        <button type="button" data-act="locate" title="Mein Standort" aria-label="Mein Standort">${ico('navarrow')}</button>
-        <button type="button" data-act="route" title="Route planen" aria-label="Route planen">${ico('route')}</button>
+        <button type="button" data-act="basepick" title="${t0('hud.ctl.base')}" aria-label="${t0('hud.ctl.baseAria')}" aria-expanded="false">${ico('earth')}</button>
+        <button type="button" data-act="locate" title="${t0('hud.ctl.locate')}" aria-label="${t0('hud.ctl.locate')}">${ico('navarrow')}</button>
+        <button type="button" data-act="route" title="${t0('hud.ctl.route')}" aria-label="${t0('hud.ctl.route')}">${ico('route')}</button>
       </div>
       <div class="hud-bp hud-glass" hidden></div>
     </div>
@@ -215,7 +223,10 @@ export function createHud(host: HudHost): Hud {
     if (rerender) render();
   }
 
-  const statusLine = (k: Karte) => (isStd(k) ? `Standardkarte${dirty(k.id) ? ' · geändert' : ''}` : `Eigene Karte · ${dirty(k.id) ? 'geändert' : `gespeichert ${rel(k.savedAt)}`}`);
+  const statusLine = (k: Karte) =>
+    isStd(k)
+      ? `${t0('hud.kstatus.std')}${dirty(k.id) ? ` ${t0('hud.kstatus.dirty')}` : ''}`
+      : `${t0('hud.kstatus.own')} · ${dirty(k.id) ? t0('hud.changed') : t0('hud.kstatus.saved', { rel: rel(k.savedAt) })}`;
   const mainFam = (k: Karte) => (k.main ? host.families().find((f) => f.id === k.main) : undefined);
 
   /** the glyph-square icons of a Karte: weather main first, then its layers.
@@ -223,11 +234,12 @@ export function createHud(host: HudHost): Hud {
   function iconList(k: Karte, max: number, toggle = false): { html: string; more: number } {
     const parts: string[] = [];
     const f = mainFam(k);
-    if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(f.label)}">${ico(f.icon, 2)}</span>`);
+    if (f) parts.push(`<span class="main" style="background:${f.color}" data-tip="${esc(tx(`hud.family.${f.id}.label`, f.label))}">${ico(f.icon, 2)}</span>`);
     k.layers.slice(0, max).forEach((l) => {
       const c = catalogOf(l.id);
       if (!c) return;
-      const tip = `${esc(c.label)}${l.hidden ? ' – einblenden' : ' – ausblenden'}`;
+      const lbl = esc(catLabelOf(c));
+      const tip = l.hidden ? t0('hud.tip.show', { label: lbl }) : t0('hud.tip.hide', { label: lbl });
       if (toggle) parts.push(`<button type="button" class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-act="eye" data-id="${esc(l.id)}" data-tip="${tip}" aria-pressed="${!l.hidden}" title="${tip}">${ico(c.icon, 2)}</button>`);
       else parts.push(`<span class="${l.hidden ? 'off' : ''}" style="background:${c.color}" data-tip="${tip}">${ico(c.icon, 2)}</span>`);
     });
@@ -236,10 +248,10 @@ export function createHud(host: HudHost): Hud {
   /** the Karte name in the stack header: own Karten can be renamed in place */
   const nameEl = (k: Karte) =>
     ui.rename && !isStd(k)
-      ? `<input id="hud-rn" class="rnin" type="text" maxlength="40" value="${esc(k.name)}" aria-label="Name der Karte" autocomplete="off"/>`
+      ? `<input id="hud-rn" class="rnin" type="text" maxlength="40" value="${esc(k.name)}" aria-label="${t0('hud.renameAria')}" autocomplete="off"/>`
       : isStd(k)
-        ? `<b>${esc(k.name)}</b>`
-        : `<button type="button" class="rn" data-act="rename" title="Umbenennen" aria-label="${esc(k.name)} umbenennen"><b>${esc(k.name)}</b>${ico('edit')}</button>`;
+        ? `<b>${esc(kname(k))}</b>`
+        : `<button type="button" class="rn" data-act="rename" title="${t0('hud.rename')}" aria-label="${t0('hud.renameSuffix', { name: esc(kname(k)) })}"><b>${esc(kname(k))}</b>${ico('edit')}</button>`;
   const mglyph = (k: Karte, s = 34) => `<span class="mglyph" style="background:${esc(k.color)};width:${s}px;height:${s}px">${ico(k.icon, 2)}</span>`;
 
   // ----- regions -----------------------------------------------------------
@@ -257,14 +269,14 @@ export function createHud(host: HudHost): Hud {
     const f = mainFam(k);
     const pinnedK = st.pinned.includes(k.id);
     return `<div class="kc ${k.id === cur ? 'on' : ''}" role="button" tabindex="0" data-act="go" data-id="${esc(k.id)}" aria-pressed="${k.id === cur}" style="--mc:${esc(k.color)}" title="${esc(k.name)}"${folded ? ` aria-expanded="${!ui.folded}"` : ''}>
-      <div class="kc-top"><span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(k.name)}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : i !== null ? `<kbd>${i + 1}</kbd>` : ''}</div>
+      <div class="kc-top"><span class="mi">${ico(k.icon, 2)}</span><span class="nm">${esc(kname(k))}</span>${folded ? `<span class="arr ${ui.folded ? 'down' : 'up'}" aria-hidden="true">${ico('chevd', 2)}</span>` : i !== null ? `<kbd>${i + 1}</kbd>` : ''}</div>
       <div class="kc-body">
         <div class="th" style="background:radial-gradient(120% 120% at 20% 0%, ${esc(k.color)}55, transparent 60%), ${BASE_GRADIENT[k.base]}"><span class="thi">${ico(f ? f.icon : k.icon, 1.6)}</span></div>
-        ${isStd(k) ? '<span class="std">Standard</span>' : ''}${dirty(k.id) ? '<span class="chg">geändert</span>' : ''}
+        ${isStd(k) ? `<span class="std">${t0('hud.std')}</span>` : ''}${dirty(k.id) ? `<span class="chg">${t0('hud.changed')}</span>` : ''}
         <div class="gt"><div class="icons">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
-          <small>${n} Ebenen${k.view ? ` · ${esc((k.view.name ?? 'Ausschnitt').split(',')[0])}` : ''}</small></div>
-        <button type="button" class="pin ${pinnedK ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${pinnedK ? 'Von der Leiste lösen' : 'An die Leiste heften'}" aria-pressed="${pinnedK}">${ico('starf')}</button>
-        ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="Karte löschen" aria-label="Karte löschen">${ico('x')}</button>`}
+          <small>${t0('hud.layerCount', { count: n }, { count: n })}${k.view ? ` · ${esc((k.view.name ?? t0('hud.cut')).split(',')[0])}` : ''}</small></div>
+        <button type="button" class="pin ${pinnedK ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${pinnedK ? t0('hud.pin.on') : t0('hud.pin.off')}" aria-pressed="${pinnedK}">${ico('starf')}</button>
+        ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="${t0('hud.kdel')}" aria-label="${t0('hud.kdel')}">${ico('x')}</button>`}
       </div></div>`;
   }
   /** the unfolded bar: the pinned Karten as cards first, then every other Karte */
@@ -273,12 +285,12 @@ export function createHud(host: HudHost): Hud {
       const i = st.pinned.indexOf(k.id);
       return i < 0 ? null : i;
     };
-    return `<div class="bg-head"><h4><span>Karten</span><small>★ = in der Leiste · Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)}</small></h4>
-        <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="Karten einklappen" title="Einklappen">${ico('x', 2)}</button></div>
+    return `<div class="bg-head"><h4><span>${t0('hud.karten.title')}</span><small>${t0('hud.karten.star', { n: Math.min(MAX_PINNED, st.pinned.length) })}</small></h4>
+        <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="${t0('hud.karten.fold')}" title="${t0('hud.close')}">${ico('x', 2)}</button></div>
       <div class="ggrid kc-grid">${STANDARD.map((k) => kcard(k, slot(k))).join('')}</div>
-      <h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>
+      <h4><span>${t0('hud.karten.more')}</span><small>${t0('hud.karten.moreSub')}</small></h4>
       <div class="ggrid kc-grid">${st.own.map((k) => kcard(k, slot(k))).join('')}
-        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}Neue leere Karte<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>`;
+        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}${t0('hud.addRow.new')}<small>${t0('hud.addRow.newSub')}</small></div></div>`;
   }
 
   function renderBar() {
@@ -293,7 +305,7 @@ export function createHud(host: HudHost): Hud {
           ? barGallery()
           : `${pins().map((k, i) => kcard(k, i)).join('')}
       <span class="sep"></span>
-      <button type="button" class="all" data-act="gallery" aria-expanded="false" aria-label="Alle Karten" title="Alle Karten">${ico('grid')}</button>`
+      <button type="button" class="all" data-act="gallery" aria-expanded="false" aria-label="${t0('hud.karten.all')}" title="${t0('hud.karten.all')}">${ico('grid')}</button>`
       }
     </div>`;
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
@@ -335,18 +347,18 @@ export function createHud(host: HudHost): Hud {
         `<button type="button" class="tgl ${o ? 'on' : ''}" data-act="filter" data-id="lightning" data-v="${v}" aria-pressed="${o}">${label}</button>`;
       const has = (v: string) => (bolt?.filter ?? '').split(',').includes(v);
       const vol = lightningVol(bolt);
-      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', 'Ton')}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="Lautstärke der Tick-Töne"/></div>`;
+      const volRow = `<div class="volrow">${chip(has('sound'), 'sound', t0('hud.opt.sound'))}<input type="range" class="rng volr" min="0" max="100" step="5" value="${vol}" data-vol="lightning" aria-label="${t0('hud.opt.volume')}"/></div>`;
       const boltChips =
-        (has('sound') ? volRow : chip(has('sound'), 'sound', 'Ton')) +
-        chip(has('wave'), 'wave', 'Kreis') +
-        chip(has('detectors'), 'detectors', 'Detektoren') +
-        chip(has('lines'), 'lines', 'Linien') +
-        chip(has('thunder'), 'thunder', 'Donner');
+        (has('sound') ? volRow : chip(has('sound'), 'sound', t0('hud.opt.sound'))) +
+        chip(has('wave'), 'wave', t0('hud.opt.wave')) +
+        chip(has('detectors'), 'detectors', t0('hud.opt.detectors')) +
+        chip(has('lines'), 'lines', t0('hud.opt.lines')) +
+        chip(has('thunder'), 'thunder', t0('hud.opt.thunder'));
       const subs = (it: WxMenuItem): string => {
         // beside "Blitze Live" the stream delay in seconds (live refresh via refreshLive, data-d)
         const delay = (x: WxMenuItem['subs'][number]) => (x.main === 'lightning' && boltOn ? '<em class="n" data-d="lightning"></em>' : '');
-        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(x.label)}${delay(x)}</button>`);
-        if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">Isobaren</button>`);
+        const rows = it.subs.filter((x) => x.label).map((x) => `<button type="button" data-act="wxsub" data-id="${esc(it.id)}" data-v="${it.subs.indexOf(x)}" class="${isOn(x) ? 'on' : ''}" aria-pressed="${isOn(x)}">${esc(tx(`hud.sub.${(x.mainVar ?? x.main).replace(/-(\w)/g, (_0, s1: string) => s1.toUpperCase())}`, x.label))}${delay(x)}</button>`);
+        if (f && ISOBAR_OPTION_MAINS.includes(f.id)) rows.push(`<button type="button" class="tgl ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars" aria-pressed="${!!k.isobars}">${t0('hud.opt.isobars')}</button>`);
         // when "Blitze Live" is chosen, its options follow as a nested list right underneath it
         if (it.id === 'storm' && boltOn) {
           const i = it.subs.findIndex((x) => x.main === 'lightning');
@@ -354,10 +366,10 @@ export function createHud(host: HudHost): Hud {
         }
         return rows.length ? `<div class="subs">${rows.join('')}</div>` : '';
       };
-      return `<div class="wxm hud-glass" role="group" aria-label="Wetterebene"><div class="mrow cats">${WX_MENU.map((it) => {
+      return `<div class="wxm hud-glass" role="group" aria-label="${t0('hud.aria.wxLayer')}"><div class="mrow cats">${WX_MENU.map((it) => {
       // the Gewitter entry stays active while the live strikes are switched on
       const on = it.id === 'storm' ? boltOn || it.subs.some(isOn) : it.subs.some(isOn);
-      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
+      return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(tx(`hud.menu.${it.id}.hint`, it.hint))}"><i>${ico(it.icon, 2)}</i><span>${esc(tx(`hud.menu.${it.id}.label`, it.label))}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
     const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
@@ -368,12 +380,12 @@ export function createHud(host: HudHost): Hud {
       const n = on ? host.info(layers[0]).count : null;
       const c = catalogOf(layers[0]);
       // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
-      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
+      return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(tx(`hud.row.${esc(layers[0])}`, label))}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
-    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    const label = k.menu === 'infra' ? t0('hud.modes.infra') : t0('hud.modes.traffic');
     return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
-      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
+      return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(tx(`hud.mcat.${c.id}`, c.label))}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
     }).join('')}</div></div>`;
   }
   /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
@@ -387,17 +399,19 @@ export function createHud(host: HudHost): Hud {
   function foldedLabel(k: Karte): { label: string; icon: string; color: string } {
     const boltOn = k.layers.some((l) => l.id === 'lightning' && !l.hidden);
     if (k.menu === 'wx') {
-      if (boltOn) return { label: 'Gewitter (Blitze Live)', icon: 'bolt', color: '#ffcc33' };
+      if (boltOn) return { label: tx('layers.lightning.label', 'Blitze Live'), icon: 'bolt', color: '#ffcc33' };
       const f = mainFam(k);
-      if (!f || !k.main) return { label: 'Keine Ebene', icon: k.icon, color: k.color };
+      if (!f || !k.main) return { label: t0('hud.none'), icon: k.icon, color: k.color };
       const varId = k.mainVar ?? f.variants[0][0];
       for (const it of WX_MENU) {
         const sub = it.subs.find((x) => x.main === f.id && x.mainVar === varId);
         if (!sub) continue;
         const v = (sub.label || f.variants.find(([id]) => id === varId)?.[1] || '').replace(SOURCE_PARENS, '');
-        return { label: v ? `${it.label} (${v})` : it.label, icon: it.icon, color: it.color };
+        const v1 = sub.label ? tx(`hud.sub.${sub.mainVar.replace(/[-_](\w)/g, (_0, s1: string) => s1.toUpperCase())}`, sub.label) : '';
+        // folded line keeps the short menu wording
+        return { label: v1 ? `${tx(`hud.menu.${it.id}.label`, it.label)} (${v1 || v})` : tx(`hud.menu.${it.id}.label`, it.label), icon: it.icon, color: it.color };
       }
-      return { label: f.label, icon: f.icon, color: f.color };
+      return { label: tx(`hud.family.${f.id}.label`, f.label), icon: f.icon, color: f.color };
     }
     const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cat = menu.find((c) => c.id === tmodeOf(k));
@@ -405,9 +419,9 @@ export function createHud(host: HudHost): Hud {
       // erste aktive Reihe zeigen (z. B. "Auto · Straßen"); ohne aktive Reihe nur die Kategorie
       const on = cat.rows.filter((r) => r.layers.every((l) => k.layers.some((x) => x.id === l && !x.hidden)));
       const row = on.length === 1 ? on[0] : null;
-      return row ? { label: `${cat.label} · ${row.label}`, icon: cat.icon, color: k.color } : { label: cat.id ? cat.label : 'Keine Kategorie', icon: cat.icon, color: k.color };
+      return row ? { label: `${tx(`hud.mcat.${cat.id}`, cat.label)} · ${tx(`hud.row.${row.layers[0]}`, row.label)}`, icon: cat.icon, color: k.color } : { label: cat.id ? tx(`hud.mcat.${cat.id}`, cat.label) : '', icon: cat.icon, color: k.color };
     }
-    return { label: menu[0]?.label ?? k.name, icon: menu[0]?.icon ?? k.icon, color: k.color };
+    return { label: menu[0] ? tx(`hud.mcat.${menu[0].id}`, menu[0].label) : k.name, icon: menu[0]?.icon ?? k.icon, color: k.color };
   }
   let lastFolded: boolean | null = null;
   function renderModes() {
@@ -427,7 +441,7 @@ export function createHud(host: HudHost): Hud {
     // collapsed: a single line naming the chosen sub-point; tapping it (or the Karte again) unfolds
     if (ui.folded) {
       const f = foldedLabel(k);
-      r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="Ausgewählte Ebene"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="Menü aufklappen">
+      r.innerHTML = `<div class="wxm folded hud-glass" role="group" aria-label="${t0('hud.aria.chosenLayer')}"><button type="button" class="mrow" data-act="menuunfold" aria-expanded="false" title="${t0('hud.menuunfold')}">
         <span class="fl"><i style="--lc:${esc(f.color)}">${ico(f.icon, 2)}</i><span class="lb">${esc(f.label)}</span></span></button></div>`;
     } else {
       r.innerHTML = modesInner(k);
@@ -471,10 +485,10 @@ export function createHud(host: HudHost): Hud {
   /** the collapsed stack: a settings gear plus the active layer icons – icons only, names as hover tooltip */
   function summary(k: Karte) {
     const { html, more } = iconList(k, 8, true);
-    return `<div class="sum hud-glass${dirty(k.id) ? ' changed' : ''}" role="group" aria-label="Einstellungen für ${esc(k.name)}${dirty(k.id) ? ' – geändert' : ''}">
-      <button type="button" class="gear" data-act="edit" aria-expanded="false" aria-label="Einstellungen öffnen" data-tip="${esc(k.name)} – Einstellungen öffnen">${ico('gear', 2)}</button>
-      <span class="lic">${html}${more ? `<span class="more" data-tip="+${more} weitere Ebenen">+${more}</span>` : ''}</span>
-      ${k.view ? `<span class="pin" data-tip="Ausschnitt: ${esc(placeText(k.view))}">${ico('pin', 2)}</span>` : ''}
+    return `<div class="sum hud-glass${dirty(k.id) ? ' changed' : ''}" role="group" aria-label="${t0('hud.settingsFor', { name: esc(kname(k)) + (dirty(k.id) ? t0('hud.summary.dirty') : '') })}">
+      <button type="button" class="gear" data-act="edit" aria-expanded="false" aria-label="${t0('hud.settings')}" data-tip="${t0('hud.gear.tip', { name: esc(kname(k)) })}">${ico('gear', 2)}</button>
+      <span class="lic">${html}${more ? `<span class="more" data-tip="${t0('hud.more', { n: more })}">+${more}</span>` : ''}</span>
+      ${k.view ? `<span class="pin" data-tip="${t0('hud.area', { v: esc(placeText(k.view)) })}">${ico('pin', 2)}</span>` : ''}
     </div>`;
   }
 
@@ -485,18 +499,18 @@ export function createHud(host: HudHost): Hud {
     const info = host.info(l.id);
     const f = FILTERS[l.id];
     const op = l.opacity ?? 100;
-    const sub = [info.sub || c.hint, filterText(l)].filter(Boolean).join(' · ');
+    const sub = [info.sub || catHintOf(c), filterText(l)].filter(Boolean).join(' · ');
     return `<div class="lyr ${open ? 'open' : ''} ${l.hidden ? 'off' : ''} ${fresh.has(l.id) ? 'new' : ''}" data-lid="${esc(l.id)}">
-      <span class="grip" data-grip title="Ziehen zum Sortieren (oder Alt + ↑/↓)" aria-hidden="true">${ico('grip', 3)}</span><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span>
-      <div class="nm">${esc(c.label)}${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small><span class="live" ${info.live ? '' : 'hidden'}>● </span><span data-sub="${esc(l.id)}">${esc(sub)}</span></small></div>
-      <button type="button" class="ic" data-act="eye" data-id="${esc(l.id)}" title="${l.hidden ? 'Einblenden' : 'Ausblenden'}" aria-pressed="${!l.hidden}">${ico(l.hidden ? 'eyeoff' : 'eye')}</button>
-      <button type="button" class="ic" data-act="open" data-id="${esc(l.id)}" title="Einstellungen" aria-expanded="${open}">${ico(open ? 'chevd' : 'sliders')}</button>
+      <span class="grip" data-grip title="${t0('hud.sort')}" aria-hidden="true">${ico('grip', 3)}</span><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span>
+      <div class="nm">${esc(catLabelOf(c))}${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small><span class="live" ${info.live ? '' : 'hidden'}>● </span><span data-sub="${esc(l.id)}">${esc(sub)}</span></small></div>
+      <button type="button" class="ic" data-act="eye" data-id="${esc(l.id)}" title="${l.hidden ? t0('hud.eye.on') : t0('hud.eye.off')}" aria-pressed="${!l.hidden}">${ico(l.hidden ? 'eyeoff' : 'eye')}</button>
+      <button type="button" class="ic" data-act="open" data-id="${esc(l.id)}" title="${t0('hud.settings')}" aria-expanded="${open}">${ico(open ? 'chevd' : 'sliders')}</button>
       ${
         open
           ? `<div class="more">
-        ${c.kind === 'extra' ? `<label class="op"><span>Deckkraft</span><input type="range" class="rng" min="10" max="100" step="5" value="${op}" data-op="${esc(l.id)}" aria-label="Deckkraft"/><span data-opv>${op} %</span></label>` : ''}
-        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${f.multi ? ((l.filter ?? '').split(',').includes(v) ? 'on' : '') : (l.filter ?? '') === v ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div>` : ''}
-        <div class="src"><span>${esc(c.hint)}</span><button type="button" data-act="remove" data-id="${esc(l.id)}">Entfernen</button></div>
+        ${c.kind === 'extra' ? `<label class="op"><span>${t0('hud.opacity')}</span><input type="range" class="rng" min="10" max="100" step="5" value="${op}" data-op="${esc(l.id)}" aria-label="${t0('hud.opacity')}"/><span data-opv>${op} %</span></label>` : ''}
+        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${f.multi ? ((l.filter ?? '').split(',').includes(v) ? 'on' : '') : (l.filter ?? '') === v ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(tx(`hud.filter.${esc(l.id)}.${v}`, t))}</button>`).join('')}</div>` : ''}
+        <div class="src"><span>${esc(catHintOf(c))}</span><button type="button" data-act="remove" data-id="${esc(l.id)}">${t0('hud.remove')}</button></div>
       </div>`
           : ''
       }
@@ -507,51 +521,51 @@ export function createHud(host: HudHost): Hud {
     const fams = host.families();
     const f = mainFam(k);
     const pick = (cur2: string | null) =>
-      `<div class="wxpick">${fams.map((x) => `<button type="button" data-act="main" data-id="${esc(x.id)}" class="${cur2 === x.id ? 'on' : ''}" title="${esc(x.hint)}">${ico(x.icon)}${esc(x.label)}</button>`).join('')}<button type="button" data-act="main" data-id="" class="${cur2 ? '' : 'on'}">${ico('x')}Keine</button></div>`;
+      `<div class="wxpick">${fams.map((x) => `<button type="button" data-act="main" data-id="${esc(x.id)}" class="${cur2 === x.id ? 'on' : ''}" title="${esc(tx(`hud.family.${esc(x.id)}.hint`, x.hint))}">${ico(x.icon)}${esc(tx(`hud.family.${esc(x.id)}.label`, x.label))}</button>`).join('')}<button type="button" data-act="main" data-id="" class="${cur2 ? '' : 'on'}">${ico('x')}${t0('hud.none')}</button></div>`;
     if (!f) {
-      return `<div class="mainwx none"><div class="t"><div><b>Keine Wetterebene</b><small>Diese Karte zeigt kein Wetterfeld</small></div></div>${pick(null)}</div>`;
+      return `<div class="mainwx none"><div class="t"><div><b>${t0('hud.nowx.title')}</b><small>${t0('hud.nowx.sub')}</small></div></div>${pick(null)}</div>`;
     }
     const lg = host.legend();
     const variantId = k.mainVar ?? f.variants[0][0];
     const opts: string[] = [];
-    if (ISOBAR_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars">Isobaren</button>`);
+    if (ISOBAR_OPTION_MAINS.includes(f.id)) opts.push(`<button type="button" class="chip ${k.isobars ? 'on' : ''}" data-act="wopt" data-v="isobars">${t0('hud.opt.isobars')}</button>`);
     return `<div class="mainwx" style="--lc:${f.color}">
-      <div class="t"><span class="glyph" style="background:${f.color}">${ico(f.icon, 2)}</span><div><b>${esc(f.label)}</b><small>${esc(f.hint)}</small></div>
-        <button type="button" class="sw" data-act="pick" aria-expanded="${ui.pick}">Wechseln ${ico('chevd')}</button></div>
+      <div class="t"><span class="glyph" style="background:${f.color}">${ico(f.icon, 2)}</span><div><b>${esc(tx(`hud.family.${esc(f.id)}.label`, f.label))}</b><small>${esc(tx(`hud.family.${esc(f.id)}.hint`, f.hint))}</small></div>
+        <button type="button" class="sw" data-act="pick" aria-expanded="${ui.pick}">${t0('hud.switch')} ${ico('chevd')}</button></div>
       ${ui.pick ? pick(f.id) : ''}
-      ${f.variants.length > 1 ? `<div class="seg">${f.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}">${esc(t)}</button>`).join('')}</div>` : ''}
+      ${f.variants.length > 1 ? `<div class="seg">${f.variants.map(([v, t]) => `<button type="button" data-act="var" data-v="${esc(v)}" class="${variantId === v ? 'on' : ''}">${esc(tx(`hud.var.${esc(v.replace(/[-_](\w)/g, (_0, s1: string) => s1.toUpperCase()))}`, t))}</button>`).join('')}</div>` : ''}
       ${opts.length ? `<div class="fl">${opts.join('')}</div>` : ''}
       ${lg?.gradient ? `<div class="g" style="background:${lg.gradient}"></div><div class="ticks">${lg.ticks.map((t) => `<span style="left:${t.pos}%">${esc(t.label)}</span>`).join('')}</div>` : ''}
     </div>`;
   }
 
   function stackBody(k: Karte): string {
-    const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? 'Tagesbild von gestern' : k.main && k.main !== 'radar' && k.main !== 'sat' ? 'Vorhersage, ab jetzt' : 'Live';
+    const timeTxt = k.main === 'sat' && (k.mainVar ?? 'sat-hd') === 'sat-hd' ? t0('hud.time.yesterday') : k.main && k.main !== 'radar' && k.main !== 'sat' ? t0('hud.time.forecast') : t0('hud.time.live');
     const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
-    const baseGroups = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) })).filter((g) => g.ids.length);
+    const baseGroups = BASE_GROUPS.map((g) => ({ label: tx(`hud.basegrp.${esc(g.ids[0])}`, g.label), ids: g.ids.filter((id) => avail.has(id)) })).filter((g) => g.ids.length);
     return `
-        <div class="slot"><span>Ebenen</span><small>oben liegt oben</small></div>
-        ${k.layers.map(layerRow).join('') || '<div class="muted" style="font-size:12.5px;padding:4px">Noch keine Ebenen.</div>'}
-        <button type="button" class="addbtn ${ui.add ? 'on' : ''}" data-act="add">${ico('plus')}Ebene hinzufügen</button>
-        <div class="slot"><span>Wetter</span><small>höchstens eine</small></div>
+        <div class="slot"><span>${t0('hud.slot.layers')}</span><small>${t0('hud.slot.layersSub')}</small></div>
+        ${k.layers.map(layerRow).join('') || `<div class="muted" style="font-size:12.5px;padding:4px">${t0('hud.slot.none')}</div>`}
+        <button type="button" class="addbtn ${ui.add ? 'on' : ''}" data-act="add">${ico('plus')}${t0('hud.add.title')}</button>
+        <div class="slot"><span>${t0('hud.slot.wx')}</span><small>${t0('hud.slot.wxSub')}</small></div>
         ${mainCard(k)}
-        ${baseGroups.map((g) => `<div class="slot"><span>Grundkarte · ${g.label}</span></div>
-        <div class="baserow">${g.ids.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${BASE_LABEL[b]}</span></button>`).join('')}</div>`).join('')}
-        <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>Ortsnamen & Grenzen</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
-        <div class="opt">${ico('sun')}<div>Tag/Nacht</div><div class="seg">${(['day', 'auto', 'night'] as const).map((v) => `<button type="button" data-act="night" data-v="${v}" class="${k.night === v ? 'on' : ''}" aria-pressed="${k.night === v}">${{ day: 'Tag', auto: 'Auto', night: 'Nacht' }[v]}</button>`).join('')}</div></div>
-        <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>3D-Gebäude<small>ab Stadtzoom · Karte mit Strg + Ziehen kippen (OpenStreetMap)</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>3D-Gelände<small>echte Höhen, nur bei geneigter Kamera (Strg + Ziehen) – von oben deaktiviert</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
-        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>Windpartikel<small>bei Wind & Böen und Satellit/Wolken (IR) sichtbar</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
-        <div class="slot"><span>Gespeichert mit</span></div>
-        <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>Ausschnitt<small>${k.view ? esc(placeText(k.view)) : 'nein, öffnet am aktuellen Ort'}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
-        <div class="opt">${ico('clock')}<div>Zeit<small>${timeTxt}</small></div></div>
+        ${baseGroups.map((g) => `<div class="slot"><span>${t0('hud.slot.base', { g: g.label })}</span></div>
+        <div class="baserow">${g.ids.map((b) => `<button type="button" data-act="base" data-id="${b}" class="${k.base === b ? 'on' : ''}" style="background:${BASE_GRADIENT[b]}" aria-pressed="${k.base === b}"><i class="bth">${baseThumb(b)}</i><span>${tx(`hud.base.${b}`, BASE_LABEL[b])}</span></button>`).join('')}</div>`).join('')}
+        <div class="opt" data-act="tog" data-v="labels" role="switch" aria-checked="${k.labels}" tabindex="0">${ico('map')}<div>${t0('hud.optRow.labels')}</div><span class="toggle ${k.labels ? 'on' : ''}"></span></div>
+        <div class="opt">${ico('sun')}<div>${t0('hud.optRow.daynight')}</div><div class="seg">${(['day', 'auto', 'night'] as const).map((v) => `<button type="button" data-act="night" data-v="${v}" class="${k.night === v ? 'on' : ''}" aria-pressed="${k.night === v}">${({ day: t0('hud.night.day'), auto: t0('hud.night.auto'), night: t0('hud.night.night') } as Record<string, string>)[v]}</button>`).join('')}</div></div>
+        <div class="opt" data-act="tog" data-v="buildings3d" role="switch" aria-checked="${k.buildings3d ?? defaultBuildings3d(k.base)}" tabindex="0">${ico('city')}<div>${t0('hud.optRow.buildings')}<small>${t0('hud.optRow.buildingsSub')}</small></div><span class="toggle ${k.buildings3d ?? defaultBuildings3d(k.base) ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="terrain3d" role="switch" aria-checked="${k.terrain3d ?? defaultTerrain3d()}" tabindex="0">${ico('mountain')}<div>${t0('hud.optRow.terrain')}<small>${t0('hud.optRow.terrainSub')}</small></div><span class="toggle ${k.terrain3d ?? defaultTerrain3d() ? 'on' : ''}"></span></div>
+        <div class="opt" data-act="tog" data-v="wind" role="switch" aria-checked="${k.wind !== false}" tabindex="0">${ico('wind')}<div>${t0('hud.optRow.windparticles')}<small>${t0('hud.optRow.windparticlesSub')}</small></div><span class="toggle ${k.wind !== false ? 'on' : ''}"></span></div>
+        <div class="slot"><span>${t0('hud.slot.savedWith')}</span></div>
+        <div class="opt" data-act="viewtog" role="switch" aria-checked="${!!k.view}" tabindex="0">${ico('pin')}<div>${t0('hud.slot.view')}<small>${k.view ? esc(placeText(k.view)) : t0('hud.slot.noView')}</small></div><span class="toggle ${k.view ? 'on' : ''}"></span></div>
+        <div class="opt">${ico('clock')}<div>${t0('hud.optRow.time')}<small>${timeTxt}</small></div></div>
     `;
   }
   function stackFoot(k: Karte): string {
     return `${
         dirty(cur)
-          ? `<span class="st" title="Geändert"><i></i><span class="stl">Geändert</span></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Zurücksetzen" aria-label="Zurücksetzen">${ico('reset')}<span class="lb">Zurücksetzen</span></button>${isStd(k) ? '' : '<button type="button" class="ebtn" data-act="overwrite">Speichern</button>'}<button type="button" class="ebtn pri" data-act="saveas">Als neue Karte</button>`
-          : `<span class="st ok" title="${isStd(k) ? 'Standardkarte' : 'Gespeichert'}"><i></i></span><button type="button" class="ebtn ghost rv" data-act="revert" title="Auf den Ausgangszustand zurücksetzen" aria-label="Zurücksetzen" ${st.drafts[cur] ? '' : 'disabled'}>${ico('reset')}<span class="lb">Zurücksetzen</span></button><button type="button" class="ebtn ghost" data-act="share" title="Teilen" aria-label="Teilen">${ico('share')}<span class="lb">Teilen</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="Duplizieren" aria-label="Duplizieren">${ico('copy')}<span class="lb">Duplizieren</span></button>`
+          ? `<span class="st" title="${t0('hud.changedCap')}"><i></i><span class="stl">${t0('hud.changedCap')}</span></span><button type="button" class="ebtn ghost rv" data-act="revert" title="${t0('hud.revert')}" aria-label="${t0('hud.revert')}">${ico('reset')}<span class="lb">${t0('hud.revert')}</span></button>${isStd(k) ? '' : `<button type="button" class="ebtn" data-act="overwrite">${t0('hud.savebtn')}</button>`}<button type="button" class="ebtn pri" data-act="saveas">${t0('hud.saveAs')}</button>`
+          : `<span class="st ok" title="${isStd(k) ? t0('hud.kstatus.std') : t0('hud.kstatus.savedTitle')}"><i></i></span><button type="button" class="ebtn ghost rv" data-act="revert" title="${t0('hud.slot.revertFull')}" aria-label="${t0('hud.revert')}" ${st.drafts[cur] ? '' : 'disabled'}>${ico('reset')}<span class="lb">${t0('hud.revert')}</span></button><button type="button" class="ebtn ghost" data-act="share" title="${t0('hud.share')}" aria-label="${t0('hud.share')}">${ico('share')}<span class="lb">${t0('hud.share')}</span></button><button type="button" class="ebtn ghost" data-act="saveas" title="${t0('hud.duplicate')}" aria-label="${t0('hud.duplicate')}">${ico('copy')}<span class="lb">${t0('hud.duplicate')}</span></button>`
       }`;
   }
   function stackPanel(k: Karte): string {
@@ -583,7 +597,7 @@ export function createHud(host: HudHost): Hud {
   // --- add popover
   function addRow(c: CatalogEntry, sub: string, sug = false) {
     return `<div class="ar ${sug ? 'sug' : ''}" data-act="addlayer" data-id="${esc(c.id)}" role="button" tabindex="0"><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span>
-      <div><b>${esc(c.label)}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div><span class="plus">${ico('plus', 2.4)}</span></div>`;
+      <div><b>${esc(catLabelOf(c))}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div><span class="plus">${ico('plus', 2.4)}</span></div>`;
   }
   function addList(): string {
     const k = view(cur);
@@ -593,15 +607,16 @@ export function createHud(host: HudHost): Hud {
     const sg = q ? [] : suggestionsFor(k).filter(([id]) => !have.has(id) && catalogOf(id));
     // suggested layers appear in their own block only, not a second time in the categories
     const shown = new Set(sg.map(([id]) => id));
-    if (sg.length) body += `<h4>${ico('sparkle', 2)}Passend zu dieser Karte</h4>${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}`;
+    if (sg.length) body += `<h4>${ico('sparkle', 2)}${t0('hud.add.fit')}</h4>${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}`;
     for (const cat of CATS) {
-      const items = CATALOG.filter((c) => c.cat === cat.id && !have.has(c.id) && !shown.has(c.id) && (!q || `${c.label} ${c.hint} ${cat.label}`.toLowerCase().includes(q)));
-      if (items.length) body += `<h4>${esc(cat.label)}</h4>${items.map((c) => addRow(c, c.hint)).join('')}`;
+      const catLabel = tx(`hud.cat.${cat.id}`, cat.label);
+      const items = CATALOG.filter((c) => c.cat === cat.id && !have.has(c.id) && !shown.has(c.id) && (!q || `${c.label} ${catLabelOf(c)} ${c.hint} ${catHintOf(c)} ${catLabel}`.toLowerCase().includes(q)));
+      if (items.length) body += `<h4>${esc(catLabel)}</h4>${items.map((c) => addRow(c, catHintOf(c))).join('')}`;
     }
-    return body || `<div class="empty">Keine Ebene für „${esc(ui.q)}“.</div>`;
+    return body || `<div class="empty">${t0('hud.add.empty', { q: esc(ui.q) })}</div>`;
   }
   const addInner = () =>
-    `<label class="srch">${ico('search')}<input id="hud-aq" type="text" autocomplete="off" placeholder="Ebene suchen, z. B. „Blitze“" value="${esc(ui.q)}"/></label><div class="lst addlst">${addList()}</div>`;
+    `<label class="srch">${ico('search')}<input id="hud-aq" type="text" autocomplete="off" placeholder="${t0('hud.add.ph')}" value="${esc(ui.q)}"/></label><div class="lst addlst">${addList()}</div>`;
   const finePointer = () => window.matchMedia('(pointer: fine)').matches;
   function renderAdd() {
     const r = reg('add');
@@ -624,20 +639,20 @@ export function createHud(host: HudHost): Hud {
     const f = mainFam(k);
     return `<div class="gc ${k.id === cur ? 'cur' : ''}" data-act="go" data-id="${esc(k.id)}" role="button" tabindex="0">
       <div class="th" style="background:radial-gradient(120% 120% at 20% 0%, ${esc(k.color)}55, transparent 60%), ${BASE_GRADIENT[k.base]}"><span class="thi">${ico(f ? f.icon : k.icon, 1.6)}</span></div>
-      ${isStd(k) ? '<span class="std">Standard</span>' : ''}${dirty(k.id) ? '<span class="chg">geändert</span>' : ''}
-      <button type="button" class="pin ${st.pinned.includes(k.id) ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${st.pinned.includes(k.id) ? 'Von der Leiste lösen' : 'An die Leiste heften'}" aria-pressed="${st.pinned.includes(k.id)}">${ico('starf')}</button>
+      ${isStd(k) ? `<span class="std">${t0('hud.std')}</span>` : ''}${dirty(k.id) ? `<span class="chg">${t0('hud.changed')}</span>` : ''}
+      <button type="button" class="pin ${st.pinned.includes(k.id) ? 'on' : ''}" data-act="pin" data-id="${esc(k.id)}" title="${st.pinned.includes(k.id) ? t0('hud.pin.on') : t0('hud.pin.off')}" aria-pressed="${st.pinned.includes(k.id)}">${ico('starf')}</button>
       <div class="gt"><b><i style="background:${esc(k.color)}">${ico(k.icon, 2)}</i><span>${esc(k.name)}</span></b>
         <div class="icons">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
-        <small>${n} Ebenen${k.view ? ` · ${esc((k.view.name ?? 'Ausschnitt').split(',')[0])}` : ''}</small></div>
-      ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="Karte löschen" aria-label="Karte löschen">${ico('x')}</button>`}</div>`;
+        <small>${t0('hud.layerCount', { count: n }, { count: n })}${k.view ? ` · ${esc((k.view.name ?? t0('hud.cut')).split(',')[0])}` : ''}</small></div>
+      ${isStd(k) ? '' : `<button type="button" class="del" data-act="del" data-id="${esc(k.id)}" title="${t0('hud.kdel')}" aria-label="${t0('hud.kdel')}">${ico('x')}</button>`}</div>`;
   }
   const galleryInner = () => `
-      <h4><span>Standardkarten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>
+      <h4><span>${t0('hud.stdMaps')}</span><small>${t0('hud.karten.moreSub')}</small></h4>
       <div class="ggrid">${STANDARD.map(galleryCard).join('')}
-        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}${phone() ? 'Neue Karte' : 'Neue leere Karte'}<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>
-      <h4><span>Meine Karten</span><small>${st.own.length} gespeichert · ★ = in der Leiste</small></h4>
-      ${st.own.length ? `<div class="ggrid">${st.own.map(galleryCard).join('')}</div>` : '<div class="muted gempty">Noch keine eigenen Karten. Ändere eine Karte und speichere sie als neue Karte.</div>'}
-      ${phone() ? `<button type="button" class="setrow" data-act="settings">${ico('gear')}Einstellungen<span class="c">${ico('chev')}</span></button>` : `<div class="ghint"><span>Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)} wechseln die angehefteten Karten</span></div>`}`;
+        <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}${phone() ? t0('hud.addRow.newPhone') : t0('hud.addRow.new')}<small>${t0('hud.addRow.newSub')}</small></div></div>
+      <h4><span>${t0('hud.myMaps')}</span><small>${t0('hud.myMapsSub', { n: st.own.length })}</small></h4>
+      ${st.own.length ? `<div class="ggrid">${st.own.map(galleryCard).join('')}</div>` : `<div class="muted gempty">${t0('hud.emptyOwn')}</div>`}
+      ${phone() ? `<button type="button" class="setrow" data-act="settings">${ico('gear')}${t0('hud.settings')}<span class="c">${ico('chev')}</span></button>` : `<div class="ghint"><span>${t0('hud.keysHint', { n: Math.min(MAX_PINNED, st.pinned.length) })}</span></div>`}`;
   function renderGallery() {
     if (!ui.gallery || layout === 'portrait' || layout === 'desktop') {
       reg('gallery').innerHTML = '';
@@ -650,14 +665,16 @@ export function createHud(host: HudHost): Hud {
   function suggestName(k: Karte): string {
     const b = baseOf(cur);
     const added = k.layers.filter((l) => !b.layers.some((x) => x.id === l.id)).map((l) => catalogOf(l.id)?.label ?? '');
-    const parts = [mainFam(k) && (!b.main || b.main !== k.main) ? mainFam(k)!.label : '', ...added].filter(Boolean);
-    return parts.slice(0, 2).join(' + ') || `${k.name} (eigene)`;
+    const parts = [mainFam(k) && (!b.main || b.main !== k.main) ? tx(`hud.family.${esc(mainFam(k)!.id)}.label`, mainFam(k)!.label) : '', ...added].filter(Boolean);
+    return parts.slice(0, 2).join(' + ') || t0('hud.kname.own', { name: k.name });
   }
   function dialogInner(): string {
     if (!form) return '';
     const k = view(cur);
     const f = mainFam(k);
-    const inc = [f && `${f.label}${f.variants.length > 1 ? ` (${f.variants.find(([v]) => v === (k.mainVar ?? f.variants[0][0]))?.[1] ?? ''})` : ''}`, ...k.layers.filter((l) => !l.hidden).map((l) => catalogOf(l.id)?.label)].filter(Boolean);
+    const famLbl = f ? tx(`hud.family.${esc(f.id)}.label`, f.label) : '';
+    const varLbl = f && f.variants.length > 1 ? (f.variants.find(([v]) => v === (k.mainVar ?? f.variants[0][0]))?.[1] ?? '') : '';
+    const inc = [f && famLbl && famLbl + (varLbl ? ` (${tx(`hud.var.${varLbl.replace(/[-_](\w)/g, (_0, s1: string) => s1.toUpperCase())}`, varLbl)})` : ''), ...k.layers.filter((l) => !l.hidden).map((l) => catalogOf(l.id) ? catLabelOf(catalogOf(l.id)!) : '')].filter(Boolean);
     const full = st.pinned.length >= MAX_PINNED;
     return `
         <div class="pv" style="background:radial-gradient(120% 140% at 20% 0%, ${esc(form.color)}88, transparent 65%), ${BASE_GRADIENT[k.base]}"><span class="badge" style="background:${esc(form.color)}">${ico(form.icon, 2)}</span></div>
@@ -668,13 +685,13 @@ export function createHud(host: HudHost): Hud {
             <div class="fld"><span>Symbol</span><div class="icgrid">${ICONS.map((i) => `<button type="button" data-act="ficon" data-v="${i}" class="${form!.icon === i ? 'on' : ''}" aria-label="${i}">${ico(i)}</button>`).join('')}</div></div>
             <div class="fld"><span>Farbe</span><div class="colgrid">${COLORS.map((c) => `<button type="button" data-act="fcol" data-v="${c}" class="${form!.color === c ? 'on' : ''}" style="background:${c}" aria-label="${c}"></button>`).join('')}</div></div>
           </div>
-          <div class="incl"><b>Enthält:</b> ${esc(inc.join(', ') || 'keine Ebenen')} · Grundkarte ${BASE_LABEL[k.base]}</div>
+          <div class="incl"><b>${t0('hud.dlg.incl')}</b> ${esc(inc.join(', ') || t0('hud.dlg.inclNone'))} · ${t0('hud.dlg.base', { base: tx(`hud.base.${k.base}`, BASE_LABEL[k.base]) })}</div>
           <div>
-            <div class="opt" data-act="fplace" role="switch" aria-checked="${form.place}" tabindex="0">${ico('pin')}<div>Ausschnitt mitspeichern<small>Sonst öffnet sie am aktuellen Ort.</small></div><span class="toggle ${form.place ? 'on' : ''}"></span></div>
-            <div class="opt" data-act="fpin" role="switch" aria-checked="${form.pin}" tabindex="0">${ico('starf')}<div>In der Leiste anheften<small>${full ? 'Leiste ist voll (5). Erst eine Karte lösen.' : `als Taste ${st.pinned.length + 1}`}</small></div><span class="toggle ${form.pin && !full ? 'on' : ''}"></span></div>
+            <div class="opt" data-act="fplace" role="switch" aria-checked="${form.place}" tabindex="0">${ico('pin')}<div>${t0('hud.dlg.saveview')}<small>${t0('hud.dlg.saveviewSub')}</small></div><span class="toggle ${form.place ? 'on' : ''}"></span></div>
+            <div class="opt" data-act="fpin" role="switch" aria-checked="${form.pin}" tabindex="0">${ico('starf')}<div>${t0('hud.dlg.pinbar')}<small>${full ? t0('hud.dlg.pinbarFull') : t0('hud.dlg.pinbarSlot', { n: st.pinned.length + 1 })}</small></div><span class="toggle ${form.pin && !full ? 'on' : ''}"></span></div>
           </div>
         </div>
-        <div class="act"><button type="button" class="ebtn ghost" data-act="cancel">Abbrechen</button><button type="button" class="ebtn pri" data-act="dosave">Karte speichern</button></div>`;
+        <div class="act"><button type="button" class="ebtn ghost" data-act="cancel">${t0('hud.cancel')}</button><button type="button" class="ebtn pri" data-act="dosave">${t0('hud.dlg.saveMap')}</button></div>`;
   }
   function renderDialog() {
     const r = reg('dialog');
@@ -685,7 +702,7 @@ export function createHud(host: HudHost): Hud {
     const opening = !r.querySelector('.dlg');
     const focused = (document.activeElement as HTMLElement | null)?.closest('[data-act]')?.getAttribute('data-act');
     const fv = (document.activeElement as HTMLElement | null)?.dataset?.v;
-    r.innerHTML = `<div class="scrim" data-act="cancel"></div><div class="dlg hud-glass" role="dialog" aria-modal="true" aria-label="Als neue Karte speichern">${dialogInner()}</div>`;
+    r.innerHTML = `<div class="scrim" data-act="cancel"></div><div class="dlg hud-glass" role="dialog" aria-modal="true" aria-label="${t0('hud.dlg.title')}">${dialogInner()}</div>`;
     if (opening) {
       const nm = r.querySelector<HTMLInputElement>('#hud-nm');
       nm?.focus();
@@ -703,7 +720,7 @@ export function createHud(host: HudHost): Hud {
     };
   }
   const evSeg = () =>
-    `<div class="seg"><button type="button" data-act="evh" data-v="24" class="${ui.evHours === 24 ? 'on' : ''}">24 h</button><button type="button" data-act="evh" data-v="168" class="${ui.evHours === 168 ? 'on' : ''}">7 Tage</button></div>`;
+    `<div class="seg"><button type="button" data-act="evh" data-v="24" class="${ui.evHours === 24 ? 'on' : ''}">${t0('hud.ev.24')}</button><button type="button" data-act="evh" data-v="168" class="${ui.evHours === 168 ? 'on' : ''}">${t0('hud.ev.7')}</button></div>`;
   const evRow = (e: HudEvent) =>
     `<div class="ev"><span class="evg">${glyphSvg(e.kind, e.color, 26)}</span><div><b>${esc(e.title)}</b><span>${esc(e.sub)}</span></div><time>${esc(e.when)}</time></div>`;
   function trafficChips(k: Karte, traf: CatalogEntry[]): string {
@@ -712,7 +729,8 @@ export function createHud(host: HudHost): Hud {
         .map((c) => {
           const n = host.info(c.id).count;
           const on = !k.layers.find((l) => l.id === c.id)?.hidden;
-          return `<button type="button" class="chip ${on ? 'on' : ''}" data-act="eye" data-id="${esc(c.id)}" title="${esc(c.label)} ${on ? 'ausblenden' : 'einblenden'}" aria-pressed="${on}" aria-label="${esc(c.label)}">${ico(c.icon)}<span class="lb">${esc(c.label)}</span>${n != null ? `<span class="n" data-n="${esc(c.id)}">${n.toLocaleString('de-DE')}</span>` : `<span class="n" data-n="${esc(c.id)}"></span>`}</button>`;
+          const lbl = catLabelOf(c);
+          return `<button type="button" class="chip ${on ? 'on' : ''}" data-act="eye" data-id="${esc(c.id)}" title="${esc(lbl)} ${on ? t0('hud.eye.off') : t0('hud.eye.on')}" aria-pressed="${on}" aria-label="${esc(lbl)}">${ico(c.icon)}<span class="lb">${esc(lbl)}</span>${n != null ? `<span class="n" data-n="${esc(c.id)}">${n.toLocaleString('de-DE')}</span>` : `<span class="n" data-n="${esc(c.id)}"></span>`}</button>`;
         })
         .join('') + '<span class="chip static">live</span>'
     );
@@ -729,8 +747,8 @@ export function createHud(host: HudHost): Hud {
     let out = '';
     if (hazard) {
       const evs = host.events(ui.evHours);
-      out += `<div class="evcard hud-glass"><div class="h"><b>Ereignisse</b>${evSeg()}</div>
-        ${evs.length ? evs.map(evRow).join('') : '<div class="muted evempty">Keine Ereignisse im Zeitraum (oder Daten laden noch).</div>'}</div>`;
+      out += `<div class="evcard hud-glass"><div class="h"><b>${t0('hud.events')}</b>${evSeg()}</div>
+        ${evs.length ? evs.map(evRow).join('') : `<div class="muted evempty">${t0('hud.evEmpty')}</div>`}</div>`;
     }
     if (!k.main && !k.menu && traffic.length) out += `<div class="trbar hud-glass">${trafficChips(k, traffic)}</div>`;
     // live refreshes come often: only touch the DOM when something changed
@@ -836,9 +854,9 @@ export function createHud(host: HudHost): Hud {
     root.querySelector('[data-act="basepick"]')?.classList.toggle('on', ui.basepick);
     if (!ui.basepick) return;
     const avail = new Set<string>(availableBases(store.getKeys()).map((b) => b.id));
-    bp.innerHTML = BASE_GROUPS.map((g) => ({ label: g.label, ids: g.ids.filter((id) => avail.has(id)) }))
+    bp.innerHTML = BASE_GROUPS.map((g) => ({ label: tx(`hud.basegrp.${esc(g.ids[0])}`, g.label), ids: g.ids.filter((id) => avail.has(id)) }))
       .filter((g) => g.ids.length)
-      .map((g) => `<div class="bpgrp">${g.label}</div>${g.ids.map((id) => `<button type="button" data-act="base" data-id="${id}" class="${k.base === id ? 'on' : ''}" aria-pressed="${k.base === id}"><i class="bth">${baseThumb(id)}</i><span>${BASE_LABEL[id]}</span></button>`).join('')}`)
+      .map((g) => `<div class="bpgrp">${g.label}</div>${g.ids.map((id) => `<button type="button" data-act="base" data-id="${id}" class="${k.base === id ? 'on' : ''}" aria-pressed="${k.base === id}"><i class="bth">${baseThumb(id)}</i><span>${tx(`hud.base.${id}`, BASE_LABEL[id])}</span></button>`).join('')}`)
       .join('');
   }
 
@@ -1079,7 +1097,7 @@ export function createHud(host: HudHost): Hud {
   const searchEl = createSearch((p) => {
     setSearch(false);
     host.onPlace(p);
-  }, 'Ort suchen und hinfliegen …');
+  }, t0('hud.search.ph'));
   searchEl.classList.add('hud-search');
   sx.appendChild(searchEl);
   const sInput = searchEl.querySelector('input')!;
@@ -1090,7 +1108,7 @@ export function createHud(host: HudHost): Hud {
     root.classList.toggle('searching', on);
     // phones close the search with the "Abbrechen" text button, the magnifier stays
     sxBtn.innerHTML = ico(on && !phone() ? 'x' : 'search');
-    sxBtn.setAttribute('aria-label', on ? 'Suche schließen' : 'Suchen');
+    sxBtn.setAttribute('aria-label', on ? t0('hud.search.close') : t0('hud.search.aria'));
     globeView()?.classList.toggle('hud-searching', on);
     if (on) {
       ui.gallery = false;
@@ -1167,7 +1185,7 @@ export function createHud(host: HudHost): Hud {
       const k = sanitizeKarte({ ...raw, id: newId(), savedAt: Date.now() });
       if (!k) throw new Error('invalid');
       delete k.std;
-      if (!k.name || k.name === 'Karte') k.name = 'Geteilte Karte';
+      if (!k.name || k.name === 'Karte') k.name = t0('hud.kname.shared');
       const fam = host.families().find((f) => f.id === k.main);
       if (!fam) {
         k.main = null;
@@ -1176,9 +1194,9 @@ export function createHud(host: HudHost): Hud {
       st.own.push(k);
       history.replaceState(null, '', `${location.pathname}${location.search}#/karte`);
       go(k.id);
-      toast(`Geteilte Karte „${k.name}“ geöffnet. Sie ist unter „Meine Karten“ gespeichert.`);
+      toast(t0('hud.toast.shared', { name: k.name }));
     } catch {
-      toast('Der Link enthält keine gültige Karte.', 'error');
+      toast(t0('hud.toast.bad'), 'error');
     }
   }
 
@@ -1190,7 +1208,7 @@ export function createHud(host: HudHost): Hud {
       const c = catalogOf(s.dataset.sub!);
       if (!l || !c) return;
       const info = host.info(l.id);
-      s.textContent = [info.sub || c.hint, filterText(l)].filter(Boolean).join(' · ');
+      s.textContent = [info.sub || catHintOf(c), filterText(l)].filter(Boolean).join(' · ');
     });
     root.querySelectorAll<HTMLElement>('[data-n]').forEach((s) => {
       const n = host.info(s.dataset.n!).count;

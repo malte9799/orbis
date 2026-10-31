@@ -8,6 +8,9 @@ const mem = new Map<string, string>();
   setItem: (k: string, v: string) => void mem.set(k, v),
   removeItem: (k: string) => void mem.delete(k),
 };
+// the de strings are asserted below: force German before the module is imported
+const { setLang } = await import('../i18n');
+setLang('de');
 const { daysTxt, nextRun, findTrip } = await import('./fahrplan-saved');
 
 describe('daysTxt', () => {

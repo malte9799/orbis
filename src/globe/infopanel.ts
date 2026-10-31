@@ -1,4 +1,5 @@
 import { escapeHtml, safeUrl } from '../util';
+import { t } from '../i18n';
 import { glyphSvg, type GlyphId } from './icons';
 import { category, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
@@ -36,7 +37,7 @@ export class InfoPanel {
     this.root.className = 'fp';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head"><i class="fp-ic"></i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head"><i class="fp-ic"></i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="${t('hud.close')}">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>
       <div class="fp-actions"></div>`;

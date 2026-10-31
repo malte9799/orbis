@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { fmt } from '../util';
+import { t } from '../i18n';
 import { angleDiff, bearing, cumulative, decodePolyline, haversine, lerpAngle, meanAngle, snapToLine, thin } from './geo';
 import { headingFromOrientation } from './gps';
 import { newGuideState, prepare, progress } from './guidance';
@@ -99,8 +101,8 @@ describe('providers', () => {
   it('writes German instructions from OSRM manoeuvres', () => {
     const [r] = parseOsrm([osrm], 'fossgis', 'car');
     expect(r.steps.map((s) => s.maneuver)).toEqual(['depart', 'left', 'arrive']);
-    expect(r.steps[1].text).toBe('Links abbiegen auf Nebenweg');
-    expect(r.steps[2].text).toBe('Ziel erreicht');
+    expect(r.steps[1].text).toBe(`${t('routing.text.left')}${t('routing.text.onto', { name: 'Nebenweg' })}`);
+    expect(r.steps[2].text).toBe(t('routing.text.arrive'));
     expect(r.summary).toBe('Hauptstraße');
   });
 
@@ -124,12 +126,14 @@ describe('providers', () => {
     expect(fromValhalla(26)).toBe('roundabout');
     expect(fromGoogle('TURN_SLIGHT_RIGHT')).toBe('slight-right');
     expect(fromGoogle(undefined)).toBe('straight');
-    expect(instruction('roundabout', 'Ring', 2)).toBe('In den Kreisverkehr einfahren. Dort die zweite Ausfahrt nehmen Richtung Ring');
+    expect(instruction('roundabout', 'Ring', 2)).toBe(
+      `${t('routing.text.roundabout')}. ${t('routing.text.exitNote', { ord: t('routing.text.ord.2') })}${t('routing.text.towards', { name: 'Ring' })}`,
+    );
   });
 
   it('says distances like a person', () => {
-    expect(spokenDistance(430)).toBe('450 Meter');
-    expect(spokenDistance(1480)).toBe('1,5 Kilometer');
+    expect(spokenDistance(430)).toBe(t('routing.say.m', { n: 450 }));
+    expect(spokenDistance(1480)).toBe(t('routing.say.km', { n: fmt.num(1.5, 1) }));
   });
 });
 

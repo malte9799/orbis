@@ -3,6 +3,7 @@ import type { SondeInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { climbTxt, climbUnit, climbVal, coordsTxt, heightBoth, heightTxt, heightUnit, heightVal, speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
+import { t } from '../i18n';
 import { category, graph, routeHero, tile } from './sidepanel';
 import './flightpanel.css';
 
@@ -40,13 +41,13 @@ export class SondePanel {
     this.root.className = 'fp';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head" style="--c:${COLOR}"><i class="fp-ic">${glyphSvg('sonde', COLOR, 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head" style="--c:${COLOR}"><i class="fp-ic">${glyphSvg('sonde', COLOR, 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="${t('hud.close')}">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>
       <div class="fp-actions three">
-        <button type="button" data-act="route">Aufstieg</button>
-        <button type="button" data-act="follow">Folgen</button>
-        <button type="button" data-act="zoom">Heranzoomen</button>
+        <button type="button" data-act="route">${t('map.sonde.ascent')}</button>
+        <button type="button" data-act="follow">${t('map.fly.follow')}</button>
+        <button type="button" data-act="zoom">${t('map.zoomIn')}</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
@@ -125,64 +126,64 @@ export class SondePanel {
     const title = this.root.querySelector('.fp-title')!;
     const sub = this.root.querySelector('.fp-sub')!;
     if (!i) {
-      title.textContent = `Sonde ${this.serial}`;
+      title.textContent = t('map.sonde.title', { serial: String(this.serial) });
       sub.textContent = '';
-      this.body.innerHTML = '<div class="fp-note">Gerade keine Daten zu dieser Sonde – sie ist außerhalb des Ausschnitts, gelandet oder schweigt.</div>';
+      this.body.innerHTML = `<div class="fp-note">${t('map.sonde.nodata')}</div>`;
       return;
     }
-    const model = [i.manufacturer, i.type, i.subtype].filter(Boolean).map(escapeHtml).join(' ') || 'Radiosonde';
-    title.textContent = `Sonde ${i.serial}`;
-    sub.innerHTML = `${model} · <b>${i.frequency != null ? `${fmt.num(i.frequency, 3)} MHz` : 'Radiosonde'}</b>`;
+    const model = [i.manufacturer, i.type, i.subtype].filter(Boolean).map(escapeHtml).join(' ') || t('map.sonde.fallback');
+    title.textContent = t('map.sonde.title', { serial: i.serial });
+    sub.innerHTML = `${model} · <b>${i.frequency != null ? `${fmt.num(i.frequency, 3)} MHz` : t('map.sonde.fallback')}</b>`;
 
     const altM = Math.round(i.altM);
     const vs = i.vsMs ?? 0;
     const rising = vs > 0.5;
     const falling = vs < -0.5;
     const landed = altM < 30 && Math.abs(vs) < 1;
-    const status = landed ? 'Gelandet' : rising ? 'Steigt' : falling ? 'Fällt' : 'Schwebt (Float)';
+    const status = landed ? t('map.sonde.status.landed') : rising ? t('map.sonde.status.rise') : falling ? t('map.sonde.status.fall') : t('map.sonde.status.float');
     const dt = i.datetime ? new Date(i.datetime).getTime() : 0;
     const age = dt ? Math.max(0, Math.round((Date.now() - dt) / 1000)) : 0;
-    const ago = age ? (age < 90 ? `vor ${age} s` : age < 5400 ? `vor ${Math.round(age / 60)} min` : `vor ${Math.round(age / 3600)} h`) : '';
+    const ago = age ? (age < 90 ? t('map.sonde.ago', { a: age }) : age < 5400 ? t('map.ago.min', { a: Math.round(age / 60) }) : t('map.ago.h', { a: Math.round(age / 3600) })) : '';
     const hero = routeHero({
-      from: { code: status, sub: landed ? 'letzte Position am Boden' : `${heightTxt(altM)} über NN` },
-      to: { code: `${fmt.num(Math.abs(vs), 1)} m/s`, sub: rising ? 'Steigrate' : falling ? 'Sinkrate (Fallschirm)' : 'vertikal fast still' },
+      from: { code: status, sub: landed ? t('map.sonde.groundSub') : t('map.sonde.heightSub', { h: heightTxt(altM) }) },
+      to: { code: `${fmt.num(Math.abs(vs), 1)} m/s`, sub: rising ? t('map.sonde.chart.vs') : falling ? t('map.sonde.chart.sink') : t('map.sonde.chart.still') },
       progress: Math.min(1, altM / 38000),
       mark: glyphSvg('sonde', COLOR, 20),
       color: COLOR,
-      note: [ago && `Letzte Meldung ${ago}`, i.track != null && `Kurs ${Math.round(i.track)}° ${compass(i.track)}`, i.speedKmh != null && `Drift ${speedTxt(i.speedKmh)}`].filter(Boolean).join(' · '),
+      note: [ago && t('map.sonde.last', { a: ago }), i.track != null && t('map.sonde.courseNote', { deg: Math.round(i.track), dir: compass(i.track) }), i.speedKmh != null && t('map.sonde.driftNote', { s: speedTxt(i.speedKmh) })].filter(Boolean).join(' · '),
     });
 
     const m = this.metric;
-    const tiles = `<div class="sp-tiles">${tile('Höhe', heightTxt(i.altM), { metric: 'alt', on: m === 'alt' })}${tile('Steigrate', climbTxt(vs), { metric: 'vs', on: m === 'vs' })}${tile('Drift', i.speedKmh != null ? speedTxt(i.speedKmh) : '–', { metric: 'speed', on: m === 'speed' })}${tile('Kurs', i.track != null ? `${Math.round(i.track)}° ${compass(i.track)}` : '–', { metric: 'track', on: m === 'track' })}</div>`;
-    const GRAPHS: Record<string, [string, string]> = { alt: ['Höhe', heightUnit()], speed: ['Drift', speedUnit()], track: ['Kurs', '°'], vs: ['Steigrate', climbUnit()] };
-    const chart = m && GRAPHS[m] ? graph(`${GRAPHS[m][0]} über die letzten Meldungen`, (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : m === 'alt' ? (i.history?.alt ?? []).map(heightVal) : m === 'vs' ? (i.history?.vs ?? []).map(climbVal) : (i.history?.track ?? [])), GRAPHS[m][1], COLOR) : '';
+    const tiles = `<div class="sp-tiles">${tile(t('map.tile.alt'), heightTxt(i.altM), { metric: 'alt', on: m === 'alt' })}${tile(t('map.tile.vs'), climbTxt(vs), { metric: 'vs', on: m === 'vs' })}${tile(t('map.tile.drift'), i.speedKmh != null ? speedTxt(i.speedKmh) : '–', { metric: 'speed', on: m === 'speed' })}${tile(t('map.tile.course'), i.track != null ? `${Math.round(i.track)}° ${compass(i.track)}` : '–', { metric: 'track', on: m === 'track' })}</div>`;
+    const GRAPHS: Record<string, [string, string]> = { alt: [t('map.metric.alt'), heightUnit()], speed: [t('map.metric.drift'), speedUnit()], track: [t('map.metric.course'), '°'], vs: [t('map.metric.vs'), climbUnit()] };
+    const chart = m && GRAPHS[m] ? graph(t('map.graph.title', { m: GRAPHS[m][0] }), (m === 'speed' ? (i.history?.speed ?? []).map(speedVal) : m === 'alt' ? (i.history?.alt ?? []).map(heightVal) : m === 'vs' ? (i.history?.vs ?? []).map(climbVal) : (i.history?.track ?? [])), GRAPHS[m][1], COLOR) : '';
 
     // everything SondeHub offers about this sonde
     const sondeRows: [string, string][] = [
-      ['Typ', model],
-      ['Seriennummer', escapeHtml(i.serial)],
-      ['Frequenz', i.frequency != null ? `${fmt.num(i.frequency, 3)} MHz` : '–'],
-      ['Messrahmen (Frame)', i.frame != null ? String(i.frame) : '–'],
+      [t('map.sonde.rows.type'), model],
+      [t('map.sonde.rows.serial'), escapeHtml(i.serial)],
+      [t('map.sonde.rows.freq'), i.frequency != null ? `${fmt.num(i.frequency, 3)} MHz` : '–'],
+      [t('map.sonde.rows.frame'), i.frame != null ? String(i.frame) : '–'],
     ];
     const posRows: [string, string][] = [
-      ['Position', coordsTxt(i.lat, i.lon)],
-      ['Höhe', heightBoth(altM)],
-      ['Vertikal (Telemetrie)', climbTxt(i.vsMs ?? 0)],
-      ['Horizontal', i.speedKmh != null ? speedTxt(i.speedKmh, 1) : '–'],
-      ['Position/Uhrzeit', escapeHtml(i.datetime ? fmt.dateTime(i.datetime) : '–')],
+      [t('map.sonde.rows.position'), coordsTxt(i.lat, i.lon)],
+      [t('map.sonde.rows.alt'), heightBoth(altM)],
+      [t('map.sonde.rows.vertical'), climbTxt(i.vsMs ?? 0)],
+      [t('map.sonde.rows.horizontal'), i.speedKmh != null ? speedTxt(i.speedKmh, 1) : '–'],
+      [t('map.sonde.rows.time'), escapeHtml(i.datetime ? fmt.dateTime(i.datetime) : '–')],
     ];
     const rxRows: [string, string][] = [
-      ['Empfänger', escapeHtml(i.uploader || '–')],
-      ['Antenne', escapeHtml(i.antenna || '–')],
-      ['Auswertesoftware', escapeHtml(i.software || '–')],
-      ['Letzter Empfang', escapeHtml(i.timeReceived ? fmt.dateTime(i.timeReceived) : '–')],
+      [t('map.sonde.rows.receiver'), escapeHtml(i.uploader || '–')],
+      [t('map.sonde.rows.antenna'), escapeHtml(i.antenna || '–')],
+      [t('map.sonde.rows.software'), escapeHtml(i.software || '–')],
+      [t('map.sonde.rows.received'), escapeHtml(i.timeReceived ? fmt.dateTime(i.timeReceived) : '–')],
     ];
     const cats =
-      category('sonde', 'Radiosonde', sondeRows, this.open_) +
-      category('position', 'Position und Telemetrie', posRows, this.open_) +
-      category('receiver', 'Bodenempfänger', rxRows, this.open_);
+      category('sonde', t('map.cat.sonde'), sondeRows, this.open_) +
+      category('position', t('map.cat.sondePos'), posRows, this.open_) +
+      category('receiver', t('map.cat.receiver'), rxRows, this.open_);
 
-    const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">SondeHub (Amateur-Netzwerk) · <a href="${escapeHtml(i.url || `https://sondehub.org/#!q=${encodeURIComponent(i.serial)}`)}" target="_blank" rel="noopener noreferrer">Auf SondeHub ansehen ↗</a></div></details>`;
+    const src = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>${t('map.cat.source')}</summary><div class="fp-note">SondeHub (Amateur-Netzwerk) · <a href="${escapeHtml(i.url || `https://sondehub.org/#!q=${encodeURIComponent(i.serial)}`)}" target="_blank" rel="noopener noreferrer">${t('map.sonde.view')}</a></div></details>`;
 
     this.body.innerHTML = hero + tiles + chart + cats + src;
   }

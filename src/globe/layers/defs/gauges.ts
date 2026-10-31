@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadPegel } from '../../../api/europe';
 
 export default defineExtra({
@@ -17,7 +18,7 @@ export default defineExtra({
       const fc = await loadPegel();
       ctx.setData('gauges', fc);
       const high = fc.features.filter((f) => f.properties.state === 'high').length;
-      return { count: fc.features.length, note: high ? `${high} Pegel mit Hochwasser` : undefined };
+      return { count: fc.features.length, note: high ? t('layers.gauges.note', { high }) : undefined };
     });
   },
   click({ p, pt, html }) {

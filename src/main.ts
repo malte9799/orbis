@@ -5,6 +5,7 @@ import './inspector/inspector.css';
 import { installCapture } from './inspector/capture';
 import { setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+import './i18n';
 import { store, type Place } from './store';
 import { createForecastView } from './views/forecast';
 import { createGlobeView } from './views/globe';

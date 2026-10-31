@@ -1,6 +1,7 @@
 import { Map as MlMap, NavigationControl, type GeoJSONSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { escapeHtml, toast } from '../util';
+import { t as m, fmtLocale, type MessageKey } from '../i18n';
 import { store } from '../store';
 import type { StreetGame } from '../games/streetguess';
 import type { NameQuiz } from '../games/namequiz';
@@ -11,6 +12,7 @@ import { GAME_CARDS, previewHtml, optIcon, slug } from '../games/menu-art';
 
 // Games – deliberately separate from the layer drawer of the main map: own tab, own (label-free) map.
 // Country / region quiz: a name pops up and you click it ("Anklicken"), or you type all names ("Eintippen").
+// All display texts come from the games.* catalog (misc.json); `m` is the catalog t (local t is taken).
 
 export interface GamesView {
   el: HTMLElement;
@@ -22,6 +24,9 @@ type Mode = 'click' | 'type';
 type Status = 'found' | 'missed' | 'wrong' | 'target' | 'hint';
 
 const MAX_TRIES = 1; // one try on the map, then the solution is shown
+
+/** display text of a game hub card: suffix from the card data → games.card.<id>.<suffix> */
+const cardTxt = (g: { id: string }, what: string) => m(`games.card.${g.id}.${what}` as MessageKey);
 
 /** one thing to find: a country/region (one feature) or a continent (all its countries) */
 interface Target {
@@ -59,31 +64,31 @@ export function createGamesView(): GamesView {
     <div class="gm-map"></div>
     <div class="gm-hud" hidden>
       <div class="gm-stats"><span class="gm-score"></span><span class="gm-time">0:00</span></div>
-      <div class="gm-ask" hidden><small>Wo liegt …</small><b class="gm-target"></b></div>
-      <form class="gm-type" hidden autocomplete="off"><input class="gm-input" type="text" placeholder="Name eintippen …" autocapitalize="off" autocorrect="off" spellcheck="false" /></form>
+      <div class="gm-ask" hidden><small>${m('games.whereIs')}</small><b class="gm-target"></b></div>
+      <form class="gm-type" hidden autocomplete="off"><input class="gm-input" type="text" placeholder="${m('games.typeName')}" autocapitalize="off" autocorrect="off" spellcheck="false" /></form>
       <div class="gm-feedback" aria-live="polite"></div>
       <div class="gm-choices" hidden></div>
       <div class="gm-actions">
-        <button class="btn gm-skip" type="button">Überspringen</button>
-        <button class="btn gm-giveup" type="button">Aufgeben</button>
-        <button class="btn gm-menu" type="button">Menü</button>
+        <button class="btn gm-skip" type="button">${m('games.skip')}</button>
+        <button class="btn gm-giveup" type="button">${m('games.giveUp')}</button>
+        <button class="btn gm-menu" type="button">${m('games.menu')}</button>
       </div>
     </div>
 
     <div class="gm-hub" data-game="hub">
       <header class="gm-hub-head">
-        <h1>Spiele</h1>
-        <p>Teste dein Weltwissen – such dir einen Modus aus.</p>
+        <h1>${m('games.hubTitle')}</h1>
+        <p>${m('games.hubSub')}</p>
       </header>
       <div class="gm-cards">${GAME_CARDS.map(
         (g) => `
         <button type="button" class="gm-card gm-card-${g.id}" data-g="${g.id}">
           ${previewHtml(g.id)}
-          <span class="gm-card-tag">${g.tag}</span>
+          <span class="gm-card-tag">${cardTxt(g, 'tag')}</span>
           <span class="gm-card-body">
-            <b>${g.label}</b>
-            <span>${g.blurb}</span>
-            <span class="gm-card-foot"><span class="gm-chips">${g.chips.map((c) => `<i>${c}</i>`).join('')}</span><em>Spielen →</em></span>
+            <b>${cardTxt(g, 'label')}</b>
+            <span>${cardTxt(g, 'blurb')}</span>
+            <span class="gm-card-foot"><span class="gm-chips">${g.chips.map((_c, i) => `<i>${cardTxt(g, 'chip' + (i + 1))}</i>`).join('')}</span><em>${m('games.play')}</em></span>
           </span>
         </button>`,
       ).join('')}
@@ -92,128 +97,128 @@ export function createGamesView(): GamesView {
 
     <div class="gm-panel" data-game="quiz" hidden>
       <div class="gm-games"></div>
-      <h2>Länder-Rater</h2>
-      <p class="gm-lead">Kennst du alle Namen? Wähle Spielart und Gebiet.</p>
-      <div class="gm-field"><span>Spielart</span>
+      <h2>${m('games.quizTitle')}</h2>
+      <p class="gm-lead">${m('games.quizLead')}</p>
+      <div class="gm-field"><span>${m('games.fLabel')}</span>
         <div class="gm-seg" data-k="mode">
-          <button type="button" data-v="click" class="on">Anklicken<small>Ein Name erscheint, du klickst ihn an</small></button>
-          <button type="button" data-v="type">Eintippen<small>Alle Namen aus dem Kopf eintippen</small></button>
+          <button type="button" data-v="click" class="on">${m('games.optClick')}<small>${m('games.optClickSub')}</small></button>
+          <button type="button" data-v="type">${m('games.optType')}<small>${m('games.optTypeSub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Gebiet</span>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span>
         <select class="gm-scope"></select>
         <select class="gm-region" hidden></select>
       </div>
-      <button class="btn btn-primary gm-start" type="button">Spiel starten</button>
+      <button class="btn btn-primary gm-start" type="button">${m('games.start')}</button>
       <p class="gm-note gm-err"></p>
-      <p class="gm-note">Kartendaten: Natural Earth (gemeinfrei).</p>
+      <p class="gm-note">${m('games.earthNote')}</p>
     </div>
 
     <div class="gm-panel" data-game="flags" hidden>
       <div class="gm-games"></div>
-      <h2>Flaggen-Rater</h2>
-      <p class="gm-lead">Welche Flagge gehört zu welchem Land?</p>
-      <div class="gm-field"><span>Antworten</span>
+      <h2>${m('games.flagsTitle')}</h2>
+      <p class="gm-lead">${m('games.flagsLead')}</p>
+      <div class="gm-field"><span>${m('games.answersLabel')}</span>
         <div class="gm-seg" data-k="fhelp">
-          <button type="button" data-v="type" class="on">Karte &amp; Eingabe<small>Land anklicken oder Namen tippen – beides immer möglich</small></button>
-          <button type="button" data-v="choice">Zusätzlich Auswahl<small>Dazu 4 Antworten zum Antippen</small></button>
+          <button type="button" data-v="type" class="on">${m('games.optMapType')}<small>${m('games.optMapTypeSub')}</small></button>
+          <button type="button" data-v="choice">${m('games.optChoice')}<small>${m('games.optChoiceSub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Gebiet</span><select class="fg-scope"></select></div>
-      <div class="gm-field"><span>Runden</span><select class="fg-rounds"><option value="15">15 Flaggen</option><option value="30">30 Flaggen</option><option value="0">Alle</option></select></div>
-      <button class="btn btn-primary fg-start" type="button">Spiel starten</button>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span><select class="fg-scope"></select></div>
+      <div class="gm-field"><span>${m('games.roundsLabel')}</span><select class="fg-rounds"><option value="15">${m('games.nFlags', { count: 15 })}</option><option value="30">${m('games.nFlags', { count: 30 })}</option><option value="0">${m('games.all')}</option></select></div>
+      <button class="btn btn-primary fg-start" type="button">${m('games.start')}</button>
       <p class="gm-note fg-err"></p>
-      <p class="gm-note">Flaggen: flag-icons (MIT).</p>
+      <p class="gm-note">${m('games.flagsNote')}</p>
     </div>
 
     <div class="gm-panel" data-game="capitals" hidden>
       <div class="gm-games"></div>
-      <h2>Hauptstädte-Rater</h2>
-      <p class="gm-lead">Land zur Hauptstadt – oder umgekehrt.</p>
-      <div class="gm-field"><span>Frage</span>
+      <h2>${m('games.capitalsTitle')}</h2>
+      <p class="gm-lead">${m('games.capitalsLead')}</p>
+      <div class="gm-field"><span>${m('games.questionLabel')}</span>
         <div class="gm-seg" data-k="cdir">
-          <button type="button" data-v="cap" class="on">Land → Hauptstadt<small>Wie heißt die Hauptstadt?</small></button>
-          <button type="button" data-v="land">Hauptstadt → Land<small>Zu welchem Land gehört sie?</small></button>
+          <button type="button" data-v="cap" class="on">${m('games.optCountryCap')}<small>${m('games.optCountryCapSub')}</small></button>
+          <button type="button" data-v="land">${m('games.optCapCountry')}<small>${m('games.optCapCountrySub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Spielart</span>
+      <div class="gm-field"><span>${m('games.fLabel')}</span>
         <div class="gm-seg" data-k="cmode">
-          <button type="button" data-v="choice" class="on">Auswahl<small>4 Antworten</small></button>
-          <button type="button" data-v="type">Eintippen<small>Name selbst schreiben</small></button>
+          <button type="button" data-v="choice" class="on">${m('games.optChoice2')}<small>${m('games.optChoice2Sub')}</small></button>
+          <button type="button" data-v="type">${m('games.optType2')}<small>${m('games.optType2Sub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Gebiet</span><select class="cp-scope"></select></div>
-      <div class="gm-field"><span>Runden</span><select class="cp-rounds"><option value="15">15 Fragen</option><option value="30">30 Fragen</option><option value="0">Alle</option></select></div>
-      <button class="btn btn-primary cp-start" type="button">Spiel starten</button>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span><select class="cp-scope"></select></div>
+      <div class="gm-field"><span>${m('games.roundsLabel')}</span><select class="cp-rounds"><option value="15">${m('games.nQuestions', { count: 15 })}</option><option value="30">${m('games.nQuestions', { count: 30 })}</option><option value="0">${m('games.all')}</option></select></div>
+      <button class="btn btn-primary cp-start" type="button">${m('games.start')}</button>
       <p class="gm-note cp-err"></p>
-      <p class="gm-note">Hauptstädte: Natural Earth (gemeinfrei).</p>
+      <p class="gm-note">${m('games.capitalsNote')}</p>
     </div>
 
     <div class="gm-panel" data-game="outline" hidden>
       <div class="gm-games"></div>
-      <h2>Umrisse-Rater</h2>
-      <p class="gm-lead">Erkennst du das Land – oder die Region – an seiner Form?</p>
-      <div class="gm-field"><span>Spielart</span>
+      <h2>${m('games.outlineTitle')}</h2>
+      <p class="gm-lead">${m('games.outlineLead')}</p>
+      <div class="gm-field"><span>${m('games.fLabel')}</span>
         <div class="gm-seg" data-k="omode">
-          <button type="button" data-v="choice" class="on">Auswahl<small>4 Antworten</small></button>
-          <button type="button" data-v="type">Eintippen<small>Name selbst schreiben</small></button>
+          <button type="button" data-v="choice" class="on">${m('games.optChoice2')}<small>${m('games.optChoice2Sub')}</small></button>
+          <button type="button" data-v="type">${m('games.optType2')}<small>${m('games.optType2Sub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Gebiet</span>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span>
         <select class="ol-scope"></select>
         <select class="ol-region" hidden></select>
       </div>
-      <div class="gm-field"><span>Runden</span><select class="ol-rounds"><option value="15">15 Umrisse</option><option value="30">30 Umrisse</option><option value="0">Alle</option></select></div>
-      <button class="btn btn-primary ol-start" type="button">Spiel starten</button>
+      <div class="gm-field"><span>${m('games.roundsLabel')}</span><select class="ol-rounds"><option value="15">${m('games.nOutlines', { count: 15 })}</option><option value="30">${m('games.nOutlines', { count: 30 })}</option><option value="0">${m('games.all')}</option></select></div>
+      <button class="btn btn-primary ol-start" type="button">${m('games.start')}</button>
       <p class="gm-note ol-err"></p>
-      <p class="gm-note">Grenzen: Natural Earth (gemeinfrei). Sehr kleine Länder fehlen.</p>
+      <p class="gm-note">${m('games.outlineNote')}</p>
     </div>
 
     <div class="gm-panel" data-game="size" hidden>
       <div class="gm-games"></div>
-      <h2>Größenvergleich</h2>
-      <p class="gm-lead">Wie groß ist ein Land im Vergleich zu einem anderen? Bei Higher Lower werden die Paare mit der Zeit immer knapper; im Maßstab ziehst du ein Gebiet auf die richtige Größe.</p>
-      <div class="gm-field"><span>Spielart</span>
+      <h2>${m('games.sizeTitle')}</h2>
+      <p class="gm-lead">${m('games.sizeLead')}</p>
+      <div class="gm-field"><span>${m('games.fLabel')}</span>
         <div class="gm-seg" data-k="smode">
-          <button type="button" data-v="scale" class="on">Maßstab<small>Ein Gebiet fest, das andere ziehst du auf die richtige Größe</small></button>
-          <button type="button" data-v="duel">Higher Lower<small>Zwei Gebiete – welches ist größer?</small></button>
+          <button type="button" data-v="scale" class="on">${m('games.optScale')}<small>${m('games.optScaleSub')}</small></button>
+          <button type="button" data-v="duel">${m('games.optDuel')}<small>${m('games.optDuelSub')}</small></button>
         </div>
       </div>
-      <div class="gm-field sz-metric"><span>Vergleich</span>
+      <div class="gm-field sz-metric"><span>${m('games.metricLabel')}</span>
         <div class="gm-seg" data-k="smetric">
-          <button type="button" data-v="area" class="on">Fläche<small>Welches ist größer?</small></button>
-          <button type="button" data-v="pop">Einwohner<small>Wo leben mehr Menschen?</small></button>
+          <button type="button" data-v="area" class="on">${m('games.optArea')}<small>${m('games.optAreaSub')}</small></button>
+          <button type="button" data-v="pop">${m('games.optPop')}<small>${m('games.optPopSub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Gebiet</span>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span>
         <select class="sz-scope"></select>
         <select class="sz-region" hidden></select>
-        <small class="gm-note">Bei Regionen eines Landes und im Maßstab-Modus zählt nur die Fläche.</small>
+        <small class="gm-note">${m('games.areaOnlyNote')}</small>
       </div>
-      <div class="gm-field"><span>Runden</span><select class="sz-rounds"><option value="10">10 Runden</option><option value="20">20 Runden</option><option value="5">5 Runden</option><option value="0" class="sz-endless">Bis zum ersten Fehler (Higher Lower)</option></select></div>
-      <button class="btn btn-primary sz-start" type="button">Spiel starten</button>
+      <div class="gm-field"><span>${m('games.roundsLabel')}</span><select class="sz-rounds"><option value="10">${m('games.nRounds', { count: 10 })}</option><option value="20">${m('games.nRounds', { count: 20 })}</option><option value="5">${m('games.nRounds', { count: 5 })}</option><option value="0" class="sz-endless">${m('games.untilMiss')}</option></select></div>
+      <button class="btn btn-primary sz-start" type="button">${m('games.start')}</button>
       <p class="gm-note sz-err"></p>
-      <p class="gm-note">Flächen aus den Grenzdaten berechnet (Natural Earth), daher nur ungefähr.</p>
+      <p class="gm-note">${m('games.sizeNote')}</p>
     </div>
 
     <div class="gm-panel" data-game="street" hidden>
       <div class="gm-games"></div>
-      <h2>Straßen-Rater</h2>
-      <p class="gm-lead">Du stehst mitten in einer 360°-Aufnahme, schaust dich um und tippst auf der Karte, wo du bist. 5 Runden, bis zu 5000 Punkte pro Runde.</p>
-      <div class="gm-field"><span>Gebiet</span><select class="sg-scope"></select></div>
-      <div class="gm-field"><span>Bewegung</span>
+      <h2>${m('games.streetTitle')}</h2>
+      <p class="gm-lead">${m('games.streetLead')}</p>
+      <div class="gm-field"><span>${m('games.areaLabel')}</span><select class="sg-scope"></select></div>
+      <div class="gm-field"><span>${m('games.moveLabel')}</span>
         <div class="gm-seg" data-k="move">
-          <button type="button" data-v="1" class="on">Frei<small>Du kannst dich umsehen und weiterfahren</small></button>
-          <button type="button" data-v="0">Gesperrt<small>Nur umschauen und zoomen</small></button>
+          <button type="button" data-v="1" class="on">${m('games.optFree')}<small>${m('games.optFreeSub')}</small></button>
+          <button type="button" data-v="0">${m('games.optLocked')}<small>${m('games.optLockedSub')}</small></button>
         </div>
       </div>
-      <div class="gm-field"><span>Mapillary-Token (${BUILT_IN_TOKEN ? 'optional' : 'kostenlos'})</span>
+      <div class="gm-field"><span>${BUILT_IN_TOKEN ? m('games.tokenOptional') : m('games.tokenFree')}</span>
         <input class="gm-input sg-token" type="password" placeholder="MLY|…" autocomplete="off" spellcheck="false" />
-        <small class="gm-note">Client-Token aus <a href="https://www.mapillary.com/dashboard/developers" target="_blank" rel="noopener">mapillary.com/dashboard/developers</a> (Anwendung registrieren). Bleibt nur in diesem Browser gespeichert.${BUILT_IN_TOKEN ? ' Ohne eigenen Token nutzt das Spiel den Token dieser Seite.' : ''}</small>
+        <small class="gm-note">${m('games.tokenNote')}<a href="https://www.mapillary.com/dashboard/developers" target="_blank" rel="noopener">mapillary.com/dashboard/developers</a> (${m('games.tokenRegister')}). ${m('games.tokenLocalNote')}${BUILT_IN_TOKEN ? m('games.tokenBuiltInNote') : ''}</small>
       </div>
-      <button class="btn btn-primary sg-start" type="button">Spiel starten</button>
+      <button class="btn btn-primary sg-start" type="button">${m('games.start')}</button>
       <p class="gm-note sg-err"></p>
-      <p class="gm-note">Fotos: Mapillary-Mitwirkende (CC BY-SA).</p>
+      <p class="gm-note">${m('games.streetNote')}</p>
     </div>
 
     <div class="gm-street-host"></div>
@@ -265,7 +270,7 @@ export function createGamesView(): GamesView {
     const hero = document.createElement('div');
     hero.className = 'gm-hero';
     hero.innerHTML = `${previewHtml(id).replace('class="gm-pv', 'class="gm-pv gm-banner')}
-      <div class="gm-hero-txt"><button type="button" class="gm-backhub">← Alle Spiele</button><span class="gm-card-tag">${card.tag}</span></div>`;
+      <div class="gm-hero-txt"><button type="button" class="gm-backhub">← ${m('games.allGames')}</button><span class="gm-card-tag">${cardTxt(card, 'tag')}</span></div>`;
     hero.querySelector('.gm-hero-txt')!.append(h2, lead);
     p.append(hero, buildOpts(p));
     hero.querySelector('.gm-backhub')!.addEventListener('click', () => showPanel('hub'));
@@ -284,16 +289,17 @@ export function createGamesView(): GamesView {
     );
   });
 
-  const scopeOptions = (extra: string[] = []) => [...SCOPES.map((s) => `<option value="${s.id}">${s.label}</option>`), ...extra].join('');
+  const scopeLabel = (l: string) => m(`games.scope.${l}` as MessageKey);
+  const scopeOptions = (extra: string[] = []) => [...SCOPES.map((s) => `<option value="${s.id}">${scopeLabel(s.label)}</option>`), ...extra].join('');
   const fill = (sel: string, extra?: string[]) => ($<HTMLSelectElement>(sel).innerHTML = scopeOptions(extra));
-  const REGIONS_OPT = '<option value="regions">Regionen eines Landes …</option>';
+  const REGIONS_OPT = `<option value="regions">${m('games.scope.regions')}</option>`;
   fill('.fg-scope');
   fill('.cp-scope');
   fill('.sg-scope');
   fill('.ol-scope', [REGIONS_OPT]);
   fill('.sz-scope', [REGIONS_OPT]);
   const scopeSel = $<HTMLSelectElement>('.gm-scope');
-  scopeSel.innerHTML = [`<option value="world">${SCOPES[0].label}</option>`, ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${s.label}</option>`), REGIONS_OPT].join('');
+  scopeSel.innerHTML = [`<option value="world">${scopeLabel(SCOPES[0].label)}</option>`, ...SCOPES.slice(1).map((s) => `<option value="${s.id}">${scopeLabel(s.label)}</option>`), REGIONS_OPT].join('');
 
   /** "Regionen eines Landes …" shows a country picker (list loaded on demand) */
   function bindRegions(scope: HTMLSelectElement, region: HTMLSelectElement, onChange?: () => void) {
@@ -301,7 +307,7 @@ export function createGamesView(): GamesView {
     const pick = document.createElement('div');
     pick.className = 'gm-regpick';
     pick.hidden = true;
-    pick.innerHTML = '<input class="gm-input gm-regsearch" type="search" placeholder="Land suchen …" autocomplete="off" spellcheck="false" /><div class="gm-regs"></div><small class="gm-note gm-regempty" hidden>Kein Land gefunden.</small>';
+    pick.innerHTML = `<input class="gm-input gm-regsearch" type="search" placeholder="${m('games.searchCountry')}" autocomplete="off" spellcheck="false" /><div class="gm-regs"></div><small class="gm-note gm-regempty" hidden>${m('games.noCountry')}</small>`;
     region.hidden = true;
     region.before(pick);
     const grid = pick.querySelector<HTMLElement>('.gm-regs')!;
@@ -345,11 +351,11 @@ export function createGamesView(): GamesView {
         try {
           const area = await countryAreas();
           const sorted = [...(await loadRegionIndex())].sort((a, b) => (area.get(b.id) ?? 0) - (area.get(a.id) ?? 0) || a.name.localeCompare(b.name, 'de'));
-          region.innerHTML = sorted.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} (${c.n})</option>`).join('');
+          region.innerHTML = sorted.map((c) => `<option value="${c.id}">${escapeHtml(c.name)} (${m('games.nRegions', { count: c.n })})</option>`).join('');
           const last = regionHistory().find((id) => sorted.some((c) => c.id === id));
           region.value = last ?? (sorted.some((c) => c.id === 'DE') ? 'DE' : sorted[0].id);
           grid.innerHTML = sorted
-            .map((c, i) => `<button type="button" data-v="${c.id}" data-i="${i}" data-n="${escapeHtml(norm(c.name))}"><span class="gm-opt-pv"><img alt="" loading="lazy" src="${DATA}previews/regions/${c.id}.svg" /></span><b>${escapeHtml(c.name)}</b><small>${c.n} Regionen</small></button>`)
+            .map((c, i) => `<button type="button" data-v="${c.id}" data-i="${i}" data-n="${escapeHtml(norm(c.name))}"><span class="gm-opt-pv"><img alt="" loading="lazy" src="${DATA}previews/regions/${c.id}.svg" /></span><b>${escapeHtml(c.name)}</b><small>${m('games.nRegions', { count: c.n })}</small></button>`)
             .join('');
           sortGrid();
           markRegion();
@@ -388,8 +394,8 @@ export function createGamesView(): GamesView {
       `<button type="button" data-v="${v}"><span class="gm-opt-pv"><img alt="" loading="lazy" src="${DATA}previews/scope-${img}.svg" /></span><b>${label}</b></button>`;
     const wrap = document.createElement('div');
     wrap.className = 'gm-scope-pick';
-    wrap.innerHTML = `<div class="gm-scopes gm-scopes-main">${card('world', 'world', 'Welt')}${hasRegions ? card('regions', 'regions', 'Regional') : ''}</div>
-      <div class="gm-scopes gm-scopes-conts">${conts.map((c) => card(c.id, slug(c.id), c.label)).join('')}</div><button type="button" class="gm-all" hidden>Alle</button>`;
+    wrap.innerHTML = `<div class="gm-scopes gm-scopes-main">${card('world', 'world', scopeLabel('world'))}${hasRegions ? card('regions', 'regions', m('games.scopeRegional')) : ''}</div>
+      <div class="gm-scopes gm-scopes-conts">${conts.map((c) => card(c.id, slug(c.id), scopeLabel(c.label))).join('')}</div><button type="button" class="gm-all" hidden>${m('games.all')}</button>`;
     const main = wrap.querySelector<HTMLElement>('.gm-scopes-main')!;
     const row = wrap.querySelector<HTMLElement>('.gm-scopes-conts')!;
     const all = wrap.querySelector<HTMLElement>('.gm-all')!;
@@ -489,17 +495,17 @@ export function createGamesView(): GamesView {
   };
   async function launchNameQuiz(panelId: string, errSel: string, build: () => Promise<{ items: import('../games/namequiz').QuizItem[]; mode: 'choice' | 'type'; rounds: number; placeholder: string }>) {
     const err = $(errSel);
-    err.textContent = 'Lade …';
+    err.textContent = m('common.loading');
     try {
       const [{ startNameQuiz }, cfg] = await Promise.all([import('../games/namequiz'), build()]);
-      if (cfg.items.length < 4) throw new Error('zu wenige Einträge in diesem Gebiet');
+      if (cfg.items.length < 4) throw new Error(m('games.tooFew'));
       nq?.destroy();
       err.textContent = '';
       showPanel('none');
       nq = startNameQuiz(host, cfg, leaveNq(panelId));
     } catch (e) {
       showPanel(panelId);
-      err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+      err.textContent = `${m('games.couldNotStart')} ${(e as Error).message}`;
     }
   }
   const val = (sel: string) => $<HTMLSelectElement>(sel).value;
@@ -512,14 +518,14 @@ export function createGamesView(): GamesView {
     launchNameQuiz('capitals', '.cp-err', async () => {
       const { capitalItems } = await import('../games/quizitems');
       const dir = segVal.cdir as 'cap' | 'land';
-      return { items: await capitalItems(val('.cp-scope'), dir), mode: segVal.cmode as 'choice' | 'type', rounds: Number(val('.cp-rounds')), placeholder: dir === 'cap' ? 'Welche Hauptstadt?' : 'Welches Land?' };
+      return { items: await capitalItems(val('.cp-scope'), dir), mode: segVal.cmode as 'choice' | 'type', rounds: Number(val('.cp-rounds')), placeholder: dir === 'cap' ? m('games.capPlaceholder') : m('games.countryPlaceholder') };
     }),
   );
   $('.ol-start').addEventListener('click', () =>
     launchNameQuiz('outline', '.ol-err', async () => {
       const { outlineItems } = await import('../games/quizitems');
       const scope = val('.ol-scope') === 'regions' ? `regions:${val('.ol-region')}` : val('.ol-scope');
-      return { items: await outlineItems(scope), mode: segVal.omode as 'choice' | 'type', rounds: Number(val('.ol-rounds')), placeholder: 'Wie heißt das?' };
+      return { items: await outlineItems(scope), mode: segVal.omode as 'choice' | 'type', rounds: Number(val('.ol-rounds')), placeholder: m('games.outlinePlaceholder') };
     }),
   );
 
@@ -540,14 +546,14 @@ export function createGamesView(): GamesView {
   syncSize();
   $('.sz-start').addEventListener('click', async () => {
     const err = $('.sz-err');
-    err.textContent = 'Lade …';
+    err.textContent = m('common.loading');
     try {
       const regions = val('.sz-scope') === 'regions';
       const scale = segVal.smode === 'scale';
       const metric = regions || scale ? 'area' : (segVal.smetric as 'area' | 'pop');
       const { sizeItems } = await import('../games/sizeduel');
       const items = await sizeItems(regions ? `regions:${val('.sz-region')}` : val('.sz-scope'), metric);
-      if (items.length < 4) throw new Error('zu wenige Einträge in diesem Gebiet');
+      if (items.length < 4) throw new Error(m('games.tooFew'));
       const rounds = Number(val('.sz-rounds')) || (scale ? 10 : 0);
       duel?.destroy();
       err.textContent = '';
@@ -556,7 +562,7 @@ export function createGamesView(): GamesView {
       else duel = (await import('../games/sizeduel')).startSizeDuel(host, { items, metric, rounds }, leaveDuel);
     } catch (e) {
       showPanel('size');
-      err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+      err.textContent = `${m('games.couldNotStart')} ${(e as Error).message}`;
     }
   });
 
@@ -574,11 +580,11 @@ export function createGamesView(): GamesView {
     const token = own || BUILT_IN_TOKEN;
     const err = $('.sg-err');
     if (!token) {
-      err.textContent = 'Bitte zuerst einen Mapillary-Token eintragen.';
+      err.textContent = m('games.needToken');
       return;
     }
     if (own) store.setKeys({ ...store.getKeys(), mapillary: own });
-    err.textContent = 'Lade …';
+    err.textContent = m('common.loading');
     try {
       const { startStreetGame } = await import('../games/streetguess');
       street?.destroy();
@@ -587,7 +593,7 @@ export function createGamesView(): GamesView {
       street = await startStreetGame(host, { token, scope: val('.sg-scope'), move: segVal.move === '1', rounds: 5, panos: true }, leaveStreet);
     } catch (e) {
       showPanel('street');
-      err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+      err.textContent = `${m('games.couldNotStart')} ${(e as Error).message}`;
     }
   });
 
@@ -687,7 +693,7 @@ export function createGamesView(): GamesView {
     $('.gm-time').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   };
   const scoreText = () => {
-    $('.gm-score').textContent = mode === 'click' ? `${found.size} / ${targets.length} · ${firstTry} auf Anhieb` : `${found.size} / ${targets.length} gefunden`;
+    $('.gm-score').textContent = mode === 'click' ? m('games.scoreFirst', { found: found.size, targets: targets.length, first: firstTry }) : m('games.scoreFound', { found: found.size, targets: targets.length });
   };
   const say = (msg: string, kind: '' | 'ok' | 'bad' = '') => {
     feedback.textContent = msg;
@@ -721,7 +727,7 @@ export function createGamesView(): GamesView {
         data = { type: 'FeatureCollection', features: list };
       }
       feats = data.features as Feat[];
-      if (feats.length < 2) throw new Error('zu wenige Gebiete');
+      if (feats.length < 2) throw new Error(m('games.tooFewAreas'));
       byId = new Map(feats.map((f) => [f.properties.id, f]));
 
       // what is asked: every country / region of the chosen area
@@ -730,7 +736,7 @@ export function createGamesView(): GamesView {
       queue = shuffle(countries);
       if (cfg.rounds) queue = queue.slice(0, cfg.rounds);
       targets = cfg.rounds ? queue.slice() : countries;
-      if (targets.length < 2) throw new Error('zu wenige Gebiete');
+      if (targets.length < 2) throw new Error(m('games.tooFewAreas'));
 
       // tiny areas get a clickable dot
       view = scope === 'regions' ? anchorView(feats) : scopeOf(scope)?.view ?? SCOPES[0].view ?? bboxOf(feats);
@@ -773,10 +779,10 @@ export function createGamesView(): GamesView {
       else {
         input.value = '';
         input.focus();
-        say(`${targets.length} Namen warten auf dich.`);
+        say(m('games.waiting', { count: targets.length }));
       }
     } catch (e) {
-      errEl.textContent = `Konnte nicht starten: ${(e as Error).message}`;
+      errEl.textContent = `${m('games.couldNotStart')} ${(e as Error).message}`;
       playing = false;
       hud.hidden = true;
       showPanel(promptFlag ? 'flags' : 'quiz');
@@ -803,11 +809,11 @@ export function createGamesView(): GamesView {
       phaseNoted = true;
       for (const f of feats) setStatus(f.properties.id, null);
       map!.fitBounds(bounds!, { ...FIT, duration: 600 });
-      say('Kontinente geschafft – jetzt die Länder!', 'ok');
+      say(m('games.continentsDone'), 'ok');
     } else if (prev) say('');
-    if (promptFlag) $('.gm-target').innerHTML = `<img class="gm-flagq" alt="Flagge" src="${DATA}flags/${current.feat!.properties.flag}.svg" />`;
+    if (promptFlag) $('.gm-target').innerHTML = `<img class="gm-flagq" alt="${m('games.flagA11y')}" src="${DATA}flags/${current.feat!.properties.flag}.svg" />`;
     else $('.gm-target').textContent = current.name;
-    $('.gm-ask small').textContent = promptFlag ? 'Zu welchem Land gehört diese Flagge?' : current.kind === 'continent' ? 'Wo liegt der Kontinent …' : 'Wo liegt …';
+    $('.gm-ask small').textContent = promptFlag ? m('games.flagQ') : current.kind === 'continent' ? m('games.whereCont') : m('games.whereIs');
     if (promptFlag) {
       input.value = '';
       input.focus({ preventScroll: true });
@@ -827,7 +833,7 @@ export function createGamesView(): GamesView {
     found.add(cur.id);
     if (tries === 0) firstTry++;
     paint(cur, 'found');
-    say(tries === 0 ? 'Richtig!' : `Richtig – nach ${tries + 1} Versuchen.`, 'ok');
+    say(tries === 0 ? m('games.correctCheer') : m('games.correctSlow', { count: tries + 1 }, { count: tries + 1 }), 'ok');
     scoreText();
     next();
   }
@@ -846,7 +852,7 @@ export function createGamesView(): GamesView {
     if (b.dataset.id === current.id) return solved(current);
     b.disabled = true;
     b.classList.add('bad');
-    say(`${b.textContent} ist falsch.`, 'bad');
+    say(m('games.wrongPick', { name: b.textContent ?? '' }), 'bad');
     failedAnswer(current);
   });
 
@@ -1054,13 +1060,13 @@ export function createGamesView(): GamesView {
         }
       }
       if (!t) {
-        say(`„${input.value.trim()}“ kenne ich nicht.`, 'bad');
+        say(m('games.dontKnow', { name: input.value.trim() }), 'bad');
         input.select();
         return;
       }
       input.value = '';
       if (t.id === current.id) return solved(current);
-      if (found.has(t.id)) return say(`${t.name} hattest du schon.`);
+      if (found.has(t.id)) return say(m('games.already', { name: t.name }));
       const cur = current;
       flashWrong(t.id, t.name, anchor(t.feat!));
       if (tries >= MAX_TRIES) {
@@ -1080,12 +1086,12 @@ export function createGamesView(): GamesView {
       }
     }
     if (!t) {
-      say(`„${input.value.trim()}“ kenne ich nicht.`, 'bad');
+      say(m('games.dontKnow', { name: input.value.trim() }), 'bad');
       input.select();
       return;
     }
     if (found.has(t.id)) {
-      say(`${t.name} hattest du schon.`);
+      say(m('games.already', { name: t.name }));
     } else {
       found.add(t.id);
       // a typed continent tints the countries that are not found yet
@@ -1110,11 +1116,11 @@ export function createGamesView(): GamesView {
     result.hidden = false;
     hud.hidden = true;
     result.innerHTML = `
-      <h2>${gaveUp ? 'Aufgegeben' : 'Geschafft!'}</h2>
+      <h2>${gaveUp ? m('games.gaveUp') : m('games.done')}</h2>
       <div class="gm-big">${found.size} / ${targets.length} <span>(${pct} %)</span></div>
-      <p>Zeit ${time}${mode === 'click' ? ` · ${firstTry} auf Anhieb · ${wrongTotal} Fehlklicks` : ''}</p>
-      ${missed.length ? `<details open><summary>${missed.length} nicht gewusst</summary><p class="gm-missed">${missed.map((t) => escapeHtml(t.name)).sort((a, b) => a.localeCompare(b, 'de')).join(' · ')}</p></details>` : ''}
-      <div class="gm-actions"><button class="btn btn-primary gm-again" type="button">Nochmal</button><button class="btn gm-back" type="button">Menü</button></div>`;
+      <p>${m('games.timeShort', { when: time })}${mode === 'click' ? ` · ${m('games.firstTry', { count: firstTry })} · ${m('games.wrongClicks', { count: wrongTotal })}` : ''}</p>
+      ${missed.length ? `<details open><summary>${m('games.missedCount', { count: missed.length })}</summary><p class="gm-missed">${missed.map((t) => escapeHtml(t.name)).sort((a, b) => a.localeCompare(b, fmtLocale())).join(' · ')}</p></details>` : ''}
+      <div class="gm-actions"><button class="btn btn-primary gm-again" type="button">${m('games.again')}</button><button class="btn gm-back" type="button">${m('games.menu')}</button></div>`;
     result.querySelector('.gm-again')!.addEventListener('click', () => void start());
     result.querySelector('.gm-back')!.addEventListener('click', toMenu);
   }

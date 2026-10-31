@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { FONT_BOLD } from '../../vector';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
@@ -12,7 +13,7 @@ function loadNow(ctx: ExtraCtx) {
   const st = getState(ctx);
   const z = ctx.map.getZoom();
   if (z < 11) {
-    ctx.set('busnet', { note: 'ab Stadtzoom (Zoomstufe 11) – Daten aus OpenStreetMap' });
+    ctx.set('busnet', { note: t('layers.busnet.noteZoom') });
     return;
   }
   const b = ctx.viewBounds(z >= 13 ? 50 : 10);
@@ -26,13 +27,13 @@ function loadNow(ctx: ExtraCtx) {
       ctx.setData('busnet', r.lines);
       ctx.setData('busnet-stops', r.stops);
       const modes = new Set(r.lines.features.map((f) => f.properties?.modeLabel));
-      ctx.set('busnet', { loading: false, count: r.lines.features.length, note: r.lines.features.length ? `Linien: ${[...modes].join(', ')}` : 'keine Linien im Ausschnitt erfasst' });
+      ctx.set('busnet', { loading: false, count: r.lines.features.length, note: r.lines.features.length ? t('layers.busnet.noteLines', { modes: [...modes].join(', ') }) : t('layers.busnet.noteNone') });
     })
     .catch((e) => {
       if (isSuperseded(e) || st.key !== key) return;
       console.warn('Overpass ÖPNV', e);
       st.key = '';
-      ctx.set('busnet', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar oder überlastet – bitte erneut verschieben' });
+      ctx.set('busnet', { loading: false, note: t('layers.busnet.noteFail') });
     });
 }
 

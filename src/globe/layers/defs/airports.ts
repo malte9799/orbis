@@ -8,6 +8,7 @@ import { escapeHtml } from '../../../util';
 import { loadAirportFlights } from '../../../api/transport';
 import { staticAirports } from '../../../api/airport';
 import { heightTxt, clockTxt } from '../../../units';
+import { t } from '../../../i18n';
 
 export const AIRPORT_FAR = ['airports-far-1', 'airports-far-2', 'airports-far-3'];
 
@@ -78,7 +79,7 @@ export default defineExtra({
     for (const [id, min] of [['airports', 1], ['airports-minor', 5.5]] as const) if (ctx.map.getLayer(id)) ctx.map.setLayerZoomRange(id, min, maxZoom);
   },
   enable(ctx) {
-    ctx.set('airports', { note: 'Klick auf einen Flughafen zeigt Abflüge & Ankünfte vom Vortag' });
+    ctx.set('airports', { note: t('layers.airports.noteClick') });
     void loadFarAirports(ctx);
   },
   click({ p, pt }) {
@@ -91,10 +92,10 @@ export default defineExtra({
         glyph: 'airport',
         color: '#90caf9',
         title: name,
-        subtitle: [code, p.ele != null ? `${heightTxt(Number(p.ele))} ü. NN` : ''].filter(Boolean).join(' · '),
+        subtitle: [code, p.ele != null ? `${heightTxt(Number(p.ele))} ${t('layers.airports.ele')}` : ''].filter(Boolean).join(' · '),
         source: 'OpenStreetMap, OpenSky Network',
         url: icao ? `https://opensky-network.org/network/explorer?airport=${encodeURIComponent(icao)}` : undefined,
-        extra: icao ? '<div class="pop-loading small">Flüge vom Vortag werden geladen …</div>' : '',
+        extra: icao ? `<div class="pop-loading small">${t('layers.airports.loading')}</div>` : '',
       }),
       lng: pt[0],
       lat: pt[1],
@@ -110,14 +111,14 @@ export default defineExtra({
             const el = node.querySelector('.pop-loading');
             if (!el) return;
             el.outerHTML = r.departures.length + r.arrivals.length
-              ? `<div class="small muted">Vortag: ${r.departures.length} Abflüge, ${r.arrivals.length} Ankünfte</div>
-                 ${r.departures.length ? `<div class="pop-sub">Letzte Abflüge</div><div class="pop-grid two">${list(r.departures, '→')}</div>` : ''}
-                 ${r.arrivals.length ? `<div class="pop-sub">Letzte Ankünfte</div><div class="pop-grid two">${list(r.arrivals, '←')}</div>` : ''}`
-              : '<div class="small muted">Keine Flugdaten vom Vortag verfügbar.</div>';
+              ? `<div class="small muted">${t('layers.airports.yday', { dep: r.departures.length, arr: r.arrivals.length })}</div>
+                 ${r.departures.length ? `<div class="pop-sub">${t('layers.airports.lastDep')}</div><div class="pop-grid two">${list(r.departures, '→')}</div>` : ''}
+                 ${r.arrivals.length ? `<div class="pop-sub">${t('layers.airports.lastArr')}</div><div class="pop-grid two">${list(r.arrivals, '←')}</div>` : ''}`
+              : `<div class="small muted">${t('layers.airports.noData')}</div>`;
           })
           .catch(() => {
             const el = node.querySelector('.pop-loading');
-            if (el) el.textContent = 'OpenSky gerade nicht erreichbar (Tageskontingent ohne Konto begrenzt).';
+            if (el) el.textContent = t('layers.airports.noteFail');
           });
       },
     };

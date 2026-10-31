@@ -4,6 +4,7 @@ import type { GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import { kindColor } from '../../api/events';
 import { fmt } from '../../util';
+import { t } from '../../i18n';
 import { FEEDS, GROUPS, groupOfKind } from './index';
 import type { EventFeature, EventKind, EventsCtx, FeedId, FeedState, GroupId } from './types';
 
@@ -98,7 +99,7 @@ export function createEvents(host: EventsHost) {
         .catch((e) => {
           console.warn(`${def.name} nicht verfügbar`, e);
           fd.error = String(e?.message ?? e);
-          if (!def.silent) host.toast(`${def.name} konnte nicht geladen werden.`, 'error');
+          if (!def.silent) host.toast(t('layers.loadFail', { name: def.name }), 'error');
         })
         .finally(() => {
           fd.at = Date.now();

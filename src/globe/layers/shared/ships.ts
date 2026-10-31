@@ -1,4 +1,5 @@
 import type { MapGeoJSONFeature } from 'maplibre-gl';
+import { t as tT } from '../../../i18n';
 import { ShipsLayer } from '../../ships3d';
 import type { ShipInfo } from '../../extras';
 import type { ExtraCtx } from '../types';
@@ -15,7 +16,7 @@ export async function loadShips(ctx: ExtraCtx) {
   } catch (e) {
     console.warn('Digitraffic AIS', e);
     if (!hasAisLive()) throw e;
-    note = 'Fintraffic nicht erreichbar';
+    note = tT('layers.ships.noteFintraFail');
   }
   mergeShips(ctx);
   return { note: note ?? ctx.info('ships')?.note };
@@ -29,7 +30,7 @@ export function mergeShips(ctx: ExtraCtx) {
   st.shipsAll = all;
   ctx.setData('ships', shipFeatures(all.values()));
   st.ships3d?.setShips(all.values());
-  const notes = [st.ais?.error, !hasAisLive() ? 'außerhalb der Ostsee mit Daten-Proxy oder kostenlosem aisstream.io-Schlüssel (Einstellungen)' : 'weltweit live im Kartenausschnitt (aisstream.io)'].filter(Boolean);
+  const notes = [st.ais?.error, !hasAisLive() ? tT('layers.ships.noteProxy') : tT('layers.ships.noteLive')].filter(Boolean);
   const prev = ctx.info('ships');
   const note = notes.join(' · ');
   if (prev?.count !== all.size || prev?.note !== note) ctx.set('ships', { count: all.size, note });

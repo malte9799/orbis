@@ -1,36 +1,18 @@
 import type { Maneuver } from './types';
+import { t } from '../i18n';
 
-const VERB: Record<Maneuver, string> = {
-  depart: 'Losfahren',
-  straight: 'Geradeaus weiter',
-  'slight-left': 'Leicht links halten',
-  left: 'Links abbiegen',
-  'sharp-left': 'Scharf links abbiegen',
-  'slight-right': 'Leicht rechts halten',
-  right: 'Rechts abbiegen',
-  'sharp-right': 'Scharf rechts abbiegen',
-  uturn: 'Wenden',
-  roundabout: 'In den Kreisverkehr einfahren',
-  merge: 'Einfädeln',
-  'fork-left': 'Links halten',
-  'fork-right': 'Rechts halten',
-  'ramp-left': 'Links auf die Auffahrt',
-  'ramp-right': 'Rechts auf die Auffahrt',
-  ferry: 'Fähre nehmen',
-  arrive: 'Ziel erreicht',
-};
+/** key suffix of a manoeuvre in the routing.text namespace */
+const key = (m: Maneuver): string => String(m).replace(/-(\w)/g, (_0, s: string) => s.toUpperCase());
 
-const ORD = ['', 'erste', 'zweite', 'dritte', 'vierte', 'fünfte', 'sechste', 'siebte', 'achte', 'neunte', 'zehnte'];
-
-/** German instruction from a manoeuvre, for providers that only deliver a vocabulary (OSRM) */
+/** instruction from a manoeuvre, for providers that only deliver a vocabulary (OSRM) */
 export function instruction(m: Maneuver, name: string, exit?: number): string {
   if (m === 'roundabout') {
-    const ex = exit && exit < ORD.length ? `Dort die ${ORD[exit]} Ausfahrt nehmen` : 'Den Kreisverkehr verlassen';
-    return `${VERB.roundabout}. ${ex}${name ? ` Richtung ${name}` : ''}`;
+    const ex = exit && exit <= 10 ? t('routing.text.exitNote', { ord: t(`routing.text.ord.${exit}` as never) }) : t('routing.text.exitLeave');
+    return `${t('routing.text.roundabout')}. ${ex}${name ? t('routing.text.towards', { name }) : ''}`;
   }
-  if (m === 'arrive') return VERB.arrive;
-  const on = name ? (m === 'straight' || m === 'depart' ? ` auf ${name}` : ` auf ${name}`) : '';
-  return `${VERB[m]}${on}`;
+  if (m === 'arrive') return t('routing.text.arrive');
+  const on = name ? t('routing.text.onto', { name }) : '';
+  return `${t(`routing.text.${key(m)}` as never)}${on}`;
 }
 
 /** OSRM / Mapbox `maneuver.type` + `modifier` → {@link Maneuver} */

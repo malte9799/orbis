@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
 import { loadCables } from '../../../api/infra';
@@ -40,16 +41,16 @@ export default defineExtra({
   click({ p, at }) {
     const id = String(p.id ?? '');
     const rows = [
-      ['Betreiber', p.operator],
-      ['In Betrieb seit', p.since],
+      [t('layers.cables.rowOperator'), p.operator],
+      [t('layers.cables.rowSince'), p.since],
     ].filter(([, v]) => v);
     return {
       type: 'html',
       html: cardHtml({
         glyph: 'cable',
         color: String(p.color ?? '#9c6bff'),
-        title: String(p.name || 'Seekabel'),
-        subtitle: 'Unterseekabel (Telekommunikation)',
+        title: String(p.name || t('layers.cables.fallback')),
+        subtitle: t('layers.cables.subtitle'),
         source: 'OpenStreetMap-Mitwirkende (ODbL)',
         url: id ? `https://www.openstreetmap.org/way/${encodeURIComponent(id)}` : undefined,
         extra: rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : undefined,

@@ -1,5 +1,6 @@
 import { getAlerts, type Alert } from '../api/alerts';
 import { getAirQuality, getForecast, reverseGeocode, type AirQuality, type Forecast } from '../api/openmeteo';
+import { t as m, type MessageKey } from '../i18n';
 import { renderHourlyChart } from '../chart';
 import { mountRawDataLink } from '../inspector/inspector';
 import { createForecastMap, type ForecastMap } from './fcmap';
@@ -47,11 +48,11 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
   el.innerHTML = `
     <div class="fc-top">
       <div class="fc-search"></div>
-      <button class="btn icon-btn" data-act="locate" title="Mein Standort" aria-label="Mein Standort">
+      <button class="btn icon-btn" data-act="locate" title="${m('forecast.myLocation')}" aria-label="${m('forecast.myLocation')}">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
       </button>
     </div>
-    <nav class="favs" aria-label="Favoriten"></nav>
+    <nav class="favs" aria-label="${m('forecast.favorites')}"></nav>
     <div class="fc-body" aria-live="polite"></div>`;
   el.querySelector('.fc-search')!.appendChild(createSearch((p) => show(p)));
   mountRawDataLink(el, 'fab');
@@ -67,7 +68,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       const { lat, lon } = await locate();
       show(await reverseGeocode(lat, lon));
     } catch {
-      toast('Standort konnte nicht ermittelt werden.', 'error');
+      toast(m('forecast.locateError'), 'error');
     }
   });
 
@@ -115,9 +116,9 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
         return;
       }
       body.innerHTML = `<div class="card error-card">
-        <h2>Wetterdaten konnten nicht geladen werden</h2>
-        <p>Bitte Internetverbindung prüfen und erneut versuchen.</p>
-        <button class="btn" data-act="retry">Erneut versuchen</button></div>`;
+        <h2>${m('forecast.loadTitle')}</h2>
+        <p>${m('forecast.loadHint')}</p>
+        <button class="btn" data-act="retry">${m('common.retry')}</button></div>`;
       body.querySelector('[data-act=retry]')!.addEventListener('click', () => show());
     }
   }
@@ -125,8 +126,8 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
   function staleNote(t: number, failed = false) {
     const at = clockTxt(t);
     const text = failed
-      ? `Stand ${at} – Aktualisierung fehlgeschlagen, es wird weiter versucht …`
-      : `Stand ${at} – wird aktualisiert …`;
+      ? m('forecast.staleFailed', { at })
+      : m('forecast.stale', { at });
     // a single note that switches to the failed state instead of stacking a second line
     const existing = body.querySelector<HTMLElement>('.stale-note');
     if (existing) {
@@ -150,16 +151,20 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
     const pollen = aq
       ? (
           [
-            ['Erle', aq.current.alder_pollen],
-            ['Birke', aq.current.birch_pollen],
-            ['Gräser', aq.current.grass_pollen],
-            ['Beifuß', aq.current.mugwort_pollen],
-            ['Ambrosia', aq.current.ragweed_pollen],
+            [m('forecast.pollen.alder'), aq.current.alder_pollen],
+            [m('forecast.pollen.birch'), aq.current.birch_pollen],
+            [m('forecast.pollen.grass'), aq.current.grass_pollen],
+            [m('forecast.pollen.mugwort'), aq.current.mugwort_pollen],
+            [m('forecast.pollen.ragweed'), aq.current.ragweed_pollen],
           ] as [string, number | null][]
         ).filter(([, v]) => v != null)
       : [];
 
     const localTime = new Date(Date.now() + f.utc_offset_seconds * 1000).toISOString().slice(11, 16);
+    const heroMeta = m(is12() ? 'forecast.heroMeta12' : 'forecast.heroMeta24', {
+      time: is12() ? hourTxt(localTime) : localTime,
+      height: heightTxt(f.elevation),
+    });
 
     body.innerHTML = `
       ${alerts.length ? renderAlerts(alerts) : ''}
@@ -168,15 +173,15 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
           <div>
             <h1 class="place">${escapeHtml(current.name)}</h1>
             <div class="muted">${escapeHtml([current.region, current.country].filter(Boolean).join(', '))}
-              · ${is12() ? hourTxt(localTime) : `${localTime} Uhr`} Ortszeit · ${heightTxt(f.elevation)} ü. NN</div>
+              · ${heroMeta}</div>
           </div>
           <div class="hero-actions">
-            <button class="btn icon-btn ${isFav ? 'on' : ''}" data-act="fav" aria-pressed="${isFav}" title="${isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}">
+            <button class="btn icon-btn ${isFav ? 'on' : ''}" data-act="fav" aria-pressed="${isFav}" title="${isFav ? m('forecast.favOff') : m('forecast.favOn')}">
               <svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>
             </button>
-            <button class="btn" data-act="globe" title="Auf Karte zeigen" aria-label="Auf Karte zeigen">
+            <button class="btn" data-act="globe" title="${m('forecast.showOnMap')}" aria-label="${m('forecast.showOnMap')}">
               <svg viewBox="0 0 24 24" class="btn-ic"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>
-              Auf Karte
+              ${m('forecast.onMap')}
             </button>
           </div>
         </div>
@@ -185,34 +190,34 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
           <div class="hero-temp">${fmt.temp(c.temperature_2m)}</div>
           <div class="hero-desc">
             <div class="desc">${escapeHtml(describe(c.weather_code))}</div>
-            <div>Gefühlt ${fmt.temp(c.apparent_temperature)}</div>
-            <div class="hl"><span>H ${fmt.temp(d.temperature_2m_max[0])}</span> <span>T ${fmt.temp(d.temperature_2m_min[0])}</span></div>
+            <div>${m('forecast.feels', { v: fmt.temp(c.apparent_temperature) })}</div>
+            <div class="hl"><span>${m('forecast.hi', { v: fmt.temp(d.temperature_2m_max[0]) })}</span> <span>${m('forecast.lo', { v: fmt.temp(d.temperature_2m_min[0]) })}</span></div>
           </div>
         </div>
       </section>
 
       <section class="details">
-        ${tile('Wind', `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${windTxt(c.wind_speed_10m)}`, `aus ${windDirTxt(c.wind_direction_10m)}${opt('wind') === 'bft' ? '' : ` · Bft ${beaufort(c.wind_speed_10m)}`}`)}
-        ${tile('Böen', windTxt(c.wind_gusts_10m), `max. heute ${windTxt(d.wind_gusts_10m_max[0])}`)}
-        ${tile('Luftfeuchte', `${Math.round(c.relative_humidity_2m)} <small>%</small>`, `Taupunkt ${fmt.temp(dew)}`)}
-        ${tile('Luftdruck', pressureTxt(c.pressure_msl), 'auf Meereshöhe')}
-        ${tile('Niederschlag', precipSumTxt(d.precipitation_sum[0]), `heute · ${d.precipitation_probability_max[0] ?? '–'} % Wahrsch.`)}
-        ${tile('Bewölkung', `${Math.round(c.cloud_cover)} <small>%</small>`, vis != null ? `Sicht ${distTxt(vis / 1000, vis < 10000 ? 1 : 0)}` : '')}
-        ${tile('UV-Index', `${fmt.num(uvNow, 0)} <small>jetzt</small>`, `<span class="dot" style="background:${uv.color}"></span>max. ${fmt.num(d.uv_index_max[0], 0)} · ${uv.label}`)}
-        ${tile('Sonne', `${fmt.hour(d.sunrise[0])} <small>↑</small> ${fmt.hour(d.sunset[0])} <small>↓</small>`, daylight(d.sunrise[0], d.sunset[0]))}
-        ${aq ? tile('Luftqualität', `${fmt.num(aq.current.european_aqi, 0)} <small>EAQI</small>`, `<span class="dot" style="background:${air.color}"></span>${air.label} · PM2.5 ${fmt.num(aq.current.pm2_5, 0)} µg/m³`) : ''}
-        ${pollen.length ? tile('Pollen', pollen.filter(([, v]) => (v ?? 0) >= 1).map(([n]) => escapeHtml(n)).join(', ') || 'keine', pollen.map(([n, v]) => `${escapeHtml(n)}: ${pollenLabel(v)}`).join(' · '), 'wide') : ''}
+        ${tile(m('forecast.tiles.wind'), `<span class="wind-arrow" style="transform:rotate(${c.wind_direction_10m + 180}deg)">↑</span> ${windTxt(c.wind_speed_10m)}`, opt('wind') === 'bft' ? m('forecast.windFrom', { dir: windDirTxt(c.wind_direction_10m) }) : m('forecast.windBft', { dir: windDirTxt(c.wind_direction_10m), bft: beaufort(c.wind_speed_10m) }))}
+        ${tile(m('forecast.tiles.gusts'), windTxt(c.wind_gusts_10m), m('forecast.gustsMax', { v: windTxt(d.wind_gusts_10m_max[0]) }))}
+        ${tile(m('forecast.tiles.humidity'), `${Math.round(c.relative_humidity_2m)} <small>%</small>`, m('forecast.dew', { v: fmt.temp(dew) }))}
+        ${tile(m('forecast.tiles.pressure'), pressureTxt(c.pressure_msl), m('forecast.pressureSea'))}
+        ${tile(m('forecast.tiles.precip'), precipSumTxt(d.precipitation_sum[0]), m('forecast.precipSub', { prob: d.precipitation_probability_max[0] ?? '–' }))}
+        ${tile(m('forecast.tiles.cloud'), `${Math.round(c.cloud_cover)} <small>%</small>`, vis != null ? m('forecast.vis', { v: distTxt(vis / 1000, vis < 10000 ? 1 : 0) }) : '')}
+        ${tile(m('forecast.tiles.uv'), `${fmt.num(uvNow, 0)} <small>${m('forecast.uvNow')}</small>`, `<span class="dot" style="background:${uv.color}"></span>${m('forecast.uvMax', { v: fmt.num(d.uv_index_max[0], 0), label: uv.label })}`)}
+        ${tile(m('forecast.tiles.sun'), `${fmt.hour(d.sunrise[0])} <small>↑</small> ${fmt.hour(d.sunset[0])} <small>↓</small>`, daylight(d.sunrise[0], d.sunset[0]))}
+        ${aq ? tile(m('forecast.tiles.aqi'), `${fmt.num(aq.current.european_aqi, 0)} <small>EAQI</small>`, `<span class="dot" style="background:${air.color}"></span>${m('forecast.pm25', { label: air.label, v: fmt.num(aq.current.pm2_5, 0) })}`) : ''}
+        ${pollen.length ? tile(m('forecast.tiles.pollen'), pollen.filter(([, v]) => (v ?? 0) >= 1).map(([n]) => escapeHtml(n)).join(', ') || m('wx.pollen.none'), pollen.map(([n, v]) => `${escapeHtml(n)}: ${pollenLabel(v)}`).join(' · '), 'wide') : ''}
       </section>
 
       <section class="card">
-        <h2>Nächste 48 Stunden</h2>
+        <h2>${m('forecast.hourlyTitle')}</h2>
         <div class="hourly-wrap"></div>
       </section>
 
       <section class="card fc-map-card"></section>
 
       <section class="card">
-        <h2>14-Tage-Vorhersage</h2>
+        <h2>${m('forecast.dailyTitle')}</h2>
         ${renderDaily(f)}
       </section>
 
@@ -252,7 +257,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       // the map is optional: a broken map must not take the forecast down with it
       console.warn('Wetterkarte', e);
       fcMap = null;
-      mapCard.innerHTML = '<h2>Wetterkarte</h2><p class="muted">Die Karte konnte nicht geladen werden.</p>';
+      mapCard.innerHTML = `<h2>${m('forecast.map.title')}</h2><p class="muted">${m('forecast.map.loadError')}</p>`;
     }
 
     body.querySelector('[data-act=fav]')!.addEventListener('click', (e) => {
@@ -261,7 +266,7 @@ export function createForecastView(onShowOnGlobe: (p: Place) => void): ForecastV
       btn.classList.toggle('on', on);
       btn.setAttribute('aria-pressed', String(on));
       renderFavs();
-      toast(on ? `${current.name} zu Favoriten hinzugefügt` : `${current.name} aus Favoriten entfernt`);
+      toast(on ? m('forecast.favAdded', { name: current.name }) : m('forecast.favRemoved', { name: current.name }));
     });
     body.querySelector('[data-act=globe]')!.addEventListener('click', () => onShowOnGlobe(current));
   }
@@ -276,15 +281,16 @@ function tile(label: string, value: string, sub = '', cls = '') {
 function daylight(rise: string, set: string) {
   const mins = (Date.parse(`${set}Z`) - Date.parse(`${rise}Z`)) / 60000;
   if (!Number.isFinite(mins)) return '';
-  return `Tageslänge ${Math.floor(mins / 60)} h ${Math.round(mins % 60)} min`;
+  return m('forecast.daylight', { h: Math.floor(mins / 60), min: Math.round(mins % 60) });
 }
 
-const SEVERITY_DE: Record<Alert['severity'], string> = {
-  minor: 'Gering',
-  moderate: 'Markant',
-  severe: 'Unwetter',
-  extreme: 'Extremes Unwetter',
-  unknown: 'Hinweis',
+/** severity → catalog key (both languages resolve through the de/en forecast catalog) */
+const SEVERITY_KEY: Record<Alert['severity'], MessageKey> = {
+  minor: 'forecast.severity.minor',
+  moderate: 'forecast.severity.moderate',
+  severe: 'forecast.severity.severe',
+  extreme: 'forecast.severity.extreme',
+  unknown: 'forecast.severity.unknown',
 };
 
 function renderAlerts(alerts: Alert[]) {
@@ -293,13 +299,13 @@ function renderAlerts(alerts: Alert[]) {
       (a) => `
       <details class="alert sev-${a.severity}">
         <summary>
-          <span class="alert-badge">${SEVERITY_DE[a.severity]}</span>
+          <span class="alert-badge">${m(SEVERITY_KEY[a.severity])}</span>
           <span class="alert-title">${escapeHtml(a.headline || a.event)}</span>
-          ${a.expires ? `<span class="alert-time">bis ${escapeHtml(fmt.dateTime(a.expires))}</span>` : ''}
+          ${a.expires ? `<span class="alert-time">${m('forecast.alertUntil', { until: escapeHtml(fmt.dateTime(a.expires)) })}</span>` : ''}
         </summary>
         <p>${escapeHtml(a.description)}</p>
         ${a.instruction ? `<p class="instruction">${escapeHtml(a.instruction)}</p>` : ''}
-        <p class="muted small">Quelle: ${escapeHtml(a.source)}</p>
+        <p class="muted small">${m('forecast.alertSource', { src: escapeHtml(a.source) })}</p>
       </details>`,
     )
     .join('')}</section>`;
@@ -319,7 +325,7 @@ function renderDaily(f: Forecast) {
       const prob = d.precipitation_probability_max[i];
       return `<li>
         <button type="button" class="d-row" aria-expanded="false" aria-controls="d-hours-${i}" data-day="${i}">
-        <span class="d-day"><b>${i === 0 ? 'Heute' : escapeHtml(fmt.weekday(t))}</b> <small>${escapeHtml(fmt.dayMonth(t))}</small></span>
+        <span class="d-day"><b>${i === 0 ? m('forecast.today') : escapeHtml(fmt.weekday(t))}</b> <small>${escapeHtml(fmt.dayMonth(t))}</small></span>
         <span class="d-icon" title="${escapeHtml(describe(d.weather_code[i]))}">${weatherIcon(d.weather_code[i], true, 34)}</span>
         <span class="d-prec ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : ''}<small>${d.precipitation_sum[i] > 0 ? precipSumTxt(d.precipitation_sum[i]) : ''}</small></span>
         <span class="d-min">${fmt.temp(min)}</span>
@@ -341,18 +347,18 @@ function renderDayHours(f: Forecast, date: string) {
     const prob = h.precipitation_probability[i];
     const uv = h.uv_index[i];
     cols.push(`<div class="h-col${t.slice(0, 13) === f.current.time.slice(0, 13) ? ' now' : ''}">
-      <b>${t.slice(0, 13) === f.current.time.slice(0, 13) ? 'Jetzt' : fmt.hour(t)}</b>
+      <b>${t.slice(0, 13) === f.current.time.slice(0, 13) ? m('forecast.now') : fmt.hour(t)}</b>
       <span title="${escapeHtml(describe(h.weather_code[i]))}">${weatherIcon(h.weather_code[i], h.is_day[i] === 1, 30)}</span>
       <span class="h-temp">${fmt.temp(h.temperature_2m[i])}</span>
-      <small>gef. ${fmt.temp(h.apparent_temperature[i])}</small>
+      <small>${m('forecast.feelsShort', { v: fmt.temp(h.apparent_temperature[i]) })}</small>
       <span class="h-rain ${prob != null && prob >= 30 ? 'wet' : ''}">${prob != null ? `${prob} %` : '–'}</span>
       <small>${h.precipitation[i] > 0 ? precipSumTxt(h.precipitation[i]) : '&nbsp;'}</small>
       <span>${windTxt(h.wind_speed_10m[i])}</span>
-      <small>Böen ${windTxt(h.wind_gusts_10m[i])}</small>
+      <small>${m('forecast.gustsShort', { v: windTxt(h.wind_gusts_10m[i]) })}</small>
       <small>UV ${uv != null ? fmt.num(uv, 0) : '–'}</small>
     </div>`);
   });
-  if (!cols.length) return '<p class="muted small">Keine Stundendaten verfügbar.</p>';
+  if (!cols.length) return `<p class="muted small">${m('forecast.noHourly')}</p>`;
   return `<div class="hours-strip">${cols.join('')}</div>`;
 }
 

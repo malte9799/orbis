@@ -89,12 +89,12 @@ export const BODIES: Body[] = [
     rotationHours: 609.12,
     position: () => [0, 0, 0],
     facts: [
-      ['Durchmesser', '1 392 684 km (109 × Erde)'],
-      ['Masse', '333 000 × Erde'],
-      ['Oberflächentemperatur', '≈ 5 500 °C'],
-      ['Alter', '≈ 4,6 Mrd. Jahre'],
+      ['facts.diameter', 'sun.diameter'],
+      ['facts.mass', 'sun.mass'],
+      ['facts.surfaceTemp', 'sun.surfaceTemp'],
+      ['facts.age', 'sun.age'],
     ],
-    description: 'Unser Stern – ein gelber Zwerg, der 99,86 % der Masse des Sonnensystems enthält.',
+    description: 'desc',
   },
   {
     id: 'mercury',
@@ -110,14 +110,14 @@ export const BODIES: Body[] = [
     position: planet('mercury'),
     orbit: true,
     facts: [
-      ['Durchmesser', '4 879 km'],
-      ['Umlaufzeit', '88 Tage'],
-      ['Tageslänge', '176 Erdtage (Sonnentag)'],
-      ['Temperatur', '−173 bis +427 °C'],
-      ['Schwerkraft', '3,7 m/s²'],
-      ['Monde', 'keine'],
+      ['facts.diameter', 'mercury.diameter'],
+      ['facts.orbit', 'mercury.orbit'],
+      ['facts.dayLength', 'mercury.dayLength'],
+      ['facts.temp', 'mercury.temp'],
+      ['facts.gravity', 'mercury.gravity'],
+      ['facts.moons', 'mercury.moons'],
     ],
-    description: 'Der kleinste und sonnennächste Planet, ohne nennenswerte Atmosphäre.',
+    description: 'desc',
   },
   {
     id: 'venus',
@@ -131,14 +131,14 @@ export const BODIES: Body[] = [
     position: planet('venus'),
     orbit: true,
     facts: [
-      ['Durchmesser', '12 104 km'],
-      ['Umlaufzeit', '225 Tage'],
-      ['Tageslänge', '117 Erdtage, rückläufig'],
-      ['Temperatur', '≈ 464 °C'],
-      ['Luftdruck', '92 bar (CO₂)'],
-      ['Monde', 'keine'],
+      ['facts.diameter', 'venus.diameter'],
+      ['facts.orbit', 'venus.orbit'],
+      ['facts.dayLength', 'venus.dayLength'],
+      ['facts.temp', 'venus.temp'],
+      ['facts.pressure', 'venus.pressure'],
+      ['facts.moons', 'venus.moons'],
     ],
-    description: 'Der heißeste Planet – eine dichte CO₂-Atmosphäre sorgt für einen extremen Treibhauseffekt.',
+    description: 'desc',
   },
   {
     id: 'earth',
@@ -152,14 +152,14 @@ export const BODIES: Body[] = [
     position: planet('earth'),
     orbit: true,
     facts: [
-      ['Durchmesser', '12 742 km'],
-      ['Umlaufzeit', '365,25 Tage'],
-      ['Tageslänge', '24 h'],
-      ['Mittlere Temperatur', '≈ 15 °C'],
-      ['Schwerkraft', '9,81 m/s²'],
-      ['Monde', '1'],
+      ['facts.diameter', 'earth.diameter'],
+      ['facts.orbit', 'earth.orbit'],
+      ['facts.dayLength', 'earth.dayLength'],
+      ['facts.meanTemp', 'earth.meanTemp'],
+      ['facts.gravity', 'earth.gravity'],
+      ['facts.moons', 'earth.moons'],
     ],
-    description: 'Unser Heimatplanet. Hineinzoomen öffnet die Wetterkarte.',
+    description: 'desc',
   },
   {
     id: 'moon',
@@ -175,12 +175,12 @@ export const BODIES: Body[] = [
     position: (ms, ctx) => add(ctx('earth'), moonGeocentric(ms)),
     periodDays: 27.32,
     facts: [
-      ['Durchmesser', '3 474 km'],
-      ['Entfernung zur Erde', '≈ 384 400 km'],
-      ['Umlaufzeit', '27,3 Tage'],
-      ['Schwerkraft', '1,62 m/s²'],
+      ['facts.diameter', 'moon.diameter'],
+      ['facts.earthDistance', 'moon.earthDistance'],
+      ['facts.orbit', 'moon.orbit'],
+      ['facts.gravity', 'moon.gravity'],
     ],
-    description: 'Der Erdmond zeigt uns wegen der gebundenen Rotation immer dieselbe Seite.',
+    description: 'desc',
   },
   {
     id: 'mars',
@@ -196,14 +196,14 @@ export const BODIES: Body[] = [
     position: planet('mars'),
     orbit: true,
     facts: [
-      ['Durchmesser', '6 779 km'],
-      ['Umlaufzeit', '687 Tage'],
-      ['Tageslänge', '24 h 37 min'],
-      ['Temperatur', '≈ −65 °C'],
-      ['Schwerkraft', '3,71 m/s²'],
-      ['Monde', '2 (Phobos, Deimos)'],
+      ['facts.diameter', 'mars.diameter'],
+      ['facts.orbit', 'mars.orbit'],
+      ['facts.dayLength', 'mars.dayLength'],
+      ['facts.temp', 'mars.temp'],
+      ['facts.gravity', 'mars.gravity'],
+      ['facts.moons', 'mars.moons'],
     ],
-    description: 'Der rote Planet mit dem höchsten Vulkan (Olympus Mons) und dem größten Canyon des Sonnensystems.',
+    description: 'desc',
   },
   {
     id: 'phobos',
@@ -237,14 +237,14 @@ export const BODIES: Body[] = [
     position: planet('jupiter'),
     orbit: true,
     facts: [
-      ['Durchmesser', '139 820 km (11 × Erde)'],
-      ['Umlaufzeit', '11,9 Jahre'],
-      ['Tageslänge', '9 h 56 min'],
-      ['Temperatur', '≈ −110 °C (Wolkenobergrenze)'],
-      ['Schwerkraft', '24,8 m/s²'],
-      ['Monde', '95'],
+      ['facts.diameter', 'jupiter.diameter'],
+      ['facts.orbit', 'jupiter.orbit'],
+      ['facts.dayLength', 'jupiter.dayLength'],
+      ['facts.temp', 'jupiter.temp'],
+      ['facts.gravity', 'jupiter.gravity'],
+      ['facts.moons', 'jupiter.moons'],
     ],
-    description: 'Der größte Planet – ein Gasriese mit dem Großen Roten Fleck, einem seit Jahrhunderten tobenden Sturm.',
+    description: 'desc',
   },
   {
     id: 'io',
@@ -255,7 +255,7 @@ export const BODIES: Body[] = [
     color: '#e8d36a',
     texture: tex('moons/io.jpg'),
     ...moon({ parent: 'jupiter', aKm: 421700, periodDays: 1.769138, l0: 106.07719, incl: 2.2 }),
-    description: 'Der vulkanisch aktivste Körper im Sonnensystem.',
+    description: 'desc',
   },
   {
     id: 'europa',
@@ -266,7 +266,7 @@ export const BODIES: Body[] = [
     color: '#d8cbb0',
     texture: tex('moons/europa.jpg'),
     ...moon({ parent: 'jupiter', aKm: 671034, periodDays: 3.551181, l0: 175.73161, incl: 2.2 }),
-    description: 'Unter dem Eispanzer liegt vermutlich ein globaler Ozean aus flüssigem Wasser.',
+    description: 'desc',
   },
   {
     id: 'ganymede',
@@ -277,7 +277,7 @@ export const BODIES: Body[] = [
     color: '#a99c8c',
     texture: tex('moons/ganymede.jpg'),
     ...moon({ parent: 'jupiter', aKm: 1070412, periodDays: 7.15455, l0: 120.55883, incl: 2.2 }),
-    description: 'Der größte Mond des Sonnensystems – größer als der Planet Merkur.',
+    description: 'desc',
   },
   {
     id: 'callisto',
@@ -301,14 +301,14 @@ export const BODIES: Body[] = [
     position: planet('saturn'),
     orbit: true,
     facts: [
-      ['Durchmesser', '116 460 km'],
-      ['Umlaufzeit', '29,5 Jahre'],
-      ['Tageslänge', '10 h 39 min'],
-      ['Temperatur', '≈ −140 °C'],
-      ['Schwerkraft', '10,4 m/s²'],
-      ['Monde', '146'],
+      ['facts.diameter', 'saturn.diameter'],
+      ['facts.orbit', 'saturn.orbit'],
+      ['facts.dayLength', 'saturn.dayLength'],
+      ['facts.temp', 'saturn.temp'],
+      ['facts.gravity', 'saturn.gravity'],
+      ['facts.moons', 'saturn.moons'],
     ],
-    description: 'Der Ringplanet – seine Ringe bestehen aus Eisbrocken und sind nur etwa 10 m bis 1 km dick.',
+    description: 'desc',
   },
   {
     id: 'titan',
@@ -319,7 +319,7 @@ export const BODIES: Body[] = [
     color: '#d9a650',
     texture: tex('moons/titan.jpg'),
     ...moon({ parent: 'saturn', aKm: 1221870, periodDays: 15.945, l0: 30, incl: 27 }),
-    description: 'Der einzige Mond mit dichter Atmosphäre und Seen aus flüssigem Methan.',
+    description: 'desc',
   },
   {
     id: 'uranus',
@@ -333,14 +333,14 @@ export const BODIES: Body[] = [
     position: planet('uranus'),
     orbit: true,
     facts: [
-      ['Durchmesser', '50 724 km'],
-      ['Umlaufzeit', '84 Jahre'],
-      ['Tageslänge', '17 h 14 min, rückläufig'],
-      ['Temperatur', '≈ −195 °C'],
-      ['Achsneigung', '98° – rollt um die Sonne'],
-      ['Monde', '28'],
+      ['facts.diameter', 'uranus.diameter'],
+      ['facts.orbit', 'uranus.orbit'],
+      ['facts.dayLength', 'uranus.dayLength'],
+      ['facts.temp', 'uranus.temp'],
+      ['facts.axialTilt', 'uranus.axialTilt'],
+      ['facts.moons', 'uranus.moons'],
     ],
-    description: 'Ein Eisriese, der praktisch auf der Seite liegend um die Sonne läuft.',
+    description: 'desc',
   },
   {
     id: 'neptune',
@@ -354,14 +354,14 @@ export const BODIES: Body[] = [
     position: planet('neptune'),
     orbit: true,
     facts: [
-      ['Durchmesser', '49 244 km'],
-      ['Umlaufzeit', '165 Jahre'],
-      ['Tageslänge', '16 h 6 min'],
-      ['Temperatur', '≈ −200 °C'],
-      ['Windgeschwindigkeit', 'bis 2 100 km/h'],
-      ['Monde', '16'],
+      ['facts.diameter', 'neptune.diameter'],
+      ['facts.orbit', 'neptune.orbit'],
+      ['facts.dayLength', 'neptune.dayLength'],
+      ['facts.temp', 'neptune.temp'],
+      ['facts.wind', 'neptune.wind'],
+      ['facts.moons', 'neptune.moons'],
     ],
-    description: 'Der äußerste Planet – mit den schnellsten Winden im Sonnensystem.',
+    description: 'desc',
   },
   {
     id: 'pluto',
@@ -375,12 +375,12 @@ export const BODIES: Body[] = [
     position: planet('pluto'),
     orbit: true,
     facts: [
-      ['Durchmesser', '2 377 km'],
-      ['Umlaufzeit', '248 Jahre'],
-      ['Temperatur', '≈ −225 °C'],
-      ['Monde', '5 (u. a. Charon)'],
+      ['facts.diameter', 'pluto.diameter'],
+      ['facts.orbit', 'pluto.orbit'],
+      ['facts.temp', 'pluto.temp'],
+      ['facts.moons', 'pluto.moons'],
     ],
-    description: 'Zwergplanet im Kuipergürtel, 2015 von New Horizons besucht.',
+    description: 'desc',
   },
   {
     id: 'mimas',
@@ -393,7 +393,7 @@ export const BODIES: Body[] = [
     rotationHours: 22.61,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 185520, periodDays: 0.942, l0: 236, incl: 27 }),
-    description: "Der kleinste und innerste der großen Saturnmonde – der riesige Herschel-Krater erinnert an den „Todesstern“.",
+    description: 'desc',
   },
   {
     id: 'enceladus',
@@ -406,7 +406,7 @@ export const BODIES: Body[] = [
     rotationHours: 32.88,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 238020, periodDays: 1.37, l0: 230, incl: 27 }),
-    description: "Eisgeysire am Südpol speisen den E-Ring; unter dem Eis liegt ein Ozean – ein Kandidat für außerirdisches Leben.",
+    description: 'desc',
   },
   {
     id: 'tethys',
@@ -419,7 +419,7 @@ export const BODIES: Body[] = [
     rotationHours: 45.31,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 294660, periodDays: 1.888, l0: 357, incl: 27 }),
-    description: "Fast reines Eis, geprägt vom Odysseus-Krater und dem Canyon Ithaca Chasma.",
+    description: 'desc',
   },
   {
     id: 'dione',
@@ -432,7 +432,7 @@ export const BODIES: Body[] = [
     rotationHours: 65.69,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 377400, periodDays: 2.737, l0: 173, incl: 27 }),
-    description: "Eismond mit hellen Eisklippen auf der Rückseite und Spuren möglicher Geologie im Inneren.",
+    description: 'desc',
   },
   {
     id: 'rhea',
@@ -445,7 +445,7 @@ export const BODIES: Body[] = [
     rotationHours: 108.43,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 527040, periodDays: 4.518, l0: 25, incl: 27 }),
-    description: "Zweitgrößter Saturnmond, stark verkratert und fast nur aus Wassereis.",
+    description: 'desc',
   },
   {
     id: 'iapetus',
@@ -458,7 +458,7 @@ export const BODIES: Body[] = [
     rotationHours: 1903.92,
     approx: true,
     ...moon({ parent: 'saturn', aKm: 3560820, periodDays: 79.33, l0: 260, incl: 17 }),
-    description: "Zweifarbig: eine Hälfte pechschwarz, die andere hell – dazu ein 20 km hoher Äquatorgrat.",
+    description: 'desc',
   },
   {
     id: 'miranda',
@@ -471,7 +471,7 @@ export const BODIES: Body[] = [
     rotationHours: 33.91,
     approx: true,
     ...moon({ parent: 'uranus', aKm: 129390, periodDays: 1.413, l0: 165, incl: 98 }),
-    description: "Der zerklüftetste Uranusmond mit Canyons, die bis zu 20 km tief sind.",
+    description: 'desc',
   },
   {
     id: 'ariel',
@@ -484,7 +484,7 @@ export const BODIES: Body[] = [
     rotationHours: 60.48,
     approx: true,
     ...moon({ parent: 'uranus', aKm: 191020, periodDays: 2.52, l0: 194, incl: 98 }),
-    description: "Hellster Uranusmond mit Tälern und Gräben aus Eis.",
+    description: 'desc',
   },
   {
     id: 'umbriel',
@@ -497,7 +497,7 @@ export const BODIES: Body[] = [
     rotationHours: 99.46,
     approx: true,
     ...moon({ parent: 'uranus', aKm: 266300, periodDays: 4.144, l0: 36, incl: 98 }),
-    description: "Dunkelster der großen Uranusmonde mit einem rätselhaften hellen Ring im Krater Wunda.",
+    description: 'desc',
   },
   {
     id: 'titania',
@@ -510,7 +510,7 @@ export const BODIES: Body[] = [
     rotationHours: 208.94,
     approx: true,
     ...moon({ parent: 'uranus', aKm: 435910, periodDays: 8.706, l0: 20, incl: 98 }),
-    description: "Größter Uranusmond, durchzogen von gewaltigen Gräben.",
+    description: 'desc',
   },
   {
     id: 'oberon',
@@ -523,7 +523,7 @@ export const BODIES: Body[] = [
     rotationHours: 323.11,
     approx: true,
     ...moon({ parent: 'uranus', aKm: 583520, periodDays: 13.463, l0: 324, incl: 98 }),
-    description: "Äußerer großer Uranusmond, uralt und stark verkratert.",
+    description: 'desc',
   },
   {
     id: 'triton',
@@ -536,7 +536,7 @@ export const BODIES: Body[] = [
     rotationHours: -141.05,
     approx: true,
     ...moon({ parent: 'neptune', aKm: 354759, periodDays: -5.877, l0: 77, incl: 29 }),
-    description: "Größter Neptunmond: umkreist seinen Planeten rückläufig – vermutlich ein eingefangener Kuipergürtel-Körper mit Stickstoffgeysiren.",
+    description: 'desc',
   },
   {
     id: 'charon',
@@ -549,7 +549,7 @@ export const BODIES: Body[] = [
     rotationHours: 153.29,
     approx: true,
     ...moon({ parent: 'pluto', aKm: 19591, periodDays: 6.387, l0: 299, incl: 119 }),
-    description: "Pluto und Charon umkreisen einen gemeinsamen Schwerpunkt außerhalb Plutos und zeigen einander stets dieselbe Seite.",
+    description: 'desc',
   },
   {
     id: 'ceres',
@@ -562,12 +562,9 @@ export const BODIES: Body[] = [
     position: small('ceres'),
     orbit: true,
     facts: [
-      ["Durchmesser", "939 km"],
-      ["Umlaufzeit", "4,6 Jahre"],
-      ["Tageslänge", "9,1 h"],
-      ["Besuch", "Dawn (2015–2018)"],
+
     ],
-    description: "Der größte Körper im Asteroidengürtel und der einzige Zwergplanet im inneren Sonnensystem – 2015 von der Sonde Dawn erkundet.",
+    description: 'desc',
   },
   {
     id: 'vesta',
@@ -580,12 +577,9 @@ export const BODIES: Body[] = [
     position: small('vesta'),
     orbit: true,
     facts: [
-      ["Durchmesser", "≈ 525 km"],
-      ["Umlaufzeit", "3,6 Jahre"],
-      ["Tageslänge", "5,3 h"],
-      ["Besuch", "Dawn (2011–2012)"],
+
     ],
-    description: "Zweitgrößter Körper des Asteroidengürtels mit dem riesigen Rheasilvia-Einschlagbecken am Südpol – von Dawn 2011/12 kartiert.",
+    description: 'desc',
   },
   {
     id: 'eris',
@@ -596,11 +590,9 @@ export const BODIES: Body[] = [
     position: small('eris'),
     orbit: true,
     facts: [
-      ["Durchmesser", "≈ 2 326 km"],
-      ["Umlaufzeit", "≈ 559 Jahre"],
-      ["Mond", "Dysnomia"],
+
     ],
-    description: "Massereichster bekannter Zwergplanet jenseits von Neptun, 2005 entdeckt – ihre Entdeckung führte zur Neudefinition des Planetenbegriffs. Keine Oberflächenkarte vorhanden.",
+    description: 'desc',
   },
   {
     id: 'haumea',
@@ -612,11 +604,9 @@ export const BODIES: Body[] = [
     position: small('haumea'),
     orbit: true,
     facts: [
-      ["Durchmesser", "≈ 1 600 × 1 000 km"],
-      ["Umlaufzeit", "≈ 283 Jahre"],
-      ["Tageslänge", "3,9 h"],
+
     ],
-    description: "Schnell rotierender, eiförmiger Zwergplanet im Kuipergürtel mit Ring und zwei Monden. Keine Oberflächenkarte vorhanden.",
+    description: 'desc',
   },
   {
     id: 'makemake',
@@ -627,11 +617,9 @@ export const BODIES: Body[] = [
     position: small('makemake'),
     orbit: true,
     facts: [
-      ["Durchmesser", "≈ 1 430 km"],
-      ["Umlaufzeit", "≈ 305 Jahre"],
-      ["Mond", "S/2015 (136472) 1"],
+
     ],
-    description: "Heller, rötlicher Zwergplanet im Kuipergürtel. Keine Oberflächenkarte vorhanden.",
+    description: 'desc',
   },
 ];
 
@@ -748,12 +736,9 @@ export const ASTEROIDS: Body[] = [
     position: small('eros'),
     orbit: true,
     facts: [
-      ["Größe", "34 × 11 × 11 km"],
-      ["Besuch", "NEAR Shoemaker (2000–2001)"],
-      ["Umlaufzeit", "1,8 Jahre"],
-      ["Rotation", "5,3 h"],
+
     ],
-    description: "Erdnaher Asteroid, 1898 entdeckt und von NEAR Shoemaker 2000/01 umkreist – der erste Asteroid, auf dem eine Sonde landete.",
+    description: 'desc',
   },
   {
     id: 'bennu',
@@ -765,12 +750,9 @@ export const ASTEROIDS: Body[] = [
     position: small('bennu'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 490 m"],
-      ["Besuch", "OSIRIS-REx (2018–2021)"],
-      ["Umlaufzeit", "1,2 Jahre"],
-      ["Rotation", "4,3 h"],
+
     ],
-    description: "Kohlenstoffreicher, erdnaher Asteroid – OSIRIS-REx nahm hier 2020 eine Probe und brachte sie 2023 zur Erde.",
+    description: 'desc',
   },
   {
     id: 'itokawa',
@@ -782,12 +764,9 @@ export const ASTEROIDS: Body[] = [
     position: small('itokawa'),
     orbit: true,
     facts: [
-      ["Größe", "535 × 294 × 209 m"],
-      ["Besuch", "Hayabusa (2005)"],
-      ["Umlaufzeit", "1,5 Jahre"],
-      ["Rotation", "12,1 h"],
+
     ],
-    description: "Erdnaher, erdnussförmiger Asteroid – von Hayabusa 2005 besucht, 2010 kamen erstmals Asteroidenproben zur Erde.",
+    description: 'desc',
   },
   {
     id: 'kleopatra',
@@ -799,11 +778,9 @@ export const ASTEROIDS: Body[] = [
     position: small('kleopatra'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 217 × 94 × 81 km"],
-      ["Umlaufzeit", "4,7 Jahre"],
-      ["Rotation", "5,4 h"],
+
     ],
-    description: "Knochenförmiger Metall-Asteroid im Hauptgürtel mit zwei kleinen Monden.",
+    description: 'desc',
   },
   {
     id: 'geographos',
@@ -815,11 +792,9 @@ export const ASTEROIDS: Body[] = [
     position: small('geographos'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 5,1 × 1,8 km"],
-      ["Umlaufzeit", "1,4 Jahre"],
-      ["Rotation", "5,2 h"],
+
     ],
-    description: "Extrem länglicher erdnaher Asteroid – einer der am stärksten gestreckten Körper des Sonnensystems.",
+    description: 'desc',
   },
   {
     id: 'toutatis',
@@ -831,12 +806,9 @@ export const ASTEROIDS: Body[] = [
     position: small('toutatis'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 4,6 × 2,3 km"],
-      ["Besuch", "Chang'e 2 (2012, Vorbeiflug)"],
-      ["Umlaufzeit", "4,0 Jahre"],
-      ["Rotation", "7 Tage"],
+
     ],
-    description: "Erdnaher Asteroid mit chaotischer Taumelbewegung; 2012 flog Chinas Chang'e 2 vorbei.",
+    description: 'desc',
   },
   {
     id: 'mithra',
@@ -848,11 +820,9 @@ export const ASTEROIDS: Body[] = [
     position: small('mithra'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 2,7 km"],
-      ["Umlaufzeit", "3,3 Jahre"],
-      ["Rotation", "3 Tage"],
+
     ],
-    description: "Erdnaher Apollo-Asteroid, per Radar vermessen.",
+    description: 'desc',
   },
   {
     id: 'golevka',
@@ -864,11 +834,9 @@ export const ASTEROIDS: Body[] = [
     position: small('golevka'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 530 m"],
-      ["Umlaufzeit", "3,9 Jahre"],
-      ["Rotation", "6,0 h"],
+
     ],
-    description: "Kleiner erdnaher Asteroid – an ihm wurde der Yarkovsky-Effekt (Bahnänderung durch Wärmeabstrahlung) erstmals gemessen.",
+    description: 'desc',
   },
   {
     id: 'hw1',
@@ -880,11 +848,9 @@ export const ASTEROIDS: Body[] = [
     position: small('hw1'),
     orbit: true,
     facts: [
-      ["Größe", "≈ 3,8 km"],
-      ["Umlaufzeit", "2,9 Jahre"],
-      ["Rotation", "8,8 h"],
+
     ],
-    description: "Doppelasteroid-ähnlicher „Kontaktbinär“ aus zwei verschmolzenen Körpern, per Radar vermessen.",
+    description: 'desc',
   },
 ];
 
@@ -900,11 +866,11 @@ export const CRAFT: Body[] = [
     model: m('iss.glb', 109, undefined, 'iss-detail.glb', Math.PI / 2),
     position: (ms) => satLookup('25544', ms),
     facts: [
-      ['Bahnhöhe', '≈ 420 km'],
-      ['Geschwindigkeit', '≈ 27 600 km/h'],
-      ['Besatzung', 'seit November 2000 dauerhaft bewohnt'],
+      ['facts.orbitHeight', 'iss.orbitHeight'],
+      ['facts.speed', 'iss.speed'],
+      ['facts.crew', 'iss.crew'],
     ],
-    description: 'Die Internationale Raumstation – Position live aus aktuellen Bahndaten (CelesTrak).',
+    description: 'desc',
   },
   {
     id: 'hubble',
@@ -916,11 +882,11 @@ export const CRAFT: Body[] = [
     model: m('hubble-lite.glb', 13.2, undefined, 'hubble.glb'),
     position: (ms) => satLookup('20580', ms),
     facts: [
-      ['Start', '24. April 1990'],
-      ['Bahnhöhe', '≈ 515 km'],
-      ['Spiegel', '2,4 m'],
+      ['facts.launch', 'hubble.launch'],
+      ['facts.orbitHeight', 'hubble.orbitHeight'],
+      ['facts.mirror', 'hubble.mirror'],
     ],
-    description: 'Das berühmte Weltraumteleskop – Position live aus aktuellen Bahndaten (CelesTrak).',
+    description: 'desc',
   },
   {
     id: 'voyager1',
@@ -931,11 +897,11 @@ export const CRAFT: Body[] = [
     color: '#ffd23f',
     position: tracked('voyager1', escaping(255.6, 35.0, 164.9, 3.57, '1981-01-01')),
     facts: [
-      ['Start', '5. September 1977'],
-      ['Status', 'aktiv, im interstellaren Raum'],
-      ['Geschwindigkeit', '≈ 61 000 km/h relativ zur Sonne'],
+      ['facts.launch', 'voyager1.launch'],
+      ['facts.status', 'voyager1.status'],
+      ['facts.speed', 'voyager1.speed'],
     ],
-    description: 'Das am weitesten entfernte menschengemachte Objekt. Besuchte Jupiter und Saturn.',
+    description: 'desc',
   },
   {
     id: 'voyager2',
@@ -946,10 +912,10 @@ export const CRAFT: Body[] = [
     color: '#ffd23f',
     position: tracked('voyager2', escaping(289.8, -32.0, 138.2, 3.25, '1990-01-01')),
     facts: [
-      ['Start', '20. August 1977'],
-      ['Status', 'aktiv, im interstellaren Raum'],
+      ['facts.launch', 'voyager2.launch'],
+      ['facts.status', 'voyager2.status'],
     ],
-    description: 'Einzige Sonde, die alle vier Gasriesen besucht hat (Jupiter, Saturn, Uranus, Neptun).',
+    description: 'desc',
   },
   {
     id: 'newhorizons',
@@ -960,11 +926,11 @@ export const CRAFT: Body[] = [
     color: '#ffd23f',
     position: tracked('newhorizons', escaping(288.0, 1.9, 61.1, 2.89, '2016-01-01')),
     facts: [
-      ['Start', '19. Januar 2006'],
-      ['Pluto-Vorbeiflug', '14. Juli 2015'],
-      ['Arrokoth-Vorbeiflug', '1. Januar 2019'],
+      ['facts.launch', 'newhorizons.launch'],
+      ['facts.plutoFlyby', 'newhorizons.plutoFlyby'],
+      ['facts.arrokothFlyby', 'newhorizons.arrokothFlyby'],
     ],
-    description: 'Erkundete Pluto und das Kuipergürtel-Objekt Arrokoth.',
+    description: 'desc',
   },
   {
     id: 'pioneer10',
@@ -975,22 +941,22 @@ export const CRAFT: Body[] = [
     color: '#b0b8c8',
     position: tracked('pioneer10', escaping(77.2, 3.0, 137.0, 2.51, '1980-01-01')),
     facts: [
-      ['Start', '3. März 1972'],
-      ['Status', 'Kontakt 2003 verloren'],
+      ['facts.launch', 'pioneer10.launch'],
+      ['facts.status', 'pioneer10.status'],
     ],
-    description: 'Erste Sonde, die den Asteroidengürtel durchquerte und Jupiter besuchte.',
+    description: 'desc',
   },
   {
     id: 'pioneer11',
     name: 'Pioneer 11',
     kind: 'craft',
-    model: m('pioneer-lite.glb', 8, 'Modell: Pioneer 10 (baugleich)', 'pioneer.glb'),
+    model: m('pioneer-lite.glb', 8, 'modelNote', 'pioneer.glb'),
     radiusKm: 0.002,
     color: '#b0b8c8',
     position: tracked('pioneer11', escaping(284.7, 13.0, 114.0, 2.37, '1991-01-01')),
     facts: [
-      ['Start', '6. April 1973'],
-      ['Status', 'Kontakt 1995 verloren'],
+      ['facts.launch', 'pioneer11.launch'],
+      ['facts.status', 'pioneer11.status'],
     ],
   },
   {
@@ -1003,10 +969,10 @@ export const CRAFT: Body[] = [
     approx: true,
     position: (ms, ctx) => (ms < date('2022-01-24') ? null : scale(ctx('earth'), 1.01003)),
     facts: [
-      ['Start', '25. Dezember 2021'],
-      ['Ort', 'Lagrange-Punkt L2, 1,5 Mio. km von der Erde'],
+      ['facts.launch', 'jwst.launch'],
+      ['facts.location', 'jwst.location'],
     ],
-    description: 'Das größte Weltraumteleskop, beobachtet im Infrarot.',
+    description: 'desc',
   },
   {
     id: 'soho',
@@ -1018,10 +984,10 @@ export const CRAFT: Body[] = [
     approx: true,
     position: (ms, ctx) => (ms < date('1996-02-14') ? null : scale(ctx('earth'), 0.99)),
     facts: [
-      ['Start', '2. Dezember 1995'],
-      ['Ort', 'Lagrange-Punkt L1 zwischen Erde und Sonne'],
+      ['facts.launch', 'soho.launch'],
+      ['facts.location', 'soho.location'],
     ],
-    description: 'Sonnenobservatorium von ESA und NASA.',
+    description: 'desc',
   },
   {
     id: 'parker',
@@ -1045,11 +1011,11 @@ export const CRAFT: Body[] = [
       return [x * Math.cos(w) - y * Math.sin(w), x * Math.sin(w) + y * Math.cos(w), 0];
     }),
     facts: [
-      ['Start', '12. August 2018'],
-      ['Sonnennähe', '6,2 Mio. km – näher als je ein Objekt zuvor'],
-      ['Höchstgeschwindigkeit', '≈ 690 000 km/h'],
+      ['facts.launch', 'parker.launch'],
+      ['facts.sunProximity', 'parker.sunProximity'],
+      ['facts.topSpeed', 'parker.topSpeed'],
     ],
-    description: 'Fliegt durch die Korona der Sonne.',
+    description: 'desc',
   },
   {
     id: 'juno',
@@ -1061,10 +1027,10 @@ export const CRAFT: Body[] = [
     approx: true,
     position: near('jupiter', '2016-07-05', [0, 0, 400000]),
     facts: [
-      ['Start', '5. August 2011'],
-      ['Ankunft am Jupiter', '5. Juli 2016'],
+      ['facts.launch', 'juno.launch'],
+      ['facts.arrivalJupiter', 'juno.arrivalJupiter'],
     ],
-    description: 'Umkreist Jupiter auf einer polaren Bahn.',
+    description: 'desc',
   },
   {
     id: 'perseverance',
@@ -1077,10 +1043,10 @@ export const CRAFT: Body[] = [
     color: '#ff9966',
     position: onSurface('mars', '2021-02-18', [77.4509, 18.4446], (ms) => roverAt(getMarsTracks()?.m20, ms)),
     facts: [
-      ['Landung', '18. Februar 2021, Jezero-Krater'],
-      ['Aufgabe', 'Suche nach Spuren früheren Lebens'],
+      ['facts.landing', 'perseverance.landing'],
+      ['facts.task', 'perseverance.task'],
     ],
-    description: 'Der Rover sammelt Gesteinsproben für eine spätere Rückführung. Position und Fahrspur aus den Daten der NASA (MMGIS).',
+    description: 'desc',
   },
   {
     id: 'ingenuity',
@@ -1092,11 +1058,11 @@ export const CRAFT: Body[] = [
     color: '#ffd23f',
     position: onSurface('mars', '2021-04-04', [77.4510, 18.4449], (ms) => heliAt(ms)),
     facts: [
-      ['Erstflug', '19. April 2021 – erster Motorflug auf einem anderen Planeten'],
-      ['Flüge', '72 (letzter: 18. Januar 2024)'],
-      ['Status', 'Mission beendet, Rotorblatt beschädigt'],
+      ['facts.firstFlight', 'ingenuity.firstFlight'],
+      ['facts.flights', 'ingenuity.flights'],
+      ['facts.status', 'ingenuity.status'],
     ],
-    description: 'Der Mars-Hubschrauber – die Karte zeigt alle Flugrouten, der Punkt markiert seinen letzten Landeplatz.',
+    description: 'desc',
   },
   {
     id: 'curiosity',
@@ -1109,7 +1075,7 @@ export const CRAFT: Body[] = [
     color: '#ff9966',
     position: onSurface('mars', '2012-08-06', [137.4417, -4.5895], (ms) => roverAt(getMarsTracks()?.msl, ms)),
     facts: [['Landung', '6. August 2012, Gale-Krater']],
-    description: 'Der Rover erkundet den Mount Sharp im Gale-Krater. Position und Fahrspur aus den Daten der NASA (MMGIS).',
+    description: 'desc',
   },
   {
     id: 'lro',
@@ -1122,10 +1088,10 @@ export const CRAFT: Body[] = [
     model: m('lro.glb', 5),
     position: near('moon', '2009-06-23', [0, 0, 1787]),
     facts: [
-      ['Start', '18. Juni 2009'],
-      ['Bahnhöhe', '≈ 50–200 km über dem Mond'],
+      ['facts.launch', 'lro.launch'],
+      ['facts.orbitHeight', 'lro.orbitHeight'],
     ],
-    description: 'Kartiert den Mond in höchster Auflösung.',
+    description: 'desc',
   },
   {
     id: 'europaclipper',
@@ -1144,11 +1110,11 @@ export const CRAFT: Body[] = [
       'jupiter',
     )),
     facts: [
-      ['Start', '14. Oktober 2024'],
-      ['Ankunft am Jupiter', 'April 2030'],
-      ['Route', 'Mars-Vorbeiflug 2025, Erd-Vorbeiflug 2026'],
+      ['facts.launch', 'europaclipper.launch'],
+      ['facts.arrivalJupiter', 'europaclipper.arrivalJupiter'],
+      ['facts.route', 'europaclipper.route'],
     ],
-    description: 'Soll Jupitermond Europa auf Bewohnbarkeit untersuchen.',
+    description: 'desc',
   },
   {
     id: 'juice',
@@ -1169,10 +1135,10 @@ export const CRAFT: Body[] = [
       'jupiter',
     )),
     facts: [
-      ['Start', '14. April 2023 (ESA)'],
-      ['Ankunft am Jupiter', 'Juli 2031'],
+      ['facts.launch', 'juice.launch'],
+      ['facts.arrivalJupiter', 'juice.arrivalJupiter'],
     ],
-    description: 'ESA-Mission zu den Eismonden Ganymed, Kallisto und Europa.',
+    description: 'desc',
   },
   {
     id: 'bepicolombo',
@@ -1198,9 +1164,9 @@ export const CRAFT: Body[] = [
       'mercury',
     )),
     facts: [
-      ['Start', '20. Oktober 2018 (ESA/JAXA)'],
-      ['Ankunft am Merkur', 'November 2026'],
+      ['facts.launch', 'bepicolombo.launch'],
+      ['facts.arrivalMercury', 'bepicolombo.arrivalMercury'],
     ],
-    description: 'Europäisch-japanische Merkur-Mission.',
+    description: 'desc',
   },
 ];

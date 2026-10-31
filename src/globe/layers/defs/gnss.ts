@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadAircraftNow } from '../shared/air';
 import { renderGnss } from '../shared/gnss';
 
@@ -65,8 +66,8 @@ export default defineExtra({
         loading: false,
         count: anomalies,
         note: zoomedOut
-          ? `${cells} Zellen gesammelt – ab Zoom 5 kommen neue Messungen dazu`
-          : `${badNow} Flugzeuge melden gerade ungenaue Navigation (Ring) · ${anomalies} von ${cells} Zellen auffällig – Zellen füllen sich über 30 min`,
+          ? t('layers.gnss.noteCells', { cells })
+          : t('layers.gnss.noteBad', { bad: badNow, anomalies, cells }),
       });
     };
     tick();

@@ -1,4 +1,5 @@
 import { defineProvider, type LngLat, type Route, type RouteStep } from '../types';
+import { fmtLocale } from '../../i18n';
 import { fetchJson } from '../../util';
 import { decodePolyline } from '../geo';
 import { fromGoogle } from '../text';
@@ -53,7 +54,7 @@ export default defineProvider({
       // traffic only exists for driving
       ...(req.profile === 'car' ? { routingPreference: 'TRAFFIC_AWARE' } : {}),
       polylineQuality: 'HIGH_QUALITY',
-      languageCode: 'de-DE',
+      languageCode: fmtLocale(),
       units: 'METRIC',
       computeAlternativeRoutes: req.alternatives && pts.length === 2,
     };

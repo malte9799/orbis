@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { empty } from '../shared/geo';
 import { ALPR_FOV_ZOOM, CAM_DETAIL_ZOOM, CAM_ZOOM_RED, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
@@ -54,15 +55,15 @@ function loadNow(ctx: ExtraCtx) {
       ctx.setData('blitzer', fc);
       st.fc = fc;
       updateCones(ctx);
-      const notes = ['Lageplan – keine Fahrwarnung (in DE verboten während der Fahrt)'];
-      if (!fc.features.length) notes.unshift('keine Anlagen im Ausschnitt erfasst');
+      const notes = [t('layers.blitzer.noteBase')];
+      if (!fc.features.length) notes.unshift(t('layers.blitzer.noteNone'));
       ctx.set('blitzer', { loading: false, count: fc.features.length, note: notes.join(' · ') });
     })
     .catch((e) => {
       if (isSuperseded(e) || st.key !== key) return;
       console.warn('Overpass Blitzer', e);
       st.key = '';
-      ctx.set('blitzer', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      ctx.set('blitzer', { loading: false, note: t('layers.blitzer.noteFail') });
     });
 }
 
@@ -115,7 +116,7 @@ export default defineExtra({
       ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const extra = `${rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : ''}
-      <div class="pop-sub">Lageplan – keine Fahrwarnung: Nutzung während der Fahrt in DE verboten (§ 23 StVO)</div>`;
+      <div class="pop-sub">${t('layers.blitzer.popupNote')}</div>`;
     return { type: 'html', html: cardHtml({ glyph: 'blitzer', color: p.kind === 'section' ? '#fb8c00' : p.kind === 'signals' ? '#ba68c8' : CAM_ZOOM_RED, title: p.title, subtitle: p.subtitle, source: 'OpenStreetMap (ODbL)', url: p.url, extra }), lng: pt[0], lat: pt[1] };
   },
   layers: ['blitzer-cone', 'blitzer-cone-line', 'blitzer'],

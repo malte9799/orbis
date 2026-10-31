@@ -1,4 +1,5 @@
 import type { FeatureCollection } from 'geojson';
+import { t } from '../../../i18n';
 import { defineExtra } from '../types';
 import type { InfoPanelData } from '../../infopanel';
 import { FONT_REGULAR } from '../../vector';
@@ -135,28 +136,29 @@ export default defineExtra({
     ctx.loadOnce('geldfluesse', Infinity, async () => {
       const d = await fetchJson<Data>(`${import.meta.env.BASE_URL}data/geldfluesse.json`);
       ctx.setData('geldfluesse', toGeoJson(d));
-      return { count: d.arcs.length, note: 'Durchgezogen: Geld · gestrichelt: bestellt · gepunktet: Obergrenze / kein Geld · Währungen werden nie addiert' };
+      return { count: d.arcs.length, note: t('layers.geldfluesse.note') };
     });
   },
   click({ p, at }) {
-    const link = { label: 'Mehr Details auf whofundedgenocide.com', url: 'https://whofundedgenocide.com/map/' };
-    const credit = '„The Entire Network“, Who Funded Genocide, Research mit Wallface (CC BY 4.0). Ein Registereintrag ist keine Anschuldigung gegen die genannten Stellen; eine Obergrenze ist kein ausgegebenes Geld.';
+    const link = { label: t('layers.geldfluesse.link'), url: 'https://whofundedgenocide.com/map/' };
+    const credit = t('layers.geldfluesse.credit');
     let data: InfoPanelData;
     if (p.kind === 'arc') {
       const amounts = JSON.parse(String(p.amounts)) as { currency: string; amount: number }[];
       const srcs = JSON.parse(String(p.sources)) as Arc['sources'];
       const c = CLASS[p.cls as Cls];
+      const clsKey = String(p.cls);
       const [from, to] = String(p.name).split(' → ');
       data = {
         glyph: 'cable',
         color: c.color,
         title: String(p.name),
-        subtitle: c.label,
+        subtitle: t(`layers.geldfluesse.${clsKey}` as never),
         hero: { from, to, note: String(p.label) },
-        tiles: [...amounts.map((m): [string, string] => [m.currency, `${SYMBOL[m.currency] ?? ''}${MONEY.format(m.amount)}`]), ['Zeilen', MONEY.format(Number(p.lines))]],
+        tiles: [...amounts.map((m): [string, string] => [m.currency, `${SYMBOL[m.currency] ?? ''}${MONEY.format(m.amount)}`]), [t('layers.geldfluesse.rowLines'), MONEY.format(Number(p.lines))]],
         sections: [
-          { key: 'what', title: 'Was der Eintrag sagt', open: true, rows: [{ k: 'Art', v: c.label }, { k: 'Beschreibung', v: String(p.text) }] },
-          { key: 'src', title: `Quellen (${srcs.length})`, open: true, rows: srcs.map((r) => ({ k: r.id, v: r.title, href: r.url })) },
+          { key: 'what', title: t('layers.geldfluesse.secWhat'), open: true, rows: [{ k: t('layers.geldfluesse.rowArt'), v: t(`layers.geldfluesse.${clsKey}` as never) }, { k: t('layers.geldfluesse.rowDesc'), v: String(p.text) }] },
+          { key: 'src', title: t('layers.geldfluesse.secSources', { n: String(srcs.length) }), open: true, rows: srcs.map((r) => ({ k: r.id, v: r.title, href: r.url })) },
         ],
         note: credit,
         link: { ...link, url: `https://whofundedgenocide.com/map/#${String(p.board)}` },
@@ -166,8 +168,8 @@ export default defineExtra({
         glyph: 'cable',
         color: COLOR,
         title: String(p.name),
-        subtitle: 'Land im Datensatz',
-        sections: [{ key: 'notes', title: 'Was die Register zu diesem Land führen', open: true, rows: String(p.notes).split('\n').map((n) => ({ k: '', v: n })) }],
+        subtitle: t('layers.geldfluesse.Land'),
+        sections: [{ key: 'notes', title: t('layers.geldfluesse.secNotes'), open: true, rows: String(p.notes).split('\n').map((n) => ({ k: '', v: n })) }],
         note: credit,
         link,
       };

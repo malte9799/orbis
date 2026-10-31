@@ -4,12 +4,12 @@ export default defineKey({
   id: 'maptiler',
   order: 14,
   group: 'weather',
-  tip: 'Schärfere Satelliten-Grundkarte (MapTiler).',
+  tip: 'tip',
   steps: [
-    { t: '1. MapTiler-Account erstellen (kostenloser Plan, nicht-kommerziell)', u: 'https://cloud.maptiler.com/auth/widget?mode=signup' },
-    { t: '2. API-Key kopieren', u: 'https://cloud.maptiler.com/account/keys/' },
-    { t: '3. Hier einfügen – danach unter Grundkarte „MapTiler Satellit“ wählen' },
+    { t: '1', u: 'https://cloud.maptiler.com/auth/widget?mode=signup' },
+    { t: '2', u: 'https://cloud.maptiler.com/account/keys/' },
+    { t: '3' },
   ],
-  label: 'MapTiler Satellit',
-  placeholder: 'Key',
+  label: 'label',
+  placeholder: 'placeholder',
 });

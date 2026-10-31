@@ -1,4 +1,5 @@
 import { groundTrack, loadSatellites, loadSatGroup, satelliteFeatures, satPopupInfo, type Sat } from '../../../api/tracking';
+import { t as tT } from '../../../i18n';
 import { cardHtml } from '../../popup';
 import type { ClickResult } from '../../extras';
 import type { ClickCtx, ExtraCtx } from '../types';
@@ -18,8 +19,8 @@ export function startSatellites(ctx: ExtraCtx) {
         ctx.set('sats', { loading: false, count: s.length });
       })
       .catch(() => {
-        ctx.set('sats', { loading: false, note: 'CelesTrak nicht erreichbar' });
-        ctx.toast('Satellitendaten (CelesTrak) konnten nicht geladen werden.');
+        ctx.set('sats', { loading: false, note: tT('layers.sats.noteFail') });
+        ctx.toast(tT('layers.sats.toastFail'));
       })
       .finally(() => {
         st.baseLoading = null;
@@ -33,7 +34,7 @@ export function startSatellites(ctx: ExtraCtx) {
         st.starlink = s;
         ctx.set('starlink', { loading: false, count: s.length });
       })
-      .catch(() => ctx.set('starlink', { loading: false, note: 'CelesTrak nicht erreichbar' }))
+      .catch(() => ctx.set('starlink', { loading: false, note: tT('layers.sats.noteFail') }))
       .finally(() => {
         st.starlinkLoading = null;
         updateSatPositions(ctx);

@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadFirePerimeters } from '../../../api/earth';
 
 export default defineExtra({
@@ -38,7 +39,7 @@ export default defineExtra({
     ctx.loadOnce('fireareas', 30 * 60000, async () => {
       const fc = await loadFirePerimeters();
       ctx.setData('fireareas', fc);
-      return { count: fc.features.length, note: fc.features.length ? undefined : 'derzeit keine aktiven Brandflächen' };
+      return { count: fc.features.length, note: fc.features.length ? undefined : t('layers.fireareas.noteNone') };
     });
   },
   click({ at, html }) {

@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
+import { t as m } from '../i18n';
 import type { StyleSpecification } from 'maplibre-gl';
 
 // Data and geometry helpers shared by the games (country features, scopes, name matching, region lists).
@@ -8,6 +9,7 @@ export type Feat = Feature<Geometry, Props>;
 
 export interface Scope {
   id: string;
+  /** message-key suffix – display text lives at games.scope.<label> */
   label: string;
   filter?: (p: Props) => boolean;
   /** fixed map view [w, s, e, n] – the bounding box of e.g. Russia or France (Guyana) is useless */
@@ -17,13 +19,13 @@ export interface Scope {
 export const DATA = `${import.meta.env.BASE_URL}data/games/`;
 export type BBox = [number, number, number, number];
 export const SCOPES: Scope[] = [
-  { id: 'world', label: 'Welt', view: [-168, -56, 180, 80] },
-  { id: 'Europe', view: [-25, 34, 45, 72], label: 'Europa', filter: (p) => p.cont === 'Europe' },
-  { id: 'Asia', view: [25, -11, 150, 55], label: 'Asien', filter: (p) => p.cont === 'Asia' },
-  { id: 'Africa', view: [-20, -36, 53, 38], label: 'Afrika', filter: (p) => p.cont === 'Africa' },
-  { id: 'North America', view: [-170, 7, -50, 72], label: 'Nordamerika', filter: (p) => p.cont === 'North America' },
-  { id: 'South America', view: [-83, -56, -34, 13], label: 'Südamerika', filter: (p) => p.cont === 'South America' },
-  { id: 'Oceania', view: [110, -48, 180, 0], label: 'Ozeanien', filter: (p) => p.cont === 'Oceania' },
+  { id: 'world', label: 'world', view: [-168, -56, 180, 80] },
+  { id: 'Europe', view: [-25, 34, 45, 72], label: 'Europe', filter: (p) => p.cont === 'Europe' },
+  { id: 'Asia', view: [25, -11, 150, 55], label: 'Asia', filter: (p) => p.cont === 'Asia' },
+  { id: 'Africa', view: [-20, -36, 53, 38], label: 'Africa', filter: (p) => p.cont === 'Africa' },
+  { id: 'North America', view: [-170, 7, -50, 72], label: 'northamerica', filter: (p) => p.cont === 'North America' },
+  { id: 'South America', view: [-83, -56, -34, 13], label: 'southamerica', filter: (p) => p.cont === 'South America' },
+  { id: 'Oceania', view: [110, -48, 180, 0], label: 'Oceania', filter: (p) => p.cont === 'Oceania' },
 ];
 /** a SCOPES id, or `conts:Europe,Asia` for several continents at once */
 export function scopeOf(id: string): Scope | undefined {
@@ -172,7 +174,7 @@ export function countryAreas(): Promise<Map<string, number>> {
 export const regionIndexP: { p: Promise<{ id: string; name: string; n: number }[]> | null } = { p: null };
 export function loadRegionIndex() {
   regionIndexP.p ??= fetch(`${DATA}admin1/index.json`).then((r) => {
-    if (!r.ok) throw new Error('Regionsliste konnte nicht geladen werden');
+    if (!r.ok) throw new Error(m('games.regionListError'));
     return r.json();
   });
   regionIndexP.p.catch(() => (regionIndexP.p = null));

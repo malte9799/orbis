@@ -1,5 +1,6 @@
 import type { Map as MlMap, MapMouseEvent } from 'maplibre-gl';
-import { reverseGeocodePoint, searchPlaces } from '../api/openmeteo';
+import { t } from '../i18n';
+import { isPickedPlaceholder, reverseGeocodePoint, searchPlaces } from '../api/openmeteo';
 import { store, type Place } from '../store';
 import { clockTxt, speedTxt } from '../units';
 import { toast } from '../util';
@@ -87,7 +88,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     plan: () => void calculate(),
     pick(i) {
       pickIndex = i;
-      panel.hint('Tippe auf die Karte, um den Punkt zu setzen.');
+      panel.hint(t('routing.stops.tapMap'));
       map.getCanvas().style.cursor = 'crosshair';
     },
     close: () => close(),
@@ -117,7 +118,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     recentre: () => locator.set('heading'),
     toggleVoice() {
       voice.enabled = !voice.enabled;
-      if (voice.enabled) voice.say('Sprachansagen sind an');
+      if (voice.enabled) voice.say(t('routing.voice.on'));
       else voice.reset();
       savePrefs();
       return voice.enabled;
@@ -149,8 +150,8 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
   );
 
   function gpsStatus(s: GpsStatus) {
-    if (s === 'denied') toast('Standortzugriff verweigert. Bitte in den Browser-Einstellungen erlauben.', 'error');
-    else if (s === 'unavailable') toast('Standort nicht verfügbar.', 'error');
+    if (s === 'denied') toast(t('routing.geo.denied'), 'error');
+    else if (s === 'unavailable') toast(t('routing.geo.unavailable'), 'error');
     if ((s === 'denied' || s === 'unavailable') && nav) stopNav();
   }
 
@@ -159,7 +160,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     const f = locator.gps.fix;
     if (f && Date.now() - f.t < 30_000) return Promise.resolve([f.lon, f.lat]);
     return new Promise((resolve, reject) => {
-      if (!navigator.geolocation) return reject(new Error('Standort nicht unterstützt'));
+      if (!navigator.geolocation) return reject(new Error(t('routing.geo.unsupported')));
       navigator.geolocation.getCurrentPosition((p) => resolve([p.coords.longitude, p.coords.latitude]), (e) => reject(e), { enableHighAccuracy: true, timeout: 15000, maximumAge: 20000 });
     });
   }
@@ -170,7 +171,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     for (const s of panel.stops) {
       if (s.pos || s.here || s.label.trim().length < 2) continue;
       const hit = (await searchPlaces(s.label.trim()))[0];
-      if (!hit) throw new Error(`„${s.label}“ nicht gefunden`);
+      if (!hit) throw new Error(t('routing.stops.notFound', { name: s.label }));
       s.pos = [hit.lon, hit.lat];
       s.label = [hit.name, hit.region].filter(Boolean).join(', ');
     }
@@ -185,10 +186,10 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     if (!last.pos && last.label.trim().length < 2) {
       routes = [];
       layer.clear();
-      panel.hint('Ziel eingeben oder auf der Karte wählen.');
+      panel.hint(t('routing.stops.giveDest'));
       return;
     }
-    panel.busy('Route wird berechnet …');
+    panel.busy(t('routing.calc.busy'));
     try {
       await resolveTyped();
       const points: LngLat[] = [];
@@ -199,7 +200,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
       }
       if (my !== planSeq) return;
       if (points.length < 2) {
-        panel.hint('Start und Ziel angeben.');
+        panel.hint(t('routing.stops.giveBoth'));
         return;
       }
       const show = (res: Planned, refining: boolean) => {
@@ -207,7 +208,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
         active = 0;
         layer.show(routes, 0);
         layer.stops(points);
-        showResult(res.failed.length ? `${res.failed[0].provider.label} war nicht erreichbar – berechnet mit ${res.provider.label}.` : undefined, res.provider.id, refining);
+        showResult(res.failed.length ? t('routing.calc.fallback', { first: res.failed[0].provider.label, provider: res.provider.label }) : undefined, res.provider.id, refining);
       };
       // the fast route appears at once, the better one replaces it when it is there
       let previewed = false;
@@ -225,7 +226,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
       if (my !== planSeq) return;
       routes = [];
       layer.clear();
-      const msg = e instanceof GeolocationPositionError ? 'Dein Standort konnte nicht bestimmt werden. Starte ein anderes Ziel oder erlaube den Standortzugriff.' : e instanceof Error ? e.message : 'Route konnte nicht berechnet werden.';
+      const msg = e instanceof GeolocationPositionError ? t('routing.calc.locFail') : e instanceof Error ? e.message : t('routing.calc.fail');
       panel.error(msg);
     }
   }
@@ -234,7 +235,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
   function showResult(note?: string, providerId?: string, refining = false) {
     if (providerId) lastProvider = providerId;
     const p = PROVIDERS.find((x) => x.id === (lastProvider || routes[active]?.provider)) ?? PROVIDERS[0];
-    panel.showRoutes(routes, active, p, note, refining ? `${providerById(provider)?.label ?? 'Der gewählte Dienst'} verbessert die Route …` : undefined);
+    panel.showRoutes(routes, active, p, note, refining ? t('routing.calc.refining', { provider: providerById(provider)?.label ?? t('routing.calc.refiningFallback', { provider: '' }) }) : undefined);
   }
 
   function fit(r: Route) {
@@ -254,7 +255,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
       const last = panel.stops.length - 1;
       panel.setStop(last, [dest.lon, dest.lat], dest.name ?? `${dest.lat.toFixed(4)}, ${dest.lon.toFixed(4)}`);
       void calculate();
-    } else if (!routes.length) panel.hint('Ziel eingeben oder auf der Karte wählen.');
+    } else if (!routes.length) panel.hint(t('routing.stops.giveDest'));
     // the position is needed for "Mein Standort": ask early so the browser prompt does not interrupt the calculation
     if (panel.stops[0].here && locator.mode === 'off') void here().catch(() => {});
   }
@@ -280,7 +281,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
       const { lng, lat } = e.lngLat;
       panel.setStop(i, [lng, lat], `${lat.toFixed(4)}, ${lng.toFixed(4)}`);
       void reverseGeocodePoint(lat, lng).then((p: Place) => {
-        if (p.name && p.name !== 'Ausgewählter Ort' && panel.stops[i]?.pos?.[0] === lng) panel.setStop(i, [lng, lat], [p.name, p.region].filter(Boolean).join(', '));
+        if (p.name && !isPickedPlaceholder(p.name) && panel.stops[i]?.pos?.[0] === lng) panel.setStop(i, [lng, lat], [p.name, p.region].filter(Boolean).join(', '));
       });
       panel.hint('');
       void calculate();
@@ -390,7 +391,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     if (!p) {
       // off the line: a few fixes in a row before a reroute, so one bad fix does not cost a recalculation
       if (nav.st.strays >= REROUTE_AFTER && !nav.rerouting && Date.now() - nav.lastReroute > REROUTE_GAP) void reroute(f);
-      panel.guideSet('text', nav.rerouting ? 'Route wird neu berechnet …' : 'Abseits der Route');
+      panel.guideSet('text', nav.rerouting ? t('routing.calc.rerouting') : t('routing.calc.offRoute'));
       return;
     }
     nav.lastAlong = p.along;
@@ -427,8 +428,8 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
     const n = nav;
     n.rerouting = true;
     n.lastReroute = Date.now();
-    panel.guideSet('text', 'Route wird neu berechnet …');
-    voice.say('Route wird neu berechnet');
+    panel.guideSet('text', t('routing.calc.rerouting'));
+    voice.say(t('routing.calc.rerouteSay'));
     try {
       const h = locator.gps.heading();
       const ahead = n.vias.filter((v) => v.along > n.lastAlong).map((v) => v.pos);
@@ -445,7 +446,7 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
       voice.reset();
       onFix(f);
     } catch {
-      if (nav === n) panel.guideSet('text', 'Keine neue Route gefunden – bitte zurück auf die Route fahren');
+      if (nav === n) panel.guideSet('text', t('routing.calc.noNewRoute'));
     } finally {
       n.rerouting = false;
     }

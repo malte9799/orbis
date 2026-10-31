@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { loadWaves } from '../../../api/ocean';
 import { waveLabel } from '../shared/ocean';
 import { heightUnit } from '../../../units';
@@ -19,12 +20,12 @@ function loadNow(ctx: ExtraCtx) {
     .then((r) => {
       if (st.key !== key) return;
       ctx.setData('waves', r.fc);
-      ctx.set('waves', { loading: false, count: r.fc.features.length, note: `Raster ${r.step}° · Zahl = Wellenhöhe in ${heightUnit()} – zoomen für feineres Raster` });
+      ctx.set('waves', { loading: false, count: r.fc.features.length, note: t('layers.waves.note', { step: r.step, unit: heightUnit() }) });
     })
     .catch((e) => {
       console.warn('Open-Meteo Marine', e);
       st.key = '';
-      ctx.set('waves', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : 'Open-Meteo Marine nicht erreichbar' });
+      ctx.set('waves', { loading: false, note: e instanceof Error && /Limit/.test(e.message) ? e.message : t('layers.waves.noteFail') });
     });
 }
 

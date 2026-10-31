@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection } from 'geojson';
 import { fetchJson } from '../util';
+import { t as m, type MessageKey } from '../i18n';
 import type { Launch } from '../api/transport';
 
 // Launch tracker: full launch records from Launch Library 2 (The Space Devs), reminders via the
@@ -54,17 +55,24 @@ interface LL2Launch {
   vid_urls?: { url?: string; priority?: number }[];
 }
 
-export const STATUS_DE: Record<string, string> = {
-  Go: 'Startbereit',
-  'Go for Launch': 'Startbereit',
-  TBD: 'Termin offen',
-  TBC: 'Termin unbestätigt',
-  Hold: 'Angehalten',
-  'In Flight': 'Im Flug',
-  Debris: 'Rückstufe',
-  Success: 'Erfolgreich',
-  Failure: 'Fehlgeschlagen',
+/** LL2 abbrev → message key of the launch.status.* catalog (misc.json). */
+const STATUS_KEYS: Record<string, string> = {
+  Go: 'go',
+  'Go for Launch': 'go',
+  TBD: 'tbd',
+  TBC: 'tbc',
+  Hold: 'hold',
+  'In Flight': 'flight',
+  Debris: 'debris',
+  Success: 'success',
+  Failure: 'failure',
 };
+
+/** display name of the launch status in the UI language; unknown abbrevs keep their original */
+export function statusTxt(d: Pick<LaunchDetail, 'status' | 'statusDe'>): string {
+  const k = STATUS_KEYS[d.status];
+  return k ? m(`launch.status.${k}` as MessageKey) : d.statusDe || d.status;
+}
 
 /** Target altitude/speed estimates for the simulation, by LL2 orbit abbrev. */
 const ORBIT: Record<string, { altKm: number; inc: number; note?: string }> = {
@@ -128,7 +136,7 @@ export async function getLaunchDetails(): Promise<LaunchDetail[]> {
       windowStart: l.window_start ?? l.net,
       windowEnd: l.window_end ?? l.net,
       status: l.status?.abbrev ?? '',
-      statusDe: STATUS_DE[l.status?.abbrev ?? ''] ?? l.status?.name ?? '',
+      statusDe: l.status?.name ?? '',
       provider: l.launch_service_provider?.name ?? '',
       rocket: l.rocket?.configuration?.full_name ?? l.rocket?.configuration?.name ?? '',
       missionName: l.mission?.name ?? '',
@@ -384,7 +392,7 @@ export function remindCount(): number {
 
 function fire(entry: RemindEntry, minutesBefore: number) {
   const liftoff = minutesBefore <= 0;
-  const text = liftoff ? `🚀 ${entry.name} hebt jetzt ab!` : `⏳ ${entry.name} startet in ${earthly(entry.net)}`;
+  const text = liftoff ? m('launch.goingUp', { name: entry.name }) : m('launch.upcoming', { name: entry.name, when: earthly(entry.net) });
   const go = () => {
     window.focus();
     location.hash = '#/karte';
@@ -394,8 +402,8 @@ function fire(entry: RemindEntry, minutesBefore: number) {
   }
   if (notifSupported() && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
     try {
-      const n = new Notification(liftoff ? `🚀 Start: ${entry.name}` : `⏳ Start in ${earthly(entry.net)}`, {
-        body: liftoff && entry.video ? 'Livestream in Orbis öffnen …' : entry.provider ?? '',
+      const n = new Notification(liftoff ? m('launch.notifGo', { name: entry.name }) : m('launch.notifPrefix', { when: earthly(entry.net) }), {
+        body: liftoff && entry.video ? m('launch.openStream') : entry.provider ?? '',
         tag: `orbis-${entry.id}-${liftoff ? 'go' : `t${minutesBefore}`}`,
       });
       n.onclick = () => {
@@ -410,10 +418,10 @@ function fire(entry: RemindEntry, minutesBefore: number) {
 
 const earthly = (net: string) => {
   const d = new Date(net);
-  const m = Math.round((d.getTime() - Date.now()) / 60000);
-  if (m <= 1) return 'weniger als einer Minute';
-  if (m < 60) return `${m} min`;
-  return `${Math.floor(m / 60)} h ${m % 60} min`;
+  const mins = Math.round((d.getTime() - Date.now()) / 60000);
+  if (mins <= 1) return m('launch.lessThanMin');
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)} h ${mins % 60} min`;
 };
 
 let reminderTimer: number | undefined;

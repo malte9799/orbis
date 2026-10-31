@@ -4,12 +4,12 @@ export default defineKey({
   id: 'alberta511',
   order: 70,
   group: 'transit',
-  tip: 'Verkehrskameras Alberta.',
+  tip: 'tip',
   steps: [
-    { t: '1. Kostenlos registrieren / anmelden', u: 'https://511.alberta.ca' },
-    { t: '2. Key unter „Developers“ nach dem Login kopieren', u: 'https://511.alberta.ca/developers/doc' },
-    { t: '3. Key hier einfügen' },
+    { t: '1', u: 'https://511.alberta.ca' },
+    { t: '2', u: 'https://511.alberta.ca/developers/doc' },
+    { t: '3' },
   ],
-  label: '511 Alberta',
-  placeholder: 'API-Key',
+  label: 'label',
+  placeholder: 'placeholder',
 });

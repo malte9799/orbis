@@ -4,12 +4,12 @@ export default defineKey({
   id: 'nps',
   order: 50,
   group: 'snapshot',
-  tip: 'Webcams der US-Nationalparks (ohne Key: gemeinsamer Snapshot).',
+  tip: 'tip',
   steps: [
-    { t: '1. Formular ausfüllen – Key kommt sofort nach dem Absenden per E-Mail', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
-    { t: '2. Key hier einfügen' },
+    { t: '1', u: 'https://www.nps.gov/subjects/developer/get-started.htm' },
+    { t: '2' },
   ],
   optional: true,
-  label: 'US National Park Service',
-  placeholder: 'API-Key (optional – sonst gemeinsamer Snapshot)',
+  label: 'label',
+  placeholder: 'placeholder',
 });

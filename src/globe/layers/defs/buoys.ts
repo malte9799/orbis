@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t } from '../../../i18n';
 import { loadBuoys } from '../../../api/ocean';
 import { waveLabel } from '../shared/ocean';
 import { heightUnit } from '../../../units';
@@ -31,7 +32,7 @@ export default defineExtra({
     ctx.loadOnce('buoys', 10 * 60000, async () => {
       const fc = await loadBuoys();
       ctx.setData('buoys', fc);
-      return { count: fc.features.length, note: `Farbe = Wellenhöhe, Zahl = Wellenhöhe in ${heightUnit()} (sonst Wind in kn)` };
+      return { count: fc.features.length, note: t('layers.buoys.note', { unit: heightUnit() }) };
     });
   },
   click({ p, pt, html }) {

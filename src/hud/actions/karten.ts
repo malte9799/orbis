@@ -1,5 +1,6 @@
 import type { ActFn, HudCore } from '../core';
 import { toast } from '../../util';
+import { t } from '../../i18n';
 import { blankKarte, clone, DEFAULT_PINNED, MAX_PINNED, newId } from '../karten';
 
 export default (c: HudCore): Record<string, ActFn> => {
@@ -22,7 +23,7 @@ export default (c: HudCore): Record<string, ActFn> => {
       delete st.drafts[c.cur];
       c.fresh = new Set();
       persist();
-      toast(`„${d.name}“ gespeichert`);
+      toast(t('hud.toast.saved', { name: d.name }));
     },
     saveas: () => {
       const k = view(c.cur);
@@ -52,7 +53,7 @@ export default (c: HudCore): Record<string, ActFn> => {
       if (nameEl) c.form.name = nameEl.value;
       const d = clone(view(c.cur));
       const id = newId();
-      Object.assign(d, { id, name: c.form.name.trim() || 'Neue Karte', icon: c.form.icon, color: c.form.color, savedAt: Date.now() });
+      Object.assign(d, { id, name: c.form.name.trim() || t('hud.kname.new'), icon: c.form.icon, color: c.form.color, savedAt: Date.now() });
       delete d.std;
       delete d.menu;
       if (c.form.place) d.view = d.view ?? captureView();
@@ -68,21 +69,21 @@ export default (c: HudCore): Record<string, ActFn> => {
       c.form = null;
       persist();
       host.apply(view(c.cur));
-      toast(`„${d.name}“ gespeichert${wantPin ? ' und angeheftet' : ''}`);
+      toast(t('hud.toast.saved', { name: d.name }) + (wantPin ? t('hud.toast.pinned') : ''));
     },
     pin: (id) => {
       if (st.pinned.includes(id)) {
         if (st.pinned.length <= 1) return;
         st.pinned = st.pinned.filter((x) => x !== id);
       } else if (st.pinned.length >= MAX_PINNED) {
-        toast('Höchstens 5 Karten in der Leiste. Erst eine lösen.');
+        toast(t('hud.toast.full'));
         return;
       } else st.pinned.push(id);
       persist();
     },
     del: (id) => {
       const k = st.own.find((x) => x.id === id);
-      if (!k || !window.confirm(`Karte „${k.name}“ löschen?`)) return;
+      if (!k || !window.confirm(t('hud.confirm.delete', { name: k.name }))) return;
       st.own = st.own.filter((x) => x.id !== id);
       st.pinned = st.pinned.filter((x) => x !== id);
       if (!st.pinned.length) st.pinned = [...DEFAULT_PINNED];

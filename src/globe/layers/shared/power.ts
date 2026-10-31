@@ -1,4 +1,5 @@
 import { loadOsmPower, loadPowerPlants, type PowerCat } from '../../../api/infra';
+import { t as tT } from '../../../i18n';
 import { isSuperseded } from '../../../api/overpass';
 import type { ExtraCtx, ExtraId } from '../types';
 
@@ -31,7 +32,7 @@ export function ensurePower(ctx: ExtraCtx) {
         st.counts = { wind: 0, solar: 0, hydro: 0, nuclear: 0, coal: 0, gas: 0, oil: 0, biomass: 0, other: 0 };
         for (const f of fc.features) st.counts[f.properties!.cat as PowerCat]++;
       })
-      .catch(() => ctx.toast('Kraftwerksdatenbank konnte nicht geladen werden.'))
+      .catch(() => ctx.toast(tT('layers.power.toast')))
       .finally(() => {
         st.loading = null;
         for (const id of POWER_EXTRAS) {

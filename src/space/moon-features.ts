@@ -11,13 +11,14 @@ export interface MoonFeature {
   km: number;
 }
 
+/** display names of the feature kinds: message keys (space.kind.*) with the kind as suffix */
 export const KIND_LABEL: Record<FeatureKind, string> = {
-  mare: 'Mare (Lavaebene)',
-  basin: 'Einschlagbecken',
-  crater: 'Krater',
-  mountain: 'Gebirge',
-  valley: 'Tal / Rille',
-  dome: 'Berg',
+  mare: 'mare',
+  basin: 'basin',
+  crater: 'crater',
+  mountain: 'mountain',
+  valley: 'valley',
+  dome: 'dome',
 };
 
 const f = (name: string, kind: FeatureKind, lat: number, lon: number, km: number): MoonFeature => ({ name, kind, lat, lon, km });

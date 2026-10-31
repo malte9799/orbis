@@ -1,0 +1,1645 @@
+{
+  "hud": {
+    "search": {
+      "title": "Search ( / )",
+      "aria": "Search",
+      "close": "Close search",
+      "ph": "Search a place and fly there …"
+    },
+    "cancel": "Cancel",
+    "done": "Done",
+    "close": "Close",
+    "none": "None",
+    "std": "Standard",
+    "changed": "changed",
+    "changedCap": "Changed",
+    "justNow": "just now",
+    "cut": "Area",
+    "layerCount": {
+      "one": "1 layer",
+      "other": "{count} layers"
+    },
+    "aria": {
+      "wxLayer": "Weather layer",
+      "chosenLayer": "Chosen layer"
+    },
+    "menuunfold": "Unfold the menu",
+    "ctl": {
+      "base": "Base map",
+      "baseAria": "Choose a base map",
+      "locate": "My location",
+      "route": "Plan a route"
+    },
+    "settings": "Settings",
+    "settingsFor": "Settings for {name}",
+    "dirtySuffix": " – changed",
+    "gear": {
+      "tip": "{name} – open settings"
+    },
+    "summary": {
+      "dirty": " – changed"
+    },
+    "pin": {
+      "on": "Remove from the bar",
+      "off": "Pin to the bar"
+    },
+    "kdel": "Delete map",
+    "confirm": {
+      "delete": "Delete map “{name}”?"
+    },
+    "kstatus": {
+      "std": "Standard map",
+      "dirty": "· changed",
+      "own": "Own map",
+      "saved": "saved {rel}",
+      "savedTitle": "Saved"
+    },
+    "kname": {
+      "new": "New map",
+      "map": "Map",
+      "shared": "Shared map",
+      "own": "{name} (own)"
+    },
+    "toast": {
+      "saved": "“{name}” saved",
+      "pinned": " and pinned",
+      "full": "At most 5 maps in the bar. Remove one first.",
+      "added": "{label} added",
+      "copied": "Map link copied",
+      "copyFail": "Could not copy the link.",
+      "shared": "Shared map “{name}” opened. It is saved under “My maps”.",
+      "bad": "The link does not contain a valid map."
+    },
+    "sug": {
+      "lightning1": "Thunderstorms and strikes live",
+      "lightning2": "Thunderstorms live",
+      "aq": "Air quality and pollen",
+      "gauges": "River gauges in Germany",
+      "radiation": "Radiation network across Europe",
+      "rivers": "Floods on rivers",
+      "transit": "Buses and trains in city traffic",
+      "railmap": "Tracks under the trains",
+      "airports": "Airports with departures",
+      "webcams": "Live webcams worldwide",
+      "aircraft": "Aircraft live"
+    },
+    "cat": {
+      "wetter": "Weather",
+      "gefahr": "Warnings & events",
+      "verkehr": "Traffic live",
+      "meer": "Sea & water",
+      "erde": "Earth & environment",
+      "netze": "Networks & infrastructure",
+      "medien": "Cameras & radio"
+    },
+    "basegrp": {
+      "satellite": "Satellite",
+      "dark": "Map",
+      "blue": "More"
+    },
+    "base": {
+      "satellite": "Satellite",
+      "clarity": "Satellite Clarity",
+      "mapbox": "Mapbox Satellite",
+      "maptiler": "MapTiler Satellite",
+      "sentinel": "Sentinel-2",
+      "topo": "Terrain",
+      "nasa": "NASA daily image",
+      "blue": "Blue Marble",
+      "night": "Night lights",
+      "dark": "Dark",
+      "light": "Light"
+    },
+    "menu": {
+      "humid": {
+        "label": "Humidity",
+        "hint": "Forecast"
+      },
+      "precip": {
+        "label": "Precipitation",
+        "hint": "Forecast (Open-Meteo), satellite (NASA IMERG) and snow depth"
+      },
+      "pressure": {
+        "label": "Air pressure",
+        "hint": "Forecast"
+      },
+      "radar": {
+        "label": "Radar",
+        "hint": "Live precipitation radar (RainViewer)"
+      },
+      "sat": {
+        "label": "Satellite",
+        "hint": "HD daily image (VIIRS) and clouds (IR)"
+      },
+      "storm": {
+        "label": "Thunderstorms",
+        "hint": "Lightning live, CAPE forecast and satellite live (Meteosat)"
+      },
+      "temp": {
+        "label": "Temperature",
+        "hint": "Forecast, 2 m above ground; water: satellite (NASA)"
+      },
+      "wind": {
+        "label": "Wind",
+        "hint": "Forecast, with wind particles"
+      }
+    },
+    "sub": {
+      "humidity": "Relative",
+      "dewpoint": "Dew point",
+      "precip": "Forecast",
+      "imerg": "Satellite",
+      "snow": "Snow",
+      "satHd": "HD",
+      "satIr": "Clouds",
+      "lightning": "Lightning live",
+      "cape": "Forecast",
+      "satStorm": "Live",
+      "temp": "Air",
+      "feels": "Feels like",
+      "water": "Water",
+      "wind": "Mean wind",
+      "gusts": "Gusts"
+    },
+    "family": {
+      "owm": {
+        "hint": "OpenWeatherMap tiles (own key)"
+      },
+      "radar": {
+        "label": "Radar",
+        "hint": "Live precipitation radar"
+      },
+      "sat": {
+        "label": "Satellite",
+        "hint": "HD daily image (VIIRS) and live data"
+      },
+      "temp": {
+        "label": "Temperature",
+        "hint": "Forecast, 2 m above ground"
+      },
+      "wind": {
+        "label": "Wind",
+        "hint": "Forecast, with wind particles"
+      },
+      "cloud": {
+        "label": "Clouds",
+        "hint": "Forecast: cloud cover"
+      },
+      "pressure": {
+        "label": "Air pressure",
+        "hint": "Forecast"
+      },
+      "humidity": {
+        "label": "Humidity",
+        "hint": "Forecast: relative humidity"
+      },
+      "ocean": {
+        "label": "Ocean",
+        "hint": "Satellite (NASA, daily): sea temperature & sea ice"
+      },
+      "snow": {
+        "label": "Snow",
+        "hint": "Forecast: snow depth"
+      },
+      "precip": {
+        "label": "Precipitation",
+        "hint": "Forecast (model)"
+      },
+      "cape": {
+        "label": "Thunderstorms",
+        "hint": "Forecast: storm energy (CAPE)"
+      }
+    },
+    "var": {
+      "water": "Sea + ice",
+      "sst": "Sea temperature",
+      "seaice": "Sea ice",
+      "satHd": "HD",
+      "satIr": "Clouds (IR)",
+      "imerg": "Precipitation",
+      "satStorm": "Storms live",
+      "radar": "Rain (RainViewer)",
+      "dwdRadar": "Germany (DWD)",
+      "temp": "Air",
+      "feels": "Feels like",
+      "dewpoint": "Dew point",
+      "wind": "Mean wind",
+      "gusts": "Gusts",
+      "owmTempNew": "Temperature",
+      "owmPrecipitationNew": "Precipitation",
+      "owmCloudsNew": "Clouds",
+      "owmWindNew": "Wind",
+      "owmPressureNew": "Air pressure"
+    },
+    "modes": {
+      "infra": "Infrastructure",
+      "traffic": "Transit modes"
+    },
+    "mcat": {
+      "air": "Plane",
+      "auto": "Car",
+      "oepnv": "Transit",
+      "ship": "Ship",
+      "energie": "Energy",
+      "netze": "Networks",
+      "radio": "Radio",
+      "rohstoffe": "Resources",
+      "ueberwachung": "Surveillance"
+    },
+    "row": {
+      "airports": "Airports",
+      "roadnet": "Roads",
+      "autobahn": "Jams & roadworks",
+      "blitzer": "Speed cameras & red lights",
+      "traffic": "Simulation",
+      "transit": "Buses live",
+      "busnet": "Bus network",
+      "trains": "Trains live",
+      "railspeed": "Rail network",
+      "shipping": "Ship routes",
+      "wind": "Wind farms",
+      "solar": "Solar parks",
+      "water": "Hydropower",
+      "nuclear": "Nuclear plants",
+      "coal": "Coal plants",
+      "gas": "Gas plants",
+      "oil": "Oil plants",
+      "biomass": "Biomass & waste",
+      "plants": "Other power plants",
+      "cables": "Submarine cables",
+      "ixp": "Internet exchanges",
+      "pipelines": "Oil & gas pipelines",
+      "radio": "Radio stations",
+      "resources": "Deposits",
+      "webcams": "Live cameras",
+      "alpr": "Licence plate cameras",
+      "cctv": "Surveillance cameras (CCTV)"
+    },
+    "opt": {
+      "isobars": "Isobars",
+      "sound": "Sound",
+      "wave": "Circle",
+      "detectors": "Detectors",
+      "lines": "Lines",
+      "thunder": "Thunder",
+      "volume": "Volume of the tick sounds"
+    },
+    "filter": {
+      "quakes": {
+        "4": "M 4+",
+        "5": "M 5+",
+        "6": "M 6+"
+      },
+      "lightning": {
+        "sound": "Sound",
+        "wave": "Strike circle",
+        "detectors": "Detectors",
+        "lines": "Detector lines",
+        "thunder": "Thunder"
+      },
+      "aircraft": {
+        "plane": "Planes",
+        "heli": "Helicopters",
+        "glider": "Gliders",
+        "drone": "Drones",
+        "balloon": "Balloons",
+        "mil": "Military only"
+      }
+    },
+    "tip": {
+      "show": "{label} – show",
+      "hide": "{label} – hide"
+    },
+    "sort": "Drag to reorder (or Alt + ↑/↓)",
+    "opacity": "Opacity",
+    "remove": "Remove",
+    "more": "+{n} more layers",
+    "area": "Area: {v}",
+    "eye": {
+      "on": "Show",
+      "off": "Hide"
+    },
+    "nowx": {
+      "title": "No weather layer",
+      "sub": "This map shows no weather field"
+    },
+    "switch": "Change",
+    "slot": {
+      "layers": "Layers",
+      "layersSub": "top of the list is on top",
+      "none": "No layers yet.",
+      "wx": "Weather",
+      "wxSub": "at most one",
+      "base": "Base map · {g}",
+      "noView": "no, opens at the current location",
+      "savedWith": "Saved with",
+      "view": "Area",
+      "revertFull": "Reset to the original state"
+    },
+    "optRow": {
+      "labels": "Place names & borders",
+      "daynight": "Day/night",
+      "buildings": "3D buildings",
+      "buildingsSub": "from city zoom · tilt the map with Ctrl + drag (OpenStreetMap)",
+      "terrain": "3D terrain",
+      "terrainSub": "real elevations, only with a tilted camera (Ctrl + drag) – disabled from above",
+      "windparticles": "Wind particles",
+      "windparticlesSub": "visible with wind & gusts and satellite/clouds (IR)",
+      "time": "Time"
+    },
+    "night": {
+      "day": "Day",
+      "auto": "Auto",
+      "night": "Night"
+    },
+    "time": {
+      "yesterday": "Daily image from yesterday",
+      "forecast": "Forecast, from now on",
+      "live": "Live"
+    },
+    "revert": "Reset",
+    "savebtn": "Save",
+    "saveAs": "Save as new map",
+    "share": "Share",
+    "duplicate": "Duplicate",
+    "dlg": {
+      "title": "Save as a new map",
+      "name": "Name",
+      "icon": "Icon",
+      "color": "Colour",
+      "incl": "Contains:",
+      "inclNone": "no layers",
+      "saveview": "Save the view with it",
+      "saveviewSub": "Otherwise it opens at the current location.",
+      "pinbar": "Pin to the bar",
+      "pinbarFull": "The bar is full (5). Remove one map first.",
+      "pinbarSlot": "as button {n}",
+      "saveMap": "Save map",
+      "base": "base map {base}"
+    },
+    "add": {
+      "ph": "Search layers, e.g. “storm”",
+      "fit": "Matches this map",
+      "empty": "No layer for “{q}”.",
+      "title": "Add layer"
+    },
+    "addRow": {
+      "new": "New blank map",
+      "newPhone": "New map",
+      "newSub": "Pick a base map, add layers"
+    },
+    "karten": {
+      "title": "Maps",
+      "star": "★ = in the bar · keys 1–{n}",
+      "fold": "Fold maps up",
+      "all": "All maps",
+      "more": "More maps",
+      "moreSub": "customisable, resettable at any time",
+      "galleryTitle": "All maps"
+    },
+    "stdMaps": "Standard maps",
+    "myMaps": "My maps",
+    "myMapsSub": "{n} saved · ★ = pinned to the bar",
+    "emptyOwn": "No own maps yet. Change a map and save it as a new map.",
+    "keysHint": "Keys 1–{n} switch the pinned maps",
+    "titleAddLayer": "Add layer",
+    "titleAllMaps": "All maps",
+    "events": "Events",
+    "ev": {
+      "7": "7 days",
+      "24": "24 h"
+    },
+    "evEmpty": "No events in the period (or still loading).",
+    "rename": "Rename",
+    "renameAria": "Name of the map",
+    "renameSuffix": "Rename {name}",
+    "sheet": {
+      "fold": "fold layers",
+      "unfold": "unfold layers"
+    },
+    "kn": {
+      "wetter": "Weather",
+      "verkehr": "Traffic",
+      "infra": "Infrastructure"
+    }
+  },
+  "nav": {
+    "menu": {
+      "aria": "Menu",
+      "title": "Menu"
+    },
+    "route": {
+      "forecast": "Forecast",
+      "globe": "Map",
+      "fahrplan": "Timetable",
+      "space": "Space",
+      "games": "Games"
+    },
+    "settings": "Settings",
+    "eyes": {
+      "earth": "Earth",
+      "solar": "Solar system",
+      "asteroids": "Asteroids",
+      "exo": "Exoplanets"
+    },
+    "bodies": {
+      "planets": "Planets",
+      "moons": "Moons",
+      "asteroids": "Asteroids"
+    }
+  },
+  "routing": {
+    "aria": {
+      "plan": "Route planning",
+      "guide": "Navigation",
+      "travel": "Mode of travel",
+      "routes": "Routes",
+      "speed": "Speed",
+      "voice": "Voice announcements",
+      "close": "Close",
+      "dirSent": "Sent",
+      "dirRecv": "Received"
+    },
+    "profile": {
+      "car": "Car",
+      "bike": "Bicycle",
+      "foot": "On foot"
+    },
+    "swap": "Swap start and destination",
+    "addVia": "+ Add a stop",
+    "provider": {
+      "title": "Routing service",
+      "needsKey": " – key required",
+      "noProfile": " – not available for this mode",
+      "none": "No routing provider available"
+    },
+    "prov": {
+      "fossgis": {
+        "note": "Free, no key. Car, bike and foot on OpenStreetMap data."
+      },
+      "valhalla": {
+        "note": "Default. Free, no key. Announcements from the server, good bike and foot profiles. While Valhalla calculates, Orbis already shows the fast OSRM route."
+      },
+      "mapbox": {
+        "note": "With live traffic (car). Uses the Mapbox key from the settings."
+      },
+      "tomtom": {
+        "note": "With live traffic (car). Uses the TomTom key from the settings."
+      },
+      "google": {
+        "note": "With live traffic (car), best coverage. Key with “Routes API”, restricted by HTTP referrer."
+      },
+      "graphhopper": {
+        "note": "Free key (500 routes/day). German announcements."
+      },
+      "ors": {
+        "note": "Free key (2,000 routes/day). Very good bike and foot profiles."
+      }
+    },
+    "stops": {
+      "here": "My location",
+      "start": "Start",
+      "dest": "Destination",
+      "stop": "Stop",
+      "ph": "Search {role} …",
+      "pickTitle": "Pick on the map",
+      "pickAria": "Pick the {role} on the map",
+      "rm": "Remove",
+      "rmStop": "Remove stop",
+      "noResults": "No matches",
+      "searchFail": "Search unavailable",
+      "notFound": "“{name}” not found",
+      "missingPlace": "Place missing",
+      "giveBoth": "Enter a start and a destination.",
+      "giveDest": "Enter a destination or pick it on the map.",
+      "tapMap": "Tap the map to set the point."
+    },
+    "calc": {
+      "busy": "Calculating route …",
+      "fail": "Could not calculate the route",
+      "locFail": "Your position could not be determined. Try another destination or allow location access.",
+      "fallback": "{first} was unreachable – calculated with {provider}.",
+      "refining": "{provider} is refining the route …",
+      "refiningFallback": "{provider} is refining the route …",
+      "rerouting": "Recalculating route …",
+      "rerouteSay": "Recalculating route",
+      "offRoute": "Off the route",
+      "noNewRoute": "No new route found – please turn back onto the route",
+      "noRouteFound": "no route found",
+      "noRoute": "no route"
+    },
+    "voice": {
+      "on": "Voice announcements are on"
+    },
+    "geo": {
+      "denied": "Location access denied. Please allow it in the browser settings.",
+      "unavailable": "Location unavailable.",
+      "unsupported": "Location not supported"
+    },
+    "result": {
+      "eta": "Arrive {t}",
+      "fastest": "Fastest route",
+      "alt": "Alternative",
+      "via": "via {via}",
+      "start": "Start",
+      "steps": "Steps"
+    },
+    "guide": {
+      "recentre": "Centre",
+      "endTitle": "End navigation",
+      "endAria": "End navigation"
+    },
+    "text": {
+      "depart": "Start driving",
+      "straight": "Continue straight",
+      "slightLeft": "Keep left",
+      "left": "Turn left",
+      "sharpLeft": "Turn sharp left",
+      "slightRight": "Keep right",
+      "right": "Turn right",
+      "sharpRight": "Turn sharp right",
+      "uturn": "Turn around",
+      "roundabout": "Enter the roundabout",
+      "merge": "Merge",
+      "forkLeft": "Keep left",
+      "forkRight": "Keep right",
+      "rampLeft": "Take the ramp to the left",
+      "rampRight": "Take the ramp to the right",
+      "ferry": "Take the ferry",
+      "arrive": "Destination reached",
+      "onto": " onto {name}",
+      "towards": " towards {name}",
+      "exitNote": "There take the {ord} exit",
+      "exitLeave": "Leave the roundabout",
+      "ord": {
+        "1": "first",
+        "2": "second",
+        "3": "third",
+        "4": "fourth",
+        "5": "fifth",
+        "6": "sixth",
+        "7": "seventh",
+        "8": "eighth",
+        "9": "ninth",
+        "10": "tenth"
+      }
+    },
+    "say": {
+      "depart": "Start driving",
+      "straight": "Continue straight",
+      "slightLeft": "Keep left",
+      "left": "Turn left",
+      "sharpLeft": "Turn sharp left",
+      "slightRight": "Keep right",
+      "right": "Turn right",
+      "sharpRight": "Turn sharp right",
+      "uturn": "Turn around",
+      "roundabout": "enter the roundabout",
+      "merge": "merge",
+      "forkLeft": "keep left",
+      "forkRight": "keep right",
+      "rampLeft": "take the ramp to the left",
+      "rampRight": "take the ramp to the right",
+      "ferry": "take the ferry",
+      "arrive": "Destination reached",
+      "inDistance": "in {d}: {what}",
+      "m": "{n} meters",
+      "km": "{n} kilometers"
+    }
+  },
+  "map": {
+    "load": "The map is still loading.",
+    "loading": "loading …",
+    "count": {
+      "now": "{count} current",
+      "loaded": "{count} loaded"
+    },
+    "locMode": {
+      "off": "My location",
+      "track": "My location (map does not follow)",
+      "follow": "Map to north, follows the location – tap again: view direction",
+      "heading": "Map rotates with the view direction – tap again: location off"
+    },
+    "err": {
+      "model": "Forecast data (Open-Meteo) could not be loaded.",
+      "limit": "{msg} – please try again later.",
+      "radar": "Rain radar (RainViewer) could not be loaded.",
+      "launch": "Launch details unreachable right now – tracking with base data.",
+      "wx": "Weather data unavailable.",
+      "noRain": "no rain"
+    },
+    "loadingWx": "Loading weather …",
+    "timeline": {
+      "play": "Play",
+      "pause": "Pause",
+      "now": "Now",
+      "aria": "Time",
+      "toNow": "To the current time",
+      "nowcast": "Forecast",
+      "radar": "Radar",
+      "nowRel": "now",
+      "relPlus": "+{h} h",
+      "relMinus": "{h} h",
+      "headRadarPro": "Radar forecast",
+      "headForecast": "Forecast"
+    },
+    "field": {
+      "wind": "Wind",
+      "gusts": "Wind gusts",
+      "temp": "Temperature",
+      "feels": "Feels-like temperature",
+      "humidity": "Relative humidity",
+      "dewpoint": "Dew point",
+      "precip": "Precipitation",
+      "cloud": "Cloud cover",
+      "pressure": "Air pressure",
+      "snow": "Snow depth",
+      "precipmix": "Precipitation",
+      "snowfall": "Snowfall",
+      "cape": "Storm energy (CAPE)"
+    },
+    "legend": {
+      "radar": {
+        "title": "Precipitation radar",
+        "sub": "live",
+        "light": "light",
+        "medium": "moderate",
+        "heavy": "heavy"
+      },
+      "dwdRadar": {
+        "title": "Radar Germany",
+        "sub": "DWD · last measurement, updated every 5 min",
+        "light": "light",
+        "medium": "moderate",
+        "storm": "severe"
+      },
+      "satHd": {
+        "title": "Satellite HD",
+        "sub": "NASA VIIRS · daily image from yesterday"
+      },
+      "satIr": {
+        "title": "Satellite infrared",
+        "sub": "live · high, cold clouds appear bright",
+        "warm": "warm/low",
+        "cold": "cold/high"
+      },
+      "satStorm": {
+        "title": "Satellite storms",
+        "sub": "Meteosat convection RGB · live, Europe & Africa",
+        "calm": "calm",
+        "storms": "vigorous storms"
+      },
+      "water": {
+        "title": "Water temperature",
+        "sub": "NASA GHRSST MUR · sea and sea ice, 2 days ago · {unit}"
+      },
+      "sst": {
+        "title": "Sea temperature",
+        "sub": "NASA GHRSST MUR · daily mean 2 days ago · {unit}"
+      },
+      "seaice": {
+        "title": "Sea-ice concentration",
+        "sub": "NASA GHRSST MUR · 2 days ago",
+        "low": "low"
+      },
+      "imerg": {
+        "title": "Precipitation satellite",
+        "sub": "NASA IMERG · {unit}"
+      }
+    },
+    "pop": {
+      "source": "Source: {src}",
+      "details": "Details ↗",
+      "firms": {
+        "title": "Fire hotspot",
+        "power": "Radiative power {mw} MW · confidence {conf}",
+        "time": "Recorded {t} UTC"
+      },
+      "nws": {
+        "area": "Warning area of the National Weather Service"
+      },
+      "wx": {
+        "feels": "Feels like",
+        "wind": "Wind",
+        "gusts": "Gusts",
+        "humidity": "Humidity",
+        "clouds": "Clouds",
+        "pressure": "Pressure",
+        "open": "Open forecast →",
+        "route": "Route here →",
+        "radar": "Radar: {v}"
+      }
+    },
+    "tile": {
+      "alt": "Altitude",
+      "speed": "Speed",
+      "course": "Course",
+      "vs": "Climb rate",
+      "drift": "Drift",
+      "status": "Status",
+      "last": "Last report",
+      "direction": "View direction",
+      "image": "Image"
+    },
+    "metric": {
+      "alt": "Altitude",
+      "speed": "Speed",
+      "course": "Course",
+      "vs": "Climb rate",
+      "drift": "Drift"
+    },
+    "graph": {
+      "title": "{m} over the last reports",
+      "to": "to",
+      "empty": "The chart appears as soon as further reports arrive."
+    },
+    "cat": {
+      "plane": "Aircraft",
+      "specs": "Technical data",
+      "seats": "Seat map & cabin",
+      "position": "Position and signal",
+      "source": "Data source",
+      "ship": "Ship",
+      "sonde": "Radiosonde",
+      "sondePos": "Position and telemetry",
+      "receiver": "Ground receiver",
+      "cam": "Camera"
+    },
+    "fly": {
+      "nodata": "No data for this aircraft right now – it is outside the view or no longer in range.",
+      "ground": "on ground",
+      "photo": "View the photo in full resolution on Planespotters.net",
+      "credit": "Photo: © {who} (Planespotters.net) ↗",
+      "routeLoading": "Loading route …",
+      "routeUnknown": "Route unknown",
+      "eta": " · approx. {d} left",
+      "rows": {
+        "operator": "Operator",
+        "model": "Model",
+        "icao": "ICAO type",
+        "reg": "Registration",
+        "modeS": "Mode-S (hex)",
+        "mfr": "Manufacturer",
+        "mil": "Category",
+        "military": "Military",
+        "engines": "Engines",
+        "passengers": "Passengers",
+        "range": "Range",
+        "span": "Wingspan / length",
+        "cruise": "Cruise speed",
+        "ceiling": "Service ceiling",
+        "wtc": "Wake turbulence (WTC)",
+        "seatsCap": "Passenger capacity",
+        "seatsVar": "Depends on configuration",
+        "seatsLink": "Seat maps",
+        "lat": "Latitude",
+        "lon": "Longitude",
+        "alt": "Altitude (baro)",
+        "squawk": "Squawk",
+        "nav": "Navigation (NIC / NACp)",
+        "inaccurate": "inaccurate",
+        "emergency": "Emergency",
+        "emergencyNone": "none",
+        "approx": "approx. ",
+        "adsbView": "View on adsb.lol ↗"
+      },
+      "route": "Route",
+      "follow": "Follow",
+      "cockpit": "Cockpit"
+    },
+    "ship": {
+      "nodata": "No data for this ship right now – it is outside the view or no longer in range.",
+      "moving": "Under way",
+      "moored": "Moored",
+      "destNote": "Destination from AIS",
+      "courseNote": "Course {deg}° {dir}",
+      "still": "not making way right now",
+      "noDest": "No destination reported · {note}",
+      "statusMoving": "under way",
+      "statusMoored": "moored",
+      "photo": "View the photo in full resolution on Wikimedia Commons",
+      "symbol": "Symbol picture · {cat}",
+      "credit": "Photo: © {who} ({license}) ↗",
+      "rows": {
+        "type": "Type",
+        "callsign": "Call sign",
+        "mmsi": "MMSI",
+        "dest": "Destination",
+        "lat": "Latitude",
+        "lon": "Longitude",
+        "speed": "Speed",
+        "view": "View on MarineTraffic ↗"
+      },
+      "alt": "{cat} · symbol picture",
+      "mmsiLabel": "MMSI {mmsi}"
+    },
+    "sonde": {
+      "nodata": "No data for this sonde right now – it is outside the view, landed or silent.",
+      "status": {
+        "landed": "Landed",
+        "rise": "Rising",
+        "fall": "Falling",
+        "float": "Floating (float)"
+      },
+      "groundSub": "last position on ground",
+      "heightSub": "{h} above sea level",
+      "chart": {
+        "vs": "Climb rate",
+        "sink": "Sink rate (parachute)",
+        "still": "almost still vertically"
+      },
+      "ago": "{a} s ago",
+      "last": "Last report {a}",
+      "rows": {
+        "type": "Type",
+        "serial": "Serial number",
+        "freq": "Frequency",
+        "frame": "Frame",
+        "position": "Position",
+        "alt": "Altitude",
+        "vertical": "Vertical (telemetry)",
+        "horizontal": "Horizontal",
+        "time": "Position/time",
+        "receiver": "Receiver",
+        "antenna": "Antenna",
+        "software": "Decoder software",
+        "received": "Last received"
+      },
+      "view": "View on SondeHub ↗",
+      "ascent": "Ascent",
+      "title": "Sonde {serial}",
+      "fallback": "Radiosonde",
+      "courseNote": "Course {deg}° {dir}",
+      "driftNote": "Drift {s}"
+    },
+    "cam": {
+      "view3d": "View in 3D",
+      "zoom": "Zoom in",
+      "edit": "Edit on map",
+      "save": "Save",
+      "cancel": "Cancel",
+      "reset": "Reset",
+      "sending": "Sending …",
+      "failed": "Failed: {err}",
+      "pinTitle": "Drag to move the camera",
+      "gripTitle": "Drag to turn the view direction",
+      "editHint": "Move the camera (large dot) on the map, drag the white grip to turn the view direction. The exact values are here.",
+      "moved": "{m} m moved",
+      "unknown": "unknown",
+      "about": "approx. {deg}° {dir}",
+      "livestream": "Livestream",
+      "still": "Still image",
+      "noteModel": "The image lies as a 3D view on the road: ground and horizon sit where the camera sees them.",
+      "noteModelTypical": "The image lies as a 3D view on the road: ground and horizon sit where the camera sees them (typical values – “Edit on map” adjusts them).",
+      "noteBoard": "The image stands as a 3D board in the view direction on the map.",
+      "noteBoardEst": "The image stands as a 3D board in the view direction on the map – the direction is an approximation (direction of the road).",
+      "noteNoDir": "No view direction is known for this camera, so there is no 3D board.",
+      "noStream": "Livestream unavailable right now",
+      "altImg": "Webcam image",
+      "updated": "Updated",
+      "location": "Location",
+      "open": "Open webcam ↗",
+      "fallback": "Webcam",
+      "f": {
+        "dir": "Direction",
+        "alt": "Height above ground",
+        "down": "Tilt down",
+        "roll": "Roll",
+        "fov": "Field of view (vertical)",
+        "reach": "Reach"
+      }
+    },
+    "port": {
+      "size": {
+        "1": "Large",
+        "2": "Medium",
+        "3": "Small",
+        "4": "Very small",
+        "5": "Small (UN/LOCODE only)"
+      },
+      "type": {
+        "coastalNatural": "Coastal, naturally sheltered",
+        "coastalBreakwater": "Coastal, breakwater",
+        "riverNatural": "River",
+        "riverBasins": "River with port basins",
+        "riverTide": "River with tide gates",
+        "coastalTide": "Coastal with tide gates",
+        "roadstead": "open roadstead",
+        "canalLake": "Canal or lake",
+        "typhoon": "Typhoon harbor"
+      },
+      "shelter": {
+        "Excellent": "excellent",
+        "Good": "good",
+        "Fair": "fair",
+        "Poor": "poor",
+        "None": "none"
+      },
+      "facility": {
+        "C": "Container",
+        "R": "Ro-Ro",
+        "S": "Bulk",
+        "L": "Liquid",
+        "B": "General cargo",
+        "O": "Oil",
+        "G": "LNG"
+      },
+      "pilot": "Required",
+      "pilotNo": "not compulsory"
+    },
+    "res": {
+      "cat": {
+        "oil": "Crude oil",
+        "gas": "Natural gas",
+        "coal": "Coal",
+        "iron": "Iron ore",
+        "gold": "Gold/silver",
+        "copper": "Copper",
+        "uranium": "Uranium",
+        "lithium": "Lithium",
+        "salt": "Salt/potash",
+        "stone": "Stone & earth",
+        "metal": "Other metals",
+        "gem": "Gemstones",
+        "other": "Mining"
+      },
+      "dev": {
+        "producer": "in production",
+        "past": "previously produced",
+        "prospect": "prospect",
+        "occurrence": "occurrence",
+        "plant": "processing plant"
+      },
+      "kind": {
+        "well": "borehole",
+        "quarry": "quarry/open-pit mine",
+        "shaft": "mineshaft",
+        "adit": "adit",
+        "refinery": "refinery",
+        "mine": "mine"
+      },
+      "sub": {
+        "gas": "Gas",
+        "naturalGas": "Natural gas",
+        "lpg": "LPG",
+        "hydrogen": "Hydrogen",
+        "oil": "Oil",
+        "crudeOil": "Crude oil",
+        "petroleum": "Oil",
+        "fuel": "Fuel",
+        "water": "Water",
+        "pipe": "Pipeline"
+      },
+      "site": "Mineral site",
+      "pipeline": "{label} pipeline",
+      "underground": "underground"
+    },
+    "airport3d": {
+      "note2d": "only in the flat map view or on the globe from zoom level 12",
+      "noteFail": "OpenStreetMap (Overpass) unreachable right now – another try soon",
+      "noteOk": "Taxiways, gates and lights – tilt with Ctrl + drag",
+      "noteNone": "no airport mapped here in OpenStreetMap",
+      "noteZoom": "visible from zoom level {z} – zoom to an airport"
+    },
+    "zoomIn": "Zoom in",
+    "approx": "approx. ",
+    "ago": {
+      "s": "{a} s ago",
+      "min": "{a} min ago",
+      "h": "{a} h ago"
+    },
+    "shipCat": {
+      "cargo": "Cargo ship",
+      "tanker": "Tanker",
+      "passenger": "Passenger ship/ferry",
+      "fishing": "Fishing vessel",
+      "tug": "Tug/pilot",
+      "pleasure": "Yacht/sailboat",
+      "hsc": "Fast ferry",
+      "special": "Authority/special vessel",
+      "other": "Ship"
+    },
+    "rain": {
+      "l1": "Very light rain",
+      "l2": "Light rain",
+      "l3": "Moderate rain",
+      "l4": "Heavy rain",
+      "l5": "Very heavy rain"
+    },
+    "radio": {
+      "live": "live",
+      "buffering": "buffering …",
+      "connecting": "connecting …",
+      "state": "{live} · {place}",
+      "error": "Stream not playable – open the station’s website",
+      "ariaPlay": "Play",
+      "ariaPause": "Pause",
+      "ariaVol": "Volume",
+      "listen": "Listen now",
+      "listenTab": "Listen in a new tab",
+      "website": "Website ↗",
+      "rows": {
+        "place": "Place",
+        "genre": "Genre",
+        "language": "Language",
+        "format": "Format"
+      }
+    },
+    "insp": {
+      "tile": {
+        "raster": "Raster tiles",
+        "dem": "DEM tiles",
+        "vector": "Vector tiles",
+        "custom": "local raster"
+      },
+      "label": "Data sources · raw data",
+      "aria": "Data sources and raw data",
+      "sources": "Data sources",
+      "thisPage": "This page",
+      "all": "All",
+      "clearTitle": "Remove all listed data sources",
+      "clear": "Clear",
+      "closeEsc": "Close (Esc)",
+      "dragWidth": "Drag to change the width · double-click: original size",
+      "dragHeight": "Drag to change the height · double-click: original size",
+      "dragBoth": "Drag: width and height · double-click: original size",
+      "empty": "No data has been loaded on this page yet.",
+      "proxied": "Loaded via the data proxy",
+      "raw": "Raw data",
+      "rawHint": "Pick a source above (top right) to see its raw data.",
+      "tilesHint": "Drag · mouse wheel zooms · click picks a tile",
+      "galleryHint": "{n} images · click shows the image large",
+      "sent": "Sent",
+      "recv": "Received",
+      "tree": "Tree",
+      "rawTab": "Raw",
+      "copyRaw": "Copy raw data",
+      "copyBody": "Copy body",
+      "copiedBody": "Body copied",
+      "copiedRaw": "Raw data copied",
+      "copiedClip": "Copied to the clipboard",
+      "loadingFont": "Reading font …",
+      "unknownType": "unknown type",
+      "noPreview": "– no preview.",
+      "rawImage": "Raw image",
+      "truncated": "Very large response: only the first {a} of {b} were loaded, so no tree.",
+      "clearedPage": "Data sources of this page cleared",
+      "clearedAll": "All data sources cleared",
+      "copyFail": "Copy not possible",
+      "errAborted": "Aborted",
+      "errNetwork": "Network error",
+      "errError": "Error",
+      "errVia": "The request went through the data proxy: whether the proxy or the API behind it failed, the browser cannot tell.",
+      "errTimeout": "The page gave up after a fixed time (timeout), no answer arrived.",
+      "errAborted2": "The page ended the request itself – usually because a newer request replaced it, a timeout fired or the view changed. An answer from the server was no longer read.",
+      "errTypeError": "No answer arrived: server unreachable, no connection, blocked by CORS or dropped by an ad blocker. For security reasons the browser hardly ever names the exact reason.",
+      "kMsg": "Message",
+      "kErrType": "Error type",
+      "kAfter": "After",
+      "kStarted": "Started",
+      "kMethod": "Method",
+      "kProxy": "Proxy",
+      "kViaProxy": "Via proxy",
+      "kPage": "Page",
+      "req": "Request",
+      "params": "Parameters ({n})",
+      "headers": "Headers ({n})",
+      "noOwnHeaders": "no own headers – the browser adds its standard headers.",
+      "browserLoaded": "Loaded by the browser itself (image, texture …): headers and body cannot be inspected.",
+      "body": "Body",
+      "copyValue": "Copy value",
+      "copyUrl": "Copy URL",
+      "copyProxy": "Copy proxy URL",
+      "open": "Open",
+      "metaGallery": "{n} images{size}",
+      "localCalc": "Orbis (computed locally)",
+      "metaTiles": "{n} tiles · zoom {z0}–{z1}"
+    },
+    "ctl": {
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "tilt": "Tilt",
+      "tiltAria": "Tilt the camera",
+      "north": "Reset north"
+    }
+  },
+  "layers": {
+    "aerosol": {
+      "label": "Aerosols & dust",
+      "hint": "Haze, smoke, Saharan dust (AOD) – NASA MODIS"
+    },
+    "aircraft": {
+      "label": "Planes & helicopters",
+      "hint": "live, ADS-B – adsb.lol, adsb.fi, OpenSky; military outlined in green"
+    },
+    "airport3d": {
+      "label": "Airport 3D",
+      "hint": "Taxiways, terminals and planes in 3D from zoom level 11 – OpenStreetMap, ADS-B (Ctrl + drag to tilt)"
+    },
+    "airports": {
+      "noteClick": "Click an airport to show departures & arrivals of yesterday",
+      "ele": "above sea level",
+      "noteFail": "OpenSky unreachable right now (daily quota limited without an account).",
+      "loading": "Yesterday’s flights are loading …",
+      "yday": "Yesterday: {dep} departures, {arr} arrivals",
+      "lastDep": "Latest departures",
+      "lastArr": "Latest arrivals",
+      "noData": "No flight data from yesterday available."
+    },
+    "alpr": {
+      "noteHeat": "Overview unreachable – live from OpenStreetMap from zoom level 9",
+      "noteHeatOk": "Overview USA/Canada · details from zoom level 9 (worldwide)",
+      "noteFlock": "{flock} of them Flock Safety (in the view)",
+      "noteNone": "no licence plate cameras captured in the view",
+      "noteFail": "OpenStreetMap (Overpass) unreachable",
+      "rowBrand": "Manufacturer",
+      "rowOperator": "Operator",
+      "rowZone": "Area",
+      "rowMount": "Mounting",
+      "rowDirection": "View direction",
+      "rowSince": "Since",
+      "rowRef": "Reference",
+      "rowPosition": "Position",
+      "examplePhoto": "(example photo)",
+      "view": "View on DeFlock ↗"
+    },
+    "aq": {
+      "label": "Air quality & pollen",
+      "hint": "European cities – Copernicus CAMS"
+    },
+    "aqhi": {
+      "label": "Air quality Canada (stations)",
+      "hint": "Air Quality Health Index, measured hourly – Environment and Climate Change Canada"
+    },
+    "aurora": {
+      "note": "Forecast for {t}",
+      "solarSun": "solar wind",
+      "goodTag": " (favourable)",
+      "xray": "X-ray"
+    },
+    "autobahn": {
+      "label": "Motorway: jams & roadworks",
+      "hint": "traffic reports, closures, roadworks – Autobahn GmbH"
+    },
+    "bathymetry": {
+      "label": "Sea depth",
+      "hint": "bathymetry worldwide – GEBCO; Europe more detailed – EMODnet"
+    },
+    "bikeshare": {
+      "noteZoom": "Zoom in (city) for stations with free bikes",
+      "noteFail": "{list} unreachable right now",
+      "rowBikes": "Free bikes",
+      "rowBikesOff": "Station out of service",
+      "rowEbikes": " (of which {count} e-bikes)",
+      "rowDocks": "Free docks",
+      "rowCapacity": "Capacity"
+    },
+    "biomass": {
+      "label": "Biomass & waste",
+      "hint": "biomass and waste-to-energy plants worldwide"
+    },
+    "blitzer": {
+      "noteBase": "Layout only – no driving warning (in DE forbidden while driving)",
+      "noteNone": "no installations captured in the view",
+      "noteFail": "OpenStreetMap (Overpass) unreachable",
+      "popupNote": "Layout only – no driving warning: use while driving is forbidden in DE (§ 23 StVO)"
+    },
+    "buoys": {
+      "note": "Colour = wave height, number = wave height in {unit} (otherwise wind in kn)"
+    },
+    "busnet": {
+      "noteZoom": "from city zoom (zoom level 11) – data from OpenStreetMap",
+      "noteLines": "Lines: {modes}",
+      "noteNone": "no lines captured in the view",
+      "noteFail": "OpenStreetMap (Overpass) unreachable or overloaded – please pan again"
+    },
+    "cables": {
+      "label": "Submarine cables",
+      "hint": "submarine cables (incomplete) – OpenStreetMap",
+      "rowOperator": "Operator",
+      "rowSince": "In service since",
+      "fallback": "Submarine cable",
+      "subtitle": "Submarine cable (telecommunications)"
+    },
+    "cctv": {
+      "rowGuard": "Security personnel / security service",
+      "rowCam": "Surveillance camera",
+      "zoomNote": "Overview from monthly extract · individual cameras from zoom level {z}",
+      "zoomNoteShort": "Individual cameras from zoom level {z}",
+      "noteFail": "Camera data unreachable",
+      "noteTilesFail": "{n} tile(s) unreachable",
+      "noteExtract": "As of: monthly extract from OpenStreetMap – in reality there are considerably more",
+      "noteNoCams": "no cameras in the view (or region not yet in the monthly extract)",
+      "kindPublic": "public space",
+      "kindOutdoor": "outdoor (private)",
+      "kindIndoor": "indoor",
+      "rowZone": "Area",
+      "rowCtype": "Construction",
+      "rowMount": "Mounting",
+      "rowDirection": "View direction",
+      "rowOperator": "Operator",
+      "rowPosition": "Position"
+    },
+    "chlorophyll": {
+      "label": "Chlorophyll (algae)",
+      "hint": "algal bloom at sea, satellite – NASA VIIRS"
+    },
+    "cities": {
+      "label": "City weather",
+      "hint": "current weather in ~200 cities"
+    },
+    "coal": {
+      "label": "Coal plants",
+      "hint": "coal and petroleum-coke plants worldwide"
+    },
+    "cyclenet": {
+      "label": "Cycle network",
+      "hint": "long-distance cycleways & regional cycle routes – Waymarked Trails"
+    },
+    "cyclones": {
+      "noteCone": "Cone = uncertainty of the track, not the storm size",
+      "noteNone": "currently no storms in the Atlantic and North Pacific",
+      "rowWind": "Wind",
+      "rowGusts": "Gusts",
+      "rowWindVal": "{speed} km/h ({kt} kt), gusts {gust} km/h",
+      "rowTime": "Time",
+      "rowTimeNow": "now ({at})",
+      "rowTimeForecast": "{at} – forecast +{tau} h",
+      "provider": "NOAA National Hurricane Center",
+      "storm": "storm",
+      "rowClass": "Rating",
+      "category": " · Category {n}",
+      "rowPressure": "Pressure",
+      "rowMove": "Motion",
+      "rowReport": "Report",
+      "rowMoveDeg": "{deg}°",
+      "rowMoveSpeed": "at {spd} km/h",
+      "rowReportVal": "No. {nr}, {at}"
+    },
+    "datacenters": {
+      "label": "Data centres",
+      "hint": "data centres and colocation sites – PeeringDB (large: many connected networks), OpenStreetMap"
+    },
+    "dwdnowcast": {
+      "label": "Radar nowcast Germany",
+      "hint": "radar forecast for the next 2 hours, 1 km – Deutscher Wetterdienst (WN product)"
+    },
+    "dwdwarn": {
+      "noteNone": "no warnings at the moment",
+      "noteImage": "available as map image only"
+    },
+    "ecradar": {
+      "label": "Radar Canada",
+      "hint": "rain radar Canada, 1 km, ~6 min – Environment Canada"
+    },
+    "ecsnow": {
+      "label": "Snow radar Canada",
+      "hint": "radar for snowfall only, 1 km – Environment Canada"
+    },
+    "fireareas": {
+      "noteNone": "no active fire areas at the moment"
+    },
+    "fmiradar": {
+      "label": "Radar Finland",
+      "hint": "rain radar Finland, 1 km, 5 min – Finnish Meteorological Institute (CC BY 4.0)"
+    },
+    "fmirain24": {
+      "label": "24 h rain sum Finland",
+      "hint": "radar precipitation sum of the last 24 hours – Finnish Meteorological Institute"
+    },
+    "gas": {
+      "label": "Gas plants",
+      "hint": "gas plants worldwide"
+    },
+    "gauges": {
+      "note": "{high} gauges in flood"
+    },
+    "geldfluesse": {
+      "ordered": "Ordered or commissioned",
+      "structure": "National section, no money",
+      "note": "Solid: money · dashed: ordered · dotted: ceiling / no money · currencies are never added",
+      "rowArt": "Type",
+      "rowDesc": "Description",
+      "secWhat": "What the entry says",
+      "secNotes": "What the registers state for this country",
+      "money": "Money moved as registered",
+      "ceiling": "Approved ceiling (maximum)",
+      "rowLines": "Lines",
+      "secSources": "Sources ({n})",
+      "link": "More details on whofundedgenocide.com",
+      "credit": "“The Entire Network”, Who Funded Genocide, research with Wallface (CC BY 4.0). A register entry is not an accusation against the named bodies; a ceiling is not money spent.",
+      "Land": "Country in the dataset"
+    },
+    "geology": {
+      "label": "Geology",
+      "hint": "geological maps worldwide, more detailed when zooming – Macrostrat"
+    },
+    "gnss": {
+      "titleHigh": "Strong GNSS jamming suspected",
+      "titleMedium": "GNSS jamming possible",
+      "titleLow": "No anomaly",
+      "subtitle": "{bad} of {n} aircraft report inaccurate navigation ({pct} % after removing an outlier) · last 30 min",
+      "description": "Aircraft report via ADS-B how accurately they know their GPS position (NIC/NACp). Many poor values point to jammers or spoofing – single outliers can also be device errors.",
+      "noteCells": "{cells} cells collected – new measurements arrive from zoom 5",
+      "noteBad": "{bad} aircraft currently report inaccurate navigation (ring) · {anomalies} of {cells} cells anomalous – cells fill up over 30 min"
+    },
+    "goesir": {
+      "label": "Clouds America (GOES, 5 min)",
+      "hint": "infrared satellite image, every 5 minutes, ~2 km – NOAA GOES via nowCOAST"
+    },
+    "gvp": {
+      "note": "{recent} with an eruption since last year (red)"
+    },
+    "hikenet": {
+      "label": "Hiking network",
+      "hint": "hiking trails – Waymarked Trails"
+    },
+    "ixp": {
+      "label": "Internet exchanges",
+      "hint": "Internet Exchange Points – PeeringDB"
+    },
+    "jmanowcast": {
+      "label": "Radar nowcast Japan",
+      "hint": "precipitation forecast for the next hour – Japan Meteorological Agency"
+    },
+    "jmaradar": {
+      "label": "Radar Japan",
+      "hint": "precipitation radar Japan, 5 min – Japan Meteorological Agency"
+    },
+    "landcover": {
+      "label": "Land cover",
+      "hint": "forest, fields, settlement, water (10 m) – ESA WorldCover"
+    },
+    "launches": {
+      "label": "Rocket launches",
+      "hint": "upcoming launches, countdown, tracking & stream – The Space Devs",
+      "track": "Open tracking & stream"
+    },
+    "lightning": {
+      "noteLive": "live connected · {count} strikes since activation{delay} · white = now, red = up to 15 min",
+      "noteDelay": " · delay ~{d} s",
+      "noteFail": "source unreachable",
+      "toastFail": "{name}: data could not be loaded.",
+      "rowTime": "Time",
+      "rowPosition": "Position",
+      "rowDetectors": "Detectors",
+      "rowDelay": "Delay",
+      "stations": "{n} stations",
+      "delayVal": "~{d} s",
+      "strikeTitle": "Lightning strike"
+    },
+    "lst": {
+      "label": "Land temperature",
+      "hint": "land surface temperature by day – NASA MODIS"
+    },
+    "ltgdensity": {
+      "label": "Lightning density America (NOAA)",
+      "hint": "strikes per km² of the last 15 min, ~8 km grid – America and Pacific, NOAA nowCOAST"
+    },
+    "ndvi": {
+      "label": "Vegetation",
+      "hint": "plant growth (NDVI, 8 days) – NASA MODIS"
+    },
+    "nexrad": {
+      "label": "Radar USA (NEXRAD)",
+      "hint": "rain radar mosaic of the USA, ~5 min – NOAA via Iowa Environmental Mesonet"
+    },
+    "nina": {
+      "noteNone": "no warnings at the moment"
+    },
+    "noaaradar": {
+      "label": "Radar Alaska, Hawaii, Caribbean, Guam",
+      "hint": "rain radar for Alaska, Hawaii, Puerto Rico and Guam – NOAA MRMS"
+    },
+    "nuclear": {
+      "label": "Nuclear plants",
+      "hint": "nuclear plants worldwide (WRI Global Power Plant Database)"
+    },
+    "oil": {
+      "label": "Oil plants",
+      "hint": "oil-fired power plants worldwide"
+    },
+    "pipelines": {
+      "note": "blue gas · orange oil · purple hydrogen",
+      "noteFail": "OpenStreetMap (Overpass) unreachable"
+    },
+    "plants": {
+      "label": "Other power plants",
+      "hint": "geothermal, storage, combined heat and power …"
+    },
+    "plates": {
+      "label": "Tectonic plates",
+      "hint": "plate boundaries (PB2002, Bird 2003)",
+      "SUB": "Subduction zone",
+      "OSR": "Oceanic ridge",
+      "OTF": "Transform fault",
+      "CRB": "Continental rift",
+      "CTF": "Continental transform",
+      "CCB": "Continental collision",
+      "OCB": "Oceanic collision",
+      "title": "Plate boundary {name}"
+    },
+    "ports": {
+      "note": "Larger ports at low zoom, smaller ones when zoomed in · click shows port data",
+      "rowSize": "Size",
+      "rowMaxShip": "Largest ship",
+      "rowMaxShipVal": "{v} m long",
+      "rowType": "Port type",
+      "rowChannel": "Channel depth",
+      "rowPier": "Pier depth",
+      "rowDraft": "Max. draft",
+      "rowPilot": "Pilotage",
+      "rowShelter": "Shelter",
+      "rowCargo": "Cargo",
+      "suffix": " m long"
+    },
+    "radiation": {
+      "noteFail": "{failed} unreachable",
+      "noteFallback": "natural normal range: 0.04–0.20 µSv/h"
+    },
+    "radio": {
+      "noteFail": "Radio Browser unreachable",
+      "noteStart": "most popular stations worldwide – zoom in for all stations of the region",
+      "notePlayable": "{count} directly playable (pink) · others open in a new tab"
+    },
+    "railelec": {
+      "label": "Rail: electrification",
+      "hint": "power systems of the lines – OpenRailwayMap"
+    },
+    "railmap": {
+      "label": "Rail network",
+      "hint": "tracks, stations, lines – OpenRailwayMap"
+    },
+    "railspeed": {
+      "label": "Rail: speed",
+      "hint": "permitted line speed – OpenRailwayMap"
+    },
+    "resources": {
+      "noteWorld": "World overview (Wikidata) – zoom in for USGS/BGR (from 7) and OSM (from 10)",
+      "noteRegion": "Regional: Wikidata, USGS MRDS, BGR (DE) – OpenStreetMap from zoom 10",
+      "noteLocal": "Local: all sources incl. OpenStreetMap"
+    },
+    "rivers": {
+      "noteGrid": "Grid {step}° – zoom for more rivers · colour = discharge (blue small → purple/red very large)",
+      "noteNone": "no rivers in the model here",
+      "noteFail": "Open-Meteo Flood unreachable"
+    },
+    "roadnet": {
+      "label": "Road network",
+      "hint": "motorways down to district roads with numbers – OpenStreetMap"
+    },
+    "sats": {
+      "noteFail": "CelesTrak unreachable",
+      "toastFail": "Satellite data (CelesTrak) could not be loaded."
+    },
+    "shipping": {
+      "label": "Ship routes & ferries",
+      "hint": "main shipping lanes, ferry lines (OSM)"
+    },
+    "ships": {
+      "noteFintraFail": "Fintraffic unreachable",
+      "noteProxy": "outside the Baltic Sea with the data proxy or a free aisstream.io key (settings)",
+      "noteLive": "live worldwide in the map view (aisstream.io)"
+    },
+    "snowcover": {
+      "label": "Snow cover (satellite)",
+      "hint": "snow cover – NASA MODIS"
+    },
+    "solar": {
+      "label": "Solar parks",
+      "hint": "photovoltaic plants"
+    },
+    "sondes": {
+      "label": "Weather balloons",
+      "hint": "radiosondes live (SondeHub) – with air traffic as 3D model and detail data on click"
+    },
+    "starlink": {
+      "label": "Starlink",
+      "hint": "thousands of satellites – CelesTrak"
+    },
+    "tides": {
+      "note": "Click a gauge to show water level & tides",
+      "rowLevel": "Water level",
+      "rowLevelVal": "{v} (above MLLW) · {t}",
+      "noteNoData": "no current measurements"
+    },
+    "traffic": {
+      "noteZoom": "Zoom in (city) for moving vehicles",
+      "noteLiveOn": " – live traffic is already visible",
+      "noteSim": "Simulation (1.5× speed) – enter a TomTom key in the settings for live traffic",
+      "noteLive": "Live traffic (TomTom): green free · yellow slow · red jam",
+      "noteLink": "The TomTom field contains a link instead of the key – please enter the API key (about 32 characters)",
+      "flowErrKey": "TomTom rejects the key (invalid or without Traffic API)",
+      "flowErrQuota": "TomTom quota exhausted",
+      "flowErrTiles": "TomTom tiles not loadable ({status})"
+    },
+    "trains": {
+      "label": "Trains live",
+      "hint": "Germany & Europe (realtime timetable, Transitous), GPS: Finland, USA (Amtrak)"
+    },
+    "transit": {
+      "label": "Buses, trams & subways",
+      "hint": "Germany & Europe from city zoom (Transitous); GPS: Norway, Boston, Toronto, Minneapolis, Austin, Malaysia, optional Melbourne, Chicago, Sweden"
+    },
+    "tsunami": {
+      "noteNone": "no notices in the last 7 days",
+      "noteWarn": "{count} active warning(s)!"
+    },
+    "water": {
+      "label": "Hydropower",
+      "hint": "water and tidal power plants"
+    },
+    "waves": {
+      "note": "Grid {step}° · number = wave height in {unit} – zoom in for a finer grid",
+      "noteFail": "Open-Meteo Marine unreachable"
+    },
+    "webcams": {
+      "noteFeeds": "{list} unreachable",
+      "noteWindy": "many more worldwide with a free Windy key (settings)",
+      "noteWindyFail": "Windy webcams unreachable – check the key"
+    },
+    "wind": {
+      "label": "Wind power",
+      "hint": "wind farms, single turbines when zoomed in"
+    },
+    "air": {
+      "noteWorld": "World overview (OpenSky, every 2 min; previously zoomed-in areas more current) – zoom in for live details",
+      "noteNoWorld": "World overview unavailable right now – zoom in closer to display",
+      "noteFail": "no flight data source reachable – maybe set up the data proxy (README)"
+    },
+    "power": {
+      "toast": "Power plant database could not be loaded."
+    },
+    "vehicles": {
+      "noteRange": "Germany & Europe from zoom level 5",
+      "noteFail": "{list} unreachable",
+      "noteCity": "Timetable realtime (Transitous) from zoom level 10 – GPS regions earlier",
+      "notePrivTransit": "Transitous unreachable – GPS trains only (Finland, USA)",
+      "noteTransit": "Transitous unreachable",
+      "rowFrom": "From",
+      "rowTo": "To",
+      "rowDelay": "Delay",
+      "rowArr": "Arrival",
+      "noRt": "no realtime data",
+      "onTime": "on time"
+    },
+    "cams": {
+      "alprZone": {
+        "traffic": "Traffic",
+        "parking": "Parking",
+        "town": "Town",
+        "building": "Building",
+        "public": "Public",
+        "shop": "Shop"
+      },
+      "alprMount": {
+        "pole": "Pole",
+        "wall": "Wall",
+        "streetLamp": "Street lamp",
+        "ceiling": "Ceiling",
+        "bridge": "Bridge",
+        "trafficSignals": "Traffic light"
+      },
+      "card": {
+        "n": "N",
+        "ne": "NE",
+        "e": "E",
+        "se": "SE",
+        "s": "S",
+        "sw": "SW",
+        "w": "W",
+        "nw": "NW"
+      }
+    },
+    "fires": {
+      "cat": "Fire hotspots",
+      "catHint": "Wildfires, satellite hotspots and fire areas USA"
+    },
+    "floods": {
+      "cat": "Flooding & droughts",
+      "catHint": "GDACS, EONET"
+    },
+    "ice": {
+      "cat": "Ice, dust & heat",
+      "catHint": "icebergs, dust storms – EONET"
+    },
+    "quakes": {
+      "cat": "Earthquakes",
+      "catHint": "7 days – Europe from M1.5, worldwide from M2.5"
+    },
+    "storms": {
+      "cat": "Storms & cyclones",
+      "catHint": "with tracks – EONET, GDACS"
+    },
+    "tornado": {
+      "cat": "Tornadoes & severe weather",
+      "catHint": "NWS warnings, SPC reports"
+    },
+    "volcanoes": {
+      "cat": "Volcanoes",
+      "catHint": "active eruptions and all ~1,300 volcanoes"
+    },
+    "loadFail": "{name} could not be loaded.",
+    "toastFail": "{name}: data could not be loaded."
+  }
+}

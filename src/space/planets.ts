@@ -12,6 +12,7 @@ import { TREK_PRODUCTS } from './trek-products';
 
 export interface TileLayer {
   id: string;
+  /** message-key suffix (space.layer.*); display texts are translated in the views */
   label: string;
   credit: string;
   /** WMTS-style tile, row from the north */
@@ -58,7 +59,7 @@ export interface PlanetMapConfig {
   detail3d: (z: number) => TileLayer;
   /** level the global base texture of the 3D body already corresponds to (256 px tiles) */
   baseLevel: number;
-  /** labels of the automatic map ("auto": base + regional mosaics) and of the plain global colour mosaic */
+  /** labels of the automatic map ("auto": base + regional mosaics) and of the plain global colour mosaic (message-key suffixes) */
   autoLabel?: string;
   globalLabel?: string;
   /** more map products (NASA Trek): global maps, regional mosaics, thematic overlays */
@@ -84,10 +85,10 @@ export interface MapProduct {
   layer: TileLayer;
 }
 
-const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'Farbmosaik (Viking, 232 m)', 'NASA/USGS Viking MDIM 2.1 · NASA Mars Trek', 7);
+const MARS_COLOR = trek('Mars', 'Mars_Viking_MDIM21_ClrMosaic_global_232m', 'marsColor', 'NASA/USGS Viking MDIM 2.1 · NASA Mars Trek', 7);
 const MARS_CTX: TileLayer = {
   id: 'ctx',
-  label: 'Kontextkamera (CTX, ≈ 5 m)',
+  label: 'ctx',
   credit: 'NASA/JPL/MSSS/Caltech Murray Lab · Powered by Esri',
   px: 512,
   maxZ: 12,
@@ -123,28 +124,28 @@ const MOON_TREK_PRODUCTS = trekProducts(MOON_PRODUCTS, { trek: 'NASA/GSFC/ASU/JA
 /** the Trek portals without their own script (see scripts/trek-products.mjs) */
 const trekList = (id: string) => trekProducts(TREK_PRODUCTS[id] ?? [], { trek: 'NASA/JPL/USGS · NASA Trek', esri: 'NASA/JPL/USGS · NASA Trek' });
 
-const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'LRO-Mosaik (WAC, ≈ 100 m)', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
-const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'MESSENGER-Mosaik (166 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
-const MERCURY_COLOR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_EnhancedColor_Mosaic_Global_665m', 'Farbkontrast (665 m)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 6);
+const MOON_WAC = trek('Moon', 'LRO_WAC_Mosaic_Global_303ppd_v02', 'moonWac', 'NASA/GSFC/ASU LRO WAC · NASA Moon Trek', 7);
+const MERCURY_BDR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_BDR_Mosaic_Global_166m', 'mercuryBdr', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 7);
+const MERCURY_COLOR = trek('Mercury', 'Mercury_MESSENGER_MDIS_Basemap_EnhancedColor_Mosaic_Global_665m', 'mercuryColor', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 6);
 
 // global height models (Trek serves them as a grey-scale image stretched over the full range;
 // LOLA spans about -9.1 … +10.8 km, the Cassini DEM of Enceladus about ± 1.5 km) – PNG only
-const MOON_LOLA_DEM = trek('Moon', 'LRO_LOLA_DEM_Global_128ppd_v04', 'LRO-Höhenmodell (LOLA)', 'NASA/GSFC/ASU LRO LOLA · NASA Moon Trek', 5, 'png');
-const ENCELADUS_DEM = trek('Enceladus', 'Cassini_ISS_DEM_375m_Global', 'Cassini-Höhenmodell (375 m)', 'NASA/JPL/SSI/DLR · NASA Trek', 4, 'png');
+const MOON_LOLA_DEM = trek('Moon', 'LRO_LOLA_DEM_Global_128ppd_v04', 'lolaDem', 'NASA/GSFC/ASU LRO LOLA · NASA Moon Trek', 5, 'png');
+const ENCELADUS_DEM = trek('Enceladus', 'Cassini_ISS_DEM_375m_Global', 'enceladusDem', 'NASA/JPL/SSI/DLR · NASA Trek', 4, 'png');
 // colour hillshades: relief as a basemap where no usable DEM tiles exist (Mars, Mercury, Ceres)
-const MOON_LOLA_CLRSHADE = trek('Moon', 'LRO_LOLA_ClrShade_Global_128ppd_v04', 'Relief (LOLA, farbig)', 'NASA/GSFC/ASU LRO LOLA · NASA Moon Trek', 5, 'png');
-const MERCURY_SHADE = trek('Mercury', 'Mercury_Messenger_USGS_DEM_665m_v2_HillshadeColor', 'Relief (MESSENGER-DEM)', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 5, 'png');
+const MOON_LOLA_CLRSHADE = trek('Moon', 'LRO_LOLA_ClrShade_Global_128ppd_v04', 'lolaClrShade', 'NASA/GSFC/ASU LRO LOLA · NASA Moon Trek', 5, 'png');
+const MERCURY_SHADE = trek('Mercury', 'Mercury_Messenger_USGS_DEM_665m_v2_HillshadeColor', 'mercuryShade', 'NASA/JHUAPL/CIW MESSENGER MDIS · NASA Mercury Trek', 5, 'png');
 
 // Saturnmonde und Kleinkörper aus den Trek-Portalen (Kacheln bis zum letzten Level gegenprüft)
-const TITAN_CASSINI = trek('Titan', 'Titan_global_32ppd_ColorRatio_v2', 'Cassini-Farbmosaik (≈ 2 km)', 'NASA/JPL/SSI · NASA Trek', 4, 'png');
-const MIMAS_CASSINI = trek('Mimas', 'MI_170630_DLR_basemap', 'Cassini-Mosaik (DLR, ≈ 150 m)', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
-const ENCELADUS_CASSINI = trek('Enceladus', 'Enceladus_Cassini_mosaic_global_110m', 'Cassini-Mosaik (110 m)', 'NASA/JPL/SSI/DLR · NASA Trek', 5);
-const TETHYS_CASSINI = trek('Tethys', 'Tethys_Cassini_mosaic_global_293m', 'Cassini-Mosaik (293 m)', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
-const DIONE_CASSINI = trek('Dione', 'Dione_Cassini_Voyageglobal_154m', 'Cassini/Voyager-Mosaik (154 m)', 'NASA/JPL/SSI · NASA Trek', 5);
-const RHEA_DLR = trek('Rhea', 'RH_120803_DLR_basemap', 'Cassini-Mosaik (DLR, ≈ 600 m)', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
-const IAPETUS_CASSINI = trek('Iapetus', 'Iapetus_Cassini_Voyager_mosaic_global_783m', 'Cassini/Voyager-Mosaik (783 m)', 'NASA/JPL/SSI · NASA Trek', 3);
-const VESTA_GRAND = trek('Vesta', 'Vesta_Dawn_GRaND_ClrIronCorrectedCounts_Global_2ppd', 'Dawn GRaND, Eisenverteilung', 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA · NASA Trek', 1);
-const CERES_DAWN = trek('Ceres', 'Ceres_Dawn_FC_HAMO_ClrShade_DLR_Global_60ppd_Oct2016', 'Dawn-Mosaik (DLR, ≈ 140 m)', 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA · NASA Trek', 5);
+const TITAN_CASSINI = trek('Titan', 'Titan_global_32ppd_ColorRatio_v2', 'titanCassini', 'NASA/JPL/SSI · NASA Trek', 4, 'png');
+const MIMAS_CASSINI = trek('Mimas', 'MI_170630_DLR_basemap', 'mimasCassini', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
+const ENCELADUS_CASSINI = trek('Enceladus', 'Enceladus_Cassini_mosaic_global_110m', 'enceladusCassini', 'NASA/JPL/SSI/DLR · NASA Trek', 5);
+const TETHYS_CASSINI = trek('Tethys', 'Tethys_Cassini_mosaic_global_293m', 'tethysCassini', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
+const DIONE_CASSINI = trek('Dione', 'Dione_Cassini_Voyageglobal_154m', 'dioneCassini', 'NASA/JPL/SSI · NASA Trek', 5);
+const RHEA_DLR = trek('Rhea', 'RH_120803_DLR_basemap', 'rheaDlr', 'NASA/JPL/SSI/DLR · NASA Trek', 4);
+const IAPETUS_CASSINI = trek('Iapetus', 'Iapetus_Cassini_Voyager_mosaic_global_783m', 'iapetusCassini', 'NASA/JPL/SSI · NASA Trek', 3);
+const VESTA_GRAND = trek('Vesta', 'Vesta_Dawn_GRaND_ClrIronCorrectedCounts_Global_2ppd', 'vestaGrand', 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA · NASA Trek', 1);
+const CERES_DAWN = trek('Ceres', 'Ceres_Dawn_FC_HAMO_ClrShade_DLR_Global_60ppd_Oct2016', 'ceresDawn', 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA · NASA Trek', 5);
 
 const wide = (b: [number, number, number, number]) => b[2] - b[0] >= 300;
 
@@ -189,12 +190,12 @@ export const PLANET_MAPS: Record<string, PlanetMapConfig> = {
     // colour mosaic as far as it goes, then the 5 m CTX mosaic (≥ 2× finer from level 7 on)
     detail3d: (z) => (z <= 6 ? MARS_COLOR : MARS_CTX),
     baseLevel: 4, // 8k texture
-    autoLabel: 'Automatisch (Farbe → 5 m → HiRISE)',
-    globalLabel: 'Farbmosaik (Viking, 232 m)',
+    autoLabel: 'autoMars',
+    globalLabel: 'marsColor',
     products: MARS_TREK_PRODUCTS,
   },
   // the space view keeps its own close-up tiles for the Moon; its map takes over very close to the surface
-  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC, MOON_LOLA_CLRSHADE], detail3d: () => MOON_WAC, baseLevel: 4, autoLabel: 'Automatisch (WAC → LROC-NAC)', products: MOON_TREK_PRODUCTS, dem: { layer: MOON_LOLA_DEM, minM: -9150, maxM: 10800 } },
+  moon: { id: 'moon', name: 'Mond', radiusKm: 1737.4, enabled: true, openAt: 1.03, layers: [MOON_WAC, MOON_LOLA_CLRSHADE], detail3d: () => MOON_WAC, baseLevel: 4, autoLabel: 'autoMoon', products: MOON_TREK_PRODUCTS, dem: { layer: MOON_LOLA_DEM, minM: -9150, maxM: 10800 } },
   mercury: { id: 'mercury', name: 'Merkur', radiusKm: 2439.7, enabled: true, openAt: 1.1, layers: [MERCURY_BDR, MERCURY_COLOR, MERCURY_SHADE], detail3d: () => MERCURY_BDR, baseLevel: 4, ...(trekList('mercury').length ? { products: trekList('mercury') } : {}) },
   venus: trekBody('venus', 'Venus', 6051.8),
   // the inner Mars moon (map from Viking/MExLab mosaics, relief from the HRSC/MExLab height models)

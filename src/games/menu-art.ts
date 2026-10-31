@@ -4,18 +4,19 @@ import { DATA } from './data';
 
 export interface GameCard {
   id: string;
+  /** message-key suffix – text lives at games.card.<id>.<label|tag|blurb|chip1…> */
   label: string;
   tag: string;
   blurb: string;
   chips: string[];
 }
 export const GAME_CARDS: GameCard[] = [
-  { id: 'quiz', label: 'Länder-Rater', tag: 'Karte', blurb: 'Ein Name erscheint – klick das Land auf der Weltkarte an. Oder tipp alle Namen aus dem Kopf. Auch Kontinente und Regionen.', chips: ['Anklicken', 'Eintippen', 'Regionen'] },
-  { id: 'flags', label: 'Flaggen-Rater', tag: 'Flaggen', blurb: 'Welche Flagge gehört zu welchem Land?', chips: ['Auswahl', 'Eintippen', 'Karte'] },
-  { id: 'capitals', label: 'Hauptstädte', tag: 'Städte', blurb: 'Land zur Hauptstadt – oder umgekehrt.', chips: ['Auswahl', 'Eintippen'] },
-  { id: 'outline', label: 'Umrisse', tag: 'Formen', blurb: 'Erkennst du ein Land oder eine Region nur an ihrer Form?', chips: ['Auswahl', 'Eintippen'] },
-  { id: 'size', label: 'Größenvergleich', tag: 'Maßstab', blurb: 'Welches Land ist größer – oder zieh ein Land auf die richtige Größe. Nach Fläche oder Einwohnern.', chips: ['Maßstab', 'Higher Lower'] },
-  { id: 'street', label: 'Straßen-Rater', tag: '360°', blurb: 'Echte 360°-Straßenfotos – schau dich um und tippe auf der Karte, wo du stehst. 5 Runden, bis zu 5000 Punkte.', chips: ['360°', '5 Runden', 'Punkte'] },
+  { id: 'quiz', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2', 'chip3'] },
+  { id: 'flags', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2', 'chip3'] },
+  { id: 'capitals', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2'] },
+  { id: 'outline', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2'] },
+  { id: 'size', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2'] },
+  { id: 'street', label: 'label', tag: 'tag', blurb: 'blurb', chips: ['chip1', 'chip2', 'chip3'] },
 ];
 
 /** preview picture of a game: static SVG (scripts/build-game-previews.mjs) or a fan of real flags */

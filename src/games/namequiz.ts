@@ -1,4 +1,5 @@
 import { lev, norm } from './data';
+import { t as m } from '../i18n';
 import { escapeHtml } from '../util';
 
 // Generic "what is this called?" quiz used by the flag, capital and outline games:
@@ -48,14 +49,14 @@ export function startNameQuiz(host: HTMLElement, o: NameQuizOptions, onExit: () 
       <div class="fg-stage">
         <div class="fg-flag"></div>
         <div class="fg-choices"></div>
-        <form class="fg-type" autocomplete="off"><input class="gm-input" type="text" placeholder="${escapeHtml(o.placeholder)}" autocapitalize="off" autocorrect="off" spellcheck="false" /><button class="btn btn-primary" type="submit">OK</button></form>
+        <form class="fg-type" autocomplete="off"><input class="gm-input" type="text" placeholder="${escapeHtml(o.placeholder)}" autocapitalize="off" autocorrect="off" spellcheck="false" /><button class="btn btn-primary" type="submit">${m('games.ok')}</button></form>
         <div class="gm-feedback" aria-live="polite"></div>
-        <button class="btn btn-primary fg-next" type="button" hidden>Weiter</button>
+        <button class="btn btn-primary fg-next" type="button" hidden>${m('games.next')}</button>
       </div>
       <div class="gm-actions">
-        <button class="btn fg-skip" type="button">Überspringen</button>
-        <button class="btn fg-giveup" type="button">Aufgeben</button>
-        <button class="btn fg-menu" type="button">Menü</button>
+        <button class="btn fg-skip" type="button">${m('games.skip')}</button>
+        <button class="btn fg-giveup" type="button">${m('games.giveUp')}</button>
+        <button class="btn fg-menu" type="button">${m('games.menu')}</button>
       </div>
     </div>`;
   host.append(root);
@@ -85,7 +86,7 @@ export function startNameQuiz(host: HTMLElement, o: NameQuizOptions, onExit: () 
   };
   const timer = window.setInterval(clock, 500);
   const score = () => {
-    $('.fg-score').textContent = `${done} / ${total} · ${right} richtig${streak > 1 ? ` · 🔥 ${streak}` : ''}`;
+    $('.fg-score').textContent = `${done} / ${total} · ${m('games.rightCount', { count: right })}${streak > 1 ? ` · 🔥 ${streak}` : ''}`;
   };
   const say = (text: string, kind: '' | 'ok' | 'bad' = '') => {
     msg.textContent = text;
@@ -124,11 +125,11 @@ export function startNameQuiz(host: HTMLElement, o: NameQuizOptions, onExit: () 
       right++;
       streak++;
       best = Math.max(best, streak);
-      say(`Richtig: ${cur.label}`, 'ok');
+      say(m('games.correct', { name: cur.label }), 'ok');
     } else {
       streak = 0;
       wrong.push(cur);
-      say(`Richtig wäre: ${cur.label}`, 'bad');
+      say(m('games.wouldBe', { name: cur.label }), 'bad');
     }
     score();
     if (o.mode === 'choice') {
@@ -183,11 +184,11 @@ export function startNameQuiz(host: HTMLElement, o: NameQuizOptions, onExit: () 
     const s = Math.round((Date.now() - t0) / 1000);
     root.innerHTML = `
       <div class="gm-result">
-        <h2>${gaveUp ? 'Aufgegeben' : 'Geschafft!'}</h2>
+        <h2>${gaveUp ? m('games.gaveUp') : m('games.done')}</h2>
         <div class="gm-big">${right} / ${total} <span>(${Math.round((right / total) * 100)} %)</span></div>
-        <p>Zeit ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} · längste Serie ${best}</p>
-        ${wrong.length ? `<details open><summary>${wrong.length} nicht gewusst</summary><p class="gm-missed">${wrong.map((f) => `<span class="fg-miss">${f.thumb ?? ''}${escapeHtml(f.label)}</span>`).join(' · ')}</p></details>` : ''}
-        <div class="gm-actions"><button class="btn btn-primary fg-again" type="button">Nochmal</button><button class="btn fg-menu" type="button">Menü</button></div>
+        <p>${m('games.timeShort', { when: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })} · ${m('games.longestStreak', { n: best })}</p>
+        ${wrong.length ? `<details open><summary>${m('games.missedCount', { count: wrong.length })}</summary><p class="gm-missed">${wrong.map((f) => `<span class="fg-miss">${f.thumb ?? ''}${escapeHtml(f.label)}</span>`).join(' · ')}</p></details>` : ''}
+        <div class="gm-actions"><button class="btn btn-primary fg-again" type="button">${m('games.again')}</button><button class="btn fg-menu" type="button">${m('games.menu')}</button></div>
       </div>`;
     root.querySelector('.fg-again')!.addEventListener('click', () => {
       destroy();

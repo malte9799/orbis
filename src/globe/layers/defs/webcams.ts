@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { ALPR_FOV_ZOOM, CAM_COLOR, CAM_DETAIL_ZOOM, CAM_DOT_ZOOM, CAM_FOV_ANGLE, CAM_FOV_RADIUS, ROAD_CAM_FOV_ANGLE, ROAD_CAM_FOV_RADIUS, fovSectors } from '../shared/cams';
@@ -40,8 +41,8 @@ function updateNote(ctx: ExtraCtx) {
   const st = getState(ctx);
   const notes: string[] = [];
   if (ctx.map.getZoom() < CAM_DETAIL_ZOOM) notes.push('Webcams aus OpenStreetMap ab Zoomstufe 9');
-  if (st.feedErrors.size) notes.push(`${[...st.feedErrors].join(', ')} nicht erreichbar`);
-  if (!hasWindyKey()) notes.push('weltweit viele weitere mit kostenlosem Windy-Schlüssel (Einstellungen)');
+  if (st.feedErrors.size) notes.push(t('layers.webcams.noteFeeds', { list: [...st.feedErrors].join(', ') }));
+  if (!hasWindyKey()) notes.push(t('layers.webcams.noteWindy'));
   else if (ctx.map.getZoom() < 5) notes.push('Windy-Webcams ab Zoomstufe 5');
   ctx.set('webcams', { note: notes.join(' · ') || undefined });
 }
@@ -114,7 +115,7 @@ function loadNow(ctx: ExtraCtx) {
         .catch((e) => {
           console.warn('Windy', e);
           st.windyKey = '';
-          ctx.set('webcams', { note: 'Windy-Webcams nicht erreichbar – Schlüssel prüfen' });
+          ctx.set('webcams', { note: t('layers.webcams.noteWindyFail') });
         });
     }
   }

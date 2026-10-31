@@ -4,6 +4,8 @@ import { clockTxt } from '../units';
 import type { Place } from '../store';
 import { distance, duration } from './format';
 import { maneuverSvg, profileSvg } from './icons';
+import { t } from '../i18n';
+import { tx } from '../globe/layers';
 import { PROFILES, type LngLat, type Maneuver, type Profile, type Route, type RoutingProvider } from './types';
 
 // The DOM of the route planner and of the guidance. Pure view: all decisions are made in ./index.ts.
@@ -42,7 +44,7 @@ const ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 export class RoutePanel {
   readonly el: HTMLElement;
   stops: Stop[] = [
-    { pos: null, label: 'Mein Standort', here: true },
+    { pos: null, label: t('routing.stops.here'), here: true },
     { pos: null, label: '' },
   ];
   private plan: HTMLElement;
@@ -58,25 +60,25 @@ export class RoutePanel {
     this.el.className = 'rt';
     this.el.hidden = true;
     this.el.innerHTML = `
-      <section class="rt-plan" aria-label="Routenplanung">
+      <section class="rt-plan" aria-label="${t('routing.aria.plan')}">
         <div class="rt-grab" aria-hidden="true"></div>
         <header class="rt-head">
-          <div class="rt-prof" role="radiogroup" aria-label="Fortbewegung">${PROFILES.map((p) => `<button type="button" role="radio" data-p="${p.id}" aria-checked="false" title="${p.label}" aria-label="${p.label}">${profileSvg(p.id)}</button>`).join('')}</div>
-          <button type="button" class="rt-x" data-a="close" aria-label="Schließen">${ICON_X}</button>
+          <div class="rt-prof" role="radiogroup" aria-label="${t('routing.aria.travel')}">${PROFILES.map((p) => `<button type="button" role="radio" data-p="${p.id}" aria-checked="false" title="${t(`routing.profile.${p.id}`)}" aria-label="${t(`routing.profile.${p.id}`)}">${profileSvg(p.id)}</button>`).join('')}</div>
+          <button type="button" class="rt-x" data-a="close" aria-label="${t('routing.aria.close')}">${ICON_X}</button>
         </header>
         <div class="rt-body">
           <div class="rt-stops"></div>
-          <button type="button" class="rt-swap" data-a="swap" title="Start und Ziel tauschen" aria-label="Start und Ziel tauschen">${ICON_SWAP}</button>
+          <button type="button" class="rt-swap" data-a="swap" title="${t('routing.swap')}" aria-label="${t('routing.swap')}">${ICON_SWAP}</button>
         </div>
-        <button type="button" class="rt-link" data-a="addvia">+ Zwischenstopp hinzufügen</button>
+        <button type="button" class="rt-link" data-a="addvia">${t('routing.addVia')}</button>
         <div class="rt-result" aria-live="polite"></div>
         <details class="rt-opt">
-          <summary>Routing-Dienst</summary>
-          <select data-a="provider" aria-label="Routing-Dienst"></select>
+          <summary>${t('routing.provider.title')}</summary>
+          <select data-a="provider" aria-label="${t('routing.provider.title')}"></select>
           <div class="rt-note"></div>
         </details>
       </section>
-      <section class="rt-guide" hidden aria-label="Navigation"></section>`;
+      <section class="rt-guide" hidden aria-label="${t('routing.aria.guide')}"></section>`;
     this.plan = this.el.querySelector('.rt-plan')!;
     this.guide = this.el.querySelector('.rt-guide')!;
     this.result = this.el.querySelector('.rt-result')!;
@@ -118,15 +120,15 @@ export class RoutePanel {
     const n = this.stops.length;
     this.stopList.innerHTML = this.stops
       .map((s, i) => {
-        const role = i === 0 ? 'Start' : i === n - 1 ? 'Ziel' : 'Stopp';
+      const role = i === 0 ? t('routing.stops.start') : i === n - 1 ? t('routing.stops.dest') : t('routing.stops.stop');
         return `<div class="rt-stop" data-i="${i}">
           <span class="rt-dot ${i === 0 ? 'start' : i === n - 1 ? 'end' : 'via'}" aria-hidden="true">${i === n - 1 ? ICON_PIN_END : ''}</span>
           <div class="rt-field">
-            <input type="text" value="${escapeHtml(s.label)}" placeholder="${role} suchen …" aria-label="${role}" autocomplete="off" spellcheck="false" data-i="${i}"/>
+            <input type="text" value="${escapeHtml(s.label)}" placeholder="${t('routing.stops.ph', { role })}" aria-label="${role}" autocomplete="off" spellcheck="false" data-i="${i}"/>
             <ul class="rt-sug" hidden></ul>
           </div>
-          <button type="button" class="rt-ib" data-pick="${i}" title="Auf der Karte wählen" aria-label="${role} auf der Karte wählen">${ICON_PIN}</button>
-          ${i > 0 && i < n - 1 ? `<button type="button" class="rt-ib" data-rm="${i}" title="Entfernen" aria-label="Stopp entfernen">${ICON_X}</button>` : ''}
+          <button type="button" class="rt-ib" data-pick="${i}" title="${t('routing.stops.pickTitle')}" aria-label="${t('routing.stops.pickAria', { role })}">${ICON_PIN}</button>
+          ${i > 0 && i < n - 1 ? `<button type="button" class="rt-ib" data-rm="${i}" title="${t('routing.stops.rm')}" aria-label="${t('routing.stops.rmStop')}">${ICON_X}</button>` : ''}
         </div>`;
       })
       .join('');
@@ -147,10 +149,10 @@ export class RoutePanel {
         results = r;
         ul.innerHTML = r.length
           ? r.map((p, k) => `<li data-k="${k}"><span>${escapeHtml(p.name)}</span><small>${escapeHtml([p.region, p.country].filter(Boolean).join(', '))}</small></li>`).join('')
-          : '<li class="empty">Keine Treffer</li>';
+          : `<li class="empty">${t('routing.stops.noResults')}</li>`;
         ul.hidden = false;
       } catch {
-        ul.innerHTML = '<li class="empty">Suche nicht verfügbar</li>';
+        ul.innerHTML = `<li class="empty">${t('routing.stops.searchFail')}</li>`;
         ul.hidden = false;
       }
     }, 250);
@@ -210,10 +212,11 @@ export class RoutePanel {
     sel.innerHTML = all
       .map((p) => {
         const ok = list.includes(p);
-        return `<option value="${p.id}" ${p.id === selected ? 'selected' : ''} ${ok ? '' : 'disabled'}>${escapeHtml(p.label)}${ok ? '' : p.key ? ' – Schlüssel nötig' : !p.profiles.includes(profile) ? ' – nicht für diese Fortbewegung' : ''}</option>`;
+        return `<option value="${p.id}" ${p.id === selected ? 'selected' : ''} ${ok ? '' : 'disabled'}>${escapeHtml(p.label)}${ok ? '' : p.key ? t('routing.provider.needsKey') : !p.profiles.includes(profile) ? t('routing.provider.noProfile') : ''}</option>`;
       })
       .join('');
-    this.el.querySelector('.rt-note')!.textContent = all.find((p) => p.id === selected)?.note ?? '';
+    const selP = all.find((p) => p.id === selected);
+    this.el.querySelector('.rt-note')!.textContent = selP ? tx(`routing.prov.${selP.id}.note`, selP.note) : '';
   }
 
   busy(text: string) {
@@ -236,15 +239,15 @@ export class RoutePanel {
     this.result.innerHTML = `
       ${fallbackNote ? `<div class="rt-msg">${escapeHtml(fallbackNote)}</div>` : ''}
       ${refining ? `<div class="rt-msg"><span class="rt-spin" aria-hidden="true"></span>${escapeHtml(refining)}</div>` : ''}
-      <div class="rt-alts" role="radiogroup" aria-label="Routen">${routes
+      <div class="rt-alts" role="radiogroup" aria-label="${t('routing.aria.routes')}">${routes
         .map(
           (a, i) => `<button type="button" class="rt-alt ${i === active ? 'on' : ''}" role="radio" aria-checked="${i === active}" data-r="${i}">
             <span class="rt-time">${duration(a.duration)}</span>
-            <span class="rt-meta">${distance(a.distance)} · Ankunft ${eta(a)}</span>
-            <span class="rt-via">${i === 0 ? 'Schnellste Route' : 'Alternative'}${a.summary ? ` · über ${escapeHtml(a.summary)}` : ''}</span></button>`,
+            <span class="rt-meta">${distance(a.distance)} · ${t('routing.result.eta', { t: eta(a) })}</span>
+            <span class="rt-via">${i === 0 ? t('routing.result.fastest') : t('routing.result.alt')}${a.summary ? ` · ${t('routing.result.via', { via: escapeHtml(a.summary) })}` : ''}</span></button>`,
         )
         .join('')}</div>
-      <div class="rt-row"><button type="button" class="rt-go" data-a="start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>Start</button><button type="button" class="rt-pill" data-a="steps">Schritte</button></div>
+      <div class="rt-row"><button type="button" class="rt-go" data-a="start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>${t('routing.result.start')}</button><button type="button" class="rt-pill" data-a="steps">${t('routing.result.steps')}</button></div>
       <div class="rt-src">${escapeHtml(provider.label)}</div>
       <ol class="rt-steps" hidden>${r.steps.map((s) => `<li><span class="rt-arr">${maneuverSvg(s.maneuver, 26)}</span><span class="rt-txt">${escapeHtml(s.text)}</span><small>${s.distance ? distance(s.distance) : ''}</small></li>`).join('')}</ol>`;
   }
@@ -274,12 +277,12 @@ export class RoutePanel {
           <div class="rt-then" data-g="then"></div>
         </div>
         <div class="rt-fabs">
-          <div class="rt-speed" aria-label="Tempo"><b data-g="speed">–</b></div>
-          <button type="button" class="rt-recentre" data-a="recentre" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>Zentrieren</button>
-          <button type="button" class="rt-circ rt-mute" data-a="voice" title="Sprachansagen" aria-label="Sprachansagen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
+          <div class="rt-speed" aria-label="${t('routing.aria.speed')}"><b data-g="speed">–</b></div>
+          <button type="button" class="rt-recentre" data-a="recentre" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8z" fill="currentColor"/></svg>${t('routing.guide.recentre')}</button>
+          <button type="button" class="rt-circ rt-mute" data-a="voice" title="${t('routing.aria.voice')}" aria-label="${t('routing.aria.voice')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
         </div>
         <div class="rt-sheet">
-          <button type="button" class="rt-circ rt-end" data-a="stopnav" title="Navigation beenden" aria-label="Navigation beenden">${ICON_X}</button>
+          <button type="button" class="rt-circ rt-end" data-a="stopnav" title="${t('routing.guide.endTitle')}" aria-label="${t('routing.guide.endAria')}">${ICON_X}</button>
           <div class="rt-eta"><b data-g="time">–</b><span><span data-g="rest">–</span> · <span data-g="eta">–</span></span></div>
         </div>`;
     }

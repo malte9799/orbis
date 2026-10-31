@@ -13,4 +13,5 @@ export const KEY_DEFS: KeyDef[] = Object.entries(modules)
   })
   .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 
-export const text = (v: string | (() => string)) => (typeof v === 'function' ? v() : v);
+// Display texts of the keys live in the i18n catalogs (keys.<id>.…): tip, label, placeholder and
+// steps.<n> (KeyStep.t holds the step number as string). The view resolves them with t().

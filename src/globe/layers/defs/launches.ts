@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { empty } from '../shared/geo';
 import type { FeatureCollection } from 'geojson';
 import { FONT_BOLD } from '../../vector';
@@ -130,7 +131,7 @@ export default defineExtra({
       )
       .join('');
     const trackBtn = ctx.openLaunch
-      ? `<button class="btn small wide pop-track" type="button" style="margin:8px 0 2px">Tracking &amp; Stream öffnen</button>`
+      ? `<button class="btn small wide pop-track" type="button" style="margin:8px 0 2px">${t('layers.launches.track')}</button>`
       : '';
     return {
       type: 'html',

@@ -4,6 +4,7 @@ import { glyphSvg } from '../globe/icons';
 import { escapeHtml as esc } from '../util';
 import { ico } from './icons';
 import type { Karte } from './karten';
+import { t } from '../i18n';
 
 // The bottom sheet of the phone portrait layout: three detents (peek / half / full), dragged by its
 // handle. The HUD renders the content; this module owns the sheet element, its height and the drag.
@@ -55,11 +56,11 @@ export function createSheet(dep: SheetDeps) {
 
   function sheetHeader(k: Karte, d: 'peek' | 'half' | 'full'): string {
     if (d === 'full') {
-      const title = ui.save ? 'Als neue Karte speichern' : ui.gallery ? 'Alle Karten' : 'Ebene hinzufügen';
-      return `<div class="sh-title"><b>${title}</b><button type="button" class="sh-done" data-act="${ui.save ? 'cancel' : 'sheetdone'}">${ui.save ? 'Abbrechen' : 'Fertig'}</button></div>`;
+      const title = ui.save ? t('hud.dlg.title') : ui.gallery ? t('hud.karten.galleryTitle') : t('hud.add.title');
+      return `<div class="sh-title"><b>${title}</b><button type="button" class="sh-done" data-act="${ui.save ? 'cancel' : 'sheetdone'}">${ui.save ? t('hud.cancel') : t('hud.done')}</button></div>`;
     }
     const { html, more } = iconList(k, 4);
-    return `<div class="kh" data-act="sheettoggle" role="button" tabindex="0" aria-expanded="${d === 'half'}" aria-label="${esc(k.name)}: Ebenen ${d === 'half' ? 'zuklappen' : 'aufklappen'}">${mglyph(k, 32)}
+    return `<div class="kh" data-act="sheettoggle" role="button" tabindex="0" aria-expanded="${d === 'half'}" aria-label="${esc(k.name)}: ${d === 'half' ? t('hud.sheet.fold') : t('hud.sheet.unfold')}">${mglyph(k, 32)}
       <div class="tx">${d === 'half' ? nameEl(k) : `<b>${esc(k.name)}</b>`}<small>${esc(statusLine(k))}</small></div>
       <div class="lic">${html}${more ? `<span class="more">+${more}</span>` : ''}</div>
       <span class="cv ${d === 'peek' ? 'up' : ''}" aria-hidden="true">${ico('chevd', 2.2)}</span></div>`;
@@ -70,7 +71,7 @@ export function createSheet(dep: SheetDeps) {
     const e = host.events(ui.evHours)[0];
     return e
       ? `<span class="evg">${glyphSvg(e.kind, e.color, 28)}</span><div><b>${esc(e.title)}</b><small>${esc(e.sub)}</small></div><time>${esc(e.when)}</time>`
-      : '<span class="muted">Keine Ereignisse im Zeitraum (oder Daten laden noch).</span>';
+      : `<span class="muted">${t('hud.evEmpty')}</span>`;
   }
 
   function renderSheet() {
@@ -104,7 +105,7 @@ export function createSheet(dep: SheetDeps) {
     if (dep.placeNode) {
       header = '';
       body = '<div class="sh-place"></div>';
-    } else if (d === 'full') body = ui.save ? `<div class="dlg" role="group" aria-label="Als neue Karte speichern">${dialogInner()}</div>` : ui.gallery ? galleryInner() : addInner();
+    } else if (d === 'full') body = ui.save ? `<div class="dlg" role="group" aria-label="${t('hud.dlg.title')}">${dialogInner()}</div>` : ui.gallery ? galleryInner() : addInner();
     else if (d === 'half') {
       body = stackBody(k);
       foot = `<div class="foot">${stackFoot(k)}</div>`;

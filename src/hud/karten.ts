@@ -1,4 +1,5 @@
 import { store } from '../store';
+import { t } from '../i18n';
 import { BASES, type BaseId } from '../globe/style';
 import { catalogOf, MENU_LAYERS } from './catalog';
 import { hasIcon } from './icons';
@@ -95,7 +96,7 @@ export const defaultTerrain3d = (): boolean => false;
 
 export function blankKarte(): Karte {
   return {
-    id: newId(), name: 'Neue Karte', icon: 'pin', color: '#a58bff',
+    id: newId(), name: t('hud.kname.new'), icon: 'pin', color: '#a58bff',
     base: 'satellite', labels: true, night: 'auto', main: null, layers: [], savedAt: Date.now(),
   };
 }
@@ -163,7 +164,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
   }
   const k: Karte = {
     id: kid,
-    name: (typeof r.name === 'string' && r.name.trim() ? r.name.trim() : 'Karte').slice(0, 40),
+    name: (typeof r.name === 'string' && r.name.trim() ? r.name.trim() : t('hud.kname.map')).slice(0, 40),
     icon: typeof r.icon === 'string' && hasIcon(r.icon) ? r.icon : 'pin',
     color: typeof r.color === 'string' && /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : '#a58bff',
     base: BASES.some((b) => b.id === r.base) ? (r.base as BaseId) : 'satellite',

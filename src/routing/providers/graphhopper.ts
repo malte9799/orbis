@@ -1,4 +1,5 @@
 import { defineProvider, type Maneuver, type Route } from '../types';
+import { getLang } from '../../i18n';
 import { fetchJson } from '../../util';
 
 const PROFILE = { car: 'car', bike: 'bike', foot: 'foot' } as const;
@@ -56,7 +57,7 @@ export default defineProvider({
     const body = {
       points: req.points,
       profile: PROFILE[req.profile],
-      locale: 'de',
+      locale: getLang(),
       instructions: true,
       points_encoded: false,
       calc_points: true,

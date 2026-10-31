@@ -1,4 +1,5 @@
 import { defineExtra } from '../types';
+import { t as m } from '../../../i18n';
 import { fmt } from '../../../util';
 import { loadAurora, loadSpaceWeather } from '../../../api/earth';
 import { clockTxt } from '../../../units';
@@ -41,9 +42,9 @@ export default defineExtra({
       const t = new Date(r.forecastTime);
       const kp = r.kp != null ? `Kp ${fmt.num(r.kp, 1)}${r.kp >= 5 ? ' – geomagnetischer Sturm!' : ''} · ` : '';
       const sun = sw
-        ? ` · Sonnenwind ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? ' (günstig)' : ''}` : ''}${sw.xray ? `, Röntgen ${sw.xray}` : ''}`
+        ? ` · ${m('layers.aurora.solarSun')} ${sw.windKmS != null ? `${Math.round(sw.windKmS)} km/s` : '–'}${sw.bz != null ? `, Bz ${fmt.num(sw.bz, 1)} nT${sw.bz < -5 ? m('layers.aurora.goodTag') : ''}` : ''}${sw.xray ? `, ${m('layers.aurora.xray')} ${sw.xray}` : ''}`
         : '';
-      return { count: undefined, note: `${kp}Vorhersage für ${clockTxt(t)}${sun}` };
+      return { count: undefined, note: `${kp}${m('layers.aurora.note', { t: clockTxt(t) })}${sun}` };
     });
   },
   layers: ['aurora'],

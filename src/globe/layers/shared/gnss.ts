@@ -1,4 +1,5 @@
 import type { Feature, FeatureCollection, Point, Polygon } from 'geojson';
+import { t as tT } from '../../../i18n';
 import type { ExtraCtx } from '../types';
 import type { AircraftResult } from '../../../api/tracking';
 
@@ -76,9 +77,9 @@ export function renderGnss(ctx: ExtraCtx) {
       geometry: { type: 'Polygon', coordinates: [[[w, s], [w + CELL_DEG, s], [w + CELL_DEG, s + CELL_DEG], [w, s + CELL_DEG], [w, s]]] },
       properties: {
         level,
-        title: level === 'high' ? 'Starke GNSS-Störung vermutet' : level === 'medium' ? 'GNSS-Störung möglich' : 'Keine Auffälligkeit',
-        subtitle: `${bad} von ${n} Flugzeugen mit ungenauer Navigation (${pct.toFixed(1)} % nach Abzug eines Ausreißers) · letzte 30 min`,
-        description: 'Flugzeuge melden per ADS-B, wie genau sie ihre GPS-Position kennen (NIC/NACp). Häufen sich schlechte Werte, deutet das auf Störsender oder Spoofing hin – einzelne Ausreißer können auch Gerätefehler sein.',
+        title: level === 'high' ? tT('layers.gnss.titleHigh') : level === 'medium' ? tT('layers.gnss.titleMedium') : tT('layers.gnss.titleLow'),
+        subtitle: tT('layers.gnss.subtitle', { bad, n, pct: pct.toFixed(1) }),
+        description: tT('layers.gnss.description'),
         source: 'adsb.lol (ODbL), Methode nach gpsjam.org',
       },
     });

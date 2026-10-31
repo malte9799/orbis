@@ -1,4 +1,5 @@
 import type { MapGeoJSONFeature } from 'maplibre-gl';
+import { t as tT } from '../../../i18n';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { VehiclesLayer } from '../../vehicles3d';
 import type { ClickResult } from '../../extras';
@@ -30,7 +31,7 @@ export async function loadGpsTrains(ctx: ExtraCtx) {
 
 export function trainNote(ctx: ExtraCtx, failed: string[] = []) {
   const z = ctx.map.getZoom();
-  return [z < 5 ? 'Deutschland & Europa ab Zoomstufe 5' : '', failed.length ? `${failed.join(', ')} nicht erreichbar` : ''].filter(Boolean).join(' · ') || undefined;
+  return [z < 5 ? tT('layers.vehicles.noteRange') : '', failed.length ? tT('layers.vehicles.noteFail', { list: failed.join(', ') }) : ''].filter(Boolean).join(' · ') || undefined;
 }
 
 export function loadSegmentsNow(ctx: ExtraCtx, force = false) {
@@ -38,7 +39,7 @@ export function loadSegmentsNow(ctx: ExtraCtx, force = false) {
   const z = ctx.map.getZoom();
   const wantRail = ctx.isOn('trains') && z >= 5;
   const wantLocal = ctx.isOn('transit') && z >= 10;
-  const cityNote = 'Fahrplan-Echtzeit (Transitous) ab Zoomstufe 10 – GPS-Regionen schon früher';
+  const cityNote = tT('layers.vehicles.noteCity');
   if (ctx.isOn('transit')) ctx.set('transit', { note: z < 10 ? cityNote : ctx.info('transit')?.note === cityNote ? undefined : ctx.info('transit')?.note });
   if (ctx.isOn('trains')) ctx.set('trains', { note: trainNote(ctx) });
   if (!wantRail && !wantLocal) {
@@ -61,8 +62,8 @@ export function loadSegmentsNow(ctx: ExtraCtx, force = false) {
     })
     .catch((e) => {
       console.warn('Transitous', e);
-      if (ctx.isOn('trains')) ctx.set('trains', { note: 'Transitous nicht erreichbar – nur GPS-Züge (Finnland, USA)' });
-      if (ctx.isOn('transit')) ctx.set('transit', { note: 'Transitous nicht erreichbar' });
+      if (ctx.isOn('trains')) ctx.set('trains', { note: tT('layers.vehicles.notePrivTransit') });
+      if (ctx.isOn('transit')) ctx.set('transit', { note: tT('layers.vehicles.noteTransit') });
     })
     .finally(() => {
       st.segLoading = false;
@@ -126,7 +127,7 @@ export function vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResu
     p.src === 'amtrak' || p.src === 'gps'
       ? [
           ['Art', st.label],
-          ...(p.src === 'gps' ? [['Von', p.from], ['Nach', p.to], ['Verspätung', delay === -999 ? '' : delay > 0 ? `+${delay} min` : 'pünktlich']] : []),
+          ...(p.src === 'gps' ? [[tT('layers.vehicles.rowFrom'), p.from], [tT('layers.vehicles.rowTo'), p.to], [tT('layers.vehicles.rowDelay'), delay === -999 ? '' : delay > 0 ? `+${delay} min` : tT('layers.vehicles.onTime')]] : []),
 
           ['Strecke', p.from && p.to ? `${p.from} → ${p.to}` : ''],
           ['Geschwindigkeit', p.speed != null ? speedTxt(Number(p.speed)) : ''],
@@ -136,7 +137,7 @@ export function vehicleCard(p: Record<string, unknown>, pt: number[]): ClickResu
           ['Art', st.label],
           ['Abschnitt', `${p.from} → ${p.to}`],
           ['Ankunft', t(p.arr)],
-          ['Verspätung', delay === -999 ? 'keine Echtzeitdaten' : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : 'pünktlich'],
+          [tT('layers.vehicles.rowDelay'), delay === -999 ? tT('layers.vehicles.noRt') : delay > 0 ? `+${delay} min` : delay < 0 ? `${delay} min` : tT('layers.vehicles.onTime')],
         ];
   const extra = `<div class="pop-grid two">${rows
     .filter(([, v]) => v)
@@ -266,7 +267,7 @@ export function vehicleClick({ p, pt }: ClickCtx): ClickResult | null {
             ['Art', d.category],
             ['Strecke', d.from && d.to ? `${d.from} → ${d.to}` : ''],
             ['Zuletzt', d.lastStation],
-            ['Verspätung', d.delay != null ? (d.delay > 0 ? `+${d.delay} min` : 'pünktlich') : ''],
+            [tT('layers.vehicles.rowDelay'), d.delay != null ? (d.delay > 0 ? `+${d.delay} min` : tT('layers.vehicles.onTime')) : ''],
           ].filter(([, v]) => v);
           el.outerHTML = `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(v)}</b>`).join('')}</div>`;
         })

@@ -5,6 +5,8 @@ import { attachHls } from './hls';
 import { CamViewLayer } from './camview3d';
 import { CARDINAL } from './layers/shared/cams';
 import { category, tile } from './sidepanel';
+import { t } from '../i18n';
+import { tx } from './layers';
 import { camdirWritable, cloudKey, hasRemoteDir, poseOf, previewDir, removeCamDir, saveCamDir, type CamPose } from '../api/camdircloud';
 import './flightpanel.css';
 
@@ -49,8 +51,11 @@ const FIELDS: Field[] = [
   { id: 'fov', label: 'Sichtfeld (vertikal)', unit: '°', min: 15, max: 90, step: 1, dec: 0 },
 ];
 const REACH: Field = { id: 'dir', label: 'Reichweite', unit: ' m', min: 30, max: 3000, step: 10, dec: 0 };
+
+/** translated field labels (the def keeps the German source text) */
+const fLabel = (f: Field) => tx(`map.cam.f.${f.id}`, f.label);
 const row = (f: Field, key: string) =>
-  `<label class="ce-row" data-f="${key}"><span>${f.label}</span><input type="range" min="${f.min}" max="${f.max}" step="${f.step}"><input type="number" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}"><i>${f.unit}</i></label>`;
+  `<label class="ce-row" data-f="${key}"><span>${fLabel(f)}</span><input type="range" min="${f.min}" max="${f.max}" step="${f.step}"><input type="number" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${fLabel(f)}"><i>${f.unit}</i></label>`;
 
 /** state of the camera being edited on the map */
 interface Edit {
@@ -91,13 +96,13 @@ export class CamPanel {
     this.root.className = 'fp';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head" style="--c:${COLOR}"><i class="fp-ic">${glyphSvg('webcam', COLOR, 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head" style="--c:${COLOR}"><i class="fp-ic">${glyphSvg('webcam', COLOR, 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="${t('hud.close')}">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>
       <div class="fp-actions">
-        <button type="button" data-act="tilt">In 3D ansehen</button>
-        <button type="button" data-act="zoom">Heranzoomen</button>
-        <button type="button" data-act="edit" hidden>Auf Karte bearbeiten</button>
+        <button type="button" data-act="tilt">${t('map.cam.view3d')}</button>
+        <button type="button" data-act="zoom">${t('map.zoomIn')}</button>
+        <button type="button" data-act="edit" hidden>${t('map.cam.edit')}</button>
       </div>`;
     parent.append(this.root);
     this.body = this.root.querySelector('.fp-body')!;
@@ -152,10 +157,10 @@ export class CamPanel {
     const key = this.key();
     const pin = document.createElement('div');
     pin.className = 'ce-pin';
-    pin.title = 'Ziehen, um die Kamera zu verschieben';
+    pin.title = t('map.cam.pinTitle');
     const grip = document.createElement('div');
     grip.className = 'ce-grip';
-    grip.title = 'Ziehen, um die Blickrichtung zu drehen';
+    grip.title = t('map.cam.gripTitle');
     for (const el of [pin, grip]) el.addEventListener('click', (e) => e.stopPropagation());
     const ed: Edit = {
       key,
@@ -243,7 +248,7 @@ export class CamPanel {
     if (out) {
       const mv = this.movedPos(ed);
       const dist = Math.hypot((ed.lng - ed.olng) * 111320 * Math.cos((ed.lat * Math.PI) / 180), (ed.lat - ed.olat) * M_LAT);
-      out.textContent = `${fmt.num(ed.lat, 5)}, ${fmt.num(ed.lng, 5)}${mv ? ` · ${Math.round(dist * 10) / 10} m verschoben` : ''}`;
+      out.textContent = `${fmt.num(ed.lat, 5)}, ${fmt.num(ed.lng, 5)}${mv ? ` · ${t('map.cam.moved', { m: Math.round(dist * 10) / 10 })}` : ''}`;
     }
   }
 
@@ -295,11 +300,11 @@ export class CamPanel {
     const keep = this.body.querySelector('.cam-media');
     this.body.replaceChildren(...(keep ? [keep] : []));
     this.body.insertAdjacentHTML('beforeend', `<div class="ce">
-      <div class="sp-note">Die Kamera (großer Punkt) auf der Karte verschieben, den weißen Griff ziehen, um die Blickrichtung zu drehen. Die genauen Werte stehen hier.</div>
+      <div class="sp-note">${t('map.cam.editHint')}</div>
       <div class="ce-pos"></div>
       ${FIELDS.map((f) => row(f, f.id)).join('')}
       ${row(REACH, 'reach')}
-      <div class="ce-btns"><button type="button" data-e="save" class="primary">Speichern</button><button type="button" data-e="cancel">Abbrechen</button><button type="button" data-e="reset" ${ed.saved ? '' : 'hidden'}>Zurücksetzen</button></div>
+      <div class="ce-btns"><button type="button" data-e="save" class="primary">${t('map.cam.save')}</button><button type="button" data-e="cancel">${t('map.cam.cancel')}</button><button type="button" data-e="reset" ${ed.saved ? '' : 'hidden'}>${t('map.cam.reset')}</button></div>
       <div class="ce-msg" role="status"></div>
     </div>`);
     this.root.querySelector<HTMLElement>('.fp-actions')!.hidden = true;
@@ -343,11 +348,11 @@ export class CamPanel {
     if (!ed || !s) return;
     const pose = ed.poseSet ? this.editPose(ed) : undefined;
     const pos = this.movedPos(ed);
-    this.busy(true, 'Wird gesendet …');
+    this.busy(true, t('map.cam.sending'));
     try {
       await saveCamDir(ed.key, ed.dir, pose, pos);
     } catch (err) {
-      this.busy(false, `Fehlgeschlagen: ${err instanceof Error ? err.message : err}`);
+      this.busy(false, t('map.cam.failed', { err: err instanceof Error ? err.message : String(err) }));
       return;
     }
     if (this.ed !== ed) return;
@@ -363,11 +368,11 @@ export class CamPanel {
     const ed = this.ed;
     const s = this.sel;
     if (!ed || !s) return;
-    this.busy(true, 'Wird gesendet …');
+    this.busy(true, t('map.cam.sending'));
     try {
       await removeCamDir(ed.key);
     } catch (err) {
-      this.busy(false, `Fehlgeschlagen: ${err instanceof Error ? err.message : err}`);
+      this.busy(false, t('map.cam.failed', { err: err instanceof Error ? err.message : String(err) }));
       return;
     }
     if (this.ed !== ed) return;
@@ -414,20 +419,20 @@ export class CamPanel {
     const video = safeUrl(p.video);
     const hls = safeUrl(p.hls);
     const link = safeUrl(p.url);
-    this.root.querySelector('.fp-title')!.textContent = String(p.title ?? 'Webcam');
+    this.root.querySelector('.fp-title')!.textContent = String(p.title ?? t('map.cam.fallback'));
     this.root.querySelector('.fp-sub')!.textContent = String(p.subtitle ?? '');
-    const still = src ? `<a class="pop-cam" href="${escapeHtml(link ?? img ?? '#')}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="Webcam-Bild" referrerpolicy="no-referrer"></a>` : '<div class="fp-note">Livestream gerade nicht verfügbar</div>';
+    const still = src ? `<a class="pop-cam" href="${escapeHtml(link ?? img ?? '#')}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(src)}" alt="${t('map.cam.altImg')}" referrerpolicy="no-referrer"></a>` : `<div class="fp-note">${t('map.cam.noStream')}</div>`;
     // the 3D board uses the playing video as a texture: HLS plays via hls.js from a blob: URL, the plain video is loaded with CORS
     const media = hls
       ? `<video class="pop-cam" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted playsinline controls></video>`
       : video
         ? `<video class="pop-cam" crossorigin="anonymous" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
         : still;
-    const tiles = `<div class="sp-tiles">${tile('Blickrichtung', dir >= 0 ? `${est ? 'ca. ' : ''}${Math.round(dir)}° ${CARDINAL[Math.round(dir / 45) % 8]}` : 'unbekannt')}${tile('Bild', hls || video ? 'Livestream' : 'Standbild')}</div>`;
-    const note = dir >= 0 ? `<div class="sp-note">${this.pose() ? 'Das Bild liegt als 3D-Ansicht auf der Straße: Boden und Horizont sitzen dort, wo die Kamera sie sieht' + (poseOf(p) ? '.' : ' (typische Werte – „Auf Karte bearbeiten“ passt sie an).') : `Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte${est ? ' – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße)' : ''}.`}</div>` : '<div class="sp-note">Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.</div>';
-    const date = typeof p.updated === 'string' && p.updated ? [['Aktualisiert', `${escapeHtml(fmt.dateTime(p.updated))} (${escapeHtml(fmt.relative(p.updated))})`] as [string, string]] : [];
-    const cats = category('cam', 'Kamera', [['Standort', `${fmt.num(s.lat, 4)}, ${fmt.num(s.lng, 4)}`], ...date], this.open_);
-    const source = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(String(p.source ?? ''))}${link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>` : ''}</div></details>`;
+    const tiles = `<div class="sp-tiles">${tile(t('map.tile.direction'), dir >= 0 ? `${est ? t('map.approx').trim() + ' ' : ''}${Math.round(dir)}° ${CARDINAL[Math.round(dir / 45) % 8]}` : t('map.cam.unknown'))}${tile(t('map.tile.image'), hls || video ? t('map.cam.livestream') : t('map.cam.still'))}</div>`;
+    const note = dir >= 0 ? `<div class="sp-note">${this.pose() ? (poseOf(p) ? t('map.cam.noteModel') : t('map.cam.noteModelTypical')) : est ? t('map.cam.noteBoardEst') : t('map.cam.noteBoard')}</div>` : `<div class="sp-note">${t('map.cam.noteNoDir')}</div>`;
+    const date = typeof p.updated === 'string' && p.updated ? [[t('map.cam.updated'), `${escapeHtml(fmt.dateTime(p.updated))} (${escapeHtml(fmt.relative(p.updated))})`] as [string, string]] : [];
+    const cats = category('cam', t('map.cat.cam'), [[t('map.cam.location'), `${fmt.num(s.lat, 4)}, ${fmt.num(s.lng, 4)}`], ...date], this.open_);
+    const source = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>${t('map.cat.source')}</summary><div class="fp-note">${escapeHtml(String(p.source ?? ''))}${link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${t('map.cam.open')}</a>` : ''}</div></details>`;
     const reach = dir >= 0 && this.pose() ? `<div class="ce">${row(REACH, 'reach')}</div>` : '';
     this.body.innerHTML = `<div class="cam-media">${media}</div>${tiles}${note}${reach}${cats}${source}`;
     this.bindRows();

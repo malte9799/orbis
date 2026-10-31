@@ -6,6 +6,7 @@ import { LEADS, enablePush, pushState, syncPush, testPush } from '../api/pushnot
 import { locate } from '../search';
 import { store, type SavedRoute, type SavedStop, type SavedTrip } from '../store';
 import { escapeHtml as esc, toast } from '../util';
+import { t as m, type MessageKey } from '../i18n';
 import { HEART, dayTxt, delayTxt, depRow, hm, stopField, timeline } from './fahrplan-ui';
 
 // The "Gemerkt" tab of the Fahrplan: commuter trips (the same ride on chosen weekdays), saved
@@ -29,18 +30,19 @@ export interface SavedDeps {
 }
 
 const REFRESH_MS = 60000;
-/** Mon … Sun, with the Date.getDay() number */
-const WEEK: [number, string][] = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
+/** Mo … Su weekday abbreviations, keyed by their Date.getDay() number (fp.day1 … fp.day6/fp.day0) */
+const WEEK: [number, string][] = [[1, 'day1'], [2, 'day2'], [3, 'day3'], [4, 'day4'], [5, 'day5'], [6, 'day6'], [0, 'day0']];
+const dayName = (day: number): string => m(`fp.${WEEK.find(([d]) => d === day)![1]}` as MessageKey);
 
 export function daysTxt(days: number[]): string {
   const set = new Set(days);
-  if (set.size === 7) return 'täglich';
-  if (!set.size) return 'nie';
+  if (set.size === 7) return m('fp.everyDay');
+  if (!set.size) return m('fp.never');
   const wk = [1, 2, 3, 4, 5].every((d) => set.has(d));
-  if (wk && set.size === 5) return 'Mo–Fr';
-  if (wk && set.size === 7 - 1 && set.has(6)) return 'Mo–Sa';
-  if (set.size === 2 && set.has(6) && set.has(0)) return 'Sa, So';
-  return WEEK.filter(([d]) => set.has(d)).map(([, n]) => n).join(', ');
+  if (wk && set.size === 5) return m('fp.weekdays');
+  if (wk && set.size === 7 - 1 && set.has(6)) return m('fp.monSat');
+  if (set.size === 2 && set.has(6) && set.has(0)) return m('fp.weekend');
+  return WEEK.filter(([wk]) => set.has(wk)).map(([wk]) => dayName(wk)).join(', ');
 }
 
 /** The next time the trip runs: today while it is still relevant (a delayed train counts), else the next chosen weekday. */
@@ -84,7 +86,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       <div class="fp-slist"></div>
     </section>
     <section class="fp-card fp-sd">
-      <button type="button" class="fp-back">‹ Zurück</button>
+      <button type="button" class="fp-back">‹ ${m('common.back')}</button>
       <div class="fp-sdbody"></div>
     </section>`;
   const q = <T extends HTMLElement>(s: string) => el.querySelector<T>(s)!;
@@ -138,37 +140,37 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
 
   const tripStatus = (res: Resolved | undefined): string => {
     if (!res) return '<span class="fp-hint">…</span>';
-    if (!res.run) return '<span class="fp-hint">kein Tag gewählt</span>';
+    if (!res.run) return `<span class="fp-hint">${m('fp.noDayChosen')}</span>`;
     const when = res.run.today ? '' : `<small>${esc(dayTxt(res.run.dep))}</small> `;
-    if (res.failed) return `${when}<span class="fp-hint">nicht erreichbar</span>`;
-    if (!res.it) return `${when}<span class="fp-hint">nicht gefunden</span>`;
+    if (res.failed) return `${when}<span class="fp-hint">${m('fp.unreachable')}</span>`;
+    if (!res.it) return `${when}<span class="fp-hint">${m('fp.notFound')}</span>`;
     const ride = res.it.legs.find((l) => l.mode !== 'WALK');
-    const off = res.stale ? ` <small class="fp-hint" title="Gespeichert um ${esc(hm(res.stale))}">offline</small>` : '';
-    if (ride?.cancelled) return `${when}<span class="fp-late">entfällt</span>${off}`;
-    return `${when}${delayTxt(ride?.arrDelayMin ?? ride?.delayMin) || '<span class="fp-hint">planmäßig</span>'}${off}`;
+    const off = res.stale ? ` <small class="fp-hint" title="${esc(m('fp.savedAt', { when: hm(res.stale) }))}">${m('fp.offline')}</small>` : '';
+    if (ride?.cancelled) return `${when}<span class="fp-late">${esc(m('fp.cancelled'))}</span>${off}`;
+    return `${when}${delayTxt(ride?.arrDelayMin ?? ride?.delayMin) || `<span class="fp-hint">${m('fp.onSchedule')}</span>`}${off}`;
   };
 
   // ---- rendering ----
   function renderSubs() {
-    const items: [Sub, string, number][] = [['trips', 'Verbindungen', store.getTrips().length], ['routes', 'Routen', store.getRoutes().length], ['stops', 'Haltestellen', store.getStations().length]];
+    const items: [Sub, string, number][] = [['trips', m('fp.subTrips'), store.getTrips().length], ['routes', m('fp.subRoutes'), store.getRoutes().length], ['stops', m('fp.subStops'), store.getStations().length]];
     subsEl.innerHTML = items.map(([id, label, n]) => `<button type="button" role="tab" class="fp-gsub${sub === id ? ' on' : ''}" data-sub="${id}" aria-selected="${sub === id}">${label}${n ? `<i>${n}</i>` : ''}</button>`).join('');
   }
 
   const tripItem = (t: SavedTrip) => `<li><button type="button" class="fp-si${selected === t.id ? ' on' : ''}" data-id="${esc(t.id)}">
       <span class="fp-sit"><b>${esc(t.hm)}</b><small>${esc(t.arrHm)}</small></span>
-      <span class="fp-sim"><span class="fp-badge" style="--c:${modeStyle('RAIL').color}">${esc(t.line || 'Fahrt')}</span><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(daysTxt(t.days))}${t.notify ? ` · Nachricht ${esc(t.notify.leads.join('/'))} min vorher` : ''}</small></span>
+      <span class="fp-sim"><span class="fp-badge" style="--c:${modeStyle('RAIL').color}">${esc(t.line || m('fp.journey'))}</span><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(daysTxt(t.days))}${t.notify ? ` · ${esc(m('fp.notifyLead', { leads: t.notify.leads.join('/') }))}` : ''}</small></span>
       <span class="fp-sis" data-status="${esc(t.id)}">${tripStatus(cache.get(t.id)?.r)}</span></button></li>`;
 
-  const routeItem = (r: SavedRoute) => `<li class="fp-sr"><button type="button" class="fp-si" data-id="${esc(r.id)}"><span class="fp-sim"><b>${esc(r.from.name)} → ${esc(r.to.name)}</b><small>Jetzt suchen</small></span></button>
-      <button type="button" class="btn icon-btn fp-del" data-del="${esc(r.id)}" aria-label="Route entfernen" title="Route entfernen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
+  const routeItem = (r: SavedRoute) => `<li class="fp-sr"><button type="button" class="fp-si" data-id="${esc(r.id)}"><span class="fp-sim"><b>${esc(r.from.name)} → ${esc(r.to.name)}</b><small>${m('fp.searchNow')}</small></span></button>
+      <button type="button" class="btn icon-btn fp-del" data-del="${esc(r.id)}" aria-label="${m('fp.routeRemove')}" title="${m('fp.routeRemove')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
 
   const stopItem = (s: SavedStop) => `<li class="fp-sr"><button type="button" class="fp-si${selected === s.id ? ' on' : ''}" data-id="${esc(s.id)}"><span class="fp-sim"><b>${esc(s.name)}</b>${s.area ? `<small>${esc(s.area)}</small>` : ''}</span></button>
-      <button type="button" class="btn icon-btn fp-del" data-del="${esc(s.id)}" aria-label="Haltestelle entfernen" title="Haltestelle entfernen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
+      <button type="button" class="btn icon-btn fp-del" data-del="${esc(s.id)}" aria-label="${m('fp.stopRemove')}" title="${m('fp.stopRemove')}"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></li>`;
 
   const EMPTY: Record<Sub, string> = {
-    trips: 'Noch keine Pendler-Verbindung. Suche eine Verbindung, öffne sie und tippe auf „Merken“ – hier siehst du dann täglich auf einen Blick, ob dein Zug pünktlich ist.',
-    routes: 'Noch keine Route. Nach einer Suche kannst du Start und Ziel mit „Route merken“ speichern – die Uhrzeit wählst du jedes Mal neu.',
-    stops: 'Noch keine Haltestelle. Such oben eine Haltestelle und tippe auf das Herz.',
+    trips: m('fp.emptyTrips'),
+    routes: m('fp.emptyRoutes'),
+    stops: m('fp.emptyStops'),
   };
 
   function renderList() {
@@ -194,22 +196,22 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
 
   // ---- push notifications of a trip ----
   const NOTIFY_MSG: Record<string, string> = {
-    unsupported: 'Dieser Browser kann keine Push-Nachrichten. Auf dem iPhone muss Orbis erst zum Home-Bildschirm hinzugefügt werden.',
-    unconfigured: 'Der Push-Dienst ist noch nicht eingerichtet (README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“).',
-    denied: 'Benachrichtigungen sind im Browser blockiert – in den Seiteneinstellungen erlauben.',
+    unsupported: m('fp.pushUnsupported'),
+    unconfigured: m('fp.pushUnconfigured'),
+    denied: m('fp.pushDenied'),
   };
 
   const notifyHtml = (t: SavedTrip) => {
     const st = pushState();
     const n = t.notify;
-    return `<div class="fp-notify"><label class="fp-chk"><input type="checkbox" data-act="notify"${n ? ' checked' : ''}${st === 'ready' || n ? '' : ' disabled'}/> Vor der Abfahrt benachrichtigen</label>
+    return `<div class="fp-notify"><label class="fp-chk"><input type="checkbox" data-act="notify"${n ? ' checked' : ''}${st === 'ready' || n ? '' : ' disabled'}/> ${m('fp.notifyBeforeDeparture')}</label>
       ${st !== 'ready' ? `<p class="fp-hint">${NOTIFY_MSG[st]}</p>` : ''}
       ${
         n
-          ? `<div class="fp-leads" role="group" aria-label="Minuten vor Abfahrt">${LEADS.map((m) => `<button type="button" class="fp-lead${n.leads.includes(m) ? ' on' : ''}" data-lead="${m}" aria-pressed="${n.leads.includes(m)}">${m} min</button>`).join('')}</div>
-        <label class="fp-chk"><input type="checkbox" data-act="onlydelay"${n.onlyDelay ? ' checked' : ''}/> Nur bei Verspätung oder Ausfall</label>
-        <div class="fp-nrow"><button type="button" class="btn small" data-act="testpush">Test-Nachricht senden</button></div>
-        <p class="fp-hint">Die Nachrichten kommen auch, wenn die App geschlossen ist.</p>`
+          ? `<div class="fp-leads" role="group" aria-label="${esc(m('fp.leadsGroup'))}">${LEADS.map((mm) => `<button type="button" class="fp-lead${n.leads.includes(mm) ? ' on' : ''}" data-lead="${mm}" aria-pressed="${n.leads.includes(mm)}">${mm} min</button>`).join('')}</div>
+        <label class="fp-chk"><input type="checkbox" data-act="onlydelay"${n.onlyDelay ? ' checked' : ''}/> ${m('fp.onlyIfDelayed')}</label>
+        <div class="fp-nrow"><button type="button" class="btn small" data-act="testpush">${m('fp.testPush')}</button></div>
+        <p class="fp-hint">${m('fp.notesWhenClosed')}</p>`
           : ''
       }</div>`;
   };
@@ -217,7 +219,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
   /** tells the push worker what to watch; errors only matter when the user is looking */
   const pushSync = (loud = false) =>
     syncPush().catch(() => {
-      if (loud) toast('Der Push-Dienst ist gerade nicht erreichbar.', 'error');
+      if (loud) toast(m('fp.pushUnreachable'), 'error');
     });
 
   // ---- detail: trip ----
@@ -226,12 +228,12 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     if (!t) return;
     selected = id;
     el.classList.add('has-detail');
-    const days = `<div class="fp-days" role="group" aria-label="Wochentage">${WEEK.map(([d, n]) => `<button type="button" class="fp-day-btn${t.days.includes(d) ? ' on' : ''}" data-d="${d}" aria-pressed="${t.days.includes(d)}">${n}</button>`).join('')}</div>`;
+    const days = `<div class="fp-days" role="group" aria-label="${esc(m('fp.weekdaysGroup'))}">${WEEK.map(([d]) => `<button type="button" class="fp-day-btn${t.days.includes(d) ? ' on' : ''}" data-d="${d}" aria-pressed="${t.days.includes(d)}">${esc(dayName(d))}</button>`).join('')}</div>`;
     const head = `<div class="fp-th"><div><b>${esc(t.from.name)} → ${esc(t.to.name)}</b><small>${esc(t.line)} · ${esc(t.hm)} → ${esc(t.arrHm)}</small></div>
-      <button type="button" class="btn small" data-act="openroute">In Suche öffnen</button></div>${days}${notifyHtml(t)}`;
-    const foot = '<button type="button" class="btn small fp-rm" data-act="rmtrip">Pendler-Verbindung entfernen</button>';
+      <button type="button" class="btn small" data-act="openroute">${m('fp.openInSearch')}</button></div>${days}${notifyHtml(t)}`;
+    const foot = `<button type="button" class="btn small fp-rm" data-act="rmtrip">${m('fp.tripRemove')}</button>`;
     const cached = cache.get(id)?.r;
-    bodyEl.innerHTML = head + (cached ? tripBody(cached) : '<p class="fp-hint">Lade Verbindung …</p>') + foot;
+    bodyEl.innerHTML = head + (cached ? tripBody(cached) : `<p class="fp-hint">${m('fp.loadingConnection')}</p>`) + foot;
     const r = await resolve(t, force);
     if (selected !== id) return;
     bodyEl.innerHTML = head + tripBody(r) + foot;
@@ -239,11 +241,11 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
   }
 
   function tripBody(r: Resolved): string {
-    if (!r.run) return '<p class="fp-hint">Wähle mindestens einen Wochentag.</p>';
-    const day = `<p class="fp-day">${r.run.today ? 'Heute' : 'Nächste Fahrt'}, ${esc(dayTxt(r.run.dep))}</p>`;
-    if (r.failed) return `${day}<p class="fp-hint">Fahrplan gerade nicht erreichbar.</p>`;
-    if (!r.it) return `${day}<p class="fp-hint">Die Fahrt wurde im Fahrplan nicht gefunden (kein Verkehr an dem Tag oder die Linie hat sich geändert).</p>`;
-    const stand = r.stale ? `Offline – gespeichert um ${hm(r.stale)}` : `Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(r.it.delaySrc))}`;
+    if (!r.run) return `<p class="fp-hint">${m('fp.chooseWeekday')}</p>`;
+    const day = `<p class="fp-day">${m(r.run.today ? 'fp.today' : 'fp.nextRun')}, ${esc(dayTxt(r.run.dep))}</p>`;
+    if (r.failed) return `${day}<p class="fp-hint">${m('fp.timetableUnreachable')}</p>`;
+    if (!r.it) return `${day}<p class="fp-hint">${m('fp.tripNotInTimetable')}</p>`;
+    const stand = r.stale ? m('fp.savedAtFull', { when: hm(r.stale) }) : m('fp.statusLine', { when: hm(Date.now()) }) + ' · ' + esc(sourceTxt(r.it.delaySrc));
     return `${day}<div class="fp-detail fp-open">${timeline(r.it)}</div><p class="fp-hint">${stand}</p>`;
   }
 
@@ -254,7 +256,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
   const headHtml = (s: SavedStop) => {
     const saved = store.isStation(s.id);
     return `<div class="fp-bh"><div><b>${esc(s.name)}</b>${s.area ? `<small>${esc(s.area)}</small>` : ''}</div>
-      <button type="button" class="btn icon-btn fp-save${saved ? ' on' : ''}" data-act="save" title="${saved ? 'Nicht mehr merken' : 'Haltestelle merken'}" aria-pressed="${saved}" aria-label="${saved ? 'Nicht mehr merken' : 'Haltestelle merken'}">${HEART}</button></div>`;
+      <button type="button" class="btn icon-btn fp-save${saved ? ' on' : ''}" data-act="save" title="${m(saved ? 'fp.stopUnsave' : 'fp.stopSave')}" aria-pressed="${saved}" aria-label="${m(saved ? 'fp.stopUnsave' : 'fp.stopSave')}">${HEART}</button></div>`;
   };
 
   async function showStop(s: SavedStop, initial = true) {
@@ -262,7 +264,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     selected = s.id;
     el.classList.add('has-detail');
     const my = ++boardSeq;
-    if (initial) bodyEl.innerHTML = headHtml(s) + '<p class="fp-hint">Lade Abfahrten …</p>';
+    if (initial) bodyEl.innerHTML = headHtml(s) + `<p class="fp-hint">${m('fp.loadingDepartures')}</p>`;
     try {
       const list = await departures(s, 25);
       if (my !== boardSeq || current?.id !== s.id) return;
@@ -270,8 +272,8 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
         bodyEl.innerHTML =
           headHtml(s) +
           (l.length
-            ? `${loading ? '<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>Verspätungen der Bahn werden geladen …</p>' : ''}<ul class="fp-deps">${l.map(depRow).join('')}</ul><p class="fp-hint">Stand ${hm(Date.now())} · aktualisiert sich jede Minute · ${esc(sourceTxt(l.some((d) => d.delaySrc) ? 'db' : undefined))}</p>`
-            : '<p class="fp-hint">Keine Abfahrten in nächster Zeit.</p>');
+            ? `${loading ? `<p class="fp-hint fp-live" role="status"><i class="fp-spin"></i>${m('fp.loadingDelays')}</p>` : ''}<ul class="fp-deps">${l.map(depRow).join('')}</ul><p class="fp-hint">${m('fp.statusLine', { when: hm(Date.now()) })} · ${esc(sourceTxt(l.some((d) => d.delaySrc) ? 'db' : undefined))}</p>`
+            : `<p class="fp-hint">${m('fp.noDepartures')}</p>`);
       };
       // Transitous first, the exact rail delays follow (a refresh renders once, with them)
       const wait = delaysConfigured();
@@ -280,7 +282,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       if (my !== boardSeq || current?.id !== s.id) return;
       render(merged, false);
     } catch {
-      if (my === boardSeq && initial) bodyEl.innerHTML = headHtml(s) + '<p class="fp-hint">Abfahrten nicht erreichbar – bitte später erneut versuchen.</p>';
+      if (my === boardSeq && initial) bodyEl.innerHTML = headHtml(s) + `<p class="fp-hint">${m('fp.departuresUnreachable')}</p>`;
     }
   }
 
@@ -294,7 +296,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
   function renderAdd() {
     addEl.innerHTML = '';
     if (sub !== 'stops') return;
-    const f = stopField('Haltestelle suchen und merken', (s) => {
+    const f = stopField(m('fp.addStopPlaceholder'), (s) => {
       if (s) {
         renderList();
         void showStop(s);
@@ -303,7 +305,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     const near = document.createElement('button');
     near.type = 'button';
     near.className = 'btn small fp-near';
-    near.textContent = 'Haltestellen in meiner Nähe';
+    near.textContent = m('fp.nearStops');
     near.addEventListener('click', async () => {
       try {
         const p = await locate();
@@ -311,9 +313,9 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
         if (r[0]) {
           f.set(r[0]);
           void showStop(r[0]);
-        } else toast('Keine Haltestelle in der Nähe gefunden.', 'error');
+        } else toast(m('fp.noNearbyStop'), 'error');
       } catch {
-        toast('Standort nicht verfügbar.', 'error');
+        toast(m('fp.noLocation'), 'error');
       }
     });
     addEl.append(f.el, near);
@@ -340,10 +342,10 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
     renderList();
     hint(
       sub === 'trips'
-        ? '<b>Pendler-Verbindungen</b><p>Wähle links eine Verbindung – hier siehst du den aktuellen Stand deines Zuges.</p>'
+        ? `<b>${m('fp.subTripsHeading')}</b><p>${m('fp.hintTrips')}</p>`
         : sub === 'routes'
-          ? '<b>Routen</b><p>Tippe auf eine Route, um sie mit der aktuellen Uhrzeit zu suchen.</p>'
-          : '<b>Haltestellen</b><p>Wähle eine Haltestelle – hier siehst du, was als Nächstes abfährt.</p>',
+          ? `<b>${m('fp.subRoutesHeading')}</b><p>${m('fp.hintRoutes')}</p>`
+          : `<b>${m('fp.subStopsHeading')}</b><p>${m('fp.hintStops')}</p>`,
     );
     selectFirst();
     renderList();
@@ -366,7 +368,7 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       } else {
         const s = store.getStations().find((x) => x.id === id);
         if (s) store.toggleStation(s);
-        if (current?.id === id) hint('<b>Haltestellen</b><p>Wähle eine Haltestelle – hier siehst du, was als Nächstes abfährt.</p>');
+        if (current?.id === id) hint(`<b>${m('fp.subStopsHeading')}</b><p>${m('fp.hintStops')}</p>`);
       }
       renderList();
       deps.onChange();
@@ -406,9 +408,9 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
         try {
           await syncPush();
           await testPush();
-          toast('Test-Nachricht ist unterwegs.');
+          toast(m('fp.testPushSent'));
         } catch {
-          toast('Test fehlgeschlagen – ist der Push-Dienst erreichbar?', 'error');
+          toast(m('fp.testPushFailed'), 'error');
         }
       })();
     } else if (day && trip) {
@@ -423,16 +425,16 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
       store.toggleTrip(trip);
       cache.delete(trip.id);
       void pushSync();
-      hint('<b>Pendler-Verbindungen</b><p>Wähle links eine Verbindung – hier siehst du den aktuellen Stand deines Zuges.</p>');
+      hint(`<b>${m('fp.subTripsHeading')}</b><p>${m('fp.hintTrips')}</p>`);
       renderList();
       deps.onChange();
-      toast('Pendler-Verbindung entfernt');
+      toast(m('fp.tripRemovedToast'));
     } else if (t.closest('[data-act="openroute"]') && trip) {
       deps.openRoute(trip.from, trip.to);
     } else if (t.closest('[data-act="save"]') && current) {
       const s = current;
       const now = store.toggleStation({ id: s.id, name: s.name, lat: s.lat, lon: s.lon, area: s.area, src: s.src });
-      toast(now ? `„${s.name}“ gemerkt` : `„${s.name}“ entfernt`);
+      toast(m(now ? 'fp.stopSavedToast' : 'fp.stopRemovedToast', { name: s.name }));
       const head = bodyEl.querySelector('.fp-bh');
       if (head) head.outerHTML = headHtml(s);
       renderList();
@@ -451,9 +453,9 @@ export function createSavedPanel(deps: SavedDeps): SavedPanel {
             await enablePush();
             store.updateTrip(trip.id, { notify: { leads: [30, 10], onlyDelay: false } });
             await syncPush();
-            toast('Benachrichtigung ist an – du bekommst eine Nachricht 30 und 10 min vor Abfahrt.');
+            toast(m('fp.notificationsOn'));
           } catch (err) {
-            toast(err instanceof Error ? err.message : 'Benachrichtigung konnte nicht eingerichtet werden.', 'error');
+            toast(err instanceof Error ? err.message : m('fp.notificationsError'), 'error');
           }
         } else {
           store.updateTrip(trip.id, { notify: undefined });

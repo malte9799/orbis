@@ -13,6 +13,7 @@ import { ensureWeatherIcons } from '../globe/icons';
 import { tileRecorder } from '../inspector/tiles';
 import { weatherIcon } from '../weather';
 import { fmt, rampColor } from '../util';
+import { t, fmtLocale, type MessageKey } from '../i18n';
 import { rainUnit, rainNum, clockTxt, tzOpts } from '../units';
 
 // Compact regional weather map for the forecast page (radar, rain/snow, temperature, wind, city weather),
@@ -20,11 +21,11 @@ import { rainUnit, rainNum, clockTxt, tzOpts } from '../units';
 
 export type MapMode = 'radar' | 'precip' | 'temp' | 'wind';
 
-const MODES: { id: MapMode; label: string; fields: FieldId[] }[] = [
-  { id: 'radar', label: 'Radar', fields: [] },
-  { id: 'precip', label: 'Niederschlag', fields: ['precipmix'] },
-  { id: 'temp', label: 'Temperatur', fields: ['temp'] },
-  { id: 'wind', label: 'Wind', fields: ['gusts'] },
+const MODES: { id: MapMode; label: MessageKey; fields: FieldId[] }[] = [
+  { id: 'radar', label: 'forecast.map.modeRadar', fields: [] },
+  { id: 'precip', label: 'forecast.map.modePrecip', fields: ['precipmix'] },
+  { id: 'temp', label: 'forecast.map.modeTemp', fields: ['temp'] },
+  { id: 'wind', label: 'forecast.map.modeWind', fields: ['gusts'] },
 ];
 
 export interface ForecastMap {
@@ -58,19 +59,19 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
   host.innerHTML = `
     <div class="fcm-head">
-      <h2>Wetterkarte</h2>
+      <h2>${t('forecast.map.title')}</h2>
       <div class="fcm-modes" role="tablist">
-        ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${m.label}</button>`).join('')}
+        ${MODES.map((m) => `<button type="button" class="seg-chip ${m.id === mode ? 'on' : ''}" data-mode="${m.id}" role="tab" aria-selected="${m.id === mode}">${t(m.label)}</button>`).join('')}
       </div>
     </div>
-    <div class="fcm-map"><div class="fcm-status">Karte wird geladen …</div><div class="fcm-empty" hidden></div>
-      <button type="button" class="fcm-full" aria-label="Vollbild: große Karte öffnen" title="Große Karte öffnen"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></svg></button></div>
+    <div class="fcm-map"><div class="fcm-status">${t('forecast.map.loading')}</div><div class="fcm-empty" hidden></div>
+      <button type="button" class="fcm-full" aria-label="${t('forecast.map.fullA11y')}" title="${t('forecast.map.fullTitle')}"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM14 4h6v6h-2V6h-4zM4 14h2v4h4v2H4zM18 14h2v6h-6v-2h4z"/></svg></button></div>
     <div class="fcm-legend"></div>
     <div class="fcm-time">
-      <button type="button" class="btn icon-btn fcm-play" aria-label="Abspielen" title="Abspielen">
+      <button type="button" class="btn icon-btn fcm-play" aria-label="${t('forecast.map.play')}" title="${t('forecast.map.play')}">
         <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <input type="range" min="0" max="0" value="0" aria-label="Zeitpunkt" disabled>
+      <input type="range" min="0" max="0" value="0" aria-label="${t('forecast.map.time')}" disabled>
       <span class="fcm-when">–</span>
     </div>
     <p class="muted small fcm-src"></p>`;
@@ -247,9 +248,9 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       attributionControl: false,
       transformRequest: tileRecorder(() => map),
       locale: {
-        'CooperativeGesturesHandler.WindowsHelpText': 'Strg + Scrollen zum Zoomen',
-        'CooperativeGesturesHandler.MacHelpText': '⌘ + Scrollen zum Zoomen',
-        'CooperativeGesturesHandler.MobileHelpText': 'Mit zwei Fingern bewegen',
+        'CooperativeGesturesHandler.WindowsHelpText': t('forecast.map.ctrlZoom'),
+        'CooperativeGesturesHandler.MacHelpText': t('forecast.map.macZoom'),
+        'CooperativeGesturesHandler.MobileHelpText': t('forecast.map.touchZoom'),
       },
     });
     map.touchZoomRotate.disableRotation();
@@ -280,8 +281,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         if (destroyed) return;
         console.warn('Regionalraster', e);
         const reason = isLimitError(e)
-          ? 'Kostenloses Abrufkontingent von Open-Meteo gerade ausgeschöpft – Radar und Karte bleiben nutzbar, Vorhersageebenen sind erst morgen wieder verfügbar.'
-          : 'Modellvorhersage konnte nicht geladen werden – Radar und Karte bleiben nutzbar.';
+          ? t('forecast.map.quota')
+          : t('forecast.map.modelError');
         modelError = reason;
         // keep the map interactive: downgrade the blocking overlay to a notice
         statusEl.remove();
@@ -303,9 +304,9 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       radarGl?.setVisible(true);
       if (radarFrames.length) {
         radarGl?.setTime(radarFrames[radarIdx]);
-        whenEl.textContent = formatWhen(radarFrames[radarIdx]) + (radarIdx >= radarMeasured ? ' · Prognose' : '');
+        whenEl.textContent = radarIdx >= radarMeasured ? t('forecast.map.whenForecast', { at: formatWhen(radarFrames[radarIdx]) }) : formatWhen(radarFrames[radarIdx]);
       } else {
-        whenEl.textContent = 'Radar wird geladen …';
+        whenEl.textContent = t('forecast.map.radarLoading');
         void showRadar();
       }
       return;
@@ -313,7 +314,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     radarGl?.setVisible(false);
     if (modelError) {
       host.querySelector<HTMLElement>('.fcm-empty')!.hidden = true;
-      whenEl.textContent = 'Modelllayer nicht verfügbar';
+      whenEl.textContent = t('forecast.map.layerUnavailable');
       return;
     }
     if (!grid || timeIdx < 0) return;
@@ -442,7 +443,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
         if (s.sample('precipitation', lat, lon) >= 0.1) return '';
       }
     }
-    return 'Kein Niederschlag im Kartenausschnitt';
+    return t('forecast.map.noPrecip');
   }
 
   /** Small non-blocking notice over the map (the map itself stays fully interactive). */
@@ -484,10 +485,10 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     const def = (id: FieldId) => FIELDS[id];
     legendEl.innerHTML =
       mode === 'precip'
-        ? bar(PRECIP_STOPS, 'Regen', PRECIP_TICKS, rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
+        ? bar(PRECIP_STOPS, t('forecast.map.legendRain'), PRECIP_TICKS, rainUnit(), rainNum) + bar(SNOWFALL_STOPS, t('forecast.map.legendSnow'), [0.1, 1.5, 3, 6], rainUnit(), rainNum)
         : mode === 'radar'
           ? ''
-          : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);
+          : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? t('forecast.map.legendTemp') : t('forecast.map.legendGusts'), def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);
   }
 
   function destroy() {
@@ -504,7 +505,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
 
 function formatWhen(ms: number) {
   const d = new Date(ms);
-  const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
+  const day = d.toLocaleDateString(fmtLocale(), { weekday: 'short', ...tzOpts() });
   const today = new Date().toDateString() === d.toDateString();
-  return `${today ? 'Heute' : day}, ${clockTxt(d)}`;
+  return `${today ? t('forecast.today') : day}, ${clockTxt(d)}`;
 }

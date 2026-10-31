@@ -1,4 +1,5 @@
 import type { ExpressionSpecification } from 'maplibre-gl';
+import { t } from '../../../i18n';
 import { defineExtra, type ExtraCtx } from '../types';
 import { empty } from '../shared/geo';
 import { LIGHTNING_LINES_MS, LIGHTNING_THUNDER_MS, LightningStream } from '../../../api/lightning';
@@ -175,7 +176,7 @@ function lightningStatus(ctx: ExtraCtx) {
   const d = l.delay;
   const note = l.error
     || (l.connected
-      ? `live verbunden · ${fmt.num(l.received)} Blitze seit Aktivierung${d != null ? ` · Verzögerung ~${fmt.num(d, 1)} s` : ''} · weiß = jetzt, rot = bis 15 min`
+      ? t('layers.lightning.noteLive', { count: fmt.num(l.received), delay: d != null ? t('layers.lightning.noteDelay', { d: fmt.num(d, 1) }) : '' })
       : 'verbinde …');
   const prev = ctx.info('lightning');
   if (prev?.count !== l.count || prev?.note !== note) ctx.set('lightning', { count: l.count, note });
@@ -338,11 +339,11 @@ export default defineExtra({
   click({ ctx, p, pt }) {
     const at = Number(p.at);
     const secs = Math.max(0, Math.round((Date.now() - at) / 1000));
-    const ago = secs < 90 ? `vor ${secs} s` : `vor ${Math.round(secs / 60)} min`;
+    const ago = secs < 90 ? t('map.ago.s', { a: secs }) : t('map.ago.min', { a: Math.round(secs / 60) });
     const n = Number(p.n);
     const d = getState(ctx).stream?.delay;
-    const extra = `<div class="pop-grid two"><span>Zeitpunkt</span><b>${clockTxt(at, true)} (${ago})</b><span>Position</span><b>${coordsTxt(pt[1] as number, pt[0] as number)}</b>${Number.isFinite(n) && n > 0 ? `<span>Detektoren</span><b>${n} Stationen</b>` : ''}${d != null ? `<span>Verzögerung</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
-    return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: 'Blitzeinschlag', source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
+    const extra = `<div class="pop-grid two"><span>${t('layers.lightning.rowTime')}</span><b>${clockTxt(at, true)} (${ago})</b><span>${t('layers.lightning.rowPosition')}</span><b>${coordsTxt(pt[1] as number, pt[0] as number)}</b>${Number.isFinite(n) && n > 0 ? `<span>${t('layers.lightning.rowDetectors')}</span><b>${t('layers.lightning.stations', { n })}</b>` : ''}${d != null ? `<span>${t('layers.lightning.rowDelay')}</span><b>~${fmt.num(d, 1)} s</b>` : ''}</div>`;
+    return { type: 'html', html: cardHtml({ glyph: 'bolt', color: '#ffd600', title: t('layers.lightning.strikeTitle'), source: 'Blitzortung.org', url: 'https://www.blitzortung.org/', extra }), lng: pt[0], lat: pt[1] };
   },
   layers: ['lightning-thunder', 'lightning-wave', 'lightning-line', 'lightning-sta', 'lightning-glow', 'lightning'],
   clickLayers: ['lightning'],

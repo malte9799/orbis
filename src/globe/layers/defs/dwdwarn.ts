@@ -1,4 +1,5 @@
 import { defineExtra, type ExtraCtx } from '../types';
+import { t } from '../../../i18n';
 import { loadDwdWarnings } from '../../../api/europe';
 
 async function loadDwd(ctx: ExtraCtx) {
@@ -6,12 +7,12 @@ async function loadDwd(ctx: ExtraCtx) {
     const fc = await loadDwdWarnings();
     ctx.setData('dwd-warn', fc);
     ctx.vis('dwd', false);
-    return { count: fc.features.length, note: fc.features.length ? undefined : 'derzeit keine Warnungen' };
+    return { count: fc.features.length, note: fc.features.length ? undefined : t('layers.dwdwarn.noteNone') };
   } catch (e) {
     // WFS unavailable – fall back to the rendered WMS image (not clickable)
     console.warn('DWD WFS', e);
     ctx.vis('dwd', ctx.isOn('dwdwarn'));
-    return { note: 'nur als Kartenbild verfügbar' };
+    return { note: t('layers.dwdwarn.noteImage') };
   }
 }
 

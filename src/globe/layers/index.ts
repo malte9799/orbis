@@ -1,6 +1,19 @@
+import { t, getLang, type MessageKey } from '../../i18n';
 import type { ExtraDef, ExtraId, SectionId } from './types';
 
 export type { CatId, ClickCtx, ExtraCtx, ExtraDef, ExtraId, ExtraInfo, RasterSpec, SectionId } from './types';
+
+/**
+ * Translate a text of this map area. `key` is the dotted catalog key (map.json namespaces
+ * map./layers./hud./nav./routing.), `de` is the German source text that lives at the call
+ * site. On `de` the source text is returned unchanged; on `en` the catalog value is used,
+ * falling back to the German text when the key is missing (fail soft, see i18n/README.md).
+ */
+export function tx(key: string, de: string, params?: Readonly<Record<string, string | number>>, count?: number): string {
+  if (getLang() === 'de') return de;
+  const en = t(key as MessageKey, params, count != null ? { count } : undefined);
+  return en === key ? de : en;
+}
 
 export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'europe', title: 'Europa & Messwerte' },
