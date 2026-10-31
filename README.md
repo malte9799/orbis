@@ -47,7 +47,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | | |
 |---|---|
 | ☁️ **Wetter** | Aktuell, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Luftqualität, Pollen, Sonnenzeiten, amtliche Warnungen (DWD, NWS) |
-| 🗺️ **Live-Karte** | 2D oder Globus, Radar, Satellit, Vorhersage bis +5 Tage mit Zeitleiste, Windströmung, Isobaren |
+| 🗺️ **Live-Karte** | 2D oder Globus, Radar, Satellit, Vorhersage bis +3 Tage mit Zeitleiste, Windströmung, Isobaren |
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🚗 **Verkehr** | Straßen, Staus, Blitzer & Rotlicht, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts mit Live-Tracking, Stream & Erinnerung |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
@@ -71,7 +71,7 @@ Ortssuche, eigener Standort und Favoriten.
 
 Interaktive Wetterkarte nach dem Vorbild von zoom.earth – standardmäßig 2D, per Schalter **2D / 3D** auch als Globus.
 
-- Live-Ebenen und Vorhersage-Ebenen mit Zeitleiste (bis +5 Tage, abspielbar)
+- Live-Ebenen und Vorhersage-Ebenen mit Zeitleiste (bis +3 Tage, abspielbar)
 - Animierte Windströmung, Isobaren und Naturereignisse
 - Wert unter dem Mauszeiger, Klick zeigt das Wetter an dieser Stelle
 
@@ -172,7 +172,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | Bereich | Ebenen | Quellen |
 |---|---|---|
 | 🗺️ **Karte** | Dunkel/Hell, Satellit, Sentinel-2, Topografie, NASA-Tagesbild, Tag/Nacht, 3D-Geländehöhen (nur Höhenanpassung, keine eigene Ebene) | [OpenFreeMap](https://openfreemap.org), [Esri](https://server.arcgisonline.com), [EOX](https://s2maps.eu), [OpenTopoMap](https://opentopomap.org), [NASA GIBS](https://earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs), [AWS Terrain](https://registry.opendata.aws/terrain-tiles/) |
-| ☁️ **Wetter** | Wind, Böen, Temperatur, Feuchte, Niederschlag, Bewölkung, Luftdruck, Schnee, CAPE – bis +5 Tage, Windpartikel, Isobaren | [Open-Meteo](https://open-meteo.com) |
+| ☁️ **Wetter** | Wind, Böen, Temperatur, Feuchte, Niederschlag, Bewölkung, Luftdruck, Schnee, CAPE – bis +3 Tage, Windpartikel, Isobaren | [Open-Meteo](https://open-meteo.com) |
 | 📡 **Radar & Satellit** | Regenradar weltweit, DE, USA (inkl. Alaska, Hawaii, Karibik, Guam), Kanada, Finnland, Japan; Satellit Infrarot; Niederschlag | [RainViewer](https://www.rainviewer.com/api.html), [DWD](https://maps.dwd.de), [IEM/NOAA](https://mesonet.agron.iastate.edu), [Environment Canada](https://eccc-msc.github.io/open-data/msc-geomet/readme_en/), [FMI](https://en.ilmatieteenlaitos.fi/open-data), [NOAA MRMS](https://www.nssl.noaa.gov/projects/mrms/), [JMA](https://www.jma.go.jp/bosai/nowc/), [EUMETSAT](https://view.eumetsat.int), [NASA GPM](https://gpm.nasa.gov/data/imerg) |
 | 🚨 **Warnungen** | Unwetter DE, Bevölkerungswarnungen, Tsunami, Katastrophen | [DWD](https://www.dwd.de), [NINA/BBK](https://warnung.bund.de), [NOAA](https://www.tsunami.gov), [GDACS](https://www.gdacs.org) |
 | 🌋 **Ereignisse** | Waldbrände, Hotspots, Stürme, Tornados, Vulkane, Fluten, Erdbeben (EU ab M 1,5, weltweit ab M 2,5) | [NASA EONET](https://eonet.gsfc.nasa.gov)/[FIRMS](https://firms.modaps.eosdis.nasa.gov), [USGS](https://earthquake.usgs.gov), [EMSC](https://www.emsc-csem.org), [Smithsonian GVP](https://volcano.si.edu), [NIFC](https://data-nifc.opendata.arcgis.com) |
@@ -200,10 +200,10 @@ RainViewer-kompatibler Radar-Server (z. B. selbst gehostetes [LibreWXR](https://
 ## 🛠️ Entwicklung
 
 ```bash
-npm install
-npm run dev       # Entwicklungsserver
-npm run build     # Typecheck + Produktions-Build nach dist/
-npm run preview   # Build lokal ansehen
+pnpm install
+pnpm dev       # Entwicklungsserver
+pnpm build     # Typecheck + Produktions-Build nach dist/
+pnpm preview   # Build lokal ansehen
 ```
 
 **Technik:** Vite, TypeScript (ohne Framework), [MapLibre GL JS 6](https://maplibre.org/) mit Globus-Projektion,
@@ -369,7 +369,7 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
 
 ## ℹ️ Hinweise
 
-- **Raster:** Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 5 Tage).
+- **Raster:** Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 3 Tage).
   Beim Hineinzoomen wird automatisch ein feineres Raster (bis 0,25°) für den sichtbaren Ausschnitt geladen und nahtlos
   eingeblendet; die Werte werden bilinear interpoliert. Taupunkt und gefühlte Temperatur werden im Browser berechnet.
 - **Limits:** Die kostenlosen APIs haben Nutzungslimits (Open-Meteo: 10 000 Aufrufe/Tag für nicht-kommerzielle Nutzung, jeder

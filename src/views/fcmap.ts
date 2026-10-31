@@ -1,7 +1,8 @@
 import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type RasterTileSource } from 'maplibre-gl';
-import { getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid } from '../api/model';
+import { emptyModelGrid, getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid, type ModelVar } from '../api/model';
+import { WxLayer, wxEnabled } from '../api/wxmodel';
 import type { Forecast } from '../api/openmeteo';
-import { FIELDS, PRECIP_STOPS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
+import { FIELDS, PRECIP_STOPS, PRECIP_TICKS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
 import { regionsGeoJSON } from '../globe/regions';
 import { baseLayers, FONT_BOLD, FONT_REGULAR, labelLayers, OFM_ATTR, OFM_GLYPHS, OFM_SOURCE } from '../globe/vector';
 import { loadRadarFrames, radarForecastSteps } from '../api/events';
@@ -36,6 +37,8 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   const key = `fc${++seq}`;
   let mode: MapMode = 'radar';
   let grid: ModelGrid | null = null;
+  /** ICON fields serving the map (the grid is then just a time axis); null: Open-Meteo regional grid */
+  let wx: WxLayer | null = null;
   let timeIdx = -1;
   let map: MlMap | null = null;
   let playing: number | null = null;
@@ -258,7 +261,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     el.title = place.name;
     new Marker({ element: el }).setLngLat([place.lon, place.lat]).addTo(map);
 
-    getRegionalModel(place.lat, place.lon)
+    loadModel()
       .then((g) => {
         if (destroyed) return;
         grid = g;
@@ -314,7 +317,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
       return;
     }
     if (!grid || timeIdx < 0) return;
-    const sampler = new ModelSampler(grid, null, timeIdx);
+    const sampler = new ModelSampler(grid, null, timeIdx, wx);
     curSampler = sampler;
     particles ??= new WindParticles(map, () => curSampler);
     if (mode === 'wind') particles.start();
@@ -324,14 +327,45 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     ['f0', 'f1'].forEach((id, i) => {
       const fid = fields[i];
       map!.setLayoutProperty(id, 'visibility', fid ? 'visible' : 'none');
-      if (fid) (map!.getSource(id) as RasterTileSource).setTiles([`wxfield://${fid}/${key}~${grid!.times[0]}-${timeIdx}/{z}/{x}/{y}`]);
+      if (fid) (map!.getSource(id) as RasterTileSource).setTiles([`wxfield://${fid}/${key}~${grid!.times[0]}-${timeIdx}-${wx?.version ?? ''}/{z}/{x}/{y}`]);
     });
     map.setPaintProperty('f0', 'raster-opacity', mode === 'temp' || mode === 'wind' ? 0.8 : 1);
     const empty = host.querySelector<HTMLElement>('.fcm-empty')!;
-    const msg = emptyMessage(grid, timeIdx);
+    const msg = emptyMessage(sampler);
     empty.hidden = !msg;
     empty.textContent = msg;
     whenEl.textContent = formatWhen(grid.times[timeIdx]);
+    loadDetail();
+  }
+
+  /** Which ICON variables the map in the current mode draws (0.125° tiles for these; the overview has them all). */
+  const WX_DETAIL: Record<MapMode, ModelVar[]> = {
+    radar: [],
+    precip: ['precipitation', 'temperature_2m'],
+    temp: ['temperature_2m'],
+    wind: ['wind_gusts_10m', 'u', 'v'],
+  };
+  const WX_ALL: ModelVar[] = ['precipitation', 'temperature_2m', 'wind_gusts_10m', 'u', 'v'];
+
+  /** ICON detail tiles around the place; redraws once they have arrived. */
+  function loadDetail() {
+    if (!wx) return;
+    void wx.setView(regionBounds(place.lat, place.lon), WX_DETAIL[mode], WX_ALL).then((changed) => {
+      if (changed && !destroyed) render();
+    });
+  }
+
+  /** ICON first (a few small files), Open-Meteo's regional grid (153 requests) only as fallback. */
+  async function loadModel(): Promise<ModelGrid> {
+    if (wxEnabled()) {
+      const layer = await WxLayer.load([]);
+      if (layer && !layer.expired) {
+        await layer.setView(null, [], WX_ALL, true);
+        wx = layer;
+        return emptyModelGrid(layer.times);
+      }
+    }
+    return getRegionalModel(place.lat, place.lon);
   }
 
   /** Städtewetter on the temperature map: current weather of the big cities (same data as the globe layer). */
@@ -400,18 +434,15 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
   }
 
   /** Short note when the chosen map has nothing to show at this time step. */
-  function emptyMessage(g: ModelGrid, t: number): string {
+  function emptyMessage(s: ModelSampler): string {
     if (mode !== 'precip') return '';
-    const n = g.nx * g.ny;
-    let rain = false;
-    let snowfall = false;
-    for (let i = t * n; i < (t + 1) * n; i++) {
-      const p = g.data.precipitation[i] >= 0.1;
-      const cold = g.data.temperature_2m[i] < 1;
-      if (p && cold) snowfall = true;
-      else if (p) rain = true;
+    const b = regionBounds(place.lat, place.lon);
+    for (let lat = b.south; lat <= b.north; lat += 0.5) {
+      for (let lon = b.west; lon <= b.east; lon += 0.5) {
+        if (s.sample('precipitation', lat, lon) >= 0.1) return '';
+      }
     }
-    return rain || snowfall ? '' : 'Kein Niederschlag im Kartenausschnitt';
+    return 'Kein Niederschlag im Kartenausschnitt';
   }
 
   /** Small non-blocking notice over the map (the map itself stays fully interactive). */
@@ -428,7 +459,9 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     const data =
       mode === 'radar'
         ? 'Radar: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>'
-        : 'Modelldaten: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>)';
+        : wx
+          ? 'Modelldaten: <a href="https://www.dwd.de/" target="_blank" rel="noopener">Deutscher Wetterdienst</a> (ICON, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>, verändert), Höhen: <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener">Mapzen Terrain Tiles</a>'
+          : 'Modelldaten: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>)';
     host.querySelector<HTMLElement>('.fcm-src')!.innerHTML =
       `${data} · Ortswetter: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> · Karte: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a>`;
   }
@@ -451,7 +484,7 @@ export function createForecastMap(host: HTMLElement, place: { lat: number; lon: 
     const def = (id: FieldId) => FIELDS[id];
     legendEl.innerHTML =
       mode === 'precip'
-        ? bar(PRECIP_STOPS, 'Regen', [0.1, 3, 10, 20, 40], rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
+        ? bar(PRECIP_STOPS, 'Regen', PRECIP_TICKS, rainUnit(), rainNum) + bar(SNOWFALL_STOPS, 'Schnee', [0.1, 1.5, 3, 6], rainUnit(), rainNum)
         : mode === 'radar'
           ? ''
           : bar(def(mode === 'temp' ? 'temp' : 'gusts').legend.stops, mode === 'temp' ? 'Temperatur' : 'Windböen', def(mode === 'temp' ? 'temp' : 'gusts').legend.ticks, def(mode === 'temp' ? 'temp' : 'gusts').unit, def(mode === 'temp' ? 'temp' : 'gusts').format);

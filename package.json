@@ -21,9 +21,16 @@
     "three": "^0.183.2"
   },
   "devDependencies": {
+    "@types/geojson": "^7946.0.16",
     "@types/three": "^0.183.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
     "vitest": "^2.1.9"
+  },
+  "packageManager": "pnpm@10.29.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

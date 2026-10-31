@@ -156,6 +156,15 @@ export function labelLayers(): LayerSpecification[] {
       paint: { 'line-color': 'rgba(255,255,255,0.3)', 'line-width': 0.8, 'line-dasharray': [3, 2] },
     },
     {
+      id: 'lbl-border-water',
+      type: 'line',
+      source: 'ofm',
+      'source-layer': 'water',
+      filter: ['==', ['get', 'class'], 'ocean'],
+      layout: { ...hidden, 'line-join': 'round' },
+      paint: { 'line-color': 'rgba(255,255,255,0.55)', 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.6, 8, 1.6] },
+    },
+    {
       id: 'lbl-water',
       type: 'symbol',
       source: 'ofm',

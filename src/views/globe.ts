@@ -17,6 +17,7 @@ import {
 } from '../api/events';
 import {
   detailRequest,
+  emptyModelGrid,
   getDetailModel,
   getGlobalModel,
   isLimitError,
@@ -24,12 +25,15 @@ import {
   nearestSubIndex,
   SUBSTEPS,
   type ModelGrid,
+  type ModelVar,
 } from '../api/model';
+import { WxLayer, wxDeps, wxEnabled } from '../api/wxmodel';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
 import { SondePanel } from '../globe/sondepanel';
+import { InfoPanel } from '../globe/infopanel';
 import { ShipPanel } from '../globe/shippanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
@@ -39,11 +43,14 @@ import { LUT, rainLabel, rainRate, rainviewerFrame } from '../globe/hdradar';
 import { RadarGl } from '../globe/radargl';
 import { glyphSvg, registerEventIcons } from '../globe/icons';
 import {
+  fieldQuality,
+  fieldTilesPending,
   FIELDS,
   isobars,
   nightImage,
   registerFieldProtocol,
   setActiveSampler,
+  setFieldQuality,
   WindParticles,
   type FieldId,
 } from '../globe/overlay';
@@ -59,7 +66,7 @@ import type { LocMode } from '../routing/locator';
 import { createScaleBar } from '../scalebar';
 import { store, OPTIONS_EVENT, type Place } from '../store';
 import { compass, debounce, escapeHtml, fmt, safeUrl, toast } from '../util';
-import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc, tzOpts } from '../units';
+import { windTxt, windDirTxt, pressureTxt, rainTxt, tempUnit, tempNum, rainUnit, rainNum, dateTimeTxt, is12, tzUtc } from '../units';
 import { describe, weatherIcon } from '../weather';
 
 // ---------------------------------------------------------------------------
@@ -153,6 +160,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
         <button class="btn icon-btn tl-play" aria-label="Abspielen"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+        <div class="tl-head"><b></b><span></span></div>
         <div class="tl-track">
           <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Zeit"/>
           <div class="tl-days"></div>
@@ -173,6 +181,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let globalModel: ModelGrid | null = null;
   let detailModel: ModelGrid | null = null;
   let detailKey = '';
+  let wxLayer: WxLayer | null = null;
+  /** the ICON fields serve the whole map (no Open-Meteo grid is loaded) */
+  let iconOnly = false;
   let modelLoading = false;
   let timeIdx = -1;
   let sampler: ModelSampler | null = null;
@@ -189,6 +200,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
   let sondePanel: SondePanel | null = null;
+  let infoPanel: InfoPanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let camPanel: CamPanel | null = null;
@@ -489,7 +501,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (l.type === 'symbol' && l.id !== 'lbl-water') {
         map.setPaintProperty(l.id, 'text-color', c.color);
         map.setPaintProperty(l.id, 'text-halo-color', c.halo);
-      } else if (l.id === 'lbl-border-country') map.setPaintProperty(l.id, 'line-color', c.border);
+      } else if (l.id === 'lbl-border-country' || l.id === 'lbl-border-water') map.setPaintProperty(l.id, 'line-color', c.border);
       else if (l.id === 'lbl-border-state') map.setPaintProperty(l.id, 'line-color', c.state);
     }
   }
@@ -541,6 +553,58 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderLegend();
   }
 
+  /** ICON fields load in the background: the map shows the Open-Meteo data first and switches over when they arrive. */
+  let wxLoading = false;
+  function loadWx() {
+    if (wxLayer?.expired) wxLayer = null;
+    if (!wxEnabled() || wxLayer || wxLoading) return;
+    wxLoading = true;
+    void WxLayer.load([])
+      .then((l) => {
+        wxLoading = false;
+        if (!l) return;
+        wxLayer = l;
+        if (globalModel && needsModel()) {
+          updateSampler();
+          refreshDetail();
+        }
+      })
+      .catch(() => {
+        wxLoading = false;
+      });
+  }
+
+  /** Which ICON variables the current view needs: the world overview of all in use, 0.125° tiles for the shown field. */
+  function wxNeeds(): { detail: ModelVar[]; overview: ModelVar[] } {
+    const def = isField(state.overlay) ? FIELDS[state.overlay] : null;
+    const detail = new Set<ModelVar>(def ? wxDeps(def.variable) : []);
+    if (def?.phase) detail.add('temperature_2m');
+    const overview = new Set<ModelVar>(detail);
+    if (state.wind) for (const v of wxDeps('wind_speed_10m')) overview.add(v);
+    if (state.isobars) overview.add('pressure_msl');
+    return { detail: [...detail], overview: [...overview] };
+  }
+
+  /** ICON fields first: a few small files instead of 408 Open-Meteo requests, and the time axis is theirs. */
+  async function useIcon(): Promise<boolean> {
+    if (!wxEnabled()) return false;
+    if (wxLayer?.expired) wxLayer = null;
+    const layer = wxLayer ?? (await WxLayer.load([]));
+    if (!layer || layer.expired) return false;
+    if (!iconOnly || layer !== wxLayer || !globalModel) {
+      const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[Math.floor(timeIdx)] : Date.now();
+      wxLayer = layer;
+      iconOnly = true;
+      globalModel = emptyModelGrid(layer.times);
+      timeIdx = nearestSubIndex(globalModel.times, prevTime);
+      detailModel = null;
+      detailKey = '';
+    }
+    // the overview of what is shown before the first draw, so the map does not start empty
+    await layer.setView(null, [], wxNeeds().overview, true);
+    return true;
+  }
+
   async function ensureModel(): Promise<boolean> {
     modelLoading = !globalModel;
     if (modelLoading) {
@@ -548,15 +612,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       renderLegend();
     }
     try {
+      if (await useIcon()) {
+        modelErrorText = '';
+        return true;
+      }
+      if (iconOnly) {
+        // ICON is gone (too old, unreachable): fall back to Open-Meteo with a fresh grid
+        iconOnly = false;
+        wxLayer = null;
+        globalModel = null;
+      }
       const g = await getGlobalModel();
       modelErrorText = '';
       if (g !== globalModel) {
         const prevTime = globalModel && timeIdx >= 0 ? globalModel.times[timeIdx] : Date.now();
         globalModel = g;
+        wxLayer = null; // reload together with the Open-Meteo grid (new ICON run)
         timeIdx = nearestSubIndex(g.times, prevTime);
         detailModel = null;
         detailKey = '';
       }
+      loadWx();
       return true;
     } catch (e) {
       modelError(e);
@@ -571,10 +647,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   function updateSampler() {
     if (!map || !globalModel || timeIdx < 0) return;
-    sampler = new ModelSampler(globalModel, detailModel, timeIdx);
+    sampler = new ModelSampler(globalModel, detailModel, timeIdx, wxLayer);
     setActiveSampler(sampler);
     if (isField(state.overlay)) {
-      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey.replace(/[^\w]/g, '_') || 'g'}`;
+      // the field protocol only accepts [\w-] in the version: a fractional step ("7.333…") would make every tile fail
+      const version = `${globalModel.times[0]}-${timeIdx}-${detailKey || 'g'}-${wxLayer?.version ?? ''}-${fieldQuality()}`.replace(/[^\w-]/g, '_');
       (map.getSource('field') as RasterTileSource).setTiles([`wxfield://${state.overlay}/${version}/{z}/{x}/{y}`]);
       vis('field', true);
     }
@@ -610,6 +687,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const refreshDetail = debounce(() => {
     if (!map || !globalModel || !needsModel()) return;
     const b = map.getBounds();
+    if (wxLayer) {
+      const { detail, overview } = wxNeeds();
+      void wxLayer
+        .setView({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() }, detail, overview)
+        .then((changed) => changed && updateSampler());
+    }
+    if (iconOnly) return; // no Open-Meteo detail grid either
     const req = detailRequest({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
     if (!req) {
       pendingDetail = '';
@@ -715,6 +799,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let playTimer = 0;
   const rangeEl = timeline.querySelector<HTMLInputElement>('.tl-range')!;
   const timeEl = timeline.querySelector<HTMLSpanElement>('.tl-time')!;
+  const headEl = timeline.querySelector<HTMLDivElement>('.tl-head')!;
   const daysEl = timeline.querySelector<HTMLDivElement>('.tl-days')!;
   const playBtn = timeline.querySelector<HTMLButtonElement>('.tl-play')!;
   const nowBtn = timeline.querySelector<HTMLButtonElement>('.tl-now')!;
@@ -828,22 +913,48 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     timeEl.innerHTML = `<b>${escapeHtml(timeLabel(t))}</b><small>${
       mode === 'radar' ? (nowcast ? 'Prognose' : 'Radar') : Math.abs(rel) < 2 ? 'jetzt' : rel > 0 ? `+${rel} h` : `${rel} h`
     }</small>`;
-    // day ticks under the slider (only rebuilt when the time axis changes)
-    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}`;
+    // desktop card: title + full date, progress of the slider
+    headEl.innerHTML = `<b>${mode === 'radar' ? (nowcast ? 'Radar-Prognose' : 'Radar') : 'Vorhersage'}</b><span>${escapeHtml(
+      dateTimeTxt(t, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+    )} · ${escapeHtml(dateTimeTxt(t, { hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }))}${tzUtc() ? ' UTC' : ''}</span>`;
+    rangeEl.style.setProperty('--p', `${(Number(rangeEl.value) / Math.max(1, Number(rangeEl.max))) * 100}%`);
+    // ticks under the slider: one per time step, labels at day change / noon (model) or every 30 min (radar),
+    // "Jetzt" at the current moment (only rebuilt when the time axis, the minute or the format change)
+    const key = `${mode}:${times[0]}:${times.length}:${tzUtc()}:${is12()}:${Math.floor(Date.now() / 60000)}`;
     if (key !== timelineKey) {
       timelineKey = key;
-      let html = '';
+      const span = Math.max(1, times[times.length - 1] - times[0]);
+      const pos = (ms: number) => ((ms - times[0]) / span) * 100;
+      const nowPos = pos(Date.now());
+      let html = times.map((tt) => `<i style="left:${pos(tt)}%"></i>`).join('');
+      const labels: [number, string][] = [];
+      const hourFmt: Intl.DateTimeFormatOptions = { hour: is12() ? 'numeric' : '2-digit' };
       if (mode === 'model') {
-        let lastDay = '';
-        times.forEach((tt, i) => {
-          const d = new Date(tt);
-          const day = d.toLocaleDateString('de-DE', { weekday: 'short', ...tzOpts() });
-          if (day !== lastDay && (tzUtc() ? d.getUTCHours() : d.getHours()) < 3) {
-            html += `<span style="left:${(i / (times.length - 1)) * 100}%">${escapeHtml(day)}</span>`;
-          }
-          lastDay = day;
-        });
+        // the 3-hourly steps rarely hit local midnight / noon, so the labels sit at the exact moments
+        const day = new Date(times[0]);
+        if (tzUtc()) day.setUTCHours(0, 0, 0, 0);
+        else day.setHours(0, 0, 0, 0);
+        while (day.getTime() <= times[times.length - 1]) {
+          const mid = day.getTime();
+          if (mid >= times[0]) labels.push([mid, dateTimeTxt(mid, { weekday: 'short' })]);
+          const noon = new Date(mid);
+          if (tzUtc()) noon.setUTCHours(12);
+          else noon.setHours(12);
+          if (noon.getTime() >= times[0] && noon.getTime() <= times[times.length - 1]) labels.push([noon.getTime(), dateTimeTxt(noon, hourFmt)]);
+          if (tzUtc()) day.setUTCDate(day.getUTCDate() + 1);
+          else day.setDate(day.getDate() + 1);
+        }
+      } else {
+        for (const tt of times) {
+          if (new Date(tt).getUTCMinutes() % 30 === 0) labels.push([tt, dateTimeTxt(tt, { ...hourFmt, minute: '2-digit' })]);
+        }
       }
+      // labels near the "Jetzt" marker would overlap it
+      for (const [tt, label] of labels) {
+        const p = pos(tt);
+        if (Math.abs(p - nowPos) > 9) html += `<span style="left:${p}%">${escapeHtml(label)}</span>`;
+      }
+      if (nowPos >= 0 && nowPos <= 100) html += `<button type="button" class="tl-nowlbl" style="left:${nowPos}%">Jetzt</button>`;
       daysEl.innerHTML = html;
     }
   }
@@ -857,6 +968,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   function stopAnimation() {
+    if (fieldQuality() === 'low') {
+      setFieldQuality('full');
+      queueMicrotask(updateSampler); // redraw the tiles in full resolution
+    }
     clearInterval(playTimer);
     playTimer = 0;
     cancelAnimationFrame(playRaf);
@@ -870,10 +985,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
     else setTimeIndex(Number(rangeEl.value));
   });
-  nowBtn.addEventListener('click', () => {
+  const jumpToNow = () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
     else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
+  };
+  nowBtn.addEventListener('click', jumpToNow);
+  daysEl.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.tl-nowlbl')) jumpToNow();
   });
   playBtn.addEventListener('click', () => {
     if (playTimer || playRaf) return stopAnimation();
@@ -899,11 +1018,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       playRaf = requestAnimationFrame(loop);
       return;
     }
-    playTimer = window.setInterval(() => {
-      const n = radarMode ? radar!.frames.length : Number(rangeEl.max) + 1;
-      const step = radarMode ? 1 : 1 / SUBSTEPS;
-      setTimeIndex(radarMode ? (radarIdx + 1) % n : timeIdx + step >= n - 1 + 1e-6 ? 0 : timeIdx + step);
-    }, radarMode ? 700 : 450);
+    if (radarMode) {
+      playTimer = window.setInterval(() => setTimeIndex((radarIdx + 1) % radar!.frames.length), 700);
+      return;
+    }
+    // Forecast fields: the tiles are drawn on the main thread, so the next step only starts once the tiles of the
+    // current one are there (otherwise requests pile up and the browser lags the longer it plays) and they are drawn coarser.
+    setFieldQuality('low');
+    let last = performance.now();
+    const loop = (now: number) => {
+      const idle = fieldTilesPending() === 0 && (!map || map.isSourceLoaded('field'));
+      if (now - last >= 450 && ((idle && now - last >= 150) || now - last > 4000)) {
+        last = now;
+        const n = Number(rangeEl.max) + 1;
+        const step = 1 / SUBSTEPS;
+        setTimeIndex(timeIdx + step >= n - 1 + 1e-6 ? 0 : timeIdx + step);
+      }
+      playRaf = requestAnimationFrame(loop);
+    };
+    playRaf = requestAnimationFrame(loop);
   });
 
   // ----- legend & readout --------------------------------------------------
@@ -917,10 +1050,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const { stops, ticks, gradient } = def.legend;
       const lo = stops[0][0];
       const hi = stops[stops.length - 1][0];
-      const pct = (v: number) => ((v - lo) / (hi - lo)) * 100;
-      const grad = gradient ?? `linear-gradient(90deg, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')})`;
-      const sub = `${def.unit}${sampler ? ` · ${timeLabel(sampler.time)}` : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
-      return t(def.label, sub, grad, ticks.map((v) => [pct(v), def.format(v)]));
+      // colour scales start with a lead-in that carries the unit and end a little early, so the labels fit
+      const LEAD = gradient ? 0 : 20;
+      const END = gradient ? 100 : 94;
+      const pct = (v: number) => LEAD + ((v - lo) / (hi - lo)) * (END - LEAD);
+      const first = stops[0][1];
+      const grad =
+        gradient ??
+        `linear-gradient(90deg, ${first} 0%, ${first} ${LEAD}%, ${stops.map(([v, c]) => `${c} ${pct(v).toFixed(1)}%`).join(', ')}, ${stops[stops.length - 1][1]} 100%)`;
+      const sub = `${def.unit}${sampler ? '' : modelLoading ? ' · lädt …' : modelErrorText ? ` · ${modelErrorText}` : ''}`;
+      const unitTick: [number, string][] = LEAD ? [[LEAD / 2, def.unit]] : [];
+      return t(def.label, sub, grad, [...unitTick, ...ticks.map((v): [number, string] => [pct(v), def.format(v)])]);
     }
     switch (o) {
       case 'radar':
@@ -1203,6 +1343,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      infoPanel = new InfoPanel(el);
+      infoPanel.onOpen = () => {
+        popup?.remove();
+        flightPanel?.close();
+        shipPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        camPanel?.close();
+      };
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
       camPanel = new CamPanel(el, { map: () => map });
       camPanel.onOpen = () => {
@@ -1376,6 +1525,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         return;
       }
       extras?.clearSelection();
+      infoPanel?.close();
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
       if (extraResult?.type === 'flight') {
         camPanel?.close();
@@ -1396,6 +1546,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (extraResult?.type === 'cam') {
         popup?.remove();
         camPanel?.open({ p: extraResult.p, lng: extraResult.lng, lat: extraResult.lat });
+      } else if (extraResult?.type === 'panel') {
+        infoPanel?.open(extraResult.data);
       } else if (extraResult?.type === 'weather') {
         if (store.getOptions().clickWx) weatherPopup(extraResult.lng, extraResult.lat);
       } else if (extraResult) {

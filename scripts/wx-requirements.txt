@@ -1,0 +1,4 @@
+eccodes==2.50.0
+numpy
+scipy
+pillow

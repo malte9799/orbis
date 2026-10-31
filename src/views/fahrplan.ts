@@ -295,6 +295,33 @@ export function createFahrplanView(): FahrplanView {
     });
   }
 
+  /**
+   * A train that is late has left according to the timetable, so a search "from now" does not list it – it only
+   * showed up after "Früher". Looks at the page before, merges the DB delays in and adds the connections that
+   * have not really left yet (the cursor stays, so "Früher" still lists the rest).
+   */
+  async function addDelayedEarlier(my: number) {
+    const cursor = cursors.prev;
+    if (!cursor || !from || !to || !lastOpts || lastOpts.arriveBy || lastOpts.time < Date.now() - 5 * 60000) return;
+    try {
+      const r = await planConnections(from, to, lastOpts, cursor);
+      const merged = await withDelays(r.list);
+      if (my !== searchSeq) return;
+      const seen = new Set(entries.map((e) => itKey(e.raw)));
+      const nowT = Date.now();
+      const late = r.list.map((raw, i): Entry => ({ raw, shown: merged[i] })).filter((e) => e.shown.delaySrc === 'db' && e.shown.dep >= nowT - 60000 && !seen.has(itKey(e.raw)));
+      if (!late.length) return;
+      entries = [...late, ...entries];
+      const open = new Set([...res.querySelectorAll<HTMLElement>('details.fp-itin[open]')].map((d) => d.dataset.k!));
+      renderResults();
+      res.querySelectorAll<HTMLDetailsElement>('details.fp-itin').forEach((d) => {
+        if (open.has(d.dataset.k!)) d.open = true;
+      });
+    } catch {
+      /* the list is complete without it */
+    }
+  }
+
   async function search() {
     if (!from || !to) {
       toast('Bitte Start und Ziel aus der Vorschlagsliste wählen.', 'error');
@@ -317,7 +344,7 @@ export function createFahrplanView(): FahrplanView {
       loadingDelays = wait && entries.length > 0;
       renderResults();
       setCompact(true);
-      if (loadingDelays) void mergeDelays(entries, my);
+      if (loadingDelays) void mergeDelays(entries, my).then(() => addDelayedEarlier(my));
     } catch {
       if (my === searchSeq) res.innerHTML = '<p class="fp-hint">Verbindungssuche nicht erreichbar – bitte später erneut versuchen.</p>';
     } finally {

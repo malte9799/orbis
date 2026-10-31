@@ -1,33 +1,43 @@
 import { defineExtra, type ExtraCtx } from '../types';
-import type { FeatureCollection, Point } from 'geojson';
+import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { DATA_BASE } from '../../../api/data';
-import { fetchJson } from '../../../util';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
-import { CCTV_LIMIT, loadCctv } from '../../../api/cams';
 import { cardHtml } from '../../popup';
-import { escapeHtml } from '../../../util';
-import { isSuperseded } from '../../../api/overpass';
+import { escapeHtml, fetchJson } from '../../../util';
 import { coordsTxt } from '../../../units';
 
-/** dense cities hold thousands of cameras, so a smaller area keeps the query fast */
-const CCTV_ZOOM = CAM_DETAIL_ZOOM + 3;
+/** single cameras from this zoom on (a few 0.5° tiles); below it the density heatmap */
+const CCTV_ZOOM = CAM_DETAIL_ZOOM + 2;
 const CCTV_COLOR = '#a78bfa';
 const CTYPE: Record<string, string> = { fixed: 'fest', dome: 'Kuppel', panning: 'Schwenkkamera', ptz: 'PTZ' };
 const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'außen (privat)', indoor: 'innen' };
 
-type St = { key: string; fc: FeatureCollection<Point> | null; fovKey: string; heat: 'idle' | 'loading' | 'done' };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '', heat: 'idle' }));
+// Data: monthly extracts per region (scripts/cctv-heat.mjs) on their own branch next to `data`:
+//   cctv-<region>.json           density cells [lon, lat, count]
+//   cctv-<region>-tiles.json     the 0.5° tiles that exist
+//   cctv-<region>/<ix>_<iy>.json cameras of one tile (record layout: see `record` in the script)
+const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
+const TILE = 2; // tiles per degree
+type Rec = [number, number, number, string, string, string, number, string, number];
 
-/** monthly density files per region (scripts/cctv-heat.mjs), on their own branch next to `data` */
-const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-cctv/');
-const HEAT_REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
+type St = {
+  key: string;
+  fc: FeatureCollection<Point> | null;
+  fovKey: string;
+  heat: 'idle' | 'loading' | 'done';
+  /** tiles that exist per region, null while loading */
+  index: Promise<Map<string, Set<string>>> | null;
+  tiles: Map<string, Promise<Rec[]>>;
+};
+const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '', heat: 'idle', index: null, tiles: new Map() }));
 
 async function loadHeat(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (st.heat !== 'idle') return;
   st.heat = 'loading';
-  const parts = await Promise.allSettled(HEAT_REGIONS.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
+  const parts = await Promise.allSettled(REGIONS.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
   const cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
   if (!cells.length) {
     st.heat = 'idle';
@@ -40,6 +50,47 @@ async function loadHeat(ctx: ExtraCtx) {
     features: cells.map(([lon, lat, n]) => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lon, lat] }, properties: { n } })),
   });
 }
+
+function loadIndex(st: St) {
+  st.index ??= Promise.allSettled(REGIONS.map((r) => fetchJson<string[]>(`${HEAT_BASE}cctv-${r}-tiles.json`, undefined, 30000))).then((res) => {
+    const index = new Map<string, Set<string>>();
+    res.forEach((p, i) => {
+      if (p.status === 'fulfilled') index.set(REGIONS[i], new Set(p.value));
+    });
+    if (!index.size) st.index = null; // try again next time
+    return index;
+  });
+  return st.index;
+}
+
+/** cameras of one tile in one region (cached; a failed tile is retried next time) */
+function loadTile(st: St, region: string, tile: string): Promise<Rec[]> {
+  const key = `${region}/${tile}`;
+  let p = st.tiles.get(key);
+  if (!p) {
+    p = fetchJson<Rec[]>(`${HEAT_BASE}cctv-${key}.json`, undefined, 30000).catch((e) => {
+      st.tiles.delete(key);
+      throw e;
+    });
+    st.tiles.set(key, p);
+  }
+  return p;
+}
+
+const toFeature = ([lon, lat, dir, kind, ctype, mount, guard, operator, id]: Rec): Feature<Point> => ({
+  type: 'Feature',
+  geometry: { type: 'Point', coordinates: [lon, lat] },
+  properties: {
+    title: guard ? 'Wachpersonal / Sicherheitsdienst' : 'Überwachungskamera',
+    subtitle: [ctype, operator].filter(Boolean).join(' · '),
+    dir,
+    kind,
+    ctype,
+    mount,
+    operator,
+    url: `https://www.openstreetmap.org/node/${id}`,
+  },
+});
 
 function updateCones(ctx: ExtraCtx) {
   const st = getState(ctx);
@@ -63,32 +114,44 @@ function loadNow(ctx: ExtraCtx) {
     st.key = '';
     st.fc = null;
     updateCones(ctx);
-    ctx.set('cctv', { note: st.heat === 'done' ? `Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` : `Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` });
+    ctx.set('cctv', { loading: false, note: st.heat === 'done' ? `Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` : `Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` });
     return;
   }
-  const b = ctx.viewBounds();
-  const key = Object.values(b).join(',');
+  const b = ctx.map.getBounds();
+  const [x0, x1, y0, y1] = [Math.floor(b.getWest() * TILE), Math.floor(b.getEast() * TILE), Math.floor(b.getSouth() * TILE), Math.floor(b.getNorth() * TILE)];
+  const key = [x0, x1, y0, y1].join(',');
   if (key === st.key) return;
   st.key = key;
   ctx.set('cctv', { loading: true, note: undefined });
-  loadCctv(b)
-    .then((fc) => {
+  loadIndex(st)
+    .then(async (index) => {
+      if (!index.size) throw new Error('Kameradaten nicht erreichbar');
+      const jobs: Promise<Rec[]>[] = [];
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          for (const [region, tiles] of index) if (tiles.has(`${x}_${y}`)) jobs.push(loadTile(st, region, `${x}_${y}`));
+        }
+      }
+      const loaded = await Promise.allSettled(jobs);
       if (st.key !== key) return;
+      const failed = loaded.filter((r) => r.status === 'rejected').length;
+      const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features: loaded.flatMap((r) => (r.status === 'fulfilled' ? r.value.map(toFeature) : [])) };
       ctx.setData('cctv', fc);
       st.fc = fc;
       updateCones(ctx);
       const n = fc.features.length;
+      if (failed) st.key = ''; // load the missing tiles again on the next move
       ctx.set('cctv', {
         loading: false,
         count: n,
-        note: n >= CCTV_LIMIT ? 'Obergrenze erreicht – näher heranzoomen' : n ? 'nur das, was Mapper erfasst haben – real gibt es deutlich mehr' : 'keine Kameras im Ausschnitt erfasst',
+        note: failed ? `${failed} Kachel(n) nicht erreichbar` : n ? 'Stand: Monatsauszug von OpenStreetMap – real gibt es deutlich mehr' : 'keine Kameras im Ausschnitt (oder Region noch nicht im Monatsauszug)',
       });
     })
     .catch((e) => {
-      if (isSuperseded(e) || st.key !== key) return;
-      console.warn('Overpass CCTV', e);
+      if (st.key !== key) return;
+      console.warn('CCTV', e);
       st.key = '';
-      ctx.set('cctv', { loading: false, note: 'OpenStreetMap (Overpass) nicht erreichbar' });
+      ctx.set('cctv', { loading: false, note: 'Kameradaten nicht erreichbar' });
     });
 }
 
@@ -98,7 +161,7 @@ export default defineExtra({
   section: 'cams',
   cat: 'medien',
   label: 'Überwachungskameras',
-  hint: 'CCTV-Kameras aus OpenStreetMap: Dichte-Übersicht (Monatsauszug), Einzelkameras ab Zoom 12 – ohne Kennzeichenleser und Webcams',
+  hint: 'CCTV-Kameras aus OpenStreetMap: Dichte-Übersicht (Monatsauszug), Einzelkameras ab Zoom 11 – ohne Kennzeichenleser und Webcams',
   glyph: 'cctv',
   icon: 'cam',
   color: CCTV_COLOR,
@@ -132,9 +195,9 @@ export default defineExtra({
         layout: hidden,
         paint: {
           'circle-color': CCTV_COLOR,
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 14, 5.5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], CCTV_ZOOM, 2.5, 14, 5.5],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 12, 0, 14, 1.3],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], CCTV_ZOOM, 0, 14, 1.3],
         },
       },
       'marker',
@@ -154,8 +217,6 @@ export default defineExtra({
       ['Montage', ALPR_MOUNT[String(p.mount)] ?? p.mount],
       ['Blickrichtung', dir >= 0 ? `${Math.round(dir)}° (${card})` : ''],
       ['Betreiber', p.operator],
-      ['Seit', p.since],
-      ['Kennung', p.ref],
       ['Position', coordsTxt(pt[1] as number, pt[0] as number)],
     ].filter(([, v]) => v);
     const extra = rows.length ? `<div class="pop-grid two">${rows.map(([k, v]) => `<span>${k}</span><b>${escapeHtml(String(v))}</b>`).join('')}</div>` : '';
