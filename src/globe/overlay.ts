@@ -1,7 +1,8 @@
 import { addProtocol, LngLat, type Map as MlMap } from 'maplibre-gl';
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
-import type { ModelSampler, ModelVar } from '../api/model';
+import { TD_LAPSE_RATIO, type ModelSampler, type ModelVar } from '../api/model';
 import { fmt, rampColor, TEMP_STOPS } from '../util';
+import { Slicer } from '../yield';
 import { windUnit, windNum, tempUnit, tempNum, pressureUnit, pressureNum, rainUnit, rainNum, snowUnit, snowVal } from '../units';
 
 // ---------------------------------------------------------------------------
@@ -42,8 +43,10 @@ export interface FieldDef {
   organic?: { warp: number; texture?: number; additive?: boolean };
   /** precipitation coloured as rain or snow depending on the 2 m temperature */
   phase?: 'mix' | 'snow-only';
-  /** the ICON temperature is corrected per pixel with the terrain height (see renderTerrainTile) */
+  /** the ICON values are corrected per pixel with the terrain height (see renderTerrainTile) */
   terrain?: boolean;
+  /** share of the temperature correction that applies to this field (default 1) */
+  terrainScale?: number;
 }
 
 /** Below this 2 m temperature [°C] precipitation is drawn as snow. */
@@ -198,6 +201,8 @@ export const FIELDS: Record<FieldId, FieldDef> = {
     label: 'Taupunkt',
     get unit() { return tempUnit(); },
     variable: 'dew_point_2m',
+    terrain: true,
+    terrainScale: TD_LAPSE_RATIO,
     color: ramp(TEMP_STOPS, 185),
     legend: { stops: TEMP_STOPS, ticks: [-30, -15, 0, 15, 30, 40] },
     format: tempNum,
@@ -343,82 +348,196 @@ function organicSample(def: FieldDef, s: ModelSampler, lat: number, lon: number)
  * interpolated bilinearly, the terrain heights (about 5 km) are applied per pixel, so valleys and ridges
  * show up much finer than the 13 km model. Lattice nodes lie on the tile edge, so neighbouring tiles agree.
  */
-async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: number, y: number): Promise<ImageBitmap> {
-  const N = z <= 3 ? 512 : 256;
-  const Nc = z <= 2 ? 64 : 128;
+async function renderTerrainTile(def: FieldDef, s: ModelSampler, z: number, x: number, y: number, sl: Slicer): Promise<ImageBitmap> {
+  const scale = def.terrainScale ?? 1;
+  const low = quality === 'low';
+  const N = low ? 128 : z <= 3 ? 512 : 256;
+  const Nc = low || z <= 2 ? 64 : 128;
   const nodes = new Float32Array((Nc + 1) * (Nc + 1));
   for (let j = 0; j <= Nc; j++) {
     const lat = tile2lat(y + j / Nc, z);
     for (let i = 0; i <= Nc; i++) nodes[j * (Nc + 1) + i] = s.sample(def.variable, lat, tile2lon(x + i / Nc, z), false);
+    await sl.tick();
   }
-  const canvas = new OffscreenCanvas(N, N);
-  const ctx = canvas.getContext('2d')!;
-  const img = ctx.createImageData(N, N);
-  const lons = new Float64Array(N);
-  for (let px = 0; px < N; px++) lons[px] = tile2lon(x + (px + 0.5) / N, z);
+  const img = new ImageData(N, N);
+  const lut = lutOf(def);
+  const deltas = await terrainDeltas(s, z, x, y, N, sl);
   for (let py = 0; py < N; py++) {
-    const lat = tile2lat(y + (py + 0.5) / N, z);
-    const fj = ((py + 0.5) / N) * Nc;
+    const fj = (py / (N - 1)) * Nc;
     const j = Math.min(Nc - 1, Math.floor(fj));
     const wy = fj - j;
     for (let px = 0; px < N; px++) {
-      const fi = ((px + 0.5) / N) * Nc;
+      const fi = (px / (N - 1)) * Nc;
       const i = Math.min(Nc - 1, Math.floor(fi));
       const wx = fi - i;
       const o = j * (Nc + 1) + i;
       const base = (nodes[o] * (1 - wx) + nodes[o + 1] * wx) * (1 - wy) + (nodes[o + Nc + 1] * (1 - wx) + nodes[o + Nc + 2] * wx) * wy;
-      const [r, g, b, a] = def.color(base + s.terrainDelta(lat, lons[px]));
-      const k = (py * N + px) * 4;
-      img.data[k] = r;
-      img.data[k + 1] = g;
-      img.data[k + 2] = b;
-      img.data[k + 3] = a;
+      paint(img.data, (py * N + px) * 4, lut, base + deltas[py * N + px] * scale);
+    }
+    await sl.tick();
+  }
+  return toBitmap(img);
+}
+
+// Sample positions of a tile: the outermost pixels lie exactly ON the tile edge (px / (N - 1), not the pixel centre).
+// The GPU holds the edge pixel's value up to the border, so with centre samples two neighbouring tiles would meet with a
+// step as large as the field changes over one pixel – a hard seam where the field is steep. Now both give the same value there.
+
+/** while the timeline plays, tiles are drawn coarser (and cheaper); standing still they get the full resolution */
+let quality: 'full' | 'low' = 'full';
+export function setFieldQuality(q: 'full' | 'low') {
+  quality = q;
+}
+export const fieldQuality = () => quality;
+
+/** tiles being drawn right now: the animation waits for them instead of requesting the next step faster than they arrive */
+let pending = 0;
+export const fieldTilesPending = () => pending;
+
+/**
+ * Colour look-up table of a field (2048 steps over its value range): drawing a pixel is then three array reads instead of
+ * a ramp search with fresh arrays per pixel – much less garbage, which matters most in Safari.
+ */
+const LUT_N = 2048;
+interface Lut {
+  rgba: Uint8ClampedArray;
+  lo: number;
+  inv: number;
+  nan: [number, number, number, number];
+}
+const luts = new WeakMap<FieldDef, Lut>();
+function lutOf(def: FieldDef): Lut {
+  let l = luts.get(def);
+  if (!l) {
+    const stops = def.legend.stops;
+    const first = stops[0][0];
+    const hi = stops[stops.length - 1][0];
+    const lo = first >= 0 && first < hi * 0.1 ? 0 : first; // fields that fade in below their first stop start at 0
+    const rgba = new Uint8ClampedArray(LUT_N * 4);
+    for (let i = 0; i < LUT_N; i++) rgba.set(def.color(lo + ((hi - lo) * i) / (LUT_N - 1)), i * 4);
+    l = { rgba, lo, inv: (LUT_N - 1) / (hi - lo), nan: def.color(NaN) };
+    luts.set(def, l);
+  }
+  return l;
+}
+function paint(d: Uint8ClampedArray, o: number, l: Lut, v: number) {
+  if (v !== v) {
+    d[o] = l.nan[0];
+    d[o + 1] = l.nan[1];
+    d[o + 2] = l.nan[2];
+    d[o + 3] = l.nan[3];
+    return;
+  }
+  let i = ((v - l.lo) * l.inv) | 0;
+  i = i < 0 ? 0 : i >= LUT_N ? LUT_N - 1 : i;
+  const k = i * 4;
+  d[o] = l.rgba[k];
+  d[o + 1] = l.rgba[k + 1];
+  d[o + 2] = l.rgba[k + 2];
+  d[o + 3] = l.rgba[k + 3];
+}
+
+/** ImageData straight to a bitmap (no canvas in between: cheaper, and much cheaper in Safari). */
+async function toBitmap(img: ImageData): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(img);
+  } catch {
+    const canvas = new OffscreenCanvas(img.width, img.height);
+    canvas.getContext('2d')!.putImageData(img, 0, 0);
+    return createImageBitmap(canvas);
+  }
+}
+
+/**
+ * The terrain correction does not change with time, so it is computed once per tile and reused for every time step
+ * (bounded by memory: the oldest tiles go first).
+ */
+const deltaCache = new Map<string, Float32Array>();
+let deltaBytes = 0;
+const DELTA_BUDGET = 24e6;
+
+async function terrainDeltas(s: ModelSampler, z: number, x: number, y: number, N: number, sl: Slicer): Promise<Float32Array> {
+  const key = `${s.wx?.version ?? ''}|${z}/${x}/${y}|${N}`;
+  let d = deltaCache.get(key);
+  if (d) {
+    deltaCache.delete(key);
+  } else {
+    d = new Float32Array(N * N);
+    const lons = new Float64Array(N);
+    for (let px = 0; px < N; px++) lons[px] = tile2lon(x + px / (N - 1), z);
+    for (let py = 0; py < N; py++) {
+      const lat = tile2lat(y + py / (N - 1), z);
+      for (let px = 0; px < N; px++) d[py * N + px] = s.terrainDelta(lat, lons[px]);
+      await sl.tick();
+    }
+    deltaBytes += d.byteLength;
+    while (deltaBytes > DELTA_BUDGET && deltaCache.size) {
+      const oldest = deltaCache.keys().next().value!;
+      deltaBytes -= deltaCache.get(oldest)!.byteLength;
+      deltaCache.delete(oldest);
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return createImageBitmap(canvas);
+  deltaCache.set(key, d);
+  return d;
 }
 
 export function registerFieldProtocol() {
   if (protocolRegistered) return;
   protocolRegistered = true;
   // URL format: wxfield://<field>/<version>/<z>/<x>/<y>
-  addProtocol('wxfield', async (params) => {
-    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w.-]+\/(\d+)\/(\d+)\/(\d+)/.exec(params.url);
+  addProtocol('wxfield', async (params, abortController) => {
+    // tiles of an earlier time step that MapLibre no longer wants are not rendered any more
+    if (abortController?.signal.aborted) throw new DOMException('aborted', 'AbortError');
+    pending++;
+    try {
+      return await renderField(params.url, abortController?.signal);
+    } finally {
+      pending--;
+    }
+  });
+}
+
+async function renderField(url: string, signal?: AbortSignal | null): Promise<{ data: ImageBitmap }> {
+  {
+    const m = /^wxfield:\/\/(\w+)\/(?:(\w+)~)?[\w.-]+\/(\d+)\/(\d+)\/(\d+)/.exec(url);
     const def = m ? FIELDS[m[1] as FieldId] : undefined;
     const sampler = m ? samplers.get(m[2] ?? 'map') : undefined;
     if (!m || !def || !sampler) throw new Error('field not ready');
     const z = +m[3];
     const x = +m[4];
     const y = +m[5];
-    if (def.terrain && sampler.hasTerrain()) return { data: await renderTerrainTile(def, sampler, z, x, y) };
+    // ICON values carry their own structure: the noise that fakes detail on the coarse Open-Meteo grid is skipped
+    const wxData = sampler.wxActive(def.variable);
+    const sl = new Slicer(signal);
+    if (def.terrain && sampler.hasTerrain(def.variable)) return { data: await renderTerrainTile(def, sampler, z, x, y, sl) };
     // The fields are smooth, so render a small image and let the GPU interpolate it up
     // ('raster-resampling: linear'): 64 px per tile when zoomed out, 128 px when zoomed in.
-    const N = z <= 4 ? 64 : 128;
-    const canvas = new OffscreenCanvas(N, N);
-    const ctx = canvas.getContext('2d')!;
-    const img = ctx.createImageData(N, N);
+    const N = quality === 'low' ? (z <= 4 ? 32 : 64) : z <= 4 ? 64 : 128;
+    const img = new ImageData(N, N);
+    const lut = def.phase ? null : lutOf(def);
     for (let py = 0; py < N; py++) {
-      const lat = tile2lat(y + (py + 0.5) / N, z);
+      const lat = tile2lat(y + py / (N - 1), z);
       for (let px = 0; px < N; px++) {
-        const lon = tile2lon(x + (px + 0.5) / N, z);
-        const v = def.organic ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
-        let [r, g, b, a] = def.color(v);
-        if (def.phase) {
-          const snow = sampler.sample('temperature_2m', lat, lon) < SNOW_BELOW;
-          if (snow) [r, g, b, a] = snowColor(v);
-          else if (def.phase === 'snow-only') a = 0;
-        }
+        const lon = tile2lon(x + px / (N - 1), z);
+        const v = def.organic && !wxData ? organicSample(def, sampler, lat, lon) : sampler.sample(def.variable, lat, lon);
         const o = (py * N + px) * 4;
+        if (lut) {
+          paint(img.data, o, lut, v);
+          continue;
+        }
+        let [r, g, b, a] = def.color(v);
+        const snow = sampler.sample('temperature_2m', lat, lon) < SNOW_BELOW;
+        if (snow) [r, g, b, a] = snowColor(v);
+        else if (def.phase === 'snow-only') a = 0;
         img.data[o] = r;
         img.data[o + 1] = g;
         img.data[o + 2] = b;
         img.data[o + 3] = a;
       }
+      await sl.tick();
     }
-    ctx.putImageData(img, 0, 0);
-    return { data: await createImageBitmap(canvas) };
-  });
+    return { data: await toBitmap(img) };
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@
 // Setup: Worker → Settings → Bindings → Add → R2 bucket, variable name `WX`, bucket = the weather bucket.
 // The Worker address (https://<name>.<account>.workers.dev) is the repository variable WX_PUBLIC_URL.
 
-const KEY = /^v1\/(latest\.json|\d{10}\/[a-z0-9_]+\/(o|t\d_\d)\.owx)$/;
+const KEY = /^v1\/(latest\.json|(\d{10}|static)\/[a-z0-9_]+\/(o|t\d_\d)\.owx)$/;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
