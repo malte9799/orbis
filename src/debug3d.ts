@@ -12,7 +12,7 @@ const map = new MlMap({
   style: {
     version: 8,
     sources: { sat: { type: 'raster', tileSize: 256, maxzoom: 19, tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], attribution: 'Esri' } },
-    layers: [{ id: 'sat', type: 'raster', source: 'sat' }],
+    layers: [{ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 0 } }],
   },
 });
 const BASEMAPS: { id: string; label: string; tiles?: string[]; maxzoom: number; attribution: string; background?: string }[] = [
@@ -56,7 +56,7 @@ map.on('style.load', () => {
     if (b.background) map.addLayer({ id: `bm-${b.id}`, type: 'background', paint: { 'background-color': b.background } });
     else {
       map.addSource(`bm-${b.id}`, { type: 'raster', tileSize: 256, maxzoom: b.maxzoom, tiles: b.tiles!, attribution: b.attribution });
-      map.addLayer({ id: `bm-${b.id}`, type: 'raster', source: `bm-${b.id}` });
+      map.addLayer({ id: `bm-${b.id}`, type: 'raster', source: `bm-${b.id}`, paint: { 'raster-fade-duration': 0 } });
     }
   }
   showBasemap();
@@ -183,7 +183,9 @@ setInterval(() => {
   }
   const c = map.getCenter();
   const lines = layer.debugInfo().map((i) => `${i.id}  ·  ${i.loaded} geladen  ·  ${i.failed} Fehler  ·  ${i.visible} sichtbar`);
-  status.textContent = `${map.getZoom().toFixed(1)} Zoom  ·  ${Math.round(map.getPitch())}° Neigung\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
+  const sourceId = basemap === 'sat' ? 'sat' : `bm-${basemap}`;
+  const ground = map.getSource(sourceId) ? (map.isSourceLoaded(sourceId) ? 'Grundkarte bereit' : 'Grundkarte lädt') : 'keine Grundkarte';
+  status.textContent = `${map.getZoom().toFixed(1)} Zoom  ·  ${Math.round(map.getPitch())}° Neigung  ·  ${ground}\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
 }, 500);
 
 (window as unknown as { layer: Tiles3DLayer; map: MlMap }).layer = layer;
