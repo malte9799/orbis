@@ -43,6 +43,72 @@ fotorealistische Dataset in Deutschland:
   ein öffentliches Streaming-Dienst (`tileset.json`) existiert aber (Stand Nov 2026) nicht —
   nur der CODE-DE-Download. Selbst-Hosting der b3dm auf eigenem CDN wäre realistisch.
 
+### Neue Funde (2. Nachtrag): Hamburg, Berlin und die Eigenbau-Route
+
+### Hamburg: landesweites Foto-Mesh als OGC 3D Tiles (Open Data!)
+
+Hamburg (LGV) hat das, was wir für unmöglich hielten: ein **ganze Stadt deckendes Foto-Mesh
+als 3D Tiles zum freien Download** — im Transparenzportal (`data.gov.de/suche/daten/3d-mesh-hamburgda6b9`,
+dl-de/by-2-0):
+
+- Download: `https://www.daten-hamburg.de/opendata/3dmesh/3D-Mesh_HH_2022.zip` — **13,2 GB**, geprüft erreichbar.
+- Inhalt geprüft: fertiger 3D-Tiles-Baum (`…/3Dtiles_reduziert-aufgeloest/hamburg-b01-b02-3dtiles-lod3/…`,
+  Tileset + Kacheln), reduzierte Auflösung, Basis Schrägbildbefliegung 2018 (Datensatzstand 2022,
+  Metadaten 06/2026 fortgeführt).
+- Weg zum Eigen-Streaming: ZIP einmal entpacken, statisch hosten (ZIP kann der Browser nicht öffnen),
+  `tileset.json` als Quelle eintragen. Lizenz: dl-de/by-2, Namensnennung LGV Hamburg.
+- Ausblick: Hamburgs Bildflug 2026 (GeoFly) enthält **optional 3D-Mesh** — neue Auflage zu erwarten.
+- Parallel offen: 3D-Stadtmodell Hamburg LoD3.0-HH (CityGML, 5 Areas, offen *untexturiert*; die 5-cm-
+  Fassadentexturen bleiben FHH-intern aus Datenschutzgründen) — kein Mesh.
+
+### Berlin: eigenes Foto-Mesh (kein Streaming)
+
+„3D-Meshmodell Berlin“ (Berlin Partner / BLC, veröffentlicht durch die Senatsverwaltung für Wirtschaft):
+Multiperspektiv-Befliegung **Juni 2025** für das gesamte Stadtgebiet (inkl. BER); Vorgängermodelle seit 2019.
+
+- Bezug: Berlin-3D-Downloadportal `businesslocationcenter.de/berlin3d-downloadportal` — Datenkacheln als
+  **OBJ + Texturen** (ZIP), kostenfrei, interaktive Selektion. Stand 11/2026: Portal in Wartungsarbeiten.
+- Lizenz: „eingeschränkte Nutzung“ (other-closed), Namensnennung „Berlin Partner für Wirtschaft und
+  Technologie GmbH“ — vor öffentlichem Einsatz die Nutzungsbedingungen im Portal lesen.
+- Kein 3D-Tiles-Dienst; für die App müssten die Kacheln konvertiert werden (z. B. `py3dtiles`) und
+  selbst gehostet.
+
+### Kommunale Meshes aus den Befliegungsaufträgen 2025 (GeoFly-Referenzliste)
+
+Befliegungen 2025 mit Produktebene „3D-Mesh“ — die Veröffentlichung ist unverbindlich, aber als
+„zu erwarten“ notiert: **Bremen** (480 km²), **Trier** (104 km²), **Mainova/Frankfurt am Main**
+(891 km² — Frankfurts eigenes Mesh könnte das unklare ArcGIS-Demo-Frankfurt-Mesh ersetzen),
+**Stuttgart** (910 km², Fortführung; Esri-Demo-Mesh 2023 läuft aus). **Magdeburg 2023**: bislang nur
+True-Ortho + Oberflächenmodell, **kein Mesh** — dort bleibt LoD2 + DOP.
+
+### Eigene Quelle für ganz Deutschland: bDOM/DOM + DOP selbst meshen
+
+Kern der Recherche: das NRW-Landes-Mesh ist kein proprietärer Sonderweg — es wird **aus dem
+Nadir-Jahrgang (10 cm) der regulären Landes-Luftbildproduktion** gerechnet. Diese Zutaten liefern fast
+alle Bundesländer als Open Data (bzw. gegen einmalige 60-€-Servicegebühr):
+
+| Zutat | Inhalt | Status |
+|---|---|---|
+| DOP20 / TrueDOP (je Land) | farbiges Orthophoto (Textur) | vielerorts dl-de/zero (NRW, BW, Berlin, Hamburg…) |
+| DOM1 / DOM5 (je Land) | Oberflächenmodell (Dächer, Vegetation) | meist dl-de/zero |
+| **bDOM (je Land)** | **farbige DSM-Punktwolke aus Bildkorrelation (LAS/LAZ, RGBI)** | BW: landesweit, jährlich aktualisiert (Open Data; Bestellung, da zu groß fürs Portal); gleiches Produkt in HHs 2026-Programm; die AdV führt es als landesweiten Produktstandard ein |
+
+Weg zur eigenen, lizenzbereinigten Landeskarte:
+
+1. **Pro Land** bDOM (Farbe ist bereits gebacken) holen — oder DOM + DOP-Drape (Fallback).
+2. **Meshen** pro Kachel (Höhenfeld aus LAS/DOM → Dreiecke, bei bDOM Vertex-Farben) → glb/b3dm.
+3. **3D-Tiles** bauen (implizites Quadtree wie NRW — die Engine liest das inzwischen; alternativ explizit).
+4. **Eigenes Hosting** (statisch, CDN) + eigene `tileset.json` — dl-de-Basis, kein Schlüssel, kein Google-Lizenzrisiko.
+
+Grenzen, die bleiben:
+
+- **Fassaden**: ein Nadir-Mesh bleibt 2,5D (wie NRW amtlich). Echte Fassaden brauchen Schrägbilder —
+  offen liegen sie nur für einzelne Städte (NRW Wuppertal 03/2024: 33.977 Bilder, dl-de/zero; Bremen).
+- **Rechenmenge statt Lizenzfrage**: bDOM ≈ 25 Pkt./m² ⇒ mehrere TB je Bundesland; skaliert pro Land,
+  nicht pro Stadt.
+- **Für NRW ist der Eigenbau erledigt**: das amtliche Landes-Mesh kommt fertig als **b3dm** (CODE-DE,
+  Registrierung, dl-de/by-2) bzw. 81er-SLPK (Open Data) — downloaden statt selbst rechnen.
+
 ### DE: fotorealistische Stadt-Modelle ohne 3D-Tiles (Open-Data-/Viewer-Projekte)
 
 Diese Städte haben ein Foto-Mesh oder texturiertes 3D-Stadtmodell, aber keinen
