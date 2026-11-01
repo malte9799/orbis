@@ -3,6 +3,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Tiles3DLayer, setTiles3dOptions, setTiles3dSelection } from './globe/tiles3d';
 import { TILES_SOURCES } from './globe/tiles3dSources';
+import { baseLayers, OFM_ATTR, OFM_SOURCE } from './globe/vector';
 import { store } from './store';
 
 setWorkerUrl(workerUrl);
@@ -15,22 +16,21 @@ const map = new MlMap({
     layers: [{ id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 0 } }],
   },
 });
-const BASEMAPS: { id: string; label: string; tiles?: string[]; maxzoom: number; attribution: string; background?: string }[] = [
+const BASEMAPS: { id: string; label: string; tiles?: string[]; maxzoom?: number; attribution: string }[] = [
   { id: 'sat', label: 'Satellit · Esri', maxzoom: 19, attribution: 'Esri', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] },
-  { id: 'dark', label: 'Dunkel · CARTO', maxzoom: 20, attribution: '© CARTO · © OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png`) },
-  { id: 'light', label: 'Hell · CARTO', maxzoom: 20, attribution: '© CARTO · © OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`) },
   { id: 'osm', label: 'OpenStreetMap', maxzoom: 19, attribution: '© OpenStreetMap', tiles: ['a', 'b', 'c'].map((x) => `https://${x}.tile.openstreetmap.org/{z}/{x}/{y}.png`) },
-  { id: 'plain-dark', label: 'Einfarbig dunkel', maxzoom: 0, attribution: '', background: '#14181f' },
-  { id: 'plain-light', label: 'Einfarbig hell', maxzoom: 0, attribution: '', background: '#e8e8e8' },
+  { id: 'dark', label: 'Dunkel', attribution: OFM_ATTR },
+  { id: 'light', label: 'Hell', attribution: OFM_ATTR },
 ];
 const BASEMAP_KEY = 'orbis.debug3d.basemap';
 let basemap = (() => {
   try { const value = localStorage.getItem(BASEMAP_KEY); return BASEMAPS.some((b) => b.id === value) ? value! : 'sat'; } catch { return 'sat'; }
 })();
 const showBasemap = () => {
-  for (const b of BASEMAPS) {
-    const id = b.id === 'sat' ? 'sat' : `bm-${b.id}`;
-    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', b.id === basemap ? 'visible' : 'none');
+  const raster: Record<string, string> = { sat: 'sat', osm: 'bm-osm' };
+  for (const l of map.getStyle().layers ?? []) {
+    if (raster[l.id]) map.setLayoutProperty(l.id, 'visibility', basemap === raster[l.id] ? 'visible' : 'none');
+    else if (l.id.startsWith('vbase-')) map.setLayoutProperty(l.id, 'visibility', l.id.startsWith(`vbase-${basemap}-`) ? 'visible' : 'none');
   }
 };
 
@@ -51,14 +51,13 @@ map.on('error', (e) => { note = `Karte: ${String(e.error?.message ?? e)}`; noteE
 
 map.on('style.load', () => {
   setTiles3dSelection(map, []);
-  for (const b of BASEMAPS) {
-    if (b.id === 'sat') continue;
-    if (b.background) map.addLayer({ id: `bm-${b.id}`, type: 'background', paint: { 'background-color': b.background } });
-    else {
-      map.addSource(`bm-${b.id}`, { type: 'raster', tileSize: 256, maxzoom: b.maxzoom, tiles: b.tiles!, attribution: b.attribution });
-      map.addLayer({ id: `bm-${b.id}`, type: 'raster', source: `bm-${b.id}`, paint: { 'raster-fade-duration': 0 } });
-    }
+  for (const atlas of BASEMAPS) {
+    if (atlas.id === 'sat' || !atlas.tiles) continue;
+    map.addSource(`bm-${atlas.id}`, { type: 'raster', tileSize: 256, maxzoom: atlas.maxzoom, tiles: atlas.tiles, attribution: atlas.attribution });
+    map.addLayer({ id: `bm-${atlas.id}`, type: 'raster', source: `bm-${atlas.id}`, paint: { 'raster-fade-duration': 0 } });
   }
+  map.addSource('ofm', { type: 'vector', url: OFM_SOURCE, attribution: OFM_ATTR });
+  for (const theme of ['dark', 'light'] as const) for (const l of baseLayers(theme)) map.addLayer(l);
   showBasemap();
   map.addSource('outline', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addSource('dem', { type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14, tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], attribution: 'Mapzen / AWS Terrain Tiles' });
@@ -183,7 +182,7 @@ setInterval(() => {
   }
   const c = map.getCenter();
   const lines = layer.debugInfo().map((i) => `${i.id}  ·  ${i.loaded} geladen  ·  ${i.failed} Fehler  ·  ${i.visible} sichtbar`);
-  const sourceId = basemap === 'sat' ? 'sat' : `bm-${basemap}`;
+  const sourceId = basemap === 'sat' ? 'sat' : basemap === 'dark' || basemap === 'light' ? 'ofm' : 'bm-osm';
   const ground = map.getSource(sourceId) ? (map.isSourceLoaded(sourceId) ? 'Grundkarte bereit' : 'Grundkarte lädt') : 'keine Grundkarte';
   status.textContent = `${map.getZoom().toFixed(1)} Zoom  ·  ${Math.round(map.getPitch())}° Neigung  ·  ${ground}\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
 }, 500);
