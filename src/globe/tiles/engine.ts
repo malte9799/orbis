@@ -53,6 +53,8 @@ interface Node {
   err: number;
   ndc: number;
   dist: number;
+  /** next child index to resume when a frame traversal is capped */
+  visitCursor: number;
 }
 
 interface Job {
@@ -77,6 +79,10 @@ export interface EngineParams {
 
 const MAX_INFLIGHT = 24;
 const MAX_JSON = 6;
+// National tilesets can expose hundreds of thousands of leaf tiles at a modest zoom.
+// Bound frame traversal and candidate work instead of enumerating and sorting the whole visible tree.
+const MAX_VISITS_PER_FRAME = 2500;
+const MAX_WANTS = 256;
 const BUILD_BUDGET_MS = 4;
 const BUILD_MAX = 4;
 const KEEP_MS = 1500;
@@ -161,6 +167,7 @@ export class TileEngine {
   private viewProj = new THREE.Matrix4();
   private denom = 1;
   private wants = new Map<number, Want>();
+  private visitsThisFrame = 0;
   private disposed = false;
   private bytesLoaded = 0;
   private p!: EngineParams;
@@ -237,7 +244,7 @@ export class TileEngine {
     const refine = String(raw.refine ?? (parent ? (parent.add ? 'ADD' : 'REPLACE') : 'REPLACE')).toUpperCase();
     const node: Node = {
       id: this.nextId++, parent, children: [], depth, ge: raw.geometricError ?? 0, add: refine === 'ADD', bv, centre, radius, tf, uri,
-      external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, tries: 0, retryAt: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, dist: 0,
+      external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, tries: 0, retryAt: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, dist: 0, visitCursor: 0,
     };
     if (imp) {
       node.imp = { level: 0, x: 0, y: 0 };
@@ -381,6 +388,7 @@ export class TileEngine {
     if (!this.top) return;
     this.wants.clear();
     this.drawn.clear();
+    this.visitsThisFrame = 0;
     this.visit(this.top, false, []);
 
     for (const n of this.loaded) {
@@ -408,6 +416,15 @@ export class TileEngine {
 
   /** Walks one subtree. Returns whether its area is covered by something drawn. */
   private visit(n: Node, loadedAncestor: boolean, stack: Node[]): boolean {
+    if (this.visitsThisFrame >= MAX_VISITS_PER_FRAME) {
+      // Keep a loaded coarse tile visible while its descendants wait for a later frame.
+      if (n.uri && !n.external && n.state === 2) {
+        this.drawn.add(n);
+        return true;
+      }
+      return false;
+    }
+    this.visitsThisFrame++;
     if (!n.bv.intersectsFrustum(this.frustum)) return true; // out of view: nothing to cover
     n.lastSeen = this.frame;
     const dist = n.bv.distanceToPoint(this.cam);
@@ -444,7 +461,16 @@ export class TileEngine {
     const anc = loadedAncestor || covered;
     let all = true;
     stack.push(n);
-    for (const c of n.children) if (!this.visit(c, anc, stack)) all = false;
+    const childCount = n.children.length;
+    const start = childCount ? n.visitCursor % childCount : 0;
+    let visitedChildren = 0;
+    for (let offset = 0; offset < childCount && this.visitsThisFrame < MAX_VISITS_PER_FRAME; offset++) {
+      const c = n.children[(start + offset) % childCount];
+      visitedChildren++;
+      if (!this.visit(c, anc, stack)) all = false;
+    }
+    if (childCount) n.visitCursor = (start + Math.max(1, visitedChildren)) % childCount;
+    if (visitedChildren < childCount) all = false;
     stack.pop();
     if (n.add) {
       if (covered) this.drawn.add(n);
@@ -461,7 +487,13 @@ export class TileEngine {
   /** Draws the loaded tiles below `n` (up to `levels` down) in its place; returns whether they cover its whole area. */
   private drawBelow(n: Node, levels: number): boolean {
     let all = true;
-    for (const c of n.children) {
+    const childCount = n.children.length;
+    const start = childCount ? n.visitCursor % childCount : 0;
+    let visitedChildren = 0;
+    for (let offset = 0; offset < childCount && this.visitsThisFrame < MAX_VISITS_PER_FRAME; offset++) {
+      const c = n.children[(start + offset) % childCount];
+      visitedChildren++;
+      this.visitsThisFrame++;
       if (!c.bv.intersectsFrustum(this.frustum)) continue;
       c.lastSeen = this.frame;
       if (c.state === 2) this.drawn.add(c);
@@ -469,6 +501,8 @@ export class TileEngine {
       else if (levels > 1 && c.children.length && this.drawBelow(c, levels - 1)) continue;
       else all = false;
     }
+    if (childCount) n.visitCursor = (start + Math.max(1, visitedChildren)) % childCount;
+    if (visitedChildren < childCount) all = false;
     return all;
   }
 
@@ -478,7 +512,23 @@ export class TileEngine {
       const w = this.wants.get(x.id);
       if (!w || w.tier > t) {
         this.rank(x);
-        this.wants.set(x.id, { node: x, tier: t });
+        const candidate = { node: x, tier: t };
+        if (w) {
+          this.wants.set(x.id, candidate);
+        } else if (this.wants.size < MAX_WANTS) {
+          this.wants.set(x.id, candidate);
+        } else {
+          let worstId = -1;
+          let worstKey = -Infinity;
+          for (const [id, current] of this.wants) {
+            const key = this.key(current);
+            if (key > worstKey) { worstKey = key; worstId = id; }
+          }
+          if (this.key(candidate) < worstKey) {
+            this.wants.delete(worstId);
+            this.wants.set(x.id, candidate);
+          }
+        }
       }
     };
     put(n, tier);
