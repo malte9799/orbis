@@ -54,24 +54,44 @@ const bearingDeg = (aLon: number, aLat: number, bLon: number, bLat: number) => {
 /** difference between two bearings, −180…180 */
 const bearingDelta = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180;
 
-/** The runway the aircraft uses next (OSM): centre line ends, matched heading, threshold towards it. */
-function runwayFor(lines: Iterable<Line>, lon: number, lat: number, track: number): RunwayRef | null {
+/** The runway the aircraft will use next (OSM): by the offset from the extended centre line and
+ * heading fit — not by the distance to the runway, otherwise two similarly pointing runways
+ * (parallel runways like 25C/25L, crossing runways) decide the winner at random. Threshold and
+ * centre direction refer to the runway end the aircraft flies toward. */
+export function runwayFor(lines: Iterable<Line>, lon: number, lat: number, track: number): RunwayRef | null {
+  const cosLa = Math.cos((lat * Math.PI) / 180);
   let best: RunwayRef | null = null;
-  let bestD = 15000;
+  let bestScore = Infinity;
   for (const l of lines) {
     if (l.properties?.kind !== 'runway' || l.geometry.type !== 'LineString') continue;
     const c = l.geometry.coordinates;
     if (c.length < 2) continue;
     const [a, b] = [c[0], c[c.length - 1]];
-    const d = near((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, lon, lat);
-    if (d >= bestD) continue;
     const hAB = bearingDeg(a[0], a[1], b[0], b[1]);
     const dAB = Math.abs(bearingDelta(track, hAB));
     const dBA = Math.abs(bearingDelta(track, hAB + 180));
-    if (Math.min(dAB, dBA) > 50) continue;
     const useAB = dAB <= dBA;
-    bestD = d;
-    best = { thLon: (useAB ? a : b)[0], thLat: (useAB ? a : b)[1], hdg: useAB ? hAB : (hAB + 180) % 360, lenM: near(a[0], a[1], b[0], b[1]) };
+    const hdg = useAB ? hAB : (hAB + 180) % 360;
+    const delta = useAB ? dAB : dBA;
+    if (delta > 50) continue;
+    const lenM = near(a[0], a[1], b[0], b[1]);
+    const thLon = (useAB ? a : b)[0];
+    const thLat = (useAB ? a : b)[1];
+    // the aircraft relative to the threshold in metres (east, north): on the approach axis it
+    // must still be before the runway (or briefly on it) and close to the extended centre line
+    const ex = (lon - thLon) * cosLa * 111320;
+    const ey = (lat - thLat) * 111320;
+    const hr = (hdg * Math.PI) / 180;
+    const along = ex * Math.sin(hr) + ey * Math.cos(hr); // < 0: before the threshold
+    if (along > lenM + 5000) continue;
+    const perp = Math.abs(ex * Math.cos(hr) - ey * Math.sin(hr));
+    if (perp > 15000) continue;
+    // distance to the centre line decides; a small penalty per degree keeps true finals on top
+    const score = perp + delta * 45;
+    if (score < bestScore) {
+      bestScore = score;
+      best = { thLon, thLat, hdg, lenM };
+    }
   }
   return best;
 }
