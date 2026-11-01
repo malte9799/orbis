@@ -53,8 +53,8 @@ interface Node {
   err: number;
   ndc: number;
   dist: number;
-  /** next child index to resume when a frame traversal is capped */
-  visitCursor: number;
+  /** frame count since when the tile has not been drawn (0 = drawn this frame); for eviction */
+  stale: number;
 }
 
 interface Job {
@@ -86,6 +86,9 @@ const MAX_WANTS = 256;
 const BUILD_BUDGET_MS = 4;
 const BUILD_MAX = 4;
 const KEEP_MS = 1500;
+/** an undrawn tile that is still in view may stand in again right away (zooming back in):
+ *  unload it only after this many frames of being covered (~15 s at 60 fps) */
+const EVICT_GRACE_FRAMES = 900;
 const MAX_TRIES = 3;
 /** metres a region bounding volume is made taller by, up and down */
 const REGION_PAD = 150;
@@ -244,7 +247,7 @@ export class TileEngine {
     const refine = String(raw.refine ?? (parent ? (parent.add ? 'ADD' : 'REPLACE') : 'REPLACE')).toUpperCase();
     const node: Node = {
       id: this.nextId++, parent, children: [], depth, ge: raw.geometricError ?? 0, add: refine === 'ADD', bv, centre, radius, tf, uri,
-      external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, tries: 0, retryAt: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, dist: 0, visitCursor: 0,
+      external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, tries: 0, retryAt: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, dist: 0, stale: 0,
     };
     if (imp) {
       node.imp = { level: 0, x: 0, y: 0 };
@@ -394,6 +397,7 @@ export class TileEngine {
     for (const n of this.loaded) {
       const on = this.drawn.has(n);
       if (n.group && n.group.visible !== on) n.group.visible = on;
+      n.stale = on ? 0 : n.stale || this.frame;
     }
     this.schedule();
     this.evict();
@@ -461,16 +465,12 @@ export class TileEngine {
     const anc = loadedAncestor || covered;
     let all = true;
     stack.push(n);
-    const childCount = n.children.length;
-    const start = childCount ? n.visitCursor % childCount : 0;
-    let visitedChildren = 0;
-    for (let offset = 0; offset < childCount && this.visitsThisFrame < MAX_VISITS_PER_FRAME; offset++) {
-      const c = n.children[(start + offset) % childCount];
-      visitedChildren++;
+    // Fixed child order (no round-robin resume): which tiles land in `drawn` must not change from
+    // frame to frame, or large loaded trees flicker hard when the traversal budget runs out.
+    for (const c of n.children) {
+      if (this.visitsThisFrame >= MAX_VISITS_PER_FRAME) { all = false; break; }
       if (!this.visit(c, anc, stack)) all = false;
     }
-    if (childCount) n.visitCursor = (start + Math.max(1, visitedChildren)) % childCount;
-    if (visitedChildren < childCount) all = false;
     stack.pop();
     if (n.add) {
       if (covered) this.drawn.add(n);
@@ -487,12 +487,8 @@ export class TileEngine {
   /** Draws the loaded tiles below `n` (up to `levels` down) in its place; returns whether they cover its whole area. */
   private drawBelow(n: Node, levels: number): boolean {
     let all = true;
-    const childCount = n.children.length;
-    const start = childCount ? n.visitCursor % childCount : 0;
-    let visitedChildren = 0;
-    for (let offset = 0; offset < childCount && this.visitsThisFrame < MAX_VISITS_PER_FRAME; offset++) {
-      const c = n.children[(start + offset) % childCount];
-      visitedChildren++;
+    for (const c of n.children) {
+      if (this.visitsThisFrame >= MAX_VISITS_PER_FRAME) { all = false; break; }
       this.visitsThisFrame++;
       if (!c.bv.intersectsFrustum(this.frustum)) continue;
       c.lastSeen = this.frame;
@@ -501,8 +497,6 @@ export class TileEngine {
       else if (levels > 1 && c.children.length && this.drawBelow(c, levels - 1)) continue;
       else all = false;
     }
-    if (childCount) n.visitCursor = (start + Math.max(1, visitedChildren)) % childCount;
-    if (visitedChildren < childCount) all = false;
     return all;
   }
 
@@ -756,9 +750,18 @@ export class TileEngine {
 
   private evict() {
     if (totalBytes <= BUDGET) return;
-    const old = [...this.loaded].filter((n) => !this.drawn.has(n) && n.lastSeen < this.frame - 5).sort((a, b) => a.lastSeen - b.lastSeen);
-    for (const n of old) {
+    const candidates: { n: Node; inView: boolean }[] = [];
+    for (const n of this.loaded) {
+      if (this.drawn.has(n)) continue;
+      candidates.push({ n, inView: n.bv.intersectsFrustum(this.frustum) });
+    }
+    // Out of view first, oldest seen first. Tiles in view are covered by a coarser tile right
+    // now, but are wanted again as soon as one zooms back in: unloading them means holes and
+    // re-fetch churn — the flicker when zooming out. They only give way after a long grace.
+    candidates.sort((a, b) => (a.inView ? 1 : 0) - (b.inView ? 1 : 0) || a.n.lastSeen - b.n.lastSeen);
+    for (const { n, inView } of candidates) {
       if (totalBytes <= BUDGET * 0.8) break;
+      if (inView && this.frame - n.stale < EVICT_GRACE_FRAMES) break; // the rest are even younger
       this.unload(n);
     }
   }
