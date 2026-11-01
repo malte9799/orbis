@@ -1,7 +1,7 @@
-# 3D-Kacheln: gefundene Quellen, die nicht eingebaut sind
+# 3D-Kacheln: gefundene Quellen und Einbaustatus
 
-Stand der Suche: Oktober 2026 (Nachtrag November 2026). Eingebaut sind alle Quellen in `src/globe/tiles3dSources.ts`.
-Hier steht, was wir gefunden, aber **nicht** aufgenommen haben, und warum.
+Stand der Suche: Oktober/November 2026. Der aktuelle Einbaustatus steht in `src/globe/tiles3dSources.ts`.
+Diese Notiz hält die Recherche, Nutzungsbedingungen und noch nicht eingebauten Quellen fest.
 
 ## Nachtrag November 2026: neue Funde (Schwerpunkt Deutschland, fotorealistisch)
 
@@ -15,12 +15,13 @@ allerdings nur als Nadir-DSM-Mesh (2,5D) und bisher ohne 3D-Tiles-Streaming-Dien
 | Quelle | Inhalt | URL | Lizenz |
 |---|---|---|---|
 | DE NRW 3D-Gebäudemodell LoD2 | ~11,6 Mio. Gebäude NRW mit standardisierten Dachformen, WGS84, implizites Quadtree-Tiling, glb-Kacheln, Metadaten-Schema | `https://ogc-api.nrw.de/3dg/v1/collections/building/3dtiles` | dl-de/zero-2.0, keine Einschränkungen |
-| CH Basel-Stadt „3D-Tiles BS" | b3dm-Objektkacheln: Gebäude, Brücken, Bäume, Wald (aktuell gepflegt) | über `https://www.bs.ch/bvd/grundbuch-und-vermessungsamt/geo/geodaten/geodienste` (Link „3D-Tiles BS") | kostenlos (Basel OGD); genaue Tileset-URLs dort verlinkt |
+| DE Brandenburg 3D-Meshes | Landesweites photogrammetrisches Oberflächenmodell, OGC 3D Tiles 1.1 | [Tileset](https://isk.geobasis-bb.de/geodienste/lgb/3d_sentinel/3dmeshes/tileset.json) | dl-de/by-2-0, © GeoBasis-DE/LGB; in Orbis eingetragen, Sichtprüfung ausstehend |
+| CH Basel-Stadt „3D-Tiles BS" | b3dm: Gebäude, weitere Objekte, Brücken, Bäume und Wald | [fünf Tileset-Einstiege](https://www.bs.ch/bvd/grundbuch-und-vermessungsamt/geo/geodienste) | kostenloser öffentlicher Dienst laut Kanton; in Orbis eingetragen |
 
 Anmerkungen:
 - NRW LoD2 nutzt **implizites Tiling** (Quadtree, Subtree-Dateien `{level}_{x}_{y}.subtree`, glb-Kacheln) und
   ein eigenes Metadaten-Schema (`schemaUri`). Die Engine v2 liest implizites Tiling inzwischen
-  (`src/globe/tiles/implicit.ts`); die Quelle ist als „DE NRW LoD2" eingebaut.
+  (`src/globe/tiles/implicit.ts`); die Quelle ist als „DE NRW LoD2" eingebaut. Im Debug-Katalog stehen außerdem Brandenburg und die fünf Basel-Tilesets.
 - Das nackte LoD2 von NRW ist *nicht* texturiert — für Foto-Look bräuchte es eine
   Überblendung mit DOP (siehe „Selbst bauen“ unten) oder das NRW-Mesh (siehe nächster Abschnitt).
 

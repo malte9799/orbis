@@ -289,6 +289,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Quelle | Verwendung | Lizenz |
 |---|---|---|
+| [NRW 3D-Gebäudemodell LoD2](https://ogc-api.nrw.de/3dg/v1/collections/building/3dtiles) | Landesweite Gebäudekacheln, implizites Quadtree-Tiling und glb im 3D-Tiles-Viewer | 🟢 dl-de/zero-2.0 · © Bezirksregierung Köln, Geobasis NRW |
+| [Brandenburg 3D-Mesh-Dienst](https://isk.geobasis-bb.de/geodienste/lgb/3d_sentinel/3dmeshes/tileset.json) | Photogrammetrisches Landes-Oberflächenmodell im 3D-Tiles-Viewer; Fassadentiefe nicht belegt | 🟢 dl-de/by-2-0 · © GeoBasis-DE/LGB |
+| [Basel-Stadt 3D-Tiles](https://www.bs.ch/bvd/grundbuch-und-vermessungsamt/geo/geodienste) | Gebäude, weitere Objekte, Brücken, Bäume und Wald; fünf einzelne Tilesets | 🟢 kostenloser öffentlicher Dienst laut Kanton · © Kanton Basel-Stadt |
 | [NASA 3D Resources](https://github.com/nasa/NASA-3D-Resources) | JWST, Hubble, ISS (≈ 96 MB, beim Deploy geladen), Voyager, Pioneer, Parker, Juno, Perseverance/Curiosity, LRO, Asteroiden (Eros, Bennu, Itokawa, Kleopatra …) | frei verwendbar |
 | ESA (Cosmographia-Modelle aus den [SPICE-Daten](https://spiftp.esac.esa.int/data/SPICE/)) | JUICE, BepiColombo | © ESA – Lizenz für Weitergabe ungeklärt |
 | Prozedural (`src/space/surface-models.ts`) | Lander, Flaggen, Fahrzeuge an Mond- und Mars-Landestellen | eigener Code |

@@ -9,7 +9,7 @@ export interface TilesSourceDef {
   attribution: string;
   textured?: boolean;
   /** what the data is: photo mesh, plain building blocks, LoD2 city model (roof shapes) or terrain */
-  kind: 'Foto-Mesh' | 'Gebäude-Blöcke' | 'LoD2' | 'Gelände';
+  kind: 'Foto-Mesh' | 'Gebäude-Blöcke' | 'LoD2' | 'Gelände' | '3D-Objekte';
   /** not a tileset of its own: expands to tilesets chosen by location (see plateau.ts) */
   dynamic?: boolean;
   /** where the source is worth a look: [lon, lat, zoom] (the chip in the settings flies there) */
@@ -27,6 +27,12 @@ export interface TilesSourceDef {
 export const TILES_SOURCES: TilesSourceDef[] = [
   { id: 'basemap', kind: 'LoD2', at: [13.4132, 52.5219, 16], label: 'basemap.de (DE)', hint: 'LoD2-Gebäude Deutschland, BKG', url: 'https://sgx.geodatenzentrum.de/gdz_basemapde_3d_gebaeude/lod2_4326_null.json', attribution: '© GeoBasis-DE / BKG, basemap.de', open: true, links: [{ text: 'dl-de/by-2-0', href: 'https://www.govdata.de/dl-de/by-2-0' }] },
   { id: 'nrwlod2', kind: 'LoD2', at: [6.9583, 50.9413, 16], label: 'DE NRW LoD2', hint: '11,6 Mio. LoD2-Gebäude NRW, OGC-API mit implizitem Tiling (Karte fliegt nach Köln)', url: 'https://ogc-api.nrw.de/3dg/v1/collections/building/3dtiles', attribution: '© Bezirksregierung Köln, Geobasis NRW', open: true, links: [{ text: 'dl-de/zero-2.0', href: 'https://www.govdata.de/dl-de/zero-2-0' }] },
+  { id: 'brandenburg', kind: 'Foto-Mesh', at: [13.0645, 52.3906, 14], label: 'DE Brandenburg', hint: 'Landesweites photogrammetrisches Oberflächenmodell; Fassadentiefe nicht belegt', textured: true, url: 'https://isk.geobasis-bb.de/geodienste/lgb/3d_sentinel/3dmeshes/tileset.json', attribution: '© GeoBasis-DE/LGB', open: true, links: [{ text: 'dl-de/by-2-0', href: 'https://www.govdata.de/dl-de/by-2-0' }] },
+  { id: 'basel-buildings', kind: 'Gebäude-Blöcke', at: [7.5886, 47.5596, 16], label: 'CH Basel · Gebäude', hint: 'Amtliches 3D-Stadtmodell; kostenloser öffentlicher Tiles-Dienst', url: 'https://3d.geo.bs.ch/cesium/tiles/av-gebaeude-basel-stadt/tileset.json', attribution: '© Kanton Basel-Stadt', open: true, links: [{ text: 'Dienstinfo', href: 'https://www.bs.ch/bvd/grundbuch-und-vermessungsamt/geo/geodienste' }] },
+  { id: 'basel-objects', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Weitere Objekte', hint: 'Weitere 3D-Objekte des Kantons', url: 'https://3d.geo.bs.ch/cesium/tiles/av-weitere-objekte/tileset.json', attribution: '© Kanton Basel-Stadt', open: true },
+  { id: 'basel-bridges', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Brücken', hint: 'Brücken des Kantons', url: 'https://3d.geo.bs.ch/cesium/tiles/av-bruecken/tileset.json', attribution: '© Kanton Basel-Stadt', open: true },
+  { id: 'basel-trees', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Bäume', hint: 'Vegetation: Einzelbäume', url: 'https://3d.geo.bs.ch/cesium/tiles/ba-vegetation-baeume/tileset.json', attribution: '© Kanton Basel-Stadt', open: true },
+  { id: 'basel-forest', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Wald', hint: 'Vegetation: Waldflächen', url: 'https://3d.geo.bs.ch/cesium/tiles/np-vegetation-wald/tileset.json', attribution: '© Kanton Basel-Stadt', open: true },
   { id: 'reearth', kind: 'Gebäude-Blöcke', at: [151.2153, -33.8568, 16], label: 'Re:Earth (Welt)', hint: 'Overture/OSM-Gebäude weltweit', url: 'https://buildings.reearth.land/tileset.json', attribution: '© OpenStreetMap contributors · © Overture Maps Foundation · Re:Earth Buildings', open: true, links: [{ text: 'ODbL', href: 'https://www.openstreetmap.org/copyright' }, { text: 'Overture', href: 'https://overturemaps.org/' }] },
   { id: 'ion', kind: 'Gebäude-Blöcke', at: [-0.0754, 51.5055, 16], label: 'Cesium OSM', hint: 'Cesium ion OSM Buildings, braucht Token', key: 'cesiumIon', attribution: 'Cesium ion · © OpenStreetMap' },
   { id: 'google', kind: 'Foto-Mesh', at: [-73.9857, 40.7484, 16], label: 'Google', hint: 'Fotorealistische 3D-Kacheln weltweit, braucht API-Key', key: 'googleTiles', textured: true, attribution: 'Google' },
