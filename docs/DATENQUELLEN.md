@@ -21,11 +21,12 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 7. [Verkehr & Verkehrsnetze](#7-verkehr--verkehrsnetze)
 8. [Kameras & Radio](#8-kameras--radio)
 9. [Infrastruktur](#9-infrastruktur)
-10. [Basiskarten, Gelände & Geokodierung](#10-basiskarten-gelände--geokodierung)
-11. [Weltall: Daten, Karten & Texturen](#11-weltall-daten-karten--texturen)
-12. [3D-Modelle](#12-3d-modelle)
-13. [Software & Bibliotheken](#13-software--bibliotheken)
-14. [Optionale Schlüssel](#14-optionale-schlüssel)
+10. [Politik & Wahlen](#10-politik--wahlen)
+11. [Basiskarten, Gelände & Geokodierung](#11-basiskarten-gelände--geokodierung)
+12. [Weltall: Daten, Karten & Texturen](#12-weltall-daten-karten--texturen)
+13. [3D-Modelle](#13-3d-modelle)
+14. [Software & Bibliotheken](#14-software--bibliotheken)
+15. [Optionale Schlüssel](#15-optionale-schlüssel)
 
 ---
 
@@ -214,7 +215,16 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [WRI Global Power Plant Database](https://datasets.wri.org/dataset/globalpowerplantdatabase) | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke | 🟢 CC BY 4.0 |
 | OpenStreetMap (Overpass) | Einzelne Windräder, Öl-/Gaspipelines | 🟢 ODbL |
 
-## 10. Basiskarten, Gelände & Geokodierung
+## 10. Politik & Wahlen
+
+| Anbieter | Verwendung in Orbis | Zugang |
+|---|---|---|
+| [GERDA – German Election Database](https://german-elections.com) (Heddesheimer, Hilbig, Sichart & Wiedemann 2025, [GitHub](https://github.com/awiedem/german_election_data)) | Wahlergebnisse der Ebene „Wahlen“: Bundestagswahlen (Kreisdaten → auf die 16 Bundesländer aggregiert) und Landtagswahlen (Wahlkreisdaten → aggregiert), ab 1990. Snapshot `public/data/wahlen/de.json`, gebaut von `scripts/wahlen-data.mjs` | 🟢 CC BY 4.0, 📦 |
+| [deutschlandGeoJSON](https://github.com/isellsoap/deutschlandGeoJSON) (aus GeoBasis-DE / BKG) | Bundesländer-Umrisse der Ebene „Wahlen“ (`public/data/wahlen/de-geo.json`) | 🟢 CC BY 4.0 (Daten © BKG), 📦 |
+
+Historische Wahlergebnisse ändern sich nicht mehr nachträglich, deshalb werden die Dateien einmalig gebaut und eingecheckt; kein laufender Abruf nötig.
+
+## 11. Basiskarten, Gelände & Geokodierung
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
@@ -232,7 +242,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Mapbox Directions](https://docs.mapbox.com/api/navigation/directions/) · [TomTom Routing](https://developer.tomtom.com/routing-api/documentation/routing/calculate-route) | Routenplanung mit Verkehrslage, mit dem vorhandenen Mapbox-/TomTom-Key | 🔑 kostenloses Kontingent |
 | [OpenRouteService](https://openrouteservice.org) · [GraphHopper](https://www.graphhopper.com) | Routenplanung (Rad/Fuß/Auto), nur mit eigenem Key | 🔑 kostenloses Kontingent |
 
-## 11. Weltall: Daten, Karten & Texturen
+## 12. Weltall: Daten, Karten & Texturen
 
 ### Bahnen & Positionen
 
@@ -289,7 +299,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NASA Missionsseiten](https://science.nasa.gov/missions/) · [ESA](https://www.esa.int) | Steckbriefe der Raumsonden (Voyager 1/2, New Horizons, Pioneer 10/11, Parker, JWST, SOHO, Juno, Europa Clipper, JUICE, BepiColombo …) |
 | [Wikipedia (de)](https://de.wikipedia.org) | Weiterführende Suche im Steckbrief |
 
-## 12. 3D-Modelle
+## 13. 3D-Modelle
 
 | Quelle | Verwendung | Lizenz |
 |---|---|---|
@@ -298,7 +308,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | Prozedural (`src/space/surface-models.ts`) | Lander, Flaggen, Fahrzeuge an Mond- und Mars-Landestellen | eigener Code |
 | [Draco](https://google.github.io/draco/) | Kompression der GLB-Modelle (`public/draco`) | Apache-2.0 (Lizenztext in `public/draco/LICENSE`) |
 
-## 13. Software & Bibliotheken
+## 14. Software & Bibliotheken
 
 | Projekt | Zweck |
 |---|---|
@@ -310,7 +320,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [GitHub Pages](https://pages.github.com) · [GitHub Actions](https://github.com/features/actions) | Hosting & Deploy |
 | [Cloudflare Workers](https://workers.cloudflare.com) | optionaler Daten-Proxy |
 
-## 14. Optionale Schlüssel
+## 15. Optionale Schlüssel
 
 Alle kostenlos; werden nur im `localStorage` des Browsers gespeichert (außer den Action-Secrets).
 

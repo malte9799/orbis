@@ -84,6 +84,7 @@ const P: Record<string, string> = {
   copy: 'M9 9h11v11H9z M5 15H4V4h11v1',
   starf: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z',
   hand: 'M8 13V5a1.5 1.5 0 0 1 3 0v6 M11 11V4a1.5 1.5 0 0 1 3 0v7 M14 11V6a1.5 1.5 0 0 1 3 0v7c0 5-3 8-7 8-3 0-4-1-6-4l-2-4a1.5 1.5 0 0 1 2.5-1.5L8 13',
+  vote: 'M4 11h16v9H4z M10 11V9h4v2 M9 2.5h6.2v5.9l-1.8 1.4H9.7L9 8.4z M10.4 5.7l1.5 1.4 2.4-2.5',
 };
 
 export type IconName = string;

@@ -371,6 +371,37 @@ video.pop-cam {
   line-height: 1.35;
 }
 
+/* Wahlergebnisse im Popup: Partei-Punkte, Prozent fett */
+.wahlen-pop {
+  list-style: none;
+  padding-left: 0;
+}
+.wahlen-pop .pdot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.wahlen-pop b {
+  margin-left: auto;
+  padding-left: 10px;
+}
+.wahlen-pop li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.wahlen-pop small {
+  color: var(--muted);
+  margin-left: 4px;
+}
+.wahlen-pop .wmuted {
+  color: var(--muted);
+}
+
 /* radio player */
 .radio-player {
   position: fixed;

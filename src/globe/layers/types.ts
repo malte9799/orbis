@@ -9,8 +9,8 @@ import type { ClickResult } from '../extras';
 
 /** id of an overlay layer = file name in ./defs (checked when the registry is built) */
 export type ExtraId = string;
-export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams';
-export type CatId = 'wetter' | 'gefahr' | 'verkehr' | 'meer' | 'erde' | 'netze' | 'medien';
+export type SectionId = 'europe' | 'earth' | 'ocean' | 'air' | 'infra' | 'networks' | 'cams' | 'politik';
+export type CatId = 'wetter' | 'gefahr' | 'verkehr' | 'meer' | 'erde' | 'netze' | 'medien' | 'politik';
 
 /** a raster tile overlay (map layer and source share the id) */
 export interface RasterSpec {

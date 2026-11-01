@@ -45,6 +45,7 @@ export const CATS: { id: CatId; label: string; icon: string }[] = [
   { id: 'erde', label: 'Erde & Umwelt', icon: 'leaf' },
   { id: 'netze', label: 'Netze & Infrastruktur', icon: 'rail' },
   { id: 'medien', label: 'Kameras & Radio', icon: 'cam' },
+  { id: 'politik', label: 'Politik & Wahlen', icon: 'vote' },
 ];
 
 export interface CatalogEntry {
