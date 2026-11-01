@@ -10,14 +10,26 @@ const CACHE = 'orbis-tiles3d-v1';
 const jobs = new Map<number, AbortController>();
 
 const MAX_AGE_MS = 7 * 24 * 3600e3;
-const MAX_ENTRIES = 4000;
-const TRIM_TO = 3000;
+const MAX_CACHE_BYTES = 768 * 1024 * 1024;
+const MAX_CACHE_ENTRIES = 1400;
+const TRIM_TO_ENTRIES = 1000;
 let puts = 0;
 
-/** the cache grows without bound otherwise: drops the oldest entries (the keys come in insertion order) */
+/** Bound persistent storage by bytes as well as count; tiles can be tens of MB each. */
 async function trim(cache: Cache) {
   const keys = await cache.keys();
-  if (keys.length > MAX_ENTRIES) await Promise.all(keys.slice(0, keys.length - TRIM_TO).map((k) => cache.delete(k)));
+  const rows = await Promise.all(keys.map(async (key) => {
+    const response = await cache.match(key);
+    return { key, at: Number(response?.headers.get('x-cached-at') ?? 0), bytes: Number(response?.headers.get('x-cached-bytes') ?? 2 * 1024 * 1024) };
+  }));
+  let bytes = rows.reduce((total, row) => total + row.bytes, 0);
+  let count = rows.length;
+  for (const row of rows.sort((a, b) => a.at - b.at)) {
+    if (count <= TRIM_TO_ENTRIES && bytes <= MAX_CACHE_BYTES) break;
+    await cache.delete(row.key);
+    count--;
+    bytes -= row.bytes;
+  }
 }
 
 async function fetchBytes(url: string, headers: Record<string, string> | undefined, signal: AbortSignal): Promise<ArrayBuffer> {
@@ -30,9 +42,10 @@ async function fetchBytes(url: string, headers: Record<string, string> | undefin
   const res = await fetch(url, { signal, headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = await res.arrayBuffer();
-  if (cache) {
-    cache.put(url, new Response(buf.slice(0), { headers: { 'x-cached-at': String(Date.now()) } })).catch(() => {});
-    if (++puts % 100 === 0) void trim(cache).catch(() => {});
+  if (cache && buf.byteLength <= MAX_CACHE_BYTES / 8) {
+    cache.put(url, new Response(buf.slice(0), { headers: { 'x-cached-at': String(Date.now()), 'x-cached-bytes': String(buf.byteLength) } })).then(() => {
+      if (++puts % 25 === 0) void trim(cache).catch(() => {});
+    }).catch(() => {});
   }
   return buf;
 }
