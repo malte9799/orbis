@@ -27,9 +27,9 @@ let basemap = (() => {
   try { const value = localStorage.getItem(BASEMAP_KEY); return BASEMAPS.some((b) => b.id === value) ? value! : 'sat'; } catch { return 'sat'; }
 })();
 const showBasemap = () => {
-  const raster: Record<string, string> = { sat: 'sat', osm: 'bm-osm' };
+  const isRaster: Record<string, string> = { sat: 'sat', 'bm-osm': 'osm' };
   for (const l of map.getStyle().layers ?? []) {
-    if (raster[l.id]) map.setLayoutProperty(l.id, 'visibility', basemap === raster[l.id] ? 'visible' : 'none');
+    if (isRaster[l.id]) map.setLayoutProperty(l.id, 'visibility', basemap === isRaster[l.id] ? 'visible' : 'none');
     else if (l.id.startsWith('vbase-')) map.setLayoutProperty(l.id, 'visibility', l.id.startsWith(`vbase-${basemap}-`) ? 'visible' : 'none');
   }
 };
