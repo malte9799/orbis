@@ -2,6 +2,7 @@ import type { GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature
 import type { FeatureCollection, Point } from 'geojson';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
 import type { FlightRoute } from '../api/route';
+import type { PlanePhase } from './planes3d';
 import {
   type Launch,
   type Ship,
@@ -75,6 +76,8 @@ export interface FlightInfo {
   source: string;
   /** departure / destination (adsbdb); null: unknown, undefined: still loading */
   route?: FlightRoute | null;
+  /** what the aircraft is visibly doing right now (estimated; only while it is tracked in 3D) */
+  phase?: PlanePhase;
   /** values of the reports seen so far, for the graph of a clicked tile */
   history?: { alt: number[]; speed: number[]; vs: number[]; track: number[] };
 }

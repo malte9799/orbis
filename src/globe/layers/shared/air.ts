@@ -167,6 +167,7 @@ export function flightInfo(ctx: ExtraCtx, hex: string): FlightInfo | null {
     lat: live ? live.lat : lat,
     source: st.lastAircraft?.source ?? '',
     route: st.airport3d?.route(hex),
+    phase: st.airport3d?.planeInfo(hex)?.phase,
     history: live ? { alt: live.hist.map((h) => h[0]), speed: live.hist.map((h) => h[1]), vs: live.hist.map((h) => h[2]), track: live.hist.map((h) => h[3]) } : undefined,
   };
 }

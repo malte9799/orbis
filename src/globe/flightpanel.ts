@@ -1,5 +1,6 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
+import { PHASE_LABEL } from './planes3d';
 import { compass, escapeHtml, fmt } from '../util';
 import { climbTxt, climbUnit, climbVal, distTxt, heightBoth, heightTxt, heightUnit, heightVal, speedTxt, speedUnit, speedVal } from '../units';
 import { glyphSvg } from './icons';
@@ -268,6 +269,7 @@ export class FlightPanel {
 
     // Position & Telemetrie
     const posRows: [string, string][] = [
+      ['Status', i.phase ? escapeHtml(PHASE_LABEL[i.phase]) : '–'],
       ['Breitengrad', fmt.num(i.lat, 3)],
       ['Längengrad', fmt.num(i.lon, 3)],
       ['Höhe (baro)', i.ground ? 'am Boden' : heightBoth(i.altM)],

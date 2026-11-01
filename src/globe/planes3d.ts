@@ -4,11 +4,25 @@ import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from
 
 // 3D aircraft: a three.js layer inside MapLibre's GL context. Positions are
 // reported every ~10 s, so every aircraft keeps a small state that is dead-reckoned from its
-// ground speed and heading and eased towards each new report (no visible jumps). Around each
-// aircraft: its trail at the real altitude, a faint wall from the trail down to the ground,
-// a thin line from the aircraft to the ground and its shadow.
+// ground speed and heading and eased towards each new report (no visible jumps). Flight phases
+// (taxi, take-off roll, climb, cruise, approach, flare, rolling out) bring a visible attitude
+// (nose up / down, banking) and, where OpenStreetMap has the runway, hold the aircraft on the
+// centre line: on a 3° glide path on the approach, rolling straight when starting or landing.
+// Around each aircraft: its trail at the real altitude, a faint wall from the trail down to the
+// ground, a thin line from the aircraft to the ground and its shadow.
 
 export type PlaneModel = 'narrow' | 'wide' | 'heli' | 'car' | 'tug' | 'sonde';
+
+/** A runway near the aircraft, used for the visual approach / take-off / landing-roll guidance. */
+export interface RunwayRef {
+  /** threshold of the runway end the aircraft flies toward (lon, lat) */
+  thLon: number;
+  thLat: number;
+  /** centre-line heading (°): direction of travel past this threshold */
+  hdg: number;
+  /** runway length (m) */
+  lenM: number;
+}
 
 export interface PlaneReport {
   hex: string;
@@ -22,9 +36,28 @@ export interface PlaneReport {
   ground: boolean;
   model: PlaneModel;
   emergency: boolean;
+  /** nearest matching runway (only for the phases where it matters); null: none in OSM */
+  rwy?: RunwayRef | null;
   /** properties shown in the popup, copied onto the label/hit features */
   props: Record<string, unknown>;
 }
+
+/** What the aircraft is visibly doing right now (estimated from the ADS-B reports). */
+export type PlanePhase = 'taxi' | 'roll' | 'climb' | 'cruise' | 'approach' | 'flare' | 'landed';
+
+/** Whether a phase takes place in the air. */
+const AIRBORNE: Partial<Record<PlanePhase, boolean>> = { climb: true, cruise: true, approach: true, flare: true };
+
+/** German phase names for the flight panel. */
+export const PHASE_LABEL: Record<PlanePhase, string> = {
+  taxi: 'Rollen / Parken',
+  roll: 'Startrolle',
+  climb: 'Steigflug',
+  cruise: 'Reiseflug',
+  approach: 'Anflug',
+  flare: 'Flare (kurz vor dem Aufsetzen)',
+  landed: 'Ausrollen / gelandet',
+};
 
 export interface PlaneState extends PlaneReport {
   /** displayed (smoothed) state */
@@ -32,6 +65,11 @@ export interface PlaneState extends PlaneReport {
   dLat: number;
   dAlt: number;
   dTrack: number;
+  /** displayed (smoothed) attitude: nose position (° up) and banking (° right) */
+  dPitch: number;
+  dRoll: number;
+  /** last estimated flight phase */
+  phase: PlanePhase;
   /** when the last report arrived (ms) */
   at: number;
   seen: number;
@@ -66,16 +104,98 @@ const WALL_FULL_M = 800;
 const WALL_MAX_M = 1500;
 /** share of the reported speed used to move an aircraft between two reports (1: not slowed down) */
 const EXTRAPOLATE = 1;
+/** visual approach guidance: exactly on the centre line below this distance to the threshold */
+const RWY_FULL_M = 2600;
+/** …and this far out the approach begins to bend gently towards the runway */
+const RWY_RANGE_M = 12000;
+/** a glide path of about 3° ends at the threshold */
+const GLIDE_TAN = Math.tan((3 * Math.PI) / 180);
 const M_PER_DEG = 111320;
 const YELLOW = 0xf2c94c;
 const RED = 0xff2d55;
 
 const rad = (d: number) => (d * Math.PI) / 180;
 const shortestDelta = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180;
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+/** smooth transition from 0 (at e0) to 1 (at e1 and beyond) */
+const smoothstep = (e0: number, e1: number, x: number) => {
+  const t = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 /** Metres between two nearby points. */
 function metres(aLon: number, aLat: number, bLon: number, bLat: number) {
   return Math.hypot((bLon - aLon) * Math.cos(rad(aLat)), bLat - aLat) * M_PER_DEG;
+}
+
+/** What the aircraft is visibly doing: estimated from the current report (ground state, height, climb rate, speed history). */
+function detectPhase(p: PlaneState): PlanePhase {
+  if (p.ground) {
+    // slow: parked or taxiing. Fast: taking off (speed rises) or rolling out after the landing (speed falls)
+    if (p.speedMs <= 12) return 'taxi';
+    const hist = p.hist;
+    return hist.length > 1 && hist[hist.length - 1][1] > hist[hist.length - 2][1] + 3 ? 'roll' : 'landed';
+  }
+  if (p.altM < 35 && p.vsMs < -0.4) return 'flare';
+  if (p.vsMs < -1 && p.altM < 1400) return 'approach';
+  if (p.vsMs > 1 && p.altM < 3000) return 'climb';
+  return 'cruise';
+}
+
+/** Refresh the phase; a change gets a white pulse (touchdown and lifting off), never after a pause. */
+function updatePhase(p: PlaneState, now: number, snap: boolean) {
+  const phase = detectPhase(p);
+  if (phase !== p.phase) {
+    const wasAir = !!AIRBORNE[p.phase];
+    if (!snap && ((wasAir && p.ground) || (!wasAir && !p.ground && p.altM > 8))) p.pulseAt = now;
+    p.phase = phase;
+  }
+}
+
+/**
+ * Target attitude in degrees: pitch (nose up) and roll (right) per phase. The physics of the
+ * reports sets the frame; the boundaries are chosen so it looks right (rotation before take-off,
+ * nose up in the flare, gentle banks in a curve).
+ */
+function attitude(p: PlaneState, phase: PlanePhase): [number, number] {
+  const gs = Math.max(1, p.speedMs);
+  const climbAngle = (Math.atan2(p.vsMs, gs) * 180) / Math.PI;
+  if (p.model === 'sonde' || p.model === 'car' || p.model === 'tug') return [0, 0];
+  if (p.model === 'heli') {
+    // helicopters: nose-down slightly in fast forward flight, banking only gently
+    const pitch = p.ground ? 0 : -7 * clamp((gs - 17) / 12, 0, 1);
+    const roll = p.ground ? 0 : clamp(shortestDelta(p.dTrack, p.track) * 0.7, -12, 12);
+    return [pitch, roll];
+  }
+  let pitch = 0;
+  switch (phase) {
+    case 'roll':
+      pitch = clamp((gs - 55) / 18, 0, 1) * 12.5; // rotation from ≈110 kt, fully raised at ≈140 kt
+      break;
+    case 'climb': {
+      // steep right after the start, flattening out with rising height
+      const strong = clamp(climbAngle * 1.7, 0, 14);
+      pitch = 3 + (strong - 3) * clamp((2200 - p.altM) / 1600, 0, 1);
+      break;
+    }
+    case 'cruise':
+      pitch = clamp(climbAngle * 1.4, -2.5, 2.5);
+      break;
+    case 'approach':
+      pitch = clamp(climbAngle * 1.6, -4.5, 1);
+      break;
+    case 'flare':
+      pitch = 4.5; // nose up before touchdown, independent of the reported sink rate
+      break;
+    case 'landed':
+      pitch = clamp((gs - 18) / 20, 0, 1) * 2.2; // rolling out with a slight nose-up
+      break;
+    case 'taxi':
+      pitch = 0;
+      break;
+  }
+  const roll = p.ground ? 0 : clamp(shortestDelta(p.dTrack, p.track) * 1.4, -26, 26);
+  return [pitch, roll];
 }
 
 export class PlaneTracker {
@@ -91,7 +211,23 @@ export class PlaneTracker {
     for (const r of reports) {
       const prev = this.planes.get(r.hex);
       if (!prev) {
-        this.planes.set(r.hex, { ...r, dLon: r.lon, dLat: r.lat, dAlt: r.altM, dTrack: r.track, at: now, seen: now, pulseAt: now, hist: [histEntry(r)], trail: [[r.lon, r.lat, trailAlt(r), now]] });
+        const s: PlaneState = {
+          ...r,
+          dLon: r.lon,
+          dLat: r.lat,
+          dAlt: r.altM,
+          dTrack: r.track,
+          dPitch: 0,
+          dRoll: 0,
+          phase: 'cruise',
+          at: now,
+          seen: now,
+          pulseAt: now,
+          hist: [histEntry(r)],
+          trail: [[r.lon, r.lat, trailAlt(r), now]],
+        };
+        s.phase = detectPhase(s);
+        this.planes.set(r.hex, s);
         continue;
       }
       // a plane that did not move since the last report keeps its old fix time → no new trail point
@@ -103,6 +239,7 @@ export class PlaneTracker {
       Object.assign(prev, r, { at: now, seen: now, pulseAt: now });
       prev.hist.push(histEntry(r));
       if (prev.hist.length > HIST_MAX) prev.hist.shift();
+      updatePhase(prev, now, false);
     }
     for (const [hex, p] of this.planes) {
       const age = now - p.seen;
@@ -128,20 +265,78 @@ export class PlaneTracker {
     const kPos = 1 - Math.exp(-dt / 1.0);
     const kAlt = 1 - Math.exp(-dt / 1.5);
     const kHdg = 1 - Math.exp(-dt / 0.7);
+    const kPitch = 1 - Math.exp(-dt / 0.6);
+    const kRoll = 1 - Math.exp(-dt / 0.4);
     for (const p of this.planes.values()) {
       const elapsed = Math.min(CACHE_MS / 1000, (now - p.at) / 1000);
+      // the phase change is cooked into a white pulse: one on touchdown, one on lifting off (not after a pause)
+      updatePhase(p, now, snap);
       // an aircraft running ahead of the next report is never pulled back along its track (see below)
+      const phase = p.phase;
       const dist = p.speedMs * EXTRAPOLATE * elapsed;
       const cosLat = Math.max(0.2, Math.cos(rad(p.lat)));
-      const tLat = p.lat + (dist * Math.cos(rad(p.track))) / M_PER_DEG;
-      const tLon = p.lon + (dist * Math.sin(rad(p.track))) / (M_PER_DEG * cosLat);
+      let tLat = p.lat + (dist * Math.cos(rad(p.track))) / M_PER_DEG;
+      let tLon = p.lon + (dist * Math.sin(rad(p.track))) / (M_PER_DEG * cosLat);
+      // the altitude runs on with the climb / sink rate; in the last 35 m of a descent it decays
+      // exponentially instead (a flare that levels off softly, whatever the reported sink rate says)
+      let tAlt = 0;
+      if (!p.ground) {
+        const run = Math.min(60, elapsed);
+        tAlt = p.altM < 35 && p.vsMs < 0 ? Math.max(1, p.altM) * Math.exp((p.vsMs / 35) * run) : p.altM + p.vsMs * EXTRAPOLATE * run;
+        tAlt = Math.max(0, tAlt);
+      }
+      // runway guidance: OSM centre line (feed sets `rwy` for the phases where it matters)
+      const rw = p.rwy;
+      if (rw && !snap) {
+        const hr = rad(rw.hdg);
+        const uLon = Math.sin(hr);
+        const uLat = Math.cos(hr);
+        const nLon = Math.cos(hr); // perpendicular to the centre line (+: to the right of the approach)
+        const nLat = -Math.sin(hr);
+        const ex = (tLon - rw.thLon) * cosLat * M_PER_DEG;
+        const ey = (tLat - rw.thLat) * M_PER_DEG;
+        const along = ex * uLon + ey * uLat; // < 0: before the threshold
+        const lateral = ex * nLon + ey * nLat;
+        const close = Math.abs(shortestDelta(p.track, rw.hdg));
+        if ((phase === 'approach' || phase === 'flare') && close < 40) {
+          const d = Math.abs(along);
+          // bend towards the extended centre line: fully on it near the threshold, fading out far away
+          const w = 1 - smoothstep(RWY_FULL_M, RWY_RANGE_M, d);
+          const cLon = rw.thLon + (along * uLon) / (M_PER_DEG * cosLat);
+          const cLat = rw.thLat + (along * uLat) / M_PER_DEG;
+          tLon += (cLon - tLon) * w;
+          tLat += (cLat - tLat) * w;
+          // glide path ends at the threshold; capped so the reported height stays the reference
+          // far away — in the flare NOT any more: there the aircraft is below the line by design
+          if (phase === 'approach') {
+            const glide = d * GLIDE_TAN;
+            tAlt = Math.max(1, tAlt + clamp(glide - tAlt, -500, 500) * w * 0.85);
+          }
+        } else if (phase === 'roll' && p.ground && close < 35 && Math.abs(lateral) < 60) {
+          // take-off roll: guided straight down the runway, without changing the reported speed
+          const w = clamp((p.speedMs - 10) / 12, 0, 1);
+          const a2 = clamp(along, 0, rw.lenM + 1200);
+          const cLon = rw.thLon + (a2 * uLon) / (M_PER_DEG * cosLat);
+          const cLat = rw.thLat + (a2 * uLat) / M_PER_DEG;
+          tLon += (cLon - tLon) * w;
+          tLat += (cLat - tLat) * w;
+        } else if (phase === 'landed' && p.ground && close < 35 && Math.abs(lateral) < 45) {
+          // rolling out: kept nicely in the middle of the runway
+          const w = clamp((p.speedMs - 6) / 10, 0, 1);
+          const a2 = clamp(along, 0, rw.lenM + 1200);
+          const cLon = rw.thLon + (a2 * uLon) / (M_PER_DEG * cosLat);
+          const cLat = rw.thLat + (a2 * uLat) / M_PER_DEG;
+          tLon += (cLon - tLon) * w;
+          tLat += (cLat - tLat) * w;
+        }
+      }
       // correction towards the target in metres (east, north); never backwards along the track
       let dx = (tLon - p.dLon) * cosLat * M_PER_DEG;
       let dy = (tLat - p.dLat) * M_PER_DEG;
-      const along = dx * Math.sin(rad(p.track)) + dy * Math.cos(rad(p.track));
-      if (along < 0) {
-        dx -= along * Math.sin(rad(p.track));
-        dy -= along * Math.cos(rad(p.track));
+      const drift = dx * Math.sin(rad(p.track)) + dy * Math.cos(rad(p.track));
+      if (drift < 0) {
+        dx -= drift * Math.sin(rad(p.track));
+        dy -= drift * Math.cos(rad(p.track));
       }
       if (snap) {
         p.dLon = tLon;
@@ -150,10 +345,17 @@ export class PlaneTracker {
         p.dLon += (dx * kPos) / (M_PER_DEG * cosLat);
         p.dLat += (dy * kPos) / M_PER_DEG;
       }
-      // the altitude runs on with the climb / sink rate (for a minute at most: the aircraft levels off sometime)
-      const tAlt = p.ground ? 0 : Math.max(0, p.altM + p.vsMs * EXTRAPOLATE * Math.min(60, elapsed));
       p.dAlt += (tAlt - p.dAlt) * kAlt;
       p.dTrack = (p.dTrack + shortestDelta(p.dTrack, p.track) * kHdg + 360) % 360;
+      // attitude: eased a little faster, so the nose lifts before the climb and heels into the curve
+      const [tp, tr] = attitude(p, phase);
+      if (snap) {
+        p.dPitch = tp;
+        p.dRoll = tr;
+      } else {
+        p.dPitch += (tp - p.dPitch) * kPitch;
+        p.dRoll += (tr - p.dRoll) * kRoll;
+      }
     }
   }
 
@@ -958,6 +1160,8 @@ export class PlanesLayer implements CustomLayerInterface {
     const padLat = (b.getNorth() - b.getSouth()) * 0.5;
     const m = new THREE.Matrix4();
     const rot = new THREE.Matrix4();
+    const att1 = new THREE.Matrix4(); // nose position, bank: reused every frame
+    const att2 = new THREE.Matrix4();
     for (const p of this.tracker.planes.values()) {
       if (only && p.hex !== only) {
         for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
@@ -993,7 +1197,15 @@ export class PlanesLayer implements CustomLayerInterface {
         // y is flipped between mercator space (south = +y) and the model (north = +y)
         m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
         if (p.model === 'sonde') rot.identity(); // the balloon hangs upright, no nose direction
-        else rot.makeRotationZ(-rad(p.dTrack));
+        else {
+          rot.makeRotationZ(-rad(p.dTrack));
+          // nose up / bank to the right around the model's own axes (x right, y nose, z up) –
+          // only for real aircraft: ground vehicles have no attitude, the balloon is untouched
+          if (p.model !== 'car' && p.model !== 'tug') {
+            if (p.dPitch) rot.multiply(att1.makeRotationX(rad(p.dPitch)));
+            if (p.dRoll) rot.multiply(att2.makeRotationY(rad(p.dRoll)));
+          }
+        }
         m.multiply(rot);
         p.obj.matrix.copy(m);
         p.obj.visible = true;

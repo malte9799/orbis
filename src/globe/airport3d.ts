@@ -4,7 +4,7 @@ import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, stati
 import { isSuperseded } from '../api/overpass';
 import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
-import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
+import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState, type RunwayRef } from './planes3d';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
@@ -43,6 +43,38 @@ const WIDE = new Set(['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B752', 'B
 WIDE.delete('B752');
 
 const contains = (c: Bounds, b: Bounds) => c.west <= b.west && c.south <= b.south && c.east >= b.east && c.north >= b.north;
+
+/** Distance between two nearby points (m). */
+const near = (aLon: number, aLat: number, bLon: number, bLat: number) => Math.hypot((bLon - aLon) * Math.cos((aLat * Math.PI) / 180), bLat - aLat) * 111320;
+/** Compass bearing (°) from a point to another, normalized to 0–360. */
+const bearingDeg = (aLon: number, aLat: number, bLon: number, bLat: number) => {
+  const h = (Math.atan2((bLon - aLon) * Math.cos((aLat * Math.PI) / 180), bLat - aLat) * 180) / Math.PI;
+  return (h + 360) % 360;
+};
+/** difference between two bearings, −180…180 */
+const bearingDelta = (from: number, to: number) => ((((to - from) % 360) + 540) % 360) - 180;
+
+/** The runway the aircraft uses next (OSM): centre line ends, matched heading, threshold towards it. */
+function runwayFor(lines: Iterable<Line>, lon: number, lat: number, track: number): RunwayRef | null {
+  let best: RunwayRef | null = null;
+  let bestD = 15000;
+  for (const l of lines) {
+    if (l.properties?.kind !== 'runway' || l.geometry.type !== 'LineString') continue;
+    const c = l.geometry.coordinates;
+    if (c.length < 2) continue;
+    const [a, b] = [c[0], c[c.length - 1]];
+    const d = near((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, lon, lat);
+    if (d >= bestD) continue;
+    const hAB = bearingDeg(a[0], a[1], b[0], b[1]);
+    const dAB = Math.abs(bearingDelta(track, hAB));
+    const dBA = Math.abs(bearingDelta(track, hAB + 180));
+    if (Math.min(dAB, dBA) > 50) continue;
+    const useAB = dAB <= dBA;
+    bestD = d;
+    best = { thLon: (useAB ? a : b)[0], thLat: (useAB ? a : b)[1], hdg: useAB ? hAB : (hAB + 180) % 360, lenM: near(a[0], a[1], b[0], b[1]) };
+  }
+  return best;
+}
 
 export interface Ap3dHooks {
   info(i: { loading?: boolean; count?: number; note?: string }): void;
@@ -477,11 +509,18 @@ export class Airport3D {
         model = p.cat === 'A5' || WIDE.has(icao) ? 'wide' : 'narrow';
       }
       const speedMs = p.speedKmh != null ? Number(p.speedKmh) / 3.6 : 0;
+      const altNum = Number(p.altM) || 0;
+      // runway guidance only where it matters: in the air below the last metres of a landing
+      // approach, or matching on the ground fast (start / landing roll) – and only for aircraft
+      let rwy: RunwayRef | null = null;
+      if ((model === 'narrow' || model === 'wide') && (speedMs > 10 || (!ground && altNum < 1400)) && !(ground && speedMs < 3)) {
+        rwy = runwayFor(this.lines.values(), lon, lat, Number(p.track) || 0);
+      }
       reports.push({
         hex: String(p.hex),
         lon,
         lat,
-        altM: Number(p.altM) || 0,
+        altM: altNum,
         vsMs: p.vsMs != null ? Number(p.vsMs) || 0 : 0,
         track: Number(p.track) || 0,
         // a taxiing or parked plane (a few knots of noise) must not drift
@@ -489,6 +528,7 @@ export class Airport3D {
         ground,
         model,
         emergency: !!p.emergency,
+        rwy,
         props: p,
       });
     }
@@ -594,7 +634,7 @@ export class Airport3D {
   /** Displayed state of an aircraft (smoothed position, trail), if it is tracked. */
   planeInfo(hex: string) {
     const p = this.tracker.planes.get(hex);
-    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist } : null;
+    return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist, phase: p.phase } : null;
   }
 
   /** The aircraft under a screen point (model, trail or wall), if any. */
