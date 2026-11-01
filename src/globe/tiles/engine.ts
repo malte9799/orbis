@@ -700,7 +700,7 @@ export class TileEngine {
         node.group = group;
         node.state = 2;
         node.bytes = data.bytes;
-        node.low = { centre: new THREE.Vector3(...data.centre), point: new THREE.Vector3(...data.low) };
+        node.low = data.meshes.length ? { centre: new THREE.Vector3(...data.centre), point: new THREE.Vector3(...data.low) } : null;
         this.bytesLoaded += data.bytes;
         totalBytes += data.bytes;
         this.loaded.add(node);

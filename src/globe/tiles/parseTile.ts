@@ -65,7 +65,7 @@ function unpack(buf: ArrayBuffer): { glb: ArrayBuffer; rtc: [number, number, num
   return { glb: buf.slice(headerEnd), rtc };
 }
 
-const parse = (glb: ArrayBuffer) => new Promise<{ scene: THREE.Group; json: { extensions?: { CESIUM_RTC?: { center: number[] } } } }>((res, rej) => getLoader().parse(glb, '', (g) => res({ scene: g.scene, json: g.parser.json }), rej));
+const parse = (glb: ArrayBuffer) => new Promise<{ scene: THREE.Group | null; json: { extensions?: { CESIUM_RTC?: { center: number[] } } } }>((res, rej) => getLoader().parse(glb, '', (g) => res({ scene: g.scene ?? null, json: g.parser.json }), rej));
 
 const UP = new THREE.Vector3();
 
@@ -76,6 +76,11 @@ const UP = new THREE.Vector3();
 export async function parseTile(raw: ArrayBuffer, transform: number[], maxTexture = 2048, zUp = false): Promise<{ data: TileData; transfer: Transferable[] }> {
   const { glb, rtc: ftRtc } = unpack(fixTile(raw));
   const { scene, json } = await parse(glb);
+  if (!scene) {
+    // legal but empty content (a glTF without a default scene, e.g. a stripped NRW leaf tile):
+    // nothing to draw — the tile counts as loaded, no retry, no error
+    return { data: { meshes: [], matrix: new THREE.Matrix4().toArray(), centre: [0, 0, 0], low: [0, 0, 0], bytes: 0 }, transfer: [] };
+  }
   const rtc = json.extensions?.CESIUM_RTC?.center ?? ftRtc ?? [0, 0, 0];
   // glTF is y-up, tiles are z-up (unless the tileset says `asset.gltfUpAxis: "Z"`); the RTC centre is not rotated
   const matrix = new THREE.Matrix4().makeTranslation(rtc[0], rtc[1], rtc[2]).multiply(zUp ? new THREE.Matrix4() : new THREE.Matrix4().makeRotationX(Math.PI / 2));
