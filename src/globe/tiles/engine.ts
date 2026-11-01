@@ -716,7 +716,11 @@ export class TileEngine {
       if (!mesh.isMesh) return;
       mesh.geometry.dispose();
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.map?.dispose();
+      if (mat.map) {
+        const image = mat.map.image;
+        mat.map.dispose();
+        if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) image.close();
+      }
       mat.dispose();
     });
     this.bytesLoaded -= n.bytes;
@@ -824,6 +828,9 @@ export class TileEngine {
     for (const job of [...this.inflight.values()]) this.cancel(job);
     for (const n of [...this.loaded]) this.unload(n);
     releasePool();
+    // A tile can be removed while its decoded image is waiting for the next build frame.
+    // Close those bitmaps too; they have not been attached to a GPU texture yet.
+    for (const { data } of this.ready) if (data.image && typeof ImageBitmap !== 'undefined' && data.image instanceof ImageBitmap) data.image.close();
     this.ready = [];
   }
 }
