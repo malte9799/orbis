@@ -3,9 +3,12 @@ import { WGS84_ELLIPSOID } from '3d-tiles-renderer';
 import { TileBoundingVolume } from '3d-tiles-renderer/src/three/renderer/math/TileBoundingVolume.js';
 import { ExtendedFrustum } from '3d-tiles-renderer/src/three/renderer/math/ExtendedFrustum.js';
 import { parseTile, type TileData } from './parseTile';
+import { available as impAvailable, childAvailable as impChild, coordsOfMorton, fetchSubtree, hasContent as impContent, levelTileCount, morton, parseScheme, useTemplate, type ImplicitScheme, type SubtreeBits } from './implicit';
 import type { WorkerIn, WorkerOut } from './tileWorker';
 
 // Tile engine v2 for OGC 3D Tiles (REPLACE refinement; what the photo meshes and city models use).
+// Implicit tiling (3D Tiles 1.1, quadtree on a region root) is also covered: the chunks of subtree
+// availability files become real tiles on demand (`./implicit.ts`).
 //
 // The idea, in short: the network is the only thing that may be slow.
 //  - Each frame the tileset is walked once. The tiles that are good enough for the view are the *wanted* ones.
@@ -34,6 +37,10 @@ interface Node {
   external: boolean;
   expanded: boolean;
   jsonLoading: boolean;
+  /** implicit tiles: their coordinates in the tileset's implicit tree; only chunk roots expand */
+  imp?: { level: number; x: number; y: number };
+  /** whether an implicit chunk root's own chunk is already materialised */
+  impDone?: boolean;
   state: State;
   /** failed attempts and the time (ms) before which the next one must not start */
   tries: number;
@@ -157,6 +164,12 @@ export class TileEngine {
   private disposed = false;
   private bytesLoaded = 0;
   private p!: EngineParams;
+  /** implicit tiling (3D Tiles 1.1) of the tileset, if it is the kind that defines its whole tree implicitly */
+  private scheme: ImplicitScheme | null = null;
+  /** the implicit root's region (radians): the bounding volumes of the tiles derive from it */
+  private impRegion: number[] | null = null;
+  /** subtree files by URL; they are small, and more than one tile of a chunk shares the request */
+  private subtreeCache = new Map<string, Promise<SubtreeBits | null>>();
 
   constructor(
     private url: string,
@@ -176,6 +189,11 @@ export class TileEngine {
       this.zUp = String(json.asset?.gltfUpAxis ?? 'Y').toUpperCase() === 'Z';
       this.root = { boundingVolume: json.root?.boundingVolume, transform: json.root?.transform };
       this.top = this.makeNode(json.root, dirOf(this.url), null, new THREE.Matrix4(), 0);
+      if (json.root?.implicitTiling) {
+        this.scheme = parseScheme(json.root, dirOf(this.url));
+        if (this.scheme) this.impRegion = json.root.boundingVolume.region as number[];
+        else this.hooks.note('Implizites Tiling nicht lesbar (kein Quadtree auf Region)');
+      }
       this.hooks.repaint();
     } catch (e) {
       this.hooks.note(`Tileset nicht ladbar: ${(e as Error).message}`);
@@ -213,13 +231,18 @@ export class TileEngine {
       }
     }
     const content = raw.content ?? raw.contents?.[0];
-    const rawUri: string | undefined = content?.uri ?? content?.url;
+    const imp = !!raw.implicitTiling;
+    const rawUri: string | undefined = imp ? undefined : content?.uri ?? content?.url; // implicit roots park their template; the chunks decide the content
     const uri = rawUri ? new URL(rawUri, base).href : null;
     const refine = String(raw.refine ?? (parent ? (parent.add ? 'ADD' : 'REPLACE') : 'REPLACE')).toUpperCase();
     const node: Node = {
       id: this.nextId++, parent, children: [], depth, ge: raw.geometricError ?? 0, add: refine === 'ADD', bv, centre, radius, tf, uri,
       external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, tries: 0, retryAt: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, dist: 0,
     };
+    if (imp) {
+      node.imp = { level: 0, x: 0, y: 0 };
+      node.impDone = false;
+    }
     for (const c of raw.children ?? []) node.children.push(this.makeNode(c, base, node, tf, depth + 1));
     return node;
   }
@@ -241,6 +264,85 @@ export class TileEngine {
     } finally {
       this.jsonInflight--;
       n.jsonLoading = false;
+    }
+  }
+
+  // ---- implicit tiling (3D Tiles 1.1) ----------------------------------------------------------------------
+
+  /** the availability of one chunk, cached by its URL (subtree files are tiny and may be asked for twice) */
+  private impSubtree(imp: { level: number; x: number; y: number }): Promise<SubtreeBits | null> {
+    const s = this.scheme!;
+    const url = useTemplate(s.subtreeUri, imp);
+    let p = this.subtreeCache.get(url);
+    if (!p) {
+      p = fetchSubtree(url).catch(() => null);
+      this.subtreeCache.set(url, p);
+    }
+    return p;
+  }
+
+  /** one implicit tile below `parent`: region subdivision of the root's region, error from the root's error */
+  private impTile(parent: Node, level: number, x: number, y: number, uri: string | null): Node {
+    const s = this.scheme!;
+    const reg = this.impRegion!;
+    const size = 2 ** level;
+    const raw = { // eslint-disable-line @typescript-eslint/no-explicit-any
+      geometricError: s.rootGe / size,
+      boundingVolume: { region: [reg[0] + (reg[2] - reg[0]) * x / size, reg[1] + (reg[3] - reg[1]) * y / size, reg[0] + (reg[2] - reg[0]) * (x + 1) / size, reg[1] + (reg[3] - reg[1]) * (y + 1) / size, reg[4], reg[5]] },
+      content: uri ? { uri } : undefined,
+    };
+    const node = this.makeNode(raw, dirOf(this.url), parent, parent.tf, parent.depth + 1);
+    parent.children.push(node); // makeNode only expands the raw children; here the tree is derived
+    return node;
+  }
+
+  /** materialises an implicit chunk: its subtree's bits become real tiles; the chunk roots below stay pending */
+  private async expandImplicit(n: Node) {
+    const s = this.scheme!;
+    const imp = n.imp!;
+    n.jsonLoading = true;
+    this.jsonInflight++;
+    try {
+      const bits = await this.impSubtree(imp);
+      if (!bits) throw new Error('Subtree nicht ladbar');
+      if (this.disposed) return;
+      // the chunk root's own content comes from the bits of its relative level 0
+      if (impContent(bits, 0, 0) && s.contentUri) n.uri = useTemplate(s.contentUri, imp);
+      // the tiles of the levels below the chunk root; children without parents are ignored (sparse bits)
+      let level: { lx: number; ly: number; node: Node }[] = [{ lx: 0, ly: 0, node: n }];
+      for (let r = 1; r < s.subtreeLevels; r++) {
+        const next: typeof level = [];
+        for (let m = 0; m < levelTileCount(r); m++) {
+          if (!impAvailable(bits, r, m)) continue;
+          const [lx, ly] = coordsOfMorton(r, m);
+          // the parent is the tile with the last bit pair dropped (quadtree)
+          const p = level.find((e) => e.lx === lx >> 1 && e.ly === ly >> 1);
+          if (!p) continue;
+          const node = this.impTile(p.node, imp.level + r, imp.x * 2 ** r + lx, imp.y * 2 ** r + ly, impContent(bits, r, m) && s.contentUri ? useTemplate(s.contentUri, { level: imp.level + r, x: imp.x * 2 ** r + lx, y: imp.y * 2 ** r + ly }) : null);
+          next.push({ lx, ly, node });
+        }
+        level = next;
+      }
+      // the deepest chunk level's tiles own the next chunk's roots, as child bits say
+      if (s.subtreeLevels > 1) {
+        for (const { lx, ly, node } of level) {
+          for (let d = 0; d < 4; d++) {
+            const clx = (lx << 1) + (d & 1);
+            const cly = (ly << 1) + (d >> 1);
+            if (!impChild(bits, morton(clx, cly))) continue;
+            const child = this.impTile(node, imp.level + s.subtreeLevels, imp.x * 2 ** s.subtreeLevels + clx, imp.y * 2 ** s.subtreeLevels + cly, null);
+            child.imp = { level: imp.level + s.subtreeLevels, x: imp.x * 2 ** s.subtreeLevels + clx, y: imp.y * 2 ** s.subtreeLevels + cly };
+            child.impDone = false;
+          }
+        }
+      }
+      n.impDone = true;
+      this.hooks.repaint();
+    } catch (e) {
+      this.giveUp(n, `Implizite Kacheln: ${(e as Error).message}`);
+    } finally {
+      n.jsonLoading = false;
+      this.jsonInflight--;
     }
   }
 
@@ -311,7 +413,7 @@ export class TileEngine {
     const dist = n.bv.distanceToPoint(this.cam);
     n.err = this.errorOf(n, dist);
     const hasContent = !!n.uri && !n.external;
-    const pending = n.external && !n.expanded && n.state !== 3;
+    const pending = ((n.external && !n.expanded) || (!!n.imp && n.impDone === false)) && n.state !== 3;
     const waiting = n.retryAt > performance.now();
     // A node that only points to another tileset has no content of its own. With REPLACE it stands where its parent
     // would be replaced, so it is expanded as soon as it is reached (the parent's content stands in meanwhile; if
@@ -331,7 +433,9 @@ export class TileEngine {
       return n.children.length > 0 && this.drawBelow(n, STAND_IN_LEVELS);
     }
     if (pending) {
-      if (this.jsonInflight < MAX_JSON && !waiting) void this.expand(n);
+      // implicit chunk roots obey the error criterion (they are ADD): a coarse parent's content is enough, so
+      // the engine does not walk every chunk of the world; the tileset root is always fine enough to open
+      if (this.jsonInflight < MAX_JSON && !waiting && (!n.imp || n.err > this.p.errorTarget)) void (n.external ? this.expand(n) : this.expandImplicit(n));
       return false;
     }
     // ADD: the content of a tile is drawn together with that of its children, so it is needed as well

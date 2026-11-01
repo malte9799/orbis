@@ -18,9 +18,9 @@ allerdings nur als Nadir-DSM-Mesh (2,5D) und bisher ohne 3D-Tiles-Streaming-Dien
 | CH Basel-Stadt „3D-Tiles BS" | b3dm-Objektkacheln: Gebäude, Brücken, Bäume, Wald (aktuell gepflegt) | über `https://www.bs.ch/bvd/grundbuch-und-vermessungsamt/geo/geodaten/geodienste` (Link „3D-Tiles BS") | kostenlos (Basel OGD); genaue Tileset-URLs dort verlinkt |
 
 Anmerkungen:
-- NRW LoD2 nutzt **implizites Tiling** (Quadtree, `content.uri` Template `{level}_{x}_{y}.glb`) und
-  ein eigenes Metadaten-Schema (`schemaUri`). Falls die Engine implizites Tiling noch nicht liest, wäre das
-  die größte Deutschland-Verbesserung überhaupt (flächendeckend, Update-Zyklen je Bundesland).
+- NRW LoD2 nutzt **implizites Tiling** (Quadtree, Subtree-Dateien `{level}_{x}_{y}.subtree`, glb-Kacheln) und
+  ein eigenes Metadaten-Schema (`schemaUri`). Die Engine v2 liest implizites Tiling inzwischen
+  (`src/globe/tiles/implicit.ts`); die Quelle ist als „DE NRW LoD2" eingebaut.
 - Das nackte LoD2 von NRW ist *nicht* texturiert — für Foto-Look bräuchte es eine
   Überblendung mit DOP (siehe „Selbst bauen“ unten) oder das NRW-Mesh (siehe nächster Abschnitt).
 
