@@ -478,7 +478,11 @@ export class TileEngine {
     }
     if (all) return true;
     if (covered) {
-      this.drawn.add(n); // stands in for the children that are not there yet
+      this.drawn.add(n); // stands in for the children that are not there yet …
+      // … but keeps the detail that is already loaded below in the picture (they overlap even
+      // while only parts of the finer branches are there — without this the view falls back to
+      // the coarse tile alone for a moment: the "Bodenplatte" flash when zooming in).
+      this.drawBelow(n, STAND_IN_LEVELS);
       return true;
     }
     return false;
