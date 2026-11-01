@@ -505,7 +505,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
   debugInfo() {
     return [...this.entries].map(([id, e]) => {
       const s = ((e.engine ?? e.tiles) as unknown as { stats: Record<string, number> }).stats;
-      return { id, engine: e.engine ? 'v2' : 'v1', loaded: s.loaded, failed: s.failed, queued: s.queued, downloading: s.downloading, active: s.active, visible: s.visible, ground: Math.round(e.ground), ring: footprint((e.engine ?? e.tiles) as unknown as TilesRenderer) };
+      return { id, engine: e.engine ? 'v2' : 'v1', loaded: s.loaded, failed: s.failed, queued: s.queued, downloading: s.downloading, active: s.active, visible: s.visible, ground: Math.round(e.ground), offset: Math.round(e.offset), ring: footprint((e.engine ?? e.tiles) as unknown as TilesRenderer) };
     });
   }
 
@@ -704,8 +704,10 @@ export class Tiles3DLayer implements CustomLayerInterface {
           // the ground under the map centre; it follows slowly, so a change of the level of detail does not make the tiles jump
           // not while tiles are still arriving (the level of detail under the centre is changing), and a change under
           // 2 m is ignored: the layer must not rise and fall when one zooms or pans
-          const s = e.engine.stats;
-          const gp = e.groundSet && s.queued + s.downloading + s.parsing > 0 ? null : e.engine.groundAt(ecef(c.lng, c.lat, 0));
+          // the ground under the map centre; changes follow slowly, so a change of the level of detail does not
+          // make the tiles jump: shifting by 2 m and more is smoothed, and only a wild change (> 100 m) is applied
+          // at once. Measured even while tiles stream in — waiting for quiet meant the layer floated for minutes.
+          const gp = e.engine.groundAt(ecef(c.lng, c.lat, 0));
           let measured: number | null = null;
           if (gp) {
             const g = heightOf(gp.x, gp.y, gp.z);
@@ -721,8 +723,12 @@ export class Tiles3DLayer implements CustomLayerInterface {
             // to place) is kept, slowly. Lowering by the terrain under the *moving* centre while the ground lags
             // behind made the layer rise and fall when panning over a slope.
             const t = measured === null ? null : map.queryTerrainElevation(c);
-            if (t !== null && t !== undefined && measured !== null) {
-              const raw = measured - t;
+            // MapLibre yields 0 while the DEM tile under the centre has not arrived; taking that as elevation sank
+            // the whole layer by its ground height. A real difference of ground against terrain is a geoid-sized
+            // thing (at most ~100 m), never hundreds of metres.
+            const usable = t != null && (t !== 0 || (measured ?? 0) <= 100) && measured !== null && Math.abs(measured - t) < 150;
+            if (usable) {
+              const raw = measured! - t;
               if (!e.terrainSet || Math.abs(raw - e.offset) > 30) e.offset = raw;
               else if (Math.abs(raw - e.offset) > 1) e.offset += (raw - e.offset) * 0.15;
               e.terrainSet = true;

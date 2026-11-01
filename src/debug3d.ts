@@ -181,7 +181,7 @@ setInterval(() => {
     (map.getSource('outline') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r } })) });
   }
   const c = map.getCenter();
-  const lines = layer.debugInfo().map((i) => `${i.id}  ·  ${i.loaded} geladen  ·  ${i.failed} Fehler  ·  ${i.visible} sichtbar`);
+  const lines = layer.debugInfo().map((i) => `${i.id}  ·  ${i.loaded} geladen  ·  ${i.failed} Fehler  ·  ${i.visible} sichtbar  ·  Boden ${i.ground} m (Versatz ${i.offset} m)`);
   const sourceId = basemap === 'sat' ? 'sat' : basemap === 'dark' || basemap === 'light' ? 'ofm' : 'bm-osm';
   const ground = map.getSource(sourceId) ? (map.isSourceLoaded(sourceId) ? 'Grundkarte bereit' : 'Grundkarte lädt') : 'keine Grundkarte';
   status.textContent = `${map.getZoom().toFixed(1)} Zoom  ·  ${Math.round(map.getPitch())}° Neigung  ·  ${ground}\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
