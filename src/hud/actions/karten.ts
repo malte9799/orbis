@@ -1,6 +1,7 @@
 import type { ActFn, HudCore } from '../core';
 import { toast } from '../../util';
 import { blankKarte, clone, DEFAULT_PINNED, MAX_PINNED, newId } from '../karten';
+import { setWarned } from '../warnings';
 
 export default (c: HudCore): Record<string, ActFn> => {
   const { captureView, dirty, go, persist, suggestName, view, ui, st, host, root } = c;
@@ -103,6 +104,26 @@ export default (c: HudCore): Record<string, ActFn> => {
       go(k.id);
       ui.edit = true;
       ui.add = true;
+    },
+    // --- Inhalts-Warnung der Zeugen-Karte (hud/warnings.ts)
+    warnok: () => {
+      if (!c.warnId()) return;
+      if (ui.warnOnce) setWarned(c.warnId()!);
+      ui.warn = false;
+      ui.warnOnce = true;
+      persist();
+      c.activate(c.warnTarget() ?? 'wetter');
+    },
+    warnno: () => {
+      ui.warn = false;
+      ui.warnOnce = true;
+      persist();
+    },
+    warnonce: () => {
+      ui.warnOnce = !ui.warnOnce;
+    },
+    zq: () => {
+      ui.zq = !ui.zq;
     },
   };
 };

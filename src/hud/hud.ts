@@ -5,6 +5,7 @@ import { bindTiltLimit, createMapCtl } from '../mapctl';
 import { createSearch } from '../search';
 import { store, type Place } from '../store';
 import { debounce, escapeHtml as esc, fmt, toast } from '../util';
+import { loadSources, type AgSources } from '../api/agarchive';
 import {
   BASE_GRADIENT,
   BASE_LABEL,
@@ -31,6 +32,7 @@ import { FILTERS } from './filters';
 import type { HudCore, HudUi } from './core';
 import { ico } from './icons';
 import { clone, defaultBuildings3d, defaultTerrain3d, fullSignature, loadKarten, MAX_PINNED, newId, sanitizeKarte, saveKarten, signature, STANDARD, type Karte, type KLayer, type KView } from './karten';
+import { warned, WARNINGS } from './warnings';
 
 // The map HUD: Karten bar, collapsed Karte card / editing stack, add-layer popover, gallery, save
 // dialog, search and the content cards that follow what is on the map. It owns the Karten state and
@@ -157,7 +159,9 @@ const rel = (t?: number) => (!t || Date.now() - t < 60000 ? 'gerade eben' : fmt.
 export function createHud(host: HudHost): Hud {
   const st = loadKarten();
   let cur = st.last;
-  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false };
+  const ui: HudUi = { edit: false, add: false, gallery: false, save: false, pick: false, open: null, q: '', evHours: 24, search: false, menu: false, rename: false, folded: false, basepick: false, warn: false, warnOnce: true, zq: false };
+  /** the Karte the open content warning belongs to */
+  let warnOf: string | null = null;
   let placeNode: HTMLElement | null = null;
 
   // layout: desktop (>= 720 x 500), phone portrait (< 720 wide) or phone landscape (< 500 high)
@@ -316,9 +320,46 @@ export function createHud(host: HudHost): Hud {
   /**
    * The menu under the Karten bar. Weather Karten pick the layer (category row, then its variants
    * and options); the traffic and infra Karten switch their categories (Auto, Energie …) whose
-   * rows toggle layers.
+   * rows toggle layers. The Zeugen-Karte has its own menu: the Quellen list and the Geldflüsse
+   * layer switch.
    */
+  /** the Quellen list of the Zeugen menu: archive sources + websites (scripts/gazasources.mjs) */
+  let sourcesList: AgSources | null = null;
+  let sourcesLoading = false;
+  function ensureSources() {
+    if (sourcesList || sourcesLoading) return;
+    sourcesLoading = true;
+    loadSources()
+      .then((s) => {
+        sourcesList = s;
+        render();
+      })
+      .catch(() => {})
+      .finally(() => (sourcesLoading = false));
+  }
+  function quellenInner(): string {
+    ensureSources();
+    if (sourcesLoading) return '<div class="muted qload">Quellen werden geladen …</div>';
+    if (!sourcesList) return '<div class="muted qload">Quellen nicht erreichbar.</div>';
+    const anchor = (url: string, label: string, sub = '') =>
+      url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</a>` : `<a>${esc(label)}${sub ? `<small>${esc(sub)}</small>` : ''}</a>`;
+    const src = sourcesList.sources
+      .map((s) => anchor(s.url, s.name, [s.platform, s.count].filter(Boolean).join(' · ')))
+      .join('');
+    const web = sourcesList.websites.map((w) => anchor(w.url, w.domain, w.desc)).join('');
+    return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div></div>`;
+  }
   function modesInner(k: Karte): string {
+    // Zeugen-Karte: Quellen-Panel (Liste der Herkünfte, einmal geladen) + Geldflüsse-Schalter
+    if (k.menu === 'zeugen') {
+      const flow = k.layers.some((l) => l.id === 'moneyflow' && !l.hidden);
+      const n = flow ? host.info('moneyflow').count : null;
+      return `<div class="wxm hud-glass" role="group" aria-label="Dokumentation"><div class="mrow cats">
+        <button type="button" data-act="zq" class="${ui.zq ? 'on' : ''}" aria-expanded="${ui.zq}" aria-pressed="${ui.zq}" title="Belegquellen der Archiv-Daten"><i>${ico('list', 2)}</i><span>Quellen</span></button>
+        ${ui.zq ? `<div class="subs">${quellenInner()}</div>` : ''}
+        <button type="button" class="tgl ${flow ? 'on' : ''}" data-act="ttog" data-id="moneyflow" aria-pressed="${flow}"><span>Geldflüsse</span><em class="n" data-n="moneyflow">${flow && n != null ? n.toLocaleString('de-DE') : ''}</em><i class="dot" style="background:#d4a800"></i></button>
+      </div></div>`;
+    }
     if (k.menu === 'wx') {
       const f = mainFam(k);
       const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
@@ -398,6 +439,12 @@ export function createHud(host: HudHost): Hud {
         return { label: v ? `${it.label} (${v})` : it.label, icon: it.icon, color: it.color };
       }
       return { label: f.label, icon: f.icon, color: f.color };
+    }
+    if (k.menu === 'zeugen') {
+      const flow = k.layers.some((l) => l.id === 'moneyflow' && !l.hidden);
+      return flow
+        ? { label: 'Zeugen-Archiv · Geldflüsse', icon: 'list', color: k.color }
+        : { label: 'Zeugen-Archiv · Videopositionen', icon: 'warn', color: k.color };
     }
     const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
     const cat = menu.find((c) => c.id === tmodeOf(k));
@@ -676,13 +723,32 @@ export function createHud(host: HudHost): Hud {
         </div>
         <div class="act"><button type="button" class="ebtn ghost" data-act="cancel">Abbrechen</button><button type="button" class="ebtn pri" data-act="dosave">Karte speichern</button></div>`;
   }
+  /** the content-warning dialog: before the first open of Karten like "Zeitzeugen" (warnings.ts) */
+  function renderWarn(r: HTMLElement) {
+    const w = warnOf ? WARNINGS[baseOf(warnOf).warn ?? ''] : undefined;
+    if (!w) {
+      ui.warn = false;
+      r.innerHTML = '';
+      return;
+    }
+    r.innerHTML = `<div class="scrim" data-act="warnno"></div><div class="dlg hud-glass warnd" role="dialog" aria-modal="true" aria-label="Inhaltswarnung">
+      <div class="bd"><div class="wn-row"><span class="wn-badge">${ico('warn', 2.2)}</span><h3>${esc(w.title)}</h3></div>
+      <p class="wn-t">${w.text}</p>
+      <div class="wn-credit">${esc(w.credit)}</div>
+      <div class="opt" data-act="warnonce" role="switch" aria-checked="${ui.warnOnce}" tabindex="0"><div>In dieser Sitzung nicht mehr fragen</div><span class="toggle ${ui.warnOnce ? 'on' : ''}"></span></div></div>
+      <div class="act"><button type="button" class="ebtn ghost" data-act="warnno">${esc(w.leave)}</button><button type="button" class="ebtn pri warnp" data-act="warnok">${esc(w.ok)}</button></div></div>`;
+  }
   function renderDialog() {
     const r = reg('dialog');
+    if (ui.warn) {
+      renderWarn(r);
+      return;
+    }
     if (!ui.save || !form || layout === 'portrait') {
       r.innerHTML = '';
       return;
     }
-    const opening = !r.querySelector('.dlg');
+    const opening = !r.querySelector('.dlg:not(.warnd)');
     const focused = (document.activeElement as HTMLElement | null)?.closest('[data-act]')?.getAttribute('data-act');
     const fv = (document.activeElement as HTMLElement | null)?.dataset?.v;
     r.innerHTML = `<div class="scrim" data-act="cancel"></div><div class="dlg hud-glass" role="dialog" aria-modal="true" aria-label="Als neue Karte speichern">${dialogInner()}</div>`;
@@ -843,20 +909,9 @@ export function createHud(host: HudHost): Hud {
   }
 
   // ----- actions -----------------------------------------------------------
-  function go(id: string) {
-    if (!allKarten().some((k) => k.id === id)) return;
-    // the active Karte toggles the menu below: fold it to the one sub-point line / unfold it
-    if (cur === id && view(id).menu) {
-      ui.folded = !ui.folded;
-      if (ui.folded && (ui.edit || ui.gallery || ui.add)) {
-        ui.edit = false;
-        ui.gallery = false;
-        ui.add = false;
-        ui.open = null;
-        ui.pick = false;
-      }
-      return;
-    }
+  function activate(id: string) {
+    warnOf = null;
+    ui.warn = false;
     cur = id;
     ui.gallery = false;
     ui.add = false;
@@ -873,6 +928,38 @@ export function createHud(host: HudHost): Hud {
     if (k.view) host.goTo(k.view);
     render();
     revealActive();
+  }
+
+  function go(id: string) {
+    if (!allKarten().some((k) => k.id === id)) return;
+    // the active Karte toggles the menu below: fold it to the one sub-point line / unfold it
+    if (cur === id && view(id).menu) {
+      ui.folded = !ui.folded;
+      if (ui.folded && (ui.edit || ui.gallery || ui.add)) {
+        ui.edit = false;
+        ui.gallery = false;
+        ui.add = false;
+        ui.open = null;
+        ui.pick = false;
+      }
+      return;
+    }
+    // Karten mit Inhalts-Warnung (z. B. die Zeugen-Karte): einmal pro Sitzung bestätigen
+    const warn = baseOf(id).warn;
+    if (warn && id !== cur && !warned(warn)) {
+      warnOf = id;
+      ui.warnOnce = true;
+      ui.warn = true;
+      ui.gallery = false;
+      ui.add = false;
+      ui.edit = false;
+      ui.open = null;
+      ui.save = false;
+      form = null;
+      render();
+      return;
+    }
+    activate(id);
   }
 
   function captureView(): KView {
@@ -913,6 +1000,9 @@ export function createHud(host: HudHost): Hud {
     set fresh(v) {
       fresh = v;
     },
+    activate,
+    warnId: () => (warnOf ? baseOf(warnOf).warn ?? '' : ''),
+    warnTarget: () => warnOf ?? '',
     view,
     edit,
     dirty,
@@ -1117,7 +1207,8 @@ export function createHud(host: HudHost): Hud {
     const t = e.target as HTMLElement;
     const typing = t.matches('input, textarea, select, [contenteditable]') || !!t.closest('dialog[open]');
     if (e.key === 'Escape') {
-      if (ui.save) ACT.cancel('', '', e);
+      if (ui.warn) ACT.warnno('', '', e);
+      else if (ui.save) ACT.cancel('', '', e);
       else if (ui.gallery) ui.gallery = false;
       else if (ui.add) ui.add = false;
       else return;

@@ -22,6 +22,12 @@ export interface HudUi {
   folded: boolean;
   /** the base-map chooser under the settings button */
   basepick: boolean;
+  /** content warning of the pending Karte is on screen */
+  warn: boolean;
+  /** "In dieser Sitzung nicht mehr fragen" (default: keep asking) */
+  warnOnce: boolean;
+  /** the Zeugen menu has its Quellen list unfolded */
+  zq: boolean;
 }
 
 export interface HudCore {
@@ -52,4 +58,10 @@ export interface HudCore {
   suggestName(k: Karte): string;
   tmodeOf(k: Karte): string;
   encodeKarte(k: Karte): string;
+  /** switches the Karte for real – the content warning sits in go() */
+  activate(id: string): void;
+  /** key of the currently displayed warning ('' = none) */
+  warnId(): string;
+  /** the Karte the warning belongs to ('' = none) */
+  warnTarget(): string;
 }

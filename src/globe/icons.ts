@@ -37,7 +37,9 @@ export type ExtraGlyph =
   | 'radio'
   | 'vehicle'
   | 'bike'
-  | 'markings';
+  | 'markings'
+  | 'witness'
+  | 'money';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -137,6 +139,15 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   vehicle: [{ mode: 'fill', d: SILHOUETTES.vehicle! }],
   bike: [{ mode: 'stroke', width: 2, d: 'M5.5 13.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7M18.5 13.5a3.5 3.5 0 1 0 0 7a3.5 3.5 0 1 0 0-7M5.5 17l4-7h6l3 7M9.5 10l3 7M8 6h3M15 6h2l-1.5 4' }],
   markings: [{ mode: 'stroke', width: 2.4, d: 'M7 3v18M12 3v18M17 3v18' }],
+  // Kriegsdokumentation: ein Blick, der bezeugt (Auge über einem Dokument)
+  witness: [
+    { mode: 'stroke', width: 2, d: 'M12 4.5v3M4 7.5h16M5 7.5v9a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3v-9M8 10.5h8M8 13.5h5' },
+    { mode: 'fill', d: 'M12 15a1.4 1.4 0 1 0 0 2.8a1.4 1.4 0 0 0 0-2.8z' },
+  ],
+  // Politische Geldflüsse: Kreis mit $-Zeichen
+  money: [
+    { mode: 'stroke', width: 1.6, d: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 6.6v10.8M14.7 8.8c-.5-1.2-1.5-1.8-2.7-1.8-1.6 0-2.9.9-2.9 2.2 0 3 5.8 1.4 5.8 4.4 0 1.3-1.3 2.2-2.9 2.2-1.3 0-2.4-.7-2.8-1.9' },
+  ],
 };
 
 const SIZE = 48; // px at pixelRatio 2 → 24 css px

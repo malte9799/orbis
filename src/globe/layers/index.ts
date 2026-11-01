@@ -10,6 +10,7 @@ export const SECTIONS: { id: SectionId; title: string }[] = [
   { id: 'infra', title: 'Verkehr & Infrastruktur' },
   { id: 'networks', title: 'Verkehrsnetze' },
   { id: 'cams', title: 'Kameras & Radio' },
+  { id: 'politik', title: 'Politik & Dokumentation' },
 ];
 
 // every file in ./defs is a layer (default export = defineExtra({...}))
