@@ -152,7 +152,7 @@ export class TileEngine {
   private drawn = new Set<Node>();
   private inflight = new Map<number, Job>();
   private jsonInflight = 0;
-  private ready: { node: Node; data: TileData }[] = [];
+  private ready: { node: Node; data: TileData; group: THREE.Group; meshIndex: number }[] = [];
   private cam = new THREE.Vector3();
   /** the camera's viewing direction and half the vertical field of view, in the tiles' frame (for the loading order) */
   private fwd = new THREE.Vector3(0, 0, -1);
@@ -617,7 +617,11 @@ export class TileEngine {
     const job = this.inflight.get(id);
     if (!job) return; // cancelled meanwhile
     this.inflight.delete(id);
-    this.ready.push({ node: job.node, data });
+    const group = new THREE.Group();
+    group.matrixAutoUpdate = false;
+    group.matrix.copy(job.node.tf).multiply(new THREE.Matrix4().fromArray(data.matrix));
+    group.visible = false;
+    this.ready.push({ node: job.node, data, group, meshIndex: 0 });
     this.hooks.repaint();
   }
 
@@ -639,26 +643,36 @@ export class TileEngine {
     const t0 = performance.now();
     let n = 0;
     while (this.ready.length && n < BUILD_MAX && performance.now() - t0 < BUILD_BUDGET_MS) {
-      const { node, data } = this.ready.shift()!;
+      const task = this.ready.shift()!;
       if (this.disposed) return;
       const m0 = performance.now();
-      this.make(node, data);
+      const complete = this.makeMesh(task);
       const took = performance.now() - m0;
       this.stats.buildMs += took;
       this.stats.maxBuildMs = Math.max(this.stats.maxBuildMs, took);
       n++;
+      if (complete) {
+        const { node, data, group } = task;
+        node.group = group;
+        node.state = 2;
+        node.bytes = data.bytes;
+        node.low = { centre: new THREE.Vector3(...data.centre), point: new THREE.Vector3(...data.low) };
+        this.bytesLoaded += data.bytes;
+        totalBytes += data.bytes;
+        this.loaded.add(node);
+        this.group.add(group);
+        this.stats.built++;
+      } else this.ready.push(task);
     }
-    if (this.ready.length) this.hooks.repaint(); // more to build next frame
+    if (this.ready.length) this.hooks.repaint();
   }
 
-  private make(node: Node, data: TileData) {
-    const g = new THREE.Group();
-    g.matrixAutoUpdate = false;
-    g.matrix.copy(node.tf).multiply(new THREE.Matrix4().fromArray(data.matrix));
-    g.visible = false;
-    const o = this.opacity / 100;
-    for (const m of data.meshes) {
-      if (this.skipFloor && !m.image && !m.colors) continue;
+  /** Add at most one mesh per work item so large content sets cannot monopolize one frame. */
+  private makeMesh(task: { node: Node; data: TileData; group: THREE.Group; meshIndex: number }): boolean {
+    const { node, data, group } = task;
+    const m = data.meshes[task.meshIndex++];
+    if (m && !(this.skipFloor && !m.image && !m.colors)) {
+      const o = this.opacity / 100;
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
       if (m.normal) geo.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3));
@@ -673,28 +687,19 @@ export class TileEngine {
         map.colorSpace = THREE.SRGBColorSpace;
         map.wrapS = map.wrapT = THREE.RepeatWrapping;
         map.needsUpdate = true;
-        this.hooks.upload?.(map); // upload now, inside the build budget, not while drawing
+        this.hooks.upload?.(map);
       }
       const base = { map, color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]), side: m.doubleSided ? THREE.DoubleSide : THREE.FrontSide, transparent: o < 1 || m.transparent, opacity: o, vertexColors: !!m.colors, alphaTest: m.alphaTest };
       const mat = m.unlit ? new THREE.MeshBasicMaterial(base) : new THREE.MeshStandardMaterial({ ...base, metalness: 0, roughness: 1 });
-      // deeper tiles win against their parents while those are still shown underneath
       mat.userData.blend = m.transparent;
       mat.polygonOffset = true;
       mat.polygonOffsetFactor = -node.depth * 0.5;
       mat.polygonOffsetUnits = -node.depth;
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
-      g.add(mesh);
+      group.add(mesh);
     }
-    node.group = g;
-    node.state = 2;
-    node.bytes = data.bytes;
-    node.low = { centre: new THREE.Vector3(...data.centre), point: new THREE.Vector3(...data.low) };
-    this.bytesLoaded += data.bytes;
-    totalBytes += data.bytes;
-    this.loaded.add(node);
-    this.group.add(g);
-    this.stats.built++;
+    return task.meshIndex >= data.meshes.length;
   }
 
   // ---- memory ------------------------------------------------------------------------------------------------
