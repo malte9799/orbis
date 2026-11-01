@@ -26,6 +26,15 @@ import {
   type ModelGrid,
 } from '../api/model';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
+import {
+  setWahlenKindToken,
+  setWahlenStep,
+  subscribeWahlen,
+  wahlenKind,
+  wahlenLegendInfo,
+  wahlenMarks,
+  wahlenStep,
+} from '../api/wahlen';
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
@@ -322,6 +331,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     const t3 = lay('tiles3d');
     if (t3) setTiles3dOptions(map, store.getKeys(), t3.opacity ?? 100, !(t3.filter ?? '').split(',').includes('noedge'));
+    // „Wahlen": Art der Wahlergebnisse kommt als Filter-Chip
+    setWahlenKindToken(lay('wahlen')?.filter ?? '');
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }
@@ -795,10 +806,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderTimeline();
   }
 
-  // ----- timeline (radar frames or forecast steps) ---------------------------
-  type TimelineMode = 'none' | 'radar' | 'model';
+  // ----- timeline (radar frames, forecast steps or election dates) ------------
+  type TimelineMode = 'none' | 'radar' | 'model' | 'wahlen';
   const timelineMode = (): TimelineMode =>
-    state.overlay === 'radar' ? (radar?.frames.length ? 'radar' : 'none') : needsModel() && globalModel ? 'model' : 'none';
+    // Der Zeitstrahl gehört der Ebene Wahlen, solange sie an ist – radar/modellwahl übernimmt sie zurück,
+    // wenn die Ebene ausgeschaltet wird (Chip / Auge)
+    extras?.isOn('wahlen') && wahlenMarks().length
+      ? 'wahlen'
+      : state.overlay === 'radar'
+        ? radar?.frames.length
+          ? 'radar'
+          : 'none'
+        : needsModel() && globalModel
+          ? 'model'
+          : 'none';
+
+  subscribeWahlen(() => {
+    renderTimeline();
+    renderLegend();
+  });
 
   const timeLabel = (ms: number) =>
     dateTimeTxt(ms, { weekday: 'short', hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }) + (tzUtc() ? ' UTC' : '');
@@ -811,6 +837,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       hud?.syncSheet();
     }
     if (mode === 'none') return;
+    if (mode === 'wahlen') return renderWahlenTimeline();
     const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
     const idx = mode === 'radar' ? radarIdx : timeIdx;
     let t = mode === 'radar' ? times[idx] : sampler?.time ?? times[Math.round(idx)];
@@ -851,8 +878,42 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
   }
 
+  /** Zeitstrahl der Wahlergebnisse: ein Schritt pro Wahltermin */
+  function renderWahlenTimeline() {
+    const marks = wahlenMarks();
+    if (!marks.length) return;
+    rangeEl.step = '1';
+    rangeEl.max = String(marks.length - 1);
+    rangeEl.min = '0';
+    const idx = wahlenStep();
+    rangeEl.value = String(idx);
+    const m = marks[idx];
+    timeEl.innerHTML = `<b>${escapeHtml(m.label)}</b><small>${escapeHtml(new Date(m.t).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' }))}</small>`;
+    // Jahr-Ticks unter dem Schieber (nur wo sie nicht drängen)
+    const key = `wahlen:${marks.length}:${marks[0].d}:${wahlenKind()}`;
+    if (key !== timelineKey) {
+      timelineKey = key;
+      let html = '';
+      let shownYear = '';
+      let lastPos = -100;
+      marks.forEach((mk, i) => {
+        const y = mk.d.slice(0, 4);
+        const pos = (i / (marks.length - 1)) * 100;
+        if (y !== shownYear) {
+          shownYear = y;
+          if (pos - lastPos >= 6) {
+            html += `<span style="left:${pos}%">${y}</span>`;
+            lastPos = pos;
+          }
+        }
+      });
+      daysEl.innerHTML = html;
+    }
+  }
+
   function setTimeIndex(i: number) {
-    if (timelineMode() === 'radar') showRadarFrame(i);
+    if (timelineMode() === 'wahlen') setWahlenStep(i);
+    else if (timelineMode() === 'radar') showRadarFrame(i);
     else if (globalModel) {
       timeIdx = Math.max(0, Math.min(globalModel.times.length - 1, Math.round(i * SUBSTEPS) / SUBSTEPS));
       updateSampler();
@@ -871,17 +932,27 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   rangeEl.addEventListener('input', () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
-    else setTimeIndex(Number(rangeEl.value));
+    // bei Wahlen zeichnen die Abonnenten (Ebene, Zeitstrahl, Legende) selbst neu
+    else if (timelineMode() !== 'wahlen') setTimeIndex(Number(rangeEl.value));
+    else setWahlenStep(Number(rangeEl.value));
   });
   nowBtn.addEventListener('click', () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
+    else if (timelineMode() === 'wahlen') setWahlenStep(wahlenMarks().length - 1);
     else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
   });
   playBtn.addEventListener('click', () => {
     if (playTimer || playRaf) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     playBtn.setAttribute('aria-label', 'Pause');
+    if (timelineMode() === 'wahlen') {
+      // eine Wahl pro Schritt
+      const marks = wahlenMarks();
+      if (marks.length < 2) return stopAnimation();
+      playTimer = window.setInterval(() => setWahlenStep((wahlenStep() + 1) % marks.length), 750);
+      return;
+    }
     const radarMode = timelineMode() === 'radar';
     if (radarMode && radar && radarGl) {
       // continuous time: 10 minutes of radar per 700 ms; the layer mixes the steps around it
@@ -911,6 +982,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   // ----- legend & readout --------------------------------------------------
   function legendInfo(): LegendInfo | null {
+    // „Wahlen": mit eingeschalteter Ebene ist der Zeitstrahl deren Wahlterminen zugeordnet
+    if (timelineMode() === 'wahlen') {
+      const w = wahlenLegendInfo();
+      if (w) return { title: w.title, sub: w.sub, gradient: '', ticks: [], swatches: w.swatches.map(([color, label]) => ({ color, label })) };
+      return null;
+    }
     const o = state.overlay;
     const t = (title: string, sub: string, gradient: string, ticks: [number, string][]): LegendInfo => ({
       title, sub, gradient, ticks: ticks.map(([pos, label]) => ({ pos, label })),
@@ -954,15 +1031,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const l = legendInfo();
     legend.innerHTML = l
       ? `<div class="legend-title">${escapeHtml(l.title)} <small>${escapeHtml(l.sub)}</small></div>${
-          l.gradient
-            ? `<div class="legend-bar" style="background:${l.gradient}"></div>
+          l.swatches
+            ? `<div class="legend-list">${l.swatches.map((s) => `<span><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('')}</div>`
+            : l.gradient
+              ? `<div class="legend-bar" style="background:${l.gradient}"></div>
         <div class="legend-ticks">${l.ticks.map((x) => `<span style="left:${x.pos}%">${escapeHtml(x.label)}</span>`).join('')}</div>`
-            : ''
+              : ''
         }`
       : '';
     legend.hidden = !l;
     // without a colour scale (true-colour image) the phone layouts, which show only the bar, drop it
-    legend.classList.toggle('no-scale', !!l && !l.gradient);
+    legend.classList.toggle('no-scale', !!l && !l.gradient && !l.swatches);
     hud?.syncSheet();
   }
 
