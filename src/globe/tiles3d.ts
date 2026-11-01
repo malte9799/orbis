@@ -324,6 +324,16 @@ export class Tiles3DLayer implements CustomLayerInterface {
   private plateauBusy = false;
   private plateauAt = 0;
   private plateauFor: [number, number] | null = null;
+  private contextLost = false;
+  private readonly onContextLost = (event: Event) => {
+    event.preventDefault();
+    this.contextLost = true;
+  };
+  private readonly onContextRestored = () => {
+    this.contextLost = false;
+    this.renderer?.resetState();
+    this.map?.triggerRepaint();
+  };
 
   constructor(
     private hooks: { note(msg: string): void } = { note: () => {} },
@@ -342,6 +352,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   onAdd(map: MlMap, gl: WebGL2RenderingContext) {
     this.map = map;
+    map.getCanvas().addEventListener('webglcontextlost', this.onContextLost);
+    map.getCanvas().addEventListener('webglcontextrestored', this.onContextRestored);
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     // Google tiles are Draco-compressed, Re:Earth's meshopt-compressed
@@ -360,6 +372,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   onRemove() {
     for (const id of [...this.entries.keys()]) this.drop(id);
+    const canvas = this.map.getCanvas();
+    canvas.removeEventListener('webglcontextlost', this.onContextLost);
+    canvas.removeEventListener('webglcontextrestored', this.onContextRestored);
     this.draco?.dispose();
     this.renderer?.dispose();
     this.attribution?.remove();
@@ -643,7 +658,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
     const renderer = this.renderer;
-    if (!renderer) return;
+    if (!renderer || this.contextLost) return;
     if (state.selected.includes('plateau')) this.pollPlateau();
     else if (this.plateau.length) this.plateau = [];
     this.sync();
