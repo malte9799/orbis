@@ -3,7 +3,7 @@ import { WGS84_ELLIPSOID } from '3d-tiles-renderer';
 import { TileBoundingVolume } from '3d-tiles-renderer/src/three/renderer/math/TileBoundingVolume.js';
 import { ExtendedFrustum } from '3d-tiles-renderer/src/three/renderer/math/ExtendedFrustum.js';
 import { parseTile, type TileData } from './parseTile';
-import type { WorkerIn, WorkerOut } from './tileWorker';
+import { tileWorkerPool } from './workerPool';
 
 // Tile engine v2 for OGC 3D Tiles (REPLACE refinement; what the photo meshes and city models use).
 //
@@ -28,10 +28,11 @@ interface Node {
   bv: TileBoundingVolume;
   centre: THREE.Vector3;
   tf: THREE.Matrix4;
-  uri: string | null;
-  external: boolean;
+  uris: string[];
+  externalUris: string[];
   expanded: boolean;
   jsonLoading: boolean;
+  expansionFailed: boolean;
   state: State;
   group: THREE.Group | null;
   bytes: number;
@@ -40,19 +41,38 @@ interface Node {
   // per frame
   err: number;
   ndc: number;
+  visitCursor: number;
 }
 
 interface Job {
   node: Node;
   id: number;
-  worker: number;
   since: number;
   unwanted: number;
+  cancelWorker?: () => void;
 }
 
 interface Want {
   node: Node;
   tier: number;
+}
+
+interface BuildTask {
+  node: Node;
+  contents: TileData[];
+  group: THREE.Group;
+  content: number;
+  mesh: number;
+  bytes: number;
+  centre: THREE.Vector3;
+  low: THREE.Vector3 | null;
+  lowHeight: number;
+  uploadsPending: number;
+}
+
+interface PendingTexture {
+  texture: THREE.Texture;
+  task: BuildTask;
 }
 
 export interface EngineParams {
@@ -62,12 +82,18 @@ export interface EngineParams {
   density: number;
 }
 
-const MAX_INFLIGHT = 24;
+const MAX_INFLIGHT = 8;
 const MAX_JSON = 6;
+// National tilesets can expose hundreds of thousands of leaf tiles at a modest zoom.
+// Bound frame traversal and candidate work instead of enumerating and sorting the whole visible tree.
+const MAX_VISITS_PER_FRAME = 2500;
+const MAX_WANTS = 256;
 const BUILD_BUDGET_MS = 4;
 const BUILD_MAX = 4;
 const KEEP_MS = 1500;
-const WORKERS = Math.max(2, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1));
+const DEVICE_MEMORY_GB = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+const GLOBAL_TILE_BUDGET = Math.min(1.5e9, Math.max(0.5e9, DEVICE_MEMORY_GB * 0.2e9));
+let globalTileBytes = 0;
 
 const dirOf = (u: string) => u.slice(0, u.lastIndexOf('/') + 1);
 
@@ -76,7 +102,7 @@ export class TileEngine {
   /** raw root tile (bounding volume and transform), for the outline */
   root: { boundingVolume?: unknown; transform?: number[] } | null = null;
   opacity = 100;
-  readonly stats = { loaded: 0, failed: 0, queued: 0, downloading: 0, parsing: 0, active: 0, visible: 0, refused: 0, bytes: 0, built: 0, buildMs: 0, maxBuildMs: 0 };
+  readonly stats = { loaded: 0, failed: 0, queued: 0, downloading: 0, parsing: 0, uploading: 0, active: 0, visible: 0, refused: 0, bytes: 0, globalBytes: 0, built: 0, buildMs: 0, maxBuildMs: 0 };
 
   private top: Node | null = null;
   private nextId = 1;
@@ -85,37 +111,30 @@ export class TileEngine {
   private drawn = new Set<Node>();
   private inflight = new Map<number, Job>();
   private jsonInflight = 0;
-  private ready: { node: Node; data: TileData }[] = [];
-  private workers: Worker[] = [];
-  private workerLoad: number[] = [];
+  private ready: BuildTask[] = [];
+  private pendingUploads: PendingTexture[] = [];
   private broken = false;
   private jobId = 1;
   private cam = new THREE.Vector3();
   private frustum = new ExtendedFrustum();
   private viewProj = new THREE.Matrix4();
   private denom = 1;
+  private upAxis: 'y' | 'z' = 'y';
   private wants = new Map<number, Want>();
+  private visitsThisFrame = 0;
   private disposed = false;
   private bytesLoaded = 0;
-  private budget = Math.min(2.5e9, Math.max(0.6e9, ((navigator as { deviceMemory?: number }).deviceMemory ?? 4) * 0.25e9));
+  private groundCache: { x: number; y: number; z: number; signature: string; height: number | null } | null = null;
+  private budget = Math.min(768e6, GLOBAL_TILE_BUDGET * 0.75);
   private p!: EngineParams;
 
   constructor(
     private url: string,
     private hooks: { repaint(): void; note(msg: string): void; /** uploads a texture to the GPU now (the layer's renderer) */ upload?(t: THREE.Texture): void },
+    private maxTexture = 2048,
+    private maxAnisotropy = 1,
   ) {
     this.group.matrixAutoUpdate = false;
-    try {
-      for (let i = 0; i < WORKERS; i++) {
-        const w = new Worker(new URL('./tileWorker.ts', import.meta.url), { type: 'module' });
-        w.onmessage = (e: MessageEvent<WorkerOut>) => this.onWorker(e.data);
-        w.onerror = () => this.workerFailed();
-        this.workers.push(w);
-        this.workerLoad.push(0);
-      }
-    } catch {
-      this.broken = true;
-    }
     void this.loadRoot();
   }
 
@@ -123,7 +142,10 @@ export class TileEngine {
 
   private async loadRoot() {
     try {
-      const json = await (await fetch(this.url)).json();
+      const response = await fetch(this.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const json = await response.json();
+      this.upAxis = String(json.asset?.gltfUpAxis ?? 'y').toLowerCase() === 'z' ? 'z' : 'y';
       this.root = { boundingVolume: json.root?.boundingVolume, transform: json.root?.transform };
       this.top = this.makeNode(json.root, dirOf(this.url), null, new THREE.Matrix4(), 0);
       this.hooks.repaint();
@@ -151,32 +173,39 @@ export class TileEngine {
       const o = bv.obb ?? bv.regionObb;
       if (o) o.box.getCenter(centre).applyMatrix4(o.transform);
     }
-    const content = raw.content ?? raw.contents?.[0];
-    const rawUri: string | undefined = content?.uri ?? content?.url;
-    const uri = rawUri ? new URL(rawUri, base).href : null;
+    const contents = raw.content ? [raw.content] : Array.isArray(raw.contents) ? raw.contents : [];
+    const contentUris = contents.map((content: { uri?: string; url?: string }) => content?.uri ?? content?.url).filter((u: unknown): u is string => typeof u === 'string');
+    const externalUris = contentUris.filter((u) => /\.json($|[?#])/i.test(u)).map((u) => new URL(u, base).href);
+    const uris = contentUris.filter((u) => !/\.json($|[?#])/i.test(u)).map((u) => new URL(u, base).href);
     const refine = String(raw.refine ?? (parent ? (parent.add ? 'ADD' : 'REPLACE') : 'REPLACE')).toUpperCase();
     const node: Node = {
-      id: this.nextId++, parent, children: [], depth, ge: raw.geometricError ?? 0, add: refine === 'ADD', bv, centre, tf, uri,
-      external: !!uri && /\.json($|\?)/.test(uri.split('#')[0]), expanded: false, jsonLoading: false, state: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0,
+      id: this.nextId++, parent, children: [], depth, ge: raw.geometricError ?? 0, add: refine === 'ADD',
+      // A region is only a geographic bounding volume; it does not define a content transform. In particular,
+      // Basel's legacy Z-up tiles use ECEF content coordinates/RTC centers and no tile.transform.
+      bv, centre, tf,
+      uris, externalUris,
+      expanded: externalUris.length === 0, jsonLoading: false, expansionFailed: false, state: 0, group: null, bytes: 0, lastSeen: 0, low: null, err: 0, ndc: 0, visitCursor: 0,
     };
     for (const c of raw.children ?? []) node.children.push(this.makeNode(c, base, node, tf, depth + 1));
     return node;
   }
 
   private async expand(n: Node) {
-    if (n.jsonLoading || !n.uri) return;
+    if (n.jsonLoading || !n.externalUris.length) return;
     n.jsonLoading = true;
     this.jsonInflight++;
     try {
-      const json = await (await fetch(n.uri)).json();
+      const roots = await Promise.all(n.externalUris.map(async (uri) => {
+        const response = await fetch(uri);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return { json: await response.json(), base: dirOf(uri) };
+      }));
       if (this.disposed) return;
-      const child = this.makeNode(json.root, dirOf(n.uri), n, n.tf, n.depth + 1);
-      // the external tileset's root stands where the node is: its own (non-json) content is the child's
-      n.children = [child];
+      n.children.push(...roots.map(({ json, base }) => this.makeNode(json.root, base, n, n.tf, n.depth + 1)));
       n.expanded = true;
       this.hooks.repaint();
     } catch {
-      n.state = 3;
+      n.expansionFailed = true;
       this.stats.failed++;
     } finally {
       this.jsonInflight--;
@@ -197,11 +226,15 @@ export class TileEngine {
     this.frustum.setFromProjectionMatrix(this.viewProj);
     this.denom = 2 / lod.projectionMatrix.elements[5] / size.height;
 
+    this.uploadTexture();
     this.build();
     if (!this.top) return;
     this.wants.clear();
     this.drawn.clear();
-    this.visit(this.top, false, []);
+    this.visitsThisFrame = 0;
+    const visible: Node[] = [];
+    this.visit(this.top, false, [], visible);
+    for (const n of visible) this.drawn.add(n);
 
     for (const n of this.loaded) {
       const on = this.drawn.has(n);
@@ -213,8 +246,10 @@ export class TileEngine {
     this.stats.active = this.stats.visible = this.drawn.size;
     this.stats.downloading = this.inflight.size;
     this.stats.parsing = this.ready.length;
+    this.stats.uploading = this.pendingUploads.length;
     this.stats.queued = Math.max(0, this.wants.size - this.inflight.size);
     this.stats.bytes = this.bytesLoaded;
+    this.stats.globalBytes = globalTileBytes;
   }
 
   private errorOf(n: Node, dist: number): number {
@@ -226,20 +261,38 @@ export class TileEngine {
     return err;
   }
 
+  /** Relax detail near the screen edge and when the shared decoded/GPU budget is tight. */
+  private errorTarget(n: Node): number {
+    const edge = Math.max(0, Math.min(1, (n.ndc - 0.12) / 0.95));
+    const foveated = edge * edge * this.p.errorTarget * 0.8;
+    const pressure = Math.max(0, Math.min(1, (globalTileBytes / GLOBAL_TILE_BUDGET - 0.65) / 0.35));
+    return (this.p.errorTarget + foveated) * (1 + pressure * 0.75);
+  }
+
   /** Walks one subtree. Returns whether its area is covered by something drawn. */
-  private visit(n: Node, loadedAncestor: boolean, stack: Node[]): boolean {
+  private visit(n: Node, loadedAncestor: boolean, stack: Node[], visible: Node[]): boolean {
+    if (this.visitsThisFrame >= MAX_VISITS_PER_FRAME) {
+      // Keep a loaded coarse tile visible while its descendants wait for a later frame.
+      if (n.uris.length && n.state === 2) {
+        visible.push(n);
+        return true;
+      }
+      return false;
+    }
+    this.visitsThisFrame++;
     if (!n.bv.intersectsFrustum(this.frustum)) return true; // out of view: nothing to cover
     n.lastSeen = this.frame;
     const dist = n.bv.distanceToPoint(this.cam);
+    this.rank(n);
     n.err = this.errorOf(n, dist);
-    const hasContent = !!n.uri && !n.external;
-    const pending = n.external && !n.expanded && n.state !== 3;
-    const refine = (n.children.length > 0 || pending) && (n.err > this.p.errorTarget || !hasContent);
+    const hasContent = n.uris.length > 0;
+    const pending = n.externalUris.length > 0 && !n.expanded && !n.expansionFailed;
+    const refine = pending || (n.children.length > 0 && (n.err > this.errorTarget(n) || !hasContent));
 
     if (!refine) {
       if (!hasContent) return true;
       if (n.state === 2) {
-        this.drawn.add(n);
+        visible.push(n);
         return true;
       }
       if (n.state !== 3) this.want(n, loadedAncestor ? 1 : 0, stack);
@@ -253,17 +306,34 @@ export class TileEngine {
     const anc = loadedAncestor || covered;
     let all = true;
     stack.push(n);
-    for (const c of n.children) if (!this.visit(c, anc, stack)) all = false;
+    const descendants: Node[] = [];
+    const childCount = n.children.length;
+    const start = childCount ? n.visitCursor % childCount : 0;
+    let visitedChildren = 0;
+    for (let offset = 0; offset < childCount && this.visitsThisFrame < MAX_VISITS_PER_FRAME; offset++) {
+      const c = n.children[(start + offset) % childCount];
+      visitedChildren++;
+      if (!this.visit(c, anc, stack, descendants)) all = false;
+    }
+    if (childCount) n.visitCursor = (start + Math.max(1, visitedChildren)) % childCount;
+    if (visitedChildren < childCount) all = false;
     stack.pop();
     if (n.add) {
-      if (covered) this.drawn.add(n);
+      if (covered) visible.push(n);
+      visible.push(...descendants);
       return true;
     }
-    if (all) return true;
+    if (all) {
+      visible.push(...descendants);
+      return true;
+    }
     if (covered) {
-      this.drawn.add(n); // stands in for the children that are not there yet
+      // REPLACE is atomic: retain the parent until every visible child subtree is ready. Drawing both
+      // levels caused z-fighting on roof surfaces during zoom transitions (notably swissBUILDINGS3D/3DBAG).
+      visible.push(n);
       return true;
     }
+    visible.push(...descendants);
     return false;
   }
 
@@ -273,13 +343,29 @@ export class TileEngine {
       const w = this.wants.get(x.id);
       if (!w || w.tier > t) {
         this.rank(x);
-        this.wants.set(x.id, { node: x, tier: t });
+        const candidate = { node: x, tier: t };
+        if (w) {
+          this.wants.set(x.id, candidate);
+        } else if (this.wants.size < MAX_WANTS) {
+          this.wants.set(x.id, candidate);
+        } else {
+          let worstId = -1;
+          let worstKey = -Infinity;
+          for (const [id, current] of this.wants) {
+            const key = this.key(current);
+            if (key > worstKey) { worstKey = key; worstId = id; }
+          }
+          if (this.key(candidate) < worstKey) {
+            this.wants.delete(worstId);
+            this.wants.set(x.id, candidate);
+          }
+        }
       }
     };
     put(n, tier);
     if (tier === 0) {
       // nothing covers this area yet: a coarse ancestor (error up to 16 × target) is fetched first as a cover
-      const cover = stack.find((a) => a.uri && !a.external && a.state !== 3 && a.err <= this.p.errorTarget * 16);
+      const cover = stack.find((a) => a.uris.length > 0 && a.state !== 3 && a.err <= this.errorTarget(a) * 16);
       if (cover && cover !== n) put(cover, 0);
     }
   }
@@ -327,68 +413,75 @@ export class TileEngine {
   }
 
   private start(n: Node) {
-    if (!n.uri) return;
+    if (!n.uris.length) return;
     n.state = 1;
     const id = this.jobId++;
-    let wi = 0;
-    for (let i = 1; i < this.workerLoad.length; i++) if (this.workerLoad[i] < this.workerLoad[wi]) wi = i;
-    const job: Job = { node: n, id, worker: wi, since: performance.now(), unwanted: 0 };
+    const job: Job = { node: n, id, since: performance.now(), unwanted: 0 };
     this.inflight.set(id, job);
-    if (!this.broken && this.workers.length) {
-      this.workerLoad[wi]++;
-      this.workers[wi].postMessage({ type: 'load', id, url: n.uri, transform: n.tf.toArray() } satisfies WorkerIn);
+    if (!this.broken) {
+      const task = tileWorkerPool.load(n.uris, n.tf.toArray(), this.maxTexture, this.upAxis);
+      job.cancelWorker = task.cancel;
+      void task.promise.then((data) => this.finish(job.id, data)).catch((error: Error) => {
+        if (!this.inflight.has(job.id)) return;
+        if (error.name === 'AbortError') this.fail(job.id, error.message, true);
+        else if (/Worker unavailable|document|ImageBitmap|createImageBitmap/i.test(error.message)) {
+          this.broken = /Worker unavailable/.test(error.message);
+          void this.runOnMain(job);
+        } else this.fail(job.id, error.message, false);
+      });
     } else void this.runOnMain(job);
   }
 
   private cancel(job: Job) {
     this.inflight.delete(job.id);
     job.node.state = 0;
-    if (!this.broken && this.workers[job.worker]) {
-      this.workerLoad[job.worker] = Math.max(0, this.workerLoad[job.worker] - 1);
-      this.workers[job.worker].postMessage({ type: 'cancel', id: job.id } satisfies WorkerIn);
-    }
+    job.cancelWorker?.();
   }
 
   private async runOnMain(job: Job) {
     try {
-      const res = await fetch(job.node.uri!);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { data } = await parseTile(await res.arrayBuffer(), job.node.tf.toArray());
+      const results = await Promise.allSettled(job.node.uris.map(async (uri) => {
+        const res = await fetch(uri);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return (await parseTile(await res.arrayBuffer(), job.node.tf.toArray(), this.maxTexture, this.upAxis)).data;
+      }));
+      const data = results.filter((r): r is PromiseFulfilledResult<TileData> => r.status === 'fulfilled').map((r) => r.value);
+      const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+      if (failed) {
+        for (const content of data) this.closeContent(content);
+        throw failed.reason;
+      }
       this.finish(job.id, data);
     } catch (e) {
       this.fail(job.id, String((e as Error).message ?? e), false);
     }
   }
 
-  private onWorker(m: WorkerOut) {
-    const job = this.inflight.get(m.id);
-    if (m.type === 'done') {
-      if (job) this.workerLoad[job.worker] = Math.max(0, this.workerLoad[job.worker] - 1);
-      this.finish(m.id, m.data);
-    } else {
-      if (job) this.workerLoad[job.worker] = Math.max(0, this.workerLoad[job.worker] - 1);
-      // a worker that cannot decode here (no document, no ImageBitmap …) is given up for the main thread
-      if (/document|ImageBitmap|createImageBitmap/i.test(m.error) && job) {
-        this.broken = true;
-        job.node.state = 1;
-        void this.runOnMain(job);
-        return;
-      }
-      this.fail(m.id, m.error, !!m.aborted);
-    }
-  }
-
-  private workerFailed() {
-    if (this.broken) return;
-    this.broken = true;
-    for (const job of [...this.inflight.values()]) void this.runOnMain(job);
-  }
-
-  private finish(id: number, data: TileData) {
+  private finish(id: number, data: TileData[]) {
     const job = this.inflight.get(id);
-    if (!job) return; // cancelled meanwhile
+    if (!job) {
+      for (const content of data) this.closeContent(content);
+      return;
+    }
     this.inflight.delete(id);
-    this.ready.push({ node: job.node, data });
+    const group = new THREE.Group();
+    group.matrixAutoUpdate = false;
+    group.matrix.copy(job.node.tf);
+    group.visible = false;
+    const centre = new THREE.Vector3();
+    let count = 0;
+    let low: THREE.Vector3 | null = null;
+    let lowHeight = Infinity;
+    let bytes = 0;
+    for (const content of data) {
+      centre.add(new THREE.Vector3(...content.centre));
+      count++;
+      const candidate = new THREE.Vector3(...content.low);
+      if (candidate.length() < lowHeight) { lowHeight = candidate.length(); low = candidate; }
+      bytes += content.bytes;
+    }
+    if (count) centre.divideScalar(count);
+    this.ready.push({ node: job.node, contents: data, group, content: 0, mesh: 0, bytes, centre, low, lowHeight, uploadsPending: 0 });
     this.hooks.repaint();
   }
 
@@ -411,68 +504,120 @@ export class TileEngine {
   private build() {
     const t0 = performance.now();
     let n = 0;
-    while (this.ready.length && n < BUILD_MAX && performance.now() - t0 < BUILD_BUDGET_MS) {
-      const { node, data } = this.ready.shift()!;
+    let idle = 0;
+    while (this.ready.length && n < BUILD_MAX && idle < this.ready.length && performance.now() - t0 < BUILD_BUDGET_MS) {
       if (this.disposed) return;
+      const task = this.ready[0];
+      const content = task.contents[task.content];
+      if (!content) {
+        if (task.uploadsPending) {
+          this.ready.push(this.ready.shift()!);
+          idle++;
+          continue;
+        }
+        this.ready.shift();
+        const { node } = task;
+        node.group = task.group;
+        node.state = 2;
+        node.bytes = task.bytes;
+        node.low = task.low ? { centre: task.centre, point: task.low } : null;
+        this.bytesLoaded += task.bytes;
+        globalTileBytes += task.bytes;
+        this.loaded.add(node);
+        this.group.add(task.group);
+        this.stats.built++;
+        idle = 0;
+        continue;
+      }
+      const meshData = content.meshes[task.mesh];
+      if (!meshData) { task.content++; task.mesh = 0; idle = 0; continue; }
       const m0 = performance.now();
-      this.make(node, data);
+      task.group.add(this.makeMesh(meshData, task.node.depth, task));
       const took = performance.now() - m0;
       this.stats.buildMs += took;
       this.stats.maxBuildMs = Math.max(this.stats.maxBuildMs, took);
+      task.mesh++;
+      if (task.mesh >= content.meshes.length) { task.content++; task.mesh = 0; }
       n++;
+      idle = 0;
     }
     if (this.ready.length) this.hooks.repaint(); // more to build next frame
   }
 
-  private make(node: Node, data: TileData) {
-    const g = new THREE.Group();
-    g.matrixAutoUpdate = false;
-    g.matrix.copy(node.tf).multiply(new THREE.Matrix4().fromArray(data.matrix));
-    g.visible = false;
+  private uploadTexture() {
+    const pending = this.pendingUploads.shift();
+    if (!pending) return;
+    try { this.hooks.upload?.(pending.texture); } finally { pending.task.uploadsPending = Math.max(0, pending.task.uploadsPending - 1); }
+  }
+
+  private makeMesh(m: TileData['meshes'][number], depth: number, task: BuildTask): THREE.Mesh {
     const o = this.opacity / 100;
-    for (const m of data.meshes) {
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
-      if (m.normal) geo.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3));
-      if (m.uv) geo.setAttribute('uv', new THREE.BufferAttribute(m.uv, 2));
-      if (m.index) geo.setIndex(new THREE.BufferAttribute(m.index, 1));
-      if (!m.normal && !m.unlit) geo.computeVertexNormals();
-      let map: THREE.Texture | null = null;
-      if (m.image) {
-        map = new THREE.Texture(m.image as unknown as HTMLImageElement);
-        map.flipY = false;
-        map.colorSpace = THREE.SRGBColorSpace;
-        map.wrapS = map.wrapT = THREE.RepeatWrapping;
-        map.needsUpdate = true;
-        this.hooks.upload?.(map); // upload now, inside the build budget, not while drawing
-      }
-      const base = { map, color: new THREE.Color().setRGB(m.color[0], m.color[1], m.color[2]), side: m.doubleSided ? THREE.DoubleSide : THREE.FrontSide, transparent: o < 1, opacity: o };
-      const mat = m.unlit ? new THREE.MeshBasicMaterial(base) : new THREE.MeshStandardMaterial({ ...base, metalness: 0, roughness: 1 });
-      // deeper tiles win against their parents while those are still shown underneath
-      mat.polygonOffset = true;
-      mat.polygonOffsetFactor = -node.depth * 0.5;
-      mat.polygonOffsetUnits = -node.depth;
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.frustumCulled = false;
-      g.add(mesh);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
+    if (m.normal) geo.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3));
+    if (m.uv) geo.setAttribute('uv', new THREE.BufferAttribute(m.uv, 2));
+    if (m.index) geo.setIndex(new THREE.BufferAttribute(m.index, 1));
+    const mats = m.materials.map((source) => {
+      const maps = Object.fromEntries(source.maps.map((entry) => {
+        const texture = new THREE.Texture(entry.image);
+        texture.flipY = false;
+        texture.colorSpace = entry.srgb ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+        texture.wrapS = entry.wrapS as THREE.Wrapping;
+        texture.wrapT = entry.wrapT as THREE.Wrapping;
+        texture.magFilter = entry.magFilter as THREE.MagnificationTextureFilter;
+        texture.minFilter = entry.minFilter as THREE.MinificationTextureFilter;
+        texture.anisotropy = Math.min(8, this.maxAnisotropy);
+        texture.needsUpdate = true;
+        if (this.hooks.upload) {
+          task.uploadsPending++;
+          this.pendingUploads.push({ texture, task });
+        }
+        return [entry.slot, texture];
+      })) as Record<string, THREE.Texture>;
+      const base = {
+        ...maps,
+        color: new THREE.Color().setRGB(...source.color),
+        side: source.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+        transparent: o < 1 || source.transparent,
+        opacity: source.opacity * o,
+        alphaTest: source.alphaTest,
+      };
+      const material = source.unlit ? new THREE.MeshBasicMaterial(base) : new THREE.MeshStandardMaterial({
+        ...base,
+        emissive: new THREE.Color().setRGB(...source.emissive),
+        emissiveIntensity: source.emissiveIntensity,
+        metalness: source.metalness,
+        roughness: source.roughness,
+      });
+      material.userData.sourceOpacity = source.opacity;
+      material.userData.sourceTransparent = source.transparent;
+      return material;
+    });
+    if (!mats.length) mats.push(new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    for (const group of m.groups) geo.addGroup(group.start, group.count, Math.min(group.materialIndex, mats.length - 1));
+    if (!m.groups.length && mats.length > 1) geo.addGroup(0, m.index?.length ?? m.position.length / 3, 0);
+    const mat = mats.length > 1 ? mats : mats[0];
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.frustumCulled = false;
+    for (const material of mats) {
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = -depth * 0.5;
+      material.polygonOffsetUnits = -depth;
     }
-    node.group = g;
-    node.state = 2;
-    node.bytes = data.bytes;
-    node.low = { centre: new THREE.Vector3(...data.centre), point: new THREE.Vector3(...data.low) };
-    this.bytesLoaded += data.bytes;
-    this.loaded.add(node);
-    this.group.add(g);
-    this.stats.built++;
+    return mesh;
+  }
+
+  private closeContent(data: TileData) {
+    for (const mesh of data.meshes) for (const material of mesh.materials) for (const map of material.maps) map.image.close();
   }
 
   // ---- memory ------------------------------------------------------------------------------------------------
 
   private evict() {
-    if (this.bytesLoaded <= this.budget) return;
+    if (this.bytesLoaded <= this.budget && globalTileBytes <= GLOBAL_TILE_BUDGET) return;
     const old = [...this.loaded].filter((n) => !this.drawn.has(n) && n.lastSeen < this.frame - 5).sort((a, b) => a.lastSeen - b.lastSeen);
     for (const n of old) {
-      if (this.bytesLoaded <= this.budget * 0.8) break;
+      if (this.bytesLoaded <= this.budget * 0.8 && globalTileBytes <= GLOBAL_TILE_BUDGET * 0.9) break;
       this.unload(n);
     }
   }
@@ -484,11 +629,20 @@ export class TileEngine {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.geometry.dispose();
-      const mat = mesh.material as THREE.MeshStandardMaterial;
-      mat.map?.dispose();
-      mat.dispose();
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const material of materials) {
+        const m = material as THREE.MeshStandardMaterial;
+        for (const slot of ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap'] as const) {
+          const texture = m[slot];
+          if (!texture) continue;
+          texture.dispose();
+          if (typeof ImageBitmap !== 'undefined' && texture.image instanceof ImageBitmap) texture.image.close();
+        }
+        material.dispose();
+      }
     });
     this.bytesLoaded -= n.bytes;
+    globalTileBytes = Math.max(0, globalTileBytes - n.bytes);
     n.group = null;
     n.low = null;
     n.state = 0;
@@ -519,13 +673,22 @@ export class TileEngine {
    * are swapped. Searches wider (15 m, 60 m, 250 m, 1 km) when nothing is that close.
    */
   groundAt(c: THREE.Vector3): THREE.Vector3 | null {
+    const signature = [...this.drawn].map((n) => n.id).sort((a, b) => a - b).join(',');
+    const up = c.clone().normalize();
+    const cached = this.groundCache;
+    if (cached && cached.signature === signature && Math.hypot(c.x - cached.x, c.y - cached.y, c.z - cached.z) < 4) {
+      return cached.height === null ? null : c.clone().addScaledVector(up, cached.height);
+    }
+    const remember = (point: THREE.Vector3 | null) => {
+      this.groundCache = { x: c.x, y: c.y, z: c.z, signature, height: point ? point.clone().sub(c).dot(up) : null };
+      return point;
+    };
     let best: Node | null = null;
     for (const n of this.drawn) {
       if (!n.group || n.bv.distanceToPoint(c) > 50) continue;
       if (!best || n.depth > best.depth) best = n;
     }
-    if (!best?.group) return this.nearestLow(c);
-    const up = c.clone().normalize();
+    if (!best?.group) return remember(this.nearestLow(c));
     const e = best.group.matrix.elements;
     const meshes = best.group.children as THREE.Mesh[];
     for (const radius of [15, 60, 250, 1000]) {
@@ -542,9 +705,9 @@ export class TileEngine {
           if (h < hmin && dx * dx + dy * dy + dz * dz - h * h < r2) hmin = h;
         }
       }
-      if (hmin !== Infinity) return c.clone().addScaledVector(up, hmin);
+      if (hmin !== Infinity) return remember(c.clone().addScaledVector(up, hmin));
     }
-    return this.nearestLow(c);
+    return remember(this.nearestLow(c));
   }
 
   setOpacity(percent: number) {
@@ -552,10 +715,10 @@ export class TileEngine {
     const o = percent / 100;
     for (const n of this.loaded) {
       n.group?.traverse((m) => {
-        const mat = (m as THREE.Mesh).material as THREE.Material | undefined;
-        if (mat) {
-          mat.transparent = o < 1;
-          mat.opacity = o;
+        const material = (m as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        for (const mat of Array.isArray(material) ? material : material ? [material] : []) {
+          mat.transparent = o < 1 || Boolean(mat.userData.sourceTransparent);
+          mat.opacity = Number(mat.userData.sourceOpacity ?? 1) * o;
           mat.needsUpdate = true;
         }
       });
@@ -566,9 +729,27 @@ export class TileEngine {
     this.disposed = true;
     for (const job of [...this.inflight.values()]) this.cancel(job);
     for (const n of [...this.loaded]) this.unload(n);
-    for (const w of this.workers) w.terminate();
-    this.workers = [];
+    for (const task of this.ready) {
+      task.group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.geometry.dispose();
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          const m = material as THREE.MeshStandardMaterial;
+          for (const slot of ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap'] as const) {
+            const texture = m[slot];
+            texture?.dispose();
+            if (texture && typeof ImageBitmap !== 'undefined' && texture.image instanceof ImageBitmap) texture.image.close();
+          }
+          material.dispose();
+        }
+      });
+      for (const content of task.contents) this.closeContent(content);
+    }
+    for (const pending of this.pendingUploads) pending.texture.dispose();
+    this.pendingUploads = [];
     this.ready = [];
+    this.groundCache = null;
   }
 }
 

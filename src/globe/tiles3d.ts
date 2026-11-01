@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 import { TilesRenderer } from '3d-tiles-renderer';
 import { CesiumIonAuthPlugin, GLTFExtensionsPlugin, GoogleCloudAuthPlugin } from '3d-tiles-renderer/plugins';
+import { ImplicitTilingPlugin } from '3d-tiles-renderer/core/plugins';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { TILES_SOURCES, type TilesSourceDef } from './tiles3dSources';
@@ -141,6 +142,8 @@ interface Entry {
   checked: number;
   /** the ground height of engine v2 was measured at least once */
   groundSet?: boolean;
+  /** fixed position of the last ground sample; LOD changes alone must not move the whole tileset */
+  groundSample?: { lng: number; lat: number } | null;
   /** lowest point (metres above the ellipsoid) and centre of every loaded tile */
   lows: Map<unknown, { centre: THREE.Vector3; low: number }>;
 }
@@ -277,12 +280,12 @@ function groundHeight(e: Entry, lon: number, lat: number): number | null {
 }
 
 /**
- * Our own engine (v2) for sources without a key; the library's renderer (v1) for the rest (Google and Cesium
- * need their auth plugins) and as a switch back: localStorage 'orbis.tiles3d.engine' = 'v1'.
+ * Our own engine (v2) for most public tilesets; the library renderer (v1) for keyed sources and sources that
+ * need its implicit-tiling plugin. localStorage 'orbis.tiles3d.engine' = 'v1' remains a global fallback switch.
  */
 function useV2(src: TilesSourceDef): boolean {
   try {
-    return !src.key && !!src.url && localStorage.getItem('orbis.tiles3d.engine') !== 'v1';
+    return src.engine !== 'v1' && !src.key && !!src.url && localStorage.getItem('orbis.tiles3d.engine') !== 'v1';
   } catch {
     return false;
   }
@@ -310,6 +313,16 @@ export class Tiles3DLayer implements CustomLayerInterface {
   private plateauBusy = false;
   private plateauAt = 0;
   private plateauFor: [number, number] | null = null;
+  private contextLost = false;
+  private readonly onContextLost = (event: Event) => {
+    event.preventDefault();
+    this.contextLost = true;
+  };
+  private readonly onContextRestored = () => {
+    this.contextLost = false;
+    this.renderer?.resetState();
+    this.map?.triggerRepaint();
+  };
 
   constructor(
     private hooks: { note(msg: string): void } = { note: () => {} },
@@ -328,6 +341,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   onAdd(map: MlMap, gl: WebGL2RenderingContext) {
     this.map = map;
+    const canvas = map.getCanvas();
+    canvas.addEventListener('webglcontextlost', this.onContextLost);
+    canvas.addEventListener('webglcontextrestored', this.onContextRestored);
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     // Google tiles are Draco-compressed, Re:Earth's meshopt-compressed
@@ -342,6 +358,9 @@ export class Tiles3DLayer implements CustomLayerInterface {
     for (const id of [...this.entries.keys()]) this.drop(id);
     this.draco?.dispose();
     this.renderer?.dispose();
+    const canvas = this.map?.getCanvas();
+    canvas?.removeEventListener('webglcontextlost', this.onContextLost);
+    canvas?.removeEventListener('webglcontextrestored', this.onContextRestored);
     this.attribution?.remove();
     this.bar?.remove();
     this.renderer = undefined;
@@ -358,6 +377,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
     const url = src.url;
     const tiles = (url ? new TilesRenderer(url) : new TilesRenderer()) as TilesRenderer & { registerPlugin(p: unknown): void };
     tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: this.draco, meshoptDecoder: MeshoptDecoder, autoDispose: false }));
+    tiles.registerPlugin(new ImplicitTilingPlugin());
     // some tilesets (Re:Earth) use root-relative uris ("/v5-add/…"), which the renderer would not resolve
     if (url) {
       const origin = new URL(url).origin;
@@ -386,7 +406,8 @@ export class Tiles3DLayer implements CustomLayerInterface {
     // Photo meshes weigh ~4 MB per tile (textures decompressed). With the default 430 MB the cache is
     // full after ~100 tiles, and the tiles of the next level are refused while their parents are already
     // hidden: holes when zooming in. Budget by the device's memory instead.
-    const budget = Math.min(2.5e9, Math.max(0.6e9, ((navigator as { deviceMemory?: number }).deviceMemory ?? 4) * 0.25e9));
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+    const budget = Math.min(512e6, Math.max(256e6, deviceMemory * 0.125e9));
     tiles.lruCache.maxBytesSize = budget;
     tiles.lruCache.minBytesSize = budget * 0.75;
     tiles.setCamera(this.lod);
@@ -429,9 +450,13 @@ export class Tiles3DLayer implements CustomLayerInterface {
   }
 
   private createV2(src: TilesSourceDef): Entry {
-    const engine = new TileEngine(src.url!, { repaint: () => this.map.triggerRepaint(), note: (m) => this.hooks.note(`${src.label}: ${m}`), upload: (t) => this.renderer?.initTexture(t) });
+    const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 4;
+    const textureBudget = deviceMemory >= 8 ? 4096 : 2048;
+    const maxTexture = Math.min(textureBudget, this.renderer?.capabilities.maxTextureSize ?? 2048);
+    const maxAnisotropy = this.renderer?.capabilities.getMaxAnisotropy() ?? 1;
+    const engine = new TileEngine(src.url!, { repaint: () => this.map.triggerRepaint(), note: (m) => this.hooks.note(`${src.label}: ${m}`), upload: (t) => this.renderer?.initTexture(t) }, maxTexture, maxAnisotropy);
     engine.setOpacity(state.opacity);
-    const entry: Entry = { engine, attribution: src.attribution, opacity: state.opacity, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, lows: new Map() };
+    const entry: Entry = { engine, attribution: src.attribution, opacity: state.opacity, ground: 0, centre: new THREE.Vector3(), depthWeight: 300, offset: 0, checked: 0, groundSample: null, lows: new Map() };
     this.world.add(engine.group);
     if (this.anchor) this.place(entry);
     return entry;
@@ -467,7 +492,23 @@ export class Tiles3DLayer implements CustomLayerInterface {
   debugInfo() {
     return [...this.entries].map(([id, e]) => {
       const s = ((e.engine ?? e.tiles) as unknown as { stats: Record<string, number> }).stats;
-      return { id, engine: e.engine ? 'v2' : 'v1', loaded: s.loaded, failed: s.failed, queued: s.queued, downloading: s.downloading, active: s.active, visible: s.visible, ground: Math.round(e.ground), ring: footprint((e.engine ?? e.tiles) as unknown as TilesRenderer) };
+      return {
+        id,
+        engine: e.engine ? 'v2' : 'v1',
+        loaded: Number(s.loaded ?? 0),
+        failed: Number(s.failed ?? 0),
+        queued: Number(s.queued ?? 0),
+        downloading: Number(s.downloading ?? 0),
+        parsing: Number(s.parsing ?? 0),
+        uploading: Number(s.uploading ?? 0),
+        active: Number(s.active ?? s.visible ?? 0),
+        visible: Number(s.visible ?? s.active ?? 0),
+        bytes: Number(s.bytes ?? 0),
+        globalBytes: Number(s.globalBytes ?? 0),
+        buildMs: Number(s.maxBuildMs ?? 0),
+        ground: Math.round(e.ground),
+        ring: footprint((e.engine ?? e.tiles) as unknown as TilesRenderer),
+      };
     });
   }
 
@@ -546,7 +587,7 @@ export class Tiles3DLayer implements CustomLayerInterface {
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
     const renderer = this.renderer;
-    if (!renderer) return;
+    if (!renderer || this.contextLost) return;
     if (state.selected.includes('plateau')) this.pollPlateau();
     else if (this.plateau.length) this.plateau = [];
     this.sync();
@@ -589,12 +630,17 @@ export class Tiles3DLayer implements CustomLayerInterface {
         e.engine.update(this.lod, { width: canvas.clientWidth, height: canvas.clientHeight }, { errorTarget: 6, falloff: 6, density: falloffDensity });
         if (now - e.checked > 400) {
           e.checked = now;
-          // the ground under the map centre; it follows slowly, so a change of the level of detail does not make the tiles jump
-          const gp = e.engine.groundAt(ecef(c.lng, c.lat, 0));
-          if (gp) {
-            const g = heightOf(gp.x, gp.y, gp.z);
-            e.ground = !e.groundSet || Math.abs(g - e.ground) > 100 ? g : e.ground + (g - e.ground) * 0.3;
-            e.groundSet = true;
+          const sampleMoved = !e.groundSample || Math.hypot((c.lng - e.groundSample.lng) * 111320 * Math.cos(c.lat * RAD), (c.lat - e.groundSample.lat) * 110574) > 100;
+          if (!e.groundSet || sampleMoved) {
+            // Ground offset is a local datum correction. Resample after a pan, not whenever LOD swaps tile
+            // geometry under a stationary camera: otherwise swissBUILDINGS3D/3DBAG can visibly hop in height.
+            const gp = e.engine.groundAt(ecef(c.lng, c.lat, 0));
+            if (gp) {
+              const g = heightOf(gp.x, gp.y, gp.z);
+              e.ground = !e.groundSet || Math.abs(g - e.ground) > 100 ? g : e.ground + (g - e.ground) * 0.3;
+              e.groundSet = true;
+              e.groundSample = { lng: c.lng, lat: c.lat };
+            }
           }
           const terrain = map.getTerrain() ? (map.queryTerrainElevation(c) ?? 0) : 0;
           if (Math.abs(e.ground - terrain - e.offset) > 0.05) {
@@ -638,5 +684,6 @@ export class Tiles3DLayer implements CustomLayerInterface {
     this.camera.projectionMatrixInverse.copy(this.proj).invert();
     renderer.resetState();
     renderer.render(this.scene, this.camera);
+    renderer.resetState();
   }
 }

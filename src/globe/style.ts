@@ -266,7 +266,7 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
         type: 'raster' as const,
         source: 'satellite',
         layout: { visibility: 'none' as const },
-        paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85 },
+        paint: { 'raster-saturation': -0.15, 'raster-brightness-max': 0.85, 'raster-fade-duration': 0 },
       },
       {
         id: 'base-clarity',

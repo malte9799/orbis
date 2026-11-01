@@ -9,9 +9,11 @@ export interface TilesSourceDef {
   attribution: string;
   textured?: boolean;
   /** what the data is: photo mesh, plain building blocks, LoD2 city model (roof shapes) or terrain */
-  kind: 'Foto-Mesh' | 'Gebäude-Blöcke' | 'LoD2' | 'Gelände';
+  kind: 'Foto-Mesh' | 'Gebäude-Blöcke' | 'LoD2' | 'Gelände' | '3D-Objekte';
   /** not a tileset of its own: expands to tilesets chosen by location (see plateau.ts) */
   dynamic?: boolean;
+  /** v1 renderer is needed for implicit 3D Tiles 1.1 (for example NRW LoD2). */
+  engine?: 'v1' | 'v2';
   /** where the source is worth a look: [lon, lat, zoom] (the chip in the settings flies there) */
   at: [number, number, number];
   url?: string;
@@ -20,6 +22,9 @@ export interface TilesSourceDef {
 
 export const TILES_SOURCES: TilesSourceDef[] = [
   { id: 'basemap', kind: 'LoD2', at: [13.4132, 52.5219, 16], label: 'basemap.de (DE)', hint: 'LoD2-Gebäude Deutschland, BKG', url: 'https://sgx.geodatenzentrum.de/gdz_basemapde_3d_gebaeude/lod2_4326_null.json', attribution: '© basemap.de / BKG' },
+  { id: 'swissbuildings3d', kind: 'LoD2', at: [7.4474, 46.948, 15], label: 'CH swissBUILDINGS3D', hint: 'Landesweite Gebäude Schweiz + Liechtenstein; Dachformen und Überstände · offizieller 3D-Tiles-Dienst', url: 'https://3d.geo.admin.ch/ch.swisstopo.swissbuildings3d.3d/v1/tileset.json', attribution: '© swisstopo' },
+  { id: '3dbag', kind: 'LoD2', at: [5.1214, 52.0907, 15], label: 'NL 3DBAG (landesweit)', hint: 'Offene 3D-Gebäudemodelle Niederlande, LoD 2.2 · 3D Tiles, Release 2025.09.03', url: 'https://data.3dbag.nl/v20250903/cesium3dtiles/lod22/tileset.json', attribution: '3DBAG · 3D geoinformation research group / 3DGI · CC BY 4.0' },
+  { id: 'nrw-lod2', kind: 'LoD2', at: [6.78, 51.23, 14], label: 'DE NRW LoD2', hint: 'Landesweite LoD2-Gebäude, implizites Quadtree-Tiling · dl-de/zero-2.0', engine: 'v1', url: 'https://ogc-api.nrw.de/3dg/v1/collections/building/3dtiles', attribution: '© Geobasis NRW, dl-de/zero-2.0' },
   { id: 'reearth', kind: 'Gebäude-Blöcke', at: [151.2153, -33.8568, 16], label: 'Re:Earth (Welt)', hint: 'Overture/OSM-Gebäude weltweit', url: 'https://buildings.reearth.land/tileset.json', attribution: '© Overture Maps, OpenStreetMap (ODbL) · Re:Earth' },
   { id: 'ion', kind: 'Gebäude-Blöcke', at: [-0.0754, 51.5055, 16], label: 'Cesium OSM', hint: 'Cesium ion OSM Buildings, braucht Token', key: 'cesiumIon', attribution: 'Cesium ion · © OpenStreetMap' },
   { id: 'google', kind: 'Foto-Mesh', at: [-73.9857, 40.7484, 16], label: 'Google', hint: 'Fotorealistische 3D-Kacheln weltweit, braucht API-Key', key: 'googleTiles', textured: true, attribution: 'Google' },
@@ -29,7 +34,9 @@ export const TILES_SOURCES: TilesSourceDef[] = [
   { id: 'clermont', kind: 'Foto-Mesh', at: [3.0825, 45.7797, 16], label: 'FR Clermont-Ferrand', hint: 'CRAIG Auvergne-Rhône-Alpes', textured: true, url: 'https://3d.craig.fr/datasets/Clermont/3dtiles/tileset.json', attribution: '© CRAIG' },
   { id: 'stetienne', kind: 'Foto-Mesh', at: [4.3872, 45.4397, 16], label: 'FR Saint-Étienne', hint: 'CRAIG Auvergne-Rhône-Alpes', textured: true, url: 'https://3d.craig.fr/datasets/St-Etienne/3dtiles/tileset.json', attribution: '© CRAIG' },
   { id: 'berlin', kind: 'LoD2', at: [13.4132, 52.5219, 16], label: 'DE Berlin', hint: 'Texturiertes Gebäudemodell (virtualcityMAP-Demo, kein Foto-Mesh)', textured: true, url: 'https://www.virtualcitymap.de/datasource-data/632b42e6-b44c-450b-9436-93e48ca78ea2/tileset.json', attribution: '© Land Berlin / virtualcitySYSTEMS' },
+  { id: 'brandenburg', kind: 'Foto-Mesh', at: [13.0645, 52.3906, 14], label: 'DE Brandenburg', hint: 'Landesweites photogrammetrisches Oberflächenmodell; Fassadentiefe nicht belegt · dl-de/by-2-0', textured: true, url: 'https://isk.geobasis-bb.de/geodienste/lgb/3d_sentinel/3dmeshes/tileset.json', attribution: '© GeoBasis-DE/LGB, dl-de/by-2-0' },
   { id: 'soest', kind: 'Foto-Mesh', at: [8.1066, 51.5716, 16], label: 'DE Soest', hint: '3D-Mesh 2023, Stadt Soest', textured: true, url: 'https://soest.virtualcitymap.de/datasource-data/HOSTING-Soest/3D-Mesh_2023/tileset.json', attribution: '© Stadt Soest' },
+  { id: 'bremen', kind: 'Gebäude-Blöcke', at: [8.8072, 53.0759, 16], label: 'DE Bremen', hint: 'LoD1-Klötzchenmodell, Open Data seit 2024 · CC BY 4.0 (nur Stadt Bremen)', url: 'https://bremen.virtualcitymap.de/datasource-data/16a95b2f-b6a9-4157-a474-2c6d31f5808a/tileset.json', attribution: '© Freie Hansestadt Bremen, Landesamt Geoinformation, CC BY 4.0' },
   { id: 'stuttgart', kind: 'Foto-Mesh', at: [9.1925, 48.8586, 16], label: 'DE Stuttgart', hint: 'Integrated Mesh 2023, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Stuttgart__Integrated_Mesh_3D_Tiles_WGS84/3DTilesServer/tileset.json', attribution: '© 2023 Geofly GmbH / Esri' },
   { id: 'munich', kind: 'Foto-Mesh', at: [11.5755, 48.1374, 16], label: 'DE München', hint: 'Integrated Mesh 2021, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Munich__Integrated_Mesh_3D_Tiles_WGS84/3DTilesServer/tileset.json', attribution: '© 2021 Hexagon / Esri' },
   { id: 'jena', kind: 'Foto-Mesh', at: [11.5867, 50.9248, 16], label: 'DE Jena', hint: 'Integrated Mesh, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Jena__Integrated_Mesh_3DTiles_WGS84/3DTilesServer/tileset.json', attribution: '© Thüringer Landesamt für Bodenmanagement und Geoinformation / Esri' },
@@ -40,6 +47,11 @@ export const TILES_SOURCES: TilesSourceDef[] = [
   { id: 'vienna', kind: 'Foto-Mesh', at: [16.3738, 48.2082, 16], label: 'AT Wien', hint: 'Integrated Mesh, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Vienna__Integrated_Mesh_3D_Tiles_WGS84/3DTilesServer/tileset.json', attribution: '© Vermessung AVT-ZT-GmbH / Esri' },
   { id: 'linz', kind: 'Foto-Mesh', at: [14.3109, 48.2984, 16], label: 'AT Linz', hint: 'Integrated Mesh, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Linz__Integrated_Mesh_3DTiles_WGS84/3DTilesServer/tileset.json', attribution: '© Amt der OÖ Landesregierung / Esri' },
   { id: 'zurich', kind: 'Foto-Mesh', at: [8.5417, 47.3769, 16], label: 'CH Zürich', hint: 'Integrated Mesh, Esri-Demo', textured: true, url: 'https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/Zurich_Integrated_Mesh_3D_Tiles/3DTilesServer/tileset.json', attribution: '© Esri' },
+  { id: 'basel-buildings', kind: 'Gebäude-Blöcke', at: [7.5886, 47.5596, 16], label: 'CH Basel · Gebäude', hint: 'Amtliches 3D-Stadtmodell · kostenloser 3D-Tiles-Dienst', url: 'https://3d.geo.bs.ch/cesium/tiles/av-gebaeude-basel-stadt/tileset.json', attribution: '© Kanton Basel-Stadt' },
+  { id: 'basel-objects', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Weitere Objekte', hint: 'Weitere 3D-Objekte des Kantons', url: 'https://3d.geo.bs.ch/cesium/tiles/av-weitere-objekte/tileset.json', attribution: '© Kanton Basel-Stadt' },
+  { id: 'basel-bridges', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Brücken', hint: 'Brücken des Kantons', url: 'https://3d.geo.bs.ch/cesium/tiles/av-bruecken/tileset.json', attribution: '© Kanton Basel-Stadt' },
+  { id: 'basel-trees', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Bäume', hint: 'Vegetation: Einzelbäume', url: 'https://3d.geo.bs.ch/cesium/tiles/ba-vegetation-baeume/tileset.json', attribution: '© Kanton Basel-Stadt' },
+  { id: 'basel-forest', kind: '3D-Objekte', at: [7.5886, 47.5596, 16], label: 'CH Basel · Wald', hint: 'Vegetation: Waldflächen', url: 'https://3d.geo.bs.ch/cesium/tiles/np-vegetation-wald/tileset.json', attribution: '© Kanton Basel-Stadt' },
   { id: 'helsinki2017', kind: 'Foto-Mesh', at: [24.9522, 60.1704, 16], label: 'FI Helsinki 2017', hint: 'Reality Mesh 2017, CC BY 4.0', textured: true, url: 'https://kartta.hel.fi/3d/mesh/Helsinki_2017/tileset.json', attribution: '© Helsingin kaupunki, CC BY 4.0' },
   { id: 'alppila', kind: 'Foto-Mesh', at: [24.9369, 60.1945, 16], label: 'FI Helsinki Alppila', hint: 'Reality Mesh 2023, CC BY 4.0', textured: true, url: 'https://kartta.hel.fi/3d/mesh/Alppila_2023/tileset.json', attribution: '© Helsingin kaupunki, CC BY 4.0' },
   { id: 'uunisaari', kind: 'Foto-Mesh', at: [24.9526, 60.1527, 16], label: 'FI Helsinki Uunisaari', hint: 'Reality Mesh 2026, CC BY 4.0', textured: true, url: 'https://kartta.hel.fi/3d/mesh/Uunisaari_2026/tileset.json', attribution: '© Helsingin kaupunki, CC BY 4.0' },
