@@ -632,7 +632,7 @@ export class TileEngine {
     try {
       const res = await fetch(job.node.uri!);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const { data } = await parseTile(await res.arrayBuffer(), job.node.tf.toArray(), undefined, this.zUp);
+      const { data } = await parseTile(await res.arrayBuffer(), job.node.tf.toArray(), undefined, this.zUp, job.node.uri!.slice(0, job.node.uri!.lastIndexOf('/') + 1));
       this.finish(job.id, data);
     } catch (e) {
       this.fail(job.id, String((e as Error).message ?? e), false);

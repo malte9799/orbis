@@ -59,7 +59,7 @@ self.onmessage = async (e: MessageEvent<WorkerIn>) => {
   jobs.set(m.id, ctl);
   try {
     const raw = await fetchBytes(m.url, m.headers, ctl.signal);
-    const { data, transfer } = await parseTile(raw, m.transform, undefined, m.zUp);
+    const { data, transfer } = await parseTile(raw, m.transform, undefined, m.zUp, m.url.slice(0, m.url.lastIndexOf('/') + 1));
     (self as unknown as Worker).postMessage({ type: 'done', id: m.id, data } satisfies WorkerOut, transfer);
   } catch (err) {
     const aborted = ctl.signal.aborted;

@@ -156,6 +156,11 @@ function listUnlit(glb: Uint8Array): Uint8Array {
   return out;
 }
 
+/** the two fixes of `fixTile` on a bare glb (used per content piece in cmpt/i3dm composites) */
+export function fixGlb(glb: Uint8Array): Uint8Array {
+  return listUnlit(glbToV2(glb));
+}
+
 /**
  * Makes a tile loadable for three.js: glTF 1.0 becomes 2.0, and unlit materials get listed.
  * Works on b3dm (the glb sits behind the header and tables) and on plain glb; anything else is

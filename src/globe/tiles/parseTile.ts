@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { fixTile } from '../gltf1';
+import { fixGlb } from '../gltf1';
 
 // Turns the bytes of one tile (b3dm or glb) into plain typed arrays: runs in a worker (tileWorker.ts) and,
 // where that is not possible, on the main thread. Nothing in the result is a three.js object, so it can be
@@ -48,59 +48,92 @@ const getLoader = () => {
 };
 
 /** the glb inside a b3dm, and the RTC centre of its feature table (if any) */
-function unpack(buf: ArrayBuffer): { glb: ArrayBuffer; rtc: [number, number, number] | null } {
-  const dv = new DataView(buf);
-  if (dv.getUint32(0, true) !== 0x6d643362) return { glb: buf, rtc: null }; // not a b3dm: plain glb
-  const ftj = dv.getUint32(12, true);
-  const headerEnd = 28 + ftj + dv.getUint32(16, true) + dv.getUint32(20, true) + dv.getUint32(24, true);
-  let rtc: [number, number, number] | null = null;
-  if (ftj > 0) {
-    try {
-      const ft = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 28, ftj)));
-      if (Array.isArray(ft.RTC_CENTER)) rtc = ft.RTC_CENTER;
-    } catch {
-      /* no usable feature table */
-    }
+const B3DM = 0x6d643362; // 'b3dm'
+const I3DM = 0x6d643369; // 'i3dm'
+const CMPT = 0x74706d63; // 'cmpt'
+
+/** the RTC centre from an embedded JSON table of the container (feature table JSON) */
+function tableRtc(buf: ArrayBuffer, at: number, length: number): [number, number, number] | null {
+  try {
+    const t = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, at, length)));
+    return Array.isArray(t.RTC_CENTER) ? t.RTC_CENTER : null;
+  } catch {
+    return null;
   }
-  return { glb: buf.slice(headerEnd), rtc };
+}
+
+/**
+ * One tile file holds one piece of content (b3dm / glb / i3dm — the glb behind header + tables)
+ * or a composite (cmpt) of several such pieces. An i3dm carries its model embedded (gltfFormat 1,
+ * the common case) or as a URI in the body, then it is fetched next to the tile itself.
+ */
+async function unpackTile(buf: ArrayBuffer, base: string): Promise<{ glb: ArrayBuffer; rtc: [number, number, number] | null }[]> {
+  const dv = new DataView(buf);
+  const magic = dv.getUint32(0, true);
+  if (magic === CMPT) {
+    const out: { glb: ArrayBuffer; rtc: [number, number, number] | null }[] = [];
+    let at = 16;
+    for (let i = 0, count = dv.getUint32(12, true); i < count && at < buf.byteLength; i++) {
+      out.push(...(await unpackTile(buf.slice(at, at + dv.getUint32(at + 8, true)), base)));
+      at += dv.getUint32(at + 8, true);
+    }
+    return out;
+  }
+  if (magic === I3DM) {
+    const headerEnd = 32 + dv.getUint32(12, true) + dv.getUint32(16, true) + dv.getUint32(20, true) + dv.getUint32(24, true);
+    if (dv.getUint8(28) !== 1) { // model by URI
+      const uri = new TextDecoder().decode(new Uint8Array(buf, headerEnd)).replace(/[\0 ]+$/, '').trim();
+      if (!base) throw new Error('i3dm mit externem Modell (Basis-URL fehlt)');
+      return [{ glb: await (await fetch(new URL(uri, base))).arrayBuffer(), rtc: null }];
+    }
+    return [{ glb: buf.slice(headerEnd), rtc: tableRtc(buf, 32, dv.getUint32(12, true)) }];
+  }
+  if (magic !== B3DM) return [{ glb: buf, rtc: null }]; // plain glb
+  const headerEnd = 28 + dv.getUint32(12, true) + dv.getUint32(16, true) + dv.getUint32(20, true) + dv.getUint32(24, true);
+  return [{ glb: buf.slice(headerEnd), rtc: tableRtc(buf, 28, dv.getUint32(12, true)) }];
 }
 
 const parse = (glb: ArrayBuffer) => new Promise<{ scene: THREE.Group | null; json: { extensions?: { CESIUM_RTC?: { center: number[] } } } }>((res, rej) => getLoader().parse(glb, '', (g) => res({ scene: g.scene ?? null, json: g.parser.json }), rej));
 
 const UP = new THREE.Vector3();
 
+/** glTF 1.0 → 2.0 plus listed unlit, per content piece (b3dm bodies and cmpt children alike) */
+function fixContent(raw: ArrayBuffer): ArrayBuffer {
+  const fixed = fixGlb(new Uint8Array(raw));
+  return fixed.buffer === raw ? raw : (fixed.slice().buffer as ArrayBuffer);
+}
+
 /**
  * Decodes one tile. `transform` is the tile's own transform in ECEF (parents multiplied in), only used to
  * work out where the content lies on the ground.
  */
-export async function parseTile(raw: ArrayBuffer, transform: number[], maxTexture = 2048, zUp = false): Promise<{ data: TileData; transfer: Transferable[] }> {
-  const { glb, rtc: ftRtc } = unpack(fixTile(raw));
-  const { scene, json } = await parse(glb);
-  if (!scene) {
-    // legal but empty content (a glTF without a default scene, e.g. a stripped NRW leaf tile):
-    // nothing to draw — the tile counts as loaded, no retry, no error
-    return { data: { meshes: [], matrix: new THREE.Matrix4().toArray(), centre: [0, 0, 0], low: [0, 0, 0], bytes: 0 }, transfer: [] };
-  }
-  const rtc = json.extensions?.CESIUM_RTC?.center ?? ftRtc ?? [0, 0, 0];
-  // glTF is y-up, tiles are z-up (unless the tileset says `asset.gltfUpAxis: "Z"`); the RTC centre is not rotated
-  const matrix = new THREE.Matrix4().makeTranslation(rtc[0], rtc[1], rtc[2]).multiply(zUp ? new THREE.Matrix4() : new THREE.Matrix4().makeRotationX(Math.PI / 2));
-  const full = new THREE.Matrix4().fromArray(transform).multiply(matrix);
-
-  scene.updateMatrixWorld(true);
+export async function parseTile(raw: ArrayBuffer, transform: number[], maxTexture = 2048, zUp = false, base = ''): Promise<{ data: TileData; transfer: Transferable[] }> {
+  const pieces = await unpackTile(raw, base);
   const meshes: MeshData[] = [];
   const transfer: Transferable[] = [];
   let bytes = 0;
+  let rtc: [number, number, number] | null = null;
+  let built = false;
+  const full = new THREE.Matrix4();
+  const v = new THREE.Vector3();
   const sum = new THREE.Vector3();
   let n = 0;
-  const v = new THREE.Vector3();
   const normalMatrix = new THREE.Matrix3();
   const sharedPos = new Map<THREE.BufferGeometry, { position: Float32Array; normal: Float32Array | null; uv: Float32Array | null; colors: Float32Array | null; colorSize: number }>();
-  const bake = (g: THREE.BufferGeometry, world: THREE.Matrix4) => {
+  const sceneUp = new THREE.Vector3();
+  let matrix = new THREE.Matrix4();
+
+  const bake = (g: THREE.BufferGeometry, world: THREE.Matrix4, offset: THREE.Vector3 | null) => {
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     const position = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i).applyMatrix4(world);
       position.set([v.x, v.y, v.z], i * 3);
+    }
+    if (offset) for (let i = 0; i < pos.count * 3; i += 3) {
+      position[i] += offset.x;
+      position[i + 1] += offset.y;
+      position[i + 2] += offset.z;
     }
     let normal: Float32Array | null = null;
     const nrm = g.getAttribute('normal') as THREE.BufferAttribute | undefined;
@@ -126,13 +159,33 @@ export async function parseTile(raw: ArrayBuffer, transform: number[], maxTextur
     }
     return { position, normal, uv, colors, colorSize: col?.itemSize ?? 3 };
   };
-  scene.traverse((o) => {
+
+  // Several pieces (a cmpt composite, an i3dm batch) share the tile transform, but each piece keeps
+  // its own RTC centre. Everything merges into one TileData on the RTC of the first piece; the other
+  // pieces carry their offset baked into the vertex positions (translation only, normals stay).
+  for (const piece of pieces) {
+    const { scene, json } = await parse(fixContent(piece.glb));
+    if (!scene) continue; // empty piece (some NRW leaves): nothing to draw
+    const pieceRtc = (json.extensions?.CESIUM_RTC?.center ?? piece.rtc ?? [0, 0, 0]) as [number, number, number];
+    let offset: THREE.Vector3 | null = null;
+    if (!built) {
+      rtc = pieceRtc;
+      // glTF is y-up, tiles are z-up (unless the tileset says `asset.gltfUpAxis: "Z"`); the RTC centre is not rotated
+      matrix = new THREE.Matrix4().makeTranslation(rtc[0], rtc[1], rtc[2]).multiply(zUp ? new THREE.Matrix4() : new THREE.Matrix4().makeRotationX(Math.PI / 2));
+      full.fromArray(transform).multiply(matrix);
+      built = true;
+    } else {
+      // glTF is y-up, tiles are z-up (unless the tileset says `asset.gltfUpAxis: "Z"`); the RTC centre is not rotated
+      offset = sceneUp.set(pieceRtc[0] - rtc![0], pieceRtc[1] - rtc![1], pieceRtc[2] - rtc![2]);
+    }
+    scene.updateMatrixWorld(true);
+    scene.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     const g = mesh.geometry;
     const pos = g.getAttribute('position') as THREE.BufferAttribute;
     let arrays = sharedPos.get(g);
-    if (!arrays) sharedPos.set(g, (arrays = bake(g, mesh.matrixWorld)));
+    if (!arrays) sharedPos.set(g, (arrays = bake(g, mesh.matrixWorld, offset)));
     // a mesh with several materials is split by its groups: one entry per material, sharing the vertex arrays
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     const parts = mats.length > 1 && g.groups.length ? g.groups.map((gr) => ({ mat: mats[gr.materialIndex ?? 0], start: gr.start, count: gr.count })) : [{ mat: mats[0], start: 0, count: Infinity }];
@@ -170,7 +223,13 @@ export async function parseTile(raw: ArrayBuffer, transform: number[], maxTextur
       sum.add(v);
       n++;
     }
-  });
+    });
+  }
+  if (!built) {
+    // legal but empty content (a glTF without a default scene, e.g. a stripped NRW leaf tile):
+    // nothing to draw — the tile counts as loaded, no retry, no error
+    return { data: { meshes: [], matrix: new THREE.Matrix4().toArray(), centre: [0, 0, 0], low: [0, 0, 0], bytes: 0 }, transfer: [] };
+  }
   // Pictures larger than the screen can use only cost memory and upload time: shrink them here, off the main thread.
   // A picture shared by several meshes is shrunk once and handed over once (a transferable may only be listed once).
   const resized = new Map<ImageBitmap, ImageBitmap>();

@@ -76,7 +76,9 @@ function mountSourceBar(map: MlMap): HTMLDivElement {
       b.style.color = on ? '#fff' : '#c9d1e0';
     }
   };
+  // the tilesets that belong to a grouped source appear only with the group (e.g. CH Basel · Gebäude)
   for (const src of TILES_SOURCES) {
+    if (src.partOf) continue;
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = src.label;
@@ -517,6 +519,14 @@ export class Tiles3DLayer implements CustomLayerInterface {
       if (!src) continue;
       // only sources with a checked licence in the public app (the others: dev server, see TilesSourceDef.open)
       if (!import.meta.env.DEV && !src.open) continue;
+      // a grouped source stands for several tilesets at once (CH Basel: Gebäude + Brücken + Objekte)
+      if (src.group) {
+        for (const gid of src.group) {
+          const g = TILES_SOURCES.find((x) => x.id === gid);
+          if (g && (import.meta.env.DEV || g.open)) out.push([gid, g]);
+        }
+        continue;
+      }
       if (!src.dynamic) out.push([id, src]);
       else if (id === 'plateau') for (const p of this.plateau) out.push([`plateau:${p.url}`, { ...src, id: `plateau:${p.url}`, label: `PLATEAU ${p.name}`, url: p.url }]);
     }

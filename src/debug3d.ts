@@ -131,6 +131,7 @@ const activate = (src: (typeof TILES_SOURCES)[number]) => {
 
 const grouped = new Map<string, HTMLElement>();
 for (const src of TILES_SOURCES) {
+  if (src.partOf) continue; // appears only with its group (CH Basel)
   let group = grouped.get(src.kind);
   if (!group) {
     const section = document.createElement('details'); section.className = 'source-group';
@@ -152,6 +153,7 @@ function refresh() {
   const q = search.value.trim().toLocaleLowerCase('de');
   let visible = 0;
   for (const src of TILES_SOURCES) {
+    if (src.partOf) continue;
     const row = rows.get(src.id)!;
     const reviewBox = row.card.querySelector<HTMLInputElement>('input[type=checkbox]');
     if (reviewBox) reviewBox.checked = signedOff.has(src.id);
