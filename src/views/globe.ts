@@ -321,7 +321,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (map.getLayer('resources')) map.setFilter('resources', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     if (map.getLayer('resources-label')) map.setFilter('resources-label', (rcats.length ? ['in', ['get', 'cat'], ['literal', rcats]] : null) as never);
     const t3 = lay('tiles3d');
-    if (t3) setTiles3dOptions(map, store.getKeys(), t3.opacity ?? 100);
+    if (t3) setTiles3dOptions(map, store.getKeys(), t3.opacity ?? 100, !(t3.filter ?? '').split(',').includes('noedge'));
     if (extras) for (const d of EXTRAS) extras.setOpacity(d.id, lay(d.id)?.opacity ?? 100);
     applyOrder(k);
   }

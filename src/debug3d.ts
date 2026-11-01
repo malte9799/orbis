@@ -65,7 +65,7 @@ map.on('style.load', () => {
   if (terrainOn()) map.setTerrain({ source: 'dem', exaggeration: 1 });
   map.addLayer(layer);
   map.addLayer({ id: 'outline', type: 'line', source: 'outline', paint: { 'line-color': '#9ee7d4', 'line-width': 2.5 } });
-  setTiles3dOptions(map, store.getKeys(), 100);
+  setTiles3dOptions(map, store.getKeys(), 100, false);
 });
 
 const toolbar = document.createElement('div');
@@ -182,10 +182,10 @@ setInterval(() => {
     (map.getSource('outline') as GeoJSONSource).setData({ type: 'FeatureCollection', features: rings.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r } })) });
   }
   const c = map.getCenter();
-  const lines = layer.debugInfo().map((i) => `${i.id} · ${i.loaded} geladen · ${i.visible} sichtbar · Netz ${i.downloading} · Parse ${i.parsing} · GPU ${i.uploading} · Queue ${i.queued} · ${i.failed} Fehler · ${(i.bytes / 1e6).toFixed(0)} MB (global ${(i.globalBytes / 1e6).toFixed(0)}) · Aufbau max. ${i.buildMs.toFixed(1)} ms`);
-  const baseId = basemap === 'sat' ? 'sat' : `bm-${basemap}`;
-  const imagery = map.getSource(baseId) ? (map.isSourceLoaded(baseId) ? 'Bodenbild bereit' : 'Bodenbild lädt') : 'kein Bodenbild';
-  status.textContent = `${map.getZoom().toFixed(1)} Zoom · ${Math.round(map.getPitch())}° Neigung · ${imagery}\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
+  const lines = layer.debugInfo().map((i) => `${i.id}  ·  ${i.loaded} geladen  ·  ${i.failed} Fehler  ·  ${i.visible} sichtbar`);
+  const sourceId = basemap === 'sat' ? 'sat' : `bm-${basemap}`;
+  const ground = map.getSource(sourceId) ? (map.isSourceLoaded(sourceId) ? 'Grundkarte bereit' : 'Grundkarte lädt') : 'keine Grundkarte';
+  status.textContent = `${map.getZoom().toFixed(1)} Zoom  ·  ${Math.round(map.getPitch())}° Neigung  ·  ${ground}\n${c.lat.toFixed(4)}, ${c.lng.toFixed(4)}\n${lines.join('\n') || 'Noch keine Kacheln geladen'}`;
 }, 500);
 
 (window as unknown as { layer: Tiles3DLayer; map: MlMap }).layer = layer;

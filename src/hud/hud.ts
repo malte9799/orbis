@@ -118,7 +118,7 @@ export interface Hud {
 const filterText = (l: KLayer): string => {
   const f = FILTERS[l.id];
   if (!f || !l.filter) return '';
-  return f.options.filter(([v]) => (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
+  return f.options.filter(([v]) => !f.invert?.includes(v) && (f.multi ? l.filter!.split(',').includes(v) : v === l.filter) && v).map(([, t]) => t).join(', ');
 };
 
 /** volume of the strike tick sounds ("Blitze Live"): stored as a vol-n token in the layer filter */
@@ -269,12 +269,15 @@ export function createHud(host: HudHost): Hud {
   }
   /** the unfolded bar: the pinned Karten as cards first, then every other Karte */
   function barGallery(): string {
-    const others = [...STANDARD, ...st.own].filter((k) => !st.pinned.includes(k.id));
+    const slot = (k: Karte) => {
+      const i = st.pinned.indexOf(k.id);
+      return i < 0 ? null : i;
+    };
     return `<div class="bg-head"><h4><span>Karten</span><small>★ = in der Leiste · Tasten 1–${Math.min(MAX_PINNED, st.pinned.length)}</small></h4>
         <button type="button" class="all open" data-act="gallery" aria-expanded="true" aria-label="Karten einklappen" title="Einklappen">${ico('x', 2)}</button></div>
-      <div class="ggrid kc-grid">${pins().map((k, i) => kcard(k, i)).join('')}</div>
-      ${others.length ? `<h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>` : ''}
-      <div class="ggrid kc-grid">${others.map((k) => kcard(k, null)).join('')}
+      <div class="ggrid kc-grid">${STANDARD.map((k) => kcard(k, slot(k))).join('')}</div>
+      <h4><span>Weitere Karten</span><small>anpassbar, jederzeit zurücksetzbar</small></h4>
+      <div class="ggrid kc-grid">${st.own.map((k) => kcard(k, slot(k))).join('')}
         <div class="gc new" data-act="blank" role="button" tabindex="0">${ico('plus')}Neue leere Karte<small>Grundkarte wählen, Ebenen hinzufügen</small></div></div>`;
   }
 
@@ -283,12 +286,6 @@ export function createHud(host: HudHost): Hud {
     const scrollLeft = prev?.scrollLeft ?? 0;
     const was = prev?.classList.contains('expanded') ?? false;
     const from = prev?.getBoundingClientRect();
-    // where every Karte (and its name) was, to carry them over to the new layout
-    const old = new Map<string, { kc: DOMRect; nm: DOMRect }>();
-    prev?.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
-      const nm = el.querySelector('.nm');
-      if (nm && !old.has(el.dataset.id!)) old.set(el.dataset.id!, { kc: el.getBoundingClientRect(), nm: nm.getBoundingClientRect() });
-    });
     const expanded = barExpanded();
     reg('bar').innerHTML = `<div class="hud-bar hud-glass${expanded ? ' expanded' : ''}" role="group" aria-label="Karten">
       ${
@@ -301,33 +298,17 @@ export function createHud(host: HudHost): Hud {
     </div>`;
     const bar = reg('bar').querySelector<HTMLElement>('.hud-bar')!;
     bar.scrollLeft = scrollLeft;
-    // unfolding / folding: the box grows (or shrinks) and each Karte moves from its old place to the new one
+    // unfolding / folding: the box grows (or shrinks) while its content fades in, staggered; nothing flies around
     if (from && was !== expanded && layout === 'desktop' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       const to = bar.getBoundingClientRect();
-      const timing = { duration: 340, easing: 'cubic-bezier(.3,.9,.3,1)' };
+      const easing = 'cubic-bezier(.25,.8,.25,1)';
       bar.style.overflow = 'hidden';
-      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], timing).onfinish = () => (bar.style.overflow = '');
-      bar.querySelectorAll<HTMLElement>('.kc[data-id]').forEach((el) => {
-        const o = old.get(el.dataset.id!);
-        const nm = el.querySelector<HTMLElement>('.nm');
-        if (!o || !nm) return;
-        const kc = el.getBoundingClientRect();
-        const nmr = nm.getBoundingClientRect();
-        el.style.overflow = 'hidden';
+      bar.animate([{ width: `${from.width}px`, height: `${from.height}px` }, { width: `${to.width}px`, height: `${to.height}px` }], { duration: 320, easing }).onfinish = () => (bar.style.overflow = '');
+      const items = expanded ? bar.querySelectorAll<HTMLElement>('.bg-head, h4, .kc') : bar.querySelectorAll<HTMLElement>('.kc, .sep, .all');
+      items.forEach((el, i) => {
         el.animate(
-          [
-            { transform: `translate(${o.kc.left - kc.left}px, ${o.kc.top - kc.top}px)`, width: `${o.kc.width}px`, height: `${o.kc.height}px` },
-            { transform: 'translate(0, 0)', width: `${kc.width}px`, height: `${kc.height}px` },
-          ],
-          timing,
-        ).onfinish = () => (el.style.overflow = '');
-        // the name keeps its place relative to the moving Karte, then slides to its new spot
-        nm.animate(
-          [
-            { transform: `translate(${o.nm.left - o.kc.left - (nmr.left - kc.left)}px, ${o.nm.top - o.kc.top - (nmr.top - kc.top)}px)` },
-            { transform: 'translate(0, 0)' },
-          ],
-          timing,
+          [{ opacity: 0, transform: expanded ? 'translateY(8px) scale(.97)' : 'none' }, { opacity: 1, transform: 'none' }],
+          { duration: 240, delay: 90 + Math.min(i, 10) * 18, easing, fill: 'backwards' },
         );
       });
     }
@@ -514,7 +495,7 @@ export function createHud(host: HudHost): Hud {
         open
           ? `<div class="more">
         ${c.kind === 'extra' ? `<label class="op"><span>Deckkraft</span><input type="range" class="rng" min="10" max="100" step="5" value="${op}" data-op="${esc(l.id)}" aria-label="Deckkraft"/><span data-opv>${op} %</span></label>` : ''}
-        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${f.multi ? ((l.filter ?? '').split(',').includes(v) ? 'on' : '') : (l.filter ?? '') === v ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div>` : ''}
+        ${f ? `<div class="fl">${f.options.map(([v, t]) => `<button type="button" class="chip ${(f.multi ? (l.filter ?? '').split(',').includes(v) : (l.filter ?? '') === v) !== !!f.invert?.includes(v) ? 'on' : ''}" data-act="filter" data-id="${esc(l.id)}" data-v="${esc(v)}">${esc(t)}</button>`).join('')}</div>` : ''}
         <div class="src"><span>${esc(c.hint)}</span><button type="button" data-act="remove" data-id="${esc(l.id)}">Entfernen</button></div>
       </div>`
           : ''
