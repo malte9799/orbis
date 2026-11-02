@@ -55,7 +55,7 @@ export function bindFollowUrl(focus: GeoFocus, stage: GeoStage) {
     // no new history entry and no hashchange: the camera does not fly back with the browser's back button
     if (hash !== location.hash) history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
   };
-  focus.onChange = (t) => write(t && followOf(t));
+  focus.listen((t) => write(t && followOf(t)));
   let asked = 0;
   const apply = () => {
     const wanted = readFollow(location.hash);

@@ -252,7 +252,7 @@ export function applyAir(ctx: ExtraCtx) {
 /** the 3D airport layer (also carries the 3D aircraft and radiosondes) */
 export function createAirport(ctx: ExtraCtx) {
   const st = getState(ctx);
-  st.airport3d = new Airport3D(ctx.map, 'marker', { info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx), iconsTick: () => refreshLiveIcons(ctx) });
+  st.airport3d = new Airport3D(ctx.map, ctx.stage, 'marker', { load: (hex) => loadAircraftByHex(hex).then((fc) => st.airport3d?.feed(fc)), info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx), iconsTick: () => refreshLiveIcons(ctx) });
   st.airport3d.init();
 }
 

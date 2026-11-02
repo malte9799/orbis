@@ -17,6 +17,9 @@ export interface FlightPanelHooks {
   select(hex: string | null): void;
   fit(hex: string): void;
   map(): MlMap | null;
+  /** the camera follows this aircraft and turns around it */
+  follow(hex: string): void;
+  unfollow(): void;
 }
 
 type Follow = 'off' | 'follow' | 'cockpit';
@@ -118,7 +121,18 @@ export class FlightPanel {
     this.root.hidden = true;
   }
 
+  /** The camera followed `following` until now or from now on (null: nothing). */
+  focusChanged(following: string | null) {
+    if (this.follow !== 'follow' || following === this.hex) return;
+    this.follow = 'off';
+    this.syncFollowButtons();
+  }
+
   private setFollow(mode: Follow) {
+    if (this.follow === 'follow' && mode !== 'follow') {
+      this.follow = mode;
+      this.h.unfollow();
+    }
     this.follow = mode;
     clearInterval(this.followTimer);
     const map = this.h.map();
@@ -127,28 +141,28 @@ export class FlightPanel {
       // moving the map by hand ends following
       map.on('dragstart', () => this.follow !== 'off' && this.setFollow('off'));
     }
-    if (mode !== 'off' && map && this.hex) {
+    if (mode === 'follow' && this.hex) this.h.follow(this.hex);
+    if (mode === 'cockpit' && map && this.hex) {
       const tick = () => {
         const i = this.hex ? this.h.info(this.hex) : null;
         if (!i) return;
         const alt = i.ground ? 0 : i.altM;
-        if (this.follow === 'cockpit') {
-          // the camera sits at the aircraft (on its altitude) and looks along its course: with the pitch
-          // the camera is `dist` away from the map centre, `dist · cos(pitch)` high and `dist · sin(pitch)`
-          // behind it – so the height fixes the zoom and the centre lies ahead of the aircraft
-          const pitch = Math.min(map.getMaxPitch(), 75);
-          const dist = (Math.max(alt, 20) + 8) / Math.cos(rad(pitch));
-          const h = map.getCanvas().clientHeight;
-          const zoom = Math.log2((40075016 * Math.cos(rad(i.lat))) / (512 * (dist / (1.5 * h))));
-          map.jumpTo({ center: shift(i.lon, i.lat, i.track, dist * Math.sin(rad(pitch))), bearing: i.track, pitch, zoom: Math.min(map.getMaxZoom(), Math.max(0, zoom)) });
-        } else {
-          // the aircraft is in the air: the map centre is where the view ray through it meets the ground
-          map.jumpTo({ center: shift(i.lon, i.lat, map.getBearing(), alt * Math.tan(rad(map.getPitch()))) });
-        }
+        // the camera sits at the aircraft (on its altitude) and looks along its course: with the pitch
+        // the camera is `dist` away from the map centre, `dist · cos(pitch)` high and `dist · sin(pitch)`
+        // behind it – so the height fixes the zoom and the centre lies ahead of the aircraft
+        const pitch = Math.min(map.getMaxPitch(), 75);
+        const dist = (Math.max(alt, 20) + 8) / Math.cos(rad(pitch));
+        const h = map.getCanvas().clientHeight;
+        const zoom = Math.log2((40075016 * Math.cos(rad(i.lat))) / (512 * (dist / (1.5 * h))));
+        map.jumpTo({ center: shift(i.lon, i.lat, i.track, dist * Math.sin(rad(pitch))), bearing: i.track, pitch, zoom: Math.min(map.getMaxZoom(), Math.max(0, zoom)) });
       };
       tick();
       this.followTimer = window.setInterval(tick, 200);
     }
+    this.syncFollowButtons();
+  }
+
+  private syncFollowButtons() {
     for (const b of this.root.querySelectorAll<HTMLButtonElement>('.fp-actions button')) b.classList.toggle('on', b.dataset.act === this.follow);
   }
 

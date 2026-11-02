@@ -241,6 +241,13 @@ export class GeoStage implements CustomLayerInterface {
     return part.targets?.().find((t) => t.slug === slug) ?? null;
   }
 
+  /** Is this target at a screen point (CSS px)? */
+  hits(target: GeoTarget, x: number, y: number): boolean {
+    const p = target.position(this.clock ?? performance.now());
+    const s = p && this.frame?.toScreen(p[0], p[1], p[2]);
+    return !!s && Math.hypot(s[0] - x, s[1] - y) < PICK_PX;
+  }
+
   /** The target at a screen point (CSS px), hidden ones excluded. */
   pick(x: number, y: number): GeoTarget | null {
     const frame = this.frame;

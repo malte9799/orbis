@@ -1468,7 +1468,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         select: (hex) => extras?.selectFlight(hex),
         fit: (hex) => extras?.fitFlight(hex),
         map: () => map,
+        follow: (hex) => {
+          void Promise.resolve(geoStage?.resolve('plane', hex, {})).then((t) => t && geoFocus?.start(t));
+        },
+        unfollow: () => geoFocus?.stop(),
       });
+      geoFocus?.listen((t) => flightPanel?.focusChanged(t?.source === 'plane' ? t.slug : null));
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
       wahlenPanel = new WahlPanel(el);

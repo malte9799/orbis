@@ -93,8 +93,7 @@ function slerp(a: [number, number], b: [number, number], k: number): [number, nu
 
 export class GeoFocus {
   target: GeoTarget | null = null;
-  /** the followed object changed */
-  onChange: ((target: GeoTarget | null) => void) | null = null;
+  private listeners: ((target: GeoTarget | null) => void)[] = [];
   private raf = 0;
   private startedAt = 0;
   private lastTick = 0;
@@ -121,6 +120,15 @@ export class GeoFocus {
     private stage: GeoStage,
   ) {}
 
+  /** `fn` hears about every change of the followed object. */
+  listen(fn: (target: GeoTarget | null) => void) {
+    this.listeners.push(fn);
+  }
+
+  private changed() {
+    for (const fn of this.listeners) fn(this.target);
+  }
+
   /**
    * A click on the map (CSS px): focuses what it hits, ends the focus when it hits nothing. True: the click
    * is used up. False: it is free for whatever else is at that point, also when it ended the focus.
@@ -130,6 +138,8 @@ export class GeoFocus {
       this.dragged = false;
       return true;
     }
+    // the followed object itself: stays followed
+    if (this.target && this.stage.hits(this.target, x, y)) return true;
     const target = this.stage.pick(x, y);
     if (!target) {
       this.stop();
@@ -170,7 +180,7 @@ export class GeoFocus {
     this.target?.released?.();
     this.target = target;
     target.entered?.();
-    this.onChange?.(target);
+    this.changed();
     const c = map.getCenter();
     this.from = [c.lng, c.lat];
     this.lastCentre = [c.lng, c.lat];
@@ -207,7 +217,7 @@ export class GeoFocus {
     if (!this.target) return;
     this.target.released?.();
     this.target = null;
-    this.onChange?.(null);
+    this.changed();
     this.last = '';
     this.dragged = false;
     cancelAnimationFrame(this.raf);

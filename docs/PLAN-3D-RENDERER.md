@@ -7,15 +7,15 @@ Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
 ## Stand
 
 Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
-PR. Phase 1 und 2 sind gebaut, im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in `views/globe.ts`;
-die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Der Fokus hat noch keine Quelle: Geldflüsse sind nur
-anklickbar, die erste Quelle mit `targets()` kommt in Phase 3. Code: `src/globe/geo3d/`.
+PR. Phase 1 bis 3 sind gebaut, Phase 3 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
+`views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
 
 | Datei | Inhalt |
 |---|---|
 | `frame.ts` | `GeoFrame`: Platzieren, Bildschirmposition, Verdeckung durch den Globus, Überblendung |
 | `stage.ts` | `GeoStage`: ein Custom Layer und ein Renderer pro Karte, eigener Framebuffer auf dem Globus, Picking, Cursor; `GeoPart`, `GeoTarget` |
-| `line.ts` | `GeoLine`: Linie mit fester Pixelbreite und Strichelung, auf Kugel und Karte |
+| `line.ts` | `GeoLine`: Linie mit fester Pixelbreite, Strichelung und Ausblenden, auf Kugel und Karte |
+| `wall.ts` | `GeoWall`: Vorhang von einer Linie zum Boden |
 | `arc.ts` | `arcPoints`: Bogen entlang des Großkreises |
 | `focus.ts` | `GeoFocus`: Kamera folgt einem Objekt, Drehen und Zoomen um das Objekt |
 | `url.ts` | Fokus in der Adresse: `#/karte?follow=sat/iss&follow.t=…`; Slug und Zusatzwerte gibt die Quelle an |
@@ -29,7 +29,7 @@ Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Ab
 |---|---|---|---|
 | ✓ 1 | `GeoStage` und `GeoFocus` fest in `views/globe.ts`, Kamerabefehle und Klick im Fokus | Karte ohne 3D-Objekt unverändert | gebaut |
 | ✓ 2 | Geldflüsse als echte Bögen | Bögen in beiden Projektionen, Klicks gehen | gebaut |
-| 3 | Flugzeuge migrieren (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernen | Spur und Route auf dem Globus, flache Karte unverändert | 3 |
+| ✓ 3 | Flugzeuge migriert (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernt; ausgewähltes Flugzeug auf dem Globus, „Folgen“ über `GeoFocus` | Spur und Route auf dem Globus, flache Karte unverändert | gebaut |
 | 4 | Schiffe, Fahrzeuge, `camview3d` migrieren, `GLOBE_FLAT_ZOOM` entfernen | keine Mercator-Rechnung mehr in Layern | 1–2 |
 | 5 | Satelliten: `GeoPoints`, `GeoOrbit`, ISS-Modell | Starlink flüssig, Orbit beim Anklicken | 2–3 |
 | 6 | Weltweite Flugzeuge mit Instancing und Detailstufen (`air.ts:64` befüllt heute nur die 2D-Quelle), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 2 mit vollem Weltdatensatz | 2 |
@@ -43,16 +43,16 @@ Nach Phase 4 entscheiden: Patch `patches/maplibre-gl@6.14.0.patch` entfernen (Ü
 ausgewählt. Trifft er nichts, endet nur der Fokus, ohne Wetter-Tooltip.
 
 **Andere Kamerabefehle im Fokus (gebaut):** Zoom-Knöpfe, Neigungsregler und Kompass steuern den Fokus. Verschiebt
-etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. Offen für Phase 3: Der Flug-Follow in
-`flightpanel.ts` und die Navigation in `routing/locator.ts` führen die Kamera selbst. Am Ende gibt es nur noch
-einen Kamera-Führer.
+etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. „Folgen“ im Flug-Panel läuft über den Fokus
+(`follow=plane/<hex>`). Offen: Cockpit-Ansicht (`flightpanel.ts`) und Navigation (`routing/locator.ts`) führen die
+Kamera noch selbst, Schiffe und Sonden in Phase 4. Am Ende gibt es nur noch einen Kamera-Führer.
 
-**Gelände (Phase 3):** Der Renderer rechnet mit Höhe 0. Modelle am Boden und Pins brauchen die Geländehöhe
-(`queryTerrainElevation`), sonst stecken sie im Berg. Noch offen ist der Lag bei eingeschaltetem 3D-Gelände:
+**Gelände:** Flugzeuge rechnen mit der Geländehöhe (`queryTerrainElevation`), das gilt auch für den Fokus. Noch offen
+ist der Lag bei eingeschaltetem 3D-Gelände:
 Gelände wird in jedem Frame neu gezeichnet, und bewegte Objekte erzwingen Dauer-Neuzeichnen. Es ruckelt auch ohne
 `?geo3d` etwas, Gelände kostet also schon selbst; mit `?geo3d` ist es stärker. Vor Phase 3 mit und ohne Stage
-messen (Kamera stehend und bewegt). Die Stage drosselt bei stehender Kamera auf 15 fps. Die alten Layer (`planes3d`, `ships3d`, `vehicles3d`) drosseln
-nicht und bekommen das mit der Migration.
+messen (Kamera stehend und bewegt). Die Stage drosselt bei stehender Kamera auf 15 fps. `ships3d` und `vehicles3d` drosseln noch nicht und bekommen das in
+Phase 4.
 
 **`moveend` im Fokus (gebaut):** Bei bewegtem Ziel endet in jedem Frame eine Kamerabewegung. `views/globe.ts` und
 `overlay.ts` filtern das über `geo3dFocus`. Der Wind bleibt deshalb ausgeblendet, sobald die Kamera im Fokus

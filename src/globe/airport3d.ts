@@ -5,7 +5,7 @@ import { isSuperseded } from '../api/overpass';
 import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
-import { GLOBE_FLAT_ZOOM } from './style';
+import type { GeoStage, GeoTarget } from './geo3d/stage';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
@@ -49,6 +49,8 @@ export interface Ap3dHooks {
   modeChanged(): void;
   /** flat map with 2D icons: refresh their positions from the smoothed state */
   iconsTick(): void;
+  /** fetch this aircraft and feed it (a link names an aircraft the map has not seen yet) */
+  load(hex: string): Promise<void>;
 }
 
 export type PlaneMode = 'off' | 'flat' | '3d';
@@ -89,28 +91,54 @@ export class Airport3D {
 
   constructor(
     private map: MlMap,
+    private stage: GeoStage,
     private before: string,
     private hooks: Ap3dHooks,
   ) {
-    this.layer = new PlanesLayer(this.tracker, {
+    this.layer = new PlanesLayer(map, this.tracker, {
       mode: () => this.mode(),
       only: () => this.onlySelected(),
       icons: () => this.iconsOn,
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
+      target: (hex) => this.followTarget(hex),
     });
   }
 
-  /** 'off' without aircraft layer, zoomed out or on the globe; 'flat' while the map is not tilted. */
-  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route (not on the globe). */
-  private onlySelected(): string | null {
-    const hex = this.layer.selected;
-    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && !this.globeShown() && this.tracker.planes.has(hex) ? hex : null;
+  /** What the camera follows for an aircraft; the map has to know it first. */
+  private followTarget(hex: string): GeoTarget | null | Promise<GeoTarget | null> {
+    if (!this.planesOn) return null;
+    const planes = this.tracker.planes;
+    if (!planes.has(hex)) return this.hooks.load(hex).then(() => (planes.has(hex) ? this.followTarget(hex) : null));
+    /** followed by a link: nothing selected it, so it goes when the camera lets go */
+    let selectedHere = false;
+    return {
+      source: this.layer.source,
+      slug: hex,
+      label: String(planes.get(hex)?.props.callsign ?? hex),
+      position: (now) => {
+        // the stage draws it at this very time: the camera must not lag one step behind
+        this.tracker.step(now);
+        const p = planes.get(hex);
+        if (!p) return null;
+        const elev = this.map.getTerrain() ? (this.map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
+        return [p.dLon, p.dLat, (p.ground ? 0 : p.dAlt) + elev];
+      },
+      entered: () => {
+        if (this.layer.selected === hex) return;
+        selectedHere = true;
+        this.select(hex);
+      },
+      released: () => {
+        if (selectedHere && this.layer.selected === hex) this.select(null);
+      },
+    };
   }
 
-  /** The globe is really drawn as a ball: from GLOBE_FLAT_ZOOM on MapLibre has faded it into the flat map. */
-  private globeShown(): boolean {
-    return this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM;
+  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route. */
+  private onlySelected(): string | null {
+    const hex = this.layer.selected;
+    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && this.tracker.planes.has(hex) ? hex : null;
   }
 
   /** The selected aircraft, if any. */
@@ -118,9 +146,12 @@ export class Airport3D {
     return this.layer.selected;
   }
 
+  /** 'off' without aircraft layer or zoomed out; 'flat' while the flat map is not tilted. */
   mode(): PlaneMode {
-    if (!this.planesOn || this.globeShown()) return 'off';
+    if (!this.planesOn) return 'off';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
+    // a flat icon means nothing on a ball: there it is the model
+    if (this.stage.frame?.globe) return '3d';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
 
@@ -128,7 +159,7 @@ export class Airport3D {
   private raise() {
     const layers = this.map.getStyle()?.layers;
     if (!layers?.length || layers[layers.length - 1].id === AP3D_HIT_LAYER) return;
-    for (const id of [this.layer.id, ...PLANE_LAYERS]) if (this.map.getLayer(id)) this.map.moveLayer(id);
+    for (const id of [this.stage.id, ...PLANE_LAYERS]) if (this.map.getLayer(id)) this.map.moveLayer(id);
   }
 
   private checkMode() {
@@ -240,7 +271,7 @@ export class Airport3D {
       layout: hidden,
       paint: { 'circle-radius': 26, 'circle-opacity': 0, 'circle-stroke-width': 0 },
     });
-    if (!m.getLayer(this.layer.id)) m.addLayer(this.layer, before);
+    this.stage.add(this.layer);
     // overlays (radar, forecast …) are added later and must not cover the aircraft
     m.on('styledata', () => this.raise());
     m.on('pitchend', () => this.checkMode());
@@ -273,10 +304,6 @@ export class Airport3D {
   /** Called after the map stopped moving: load the layout for the visible box. */
   onMoveEnd() {
     if (!this.layoutOn) return;
-    if (this.globeShown()) {
-      this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht oder auf dem Globus ab Zoomstufe 12' });
-      return;
-    }
     if (this.map.getZoom() < AIRPORT_ZOOM) {
       this.hooks.info({ loading: false, note: `ab Zoomstufe ${AIRPORT_ZOOM} sichtbar – zu einem Flughafen zoomen` });
       return;
