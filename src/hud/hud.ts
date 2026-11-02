@@ -648,8 +648,8 @@ export function createHud(host: HudHost): Hud {
 
   // --- add popover
   function addRow(c: CatalogEntry, sub: string, sug = false) {
-    return `<div class="ar ${sug ? 'sug' : ''}" data-act="addlayer" data-id="${esc(c.id)}" role="button" tabindex="0"><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span>
-      <div><b>${esc(c.label)}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div><span class="plus">${ico('plus', 2.4)}</span></div>`;
+    return `<div class="ar ${sug ? 'sug' : ''}" data-act="addlayer" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(sub)}"><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span><span class="plus">${ico('plus', 2.4)}</span>
+      <b>${esc(c.label)}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div>`;
   }
   function addList(): string {
     const k = view(cur);
@@ -659,10 +659,10 @@ export function createHud(host: HudHost): Hud {
     const sg = q ? [] : suggestionsFor(k).filter(([id]) => !have.has(id) && catalogOf(id));
     // suggested layers appear in their own block only, not a second time in the categories
     const shown = new Set(sg.map(([id]) => id));
-    if (sg.length) body += `<h4>${ico('sparkle', 2)}Passend zu dieser Karte</h4>${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}`;
+    if (sg.length) body += `<section class="acat"><h4>${ico('sparkle', 2)}Passend zu dieser Karte</h4><div class="agrid">${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}</div></section>`;
     for (const cat of CATS) {
       const items = CATALOG.filter((c) => c.cat === cat.id && !have.has(c.id) && !shown.has(c.id) && (!q || `${c.label} ${c.hint} ${cat.label}`.toLowerCase().includes(q)));
-      if (items.length) body += `<h4>${esc(cat.label)}</h4>${items.map((c) => addRow(c, c.hint)).join('')}`;
+      if (items.length) body += `<section class="acat"><h4>${ico(cat.icon, 2)}${esc(cat.label)}</h4><div class="agrid">${items.map((c) => addRow(c, c.hint)).join('')}</div></section>`;
     }
     return body || `<div class="empty">Keine Ebene für „${esc(ui.q)}“.</div>`;
   }
