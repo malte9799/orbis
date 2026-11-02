@@ -432,6 +432,7 @@ export class ShipsLayer implements GeoPart {
       queueMicrotask(() => this.hooks.modeChanged(on));
     }
     const only = on ? null : this.followed;
+    this.object.visible = on || only !== null;
     const hide = (s: ShipState) => {
       if (s.obj) s.obj.visible = false;
       if (s.pulse) s.pulse.visible = false;

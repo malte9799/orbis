@@ -750,6 +750,7 @@ export class PlanesLayer implements GeoPart {
     const mode = this.hooks.mode();
     this.object.visible = mode !== 'off';
     if (mode === 'off') {
+      this.crowdHits = [];
       // far out without models the 2D icon can be hovered all the same
       if (this.hovered) this.tracker.step(now);
       this.syncLabel();
@@ -906,6 +907,16 @@ export class PlanesLayer implements GeoPart {
     this.crowdHits = hits;
   }
 
+  /** The aircraft are gone for good: their buffers go too. */
+  dropCrowd() {
+    this.crowdHits = [];
+    this.hovered = null;
+    if (!this.far) return;
+    this.object.remove(this.far.object);
+    this.far.dispose();
+    this.far = null;
+  }
+
   private newCrowd() {
     const far = new GeoInstances({ narrow: farAirliner(1), wide: farAirliner(1.68), heli: farAirliner(0.45) });
     this.object.add(far.object);
@@ -947,7 +958,7 @@ export class PlanesLayer implements GeoPart {
    */
   pick(x: number, y: number): string | null {
     const frame = this.frameNow;
-    if (!frame) return null;
+    if (!frame || !this.object.visible) return null;
     const screen = (lon: number, lat: number, alt: number) => frame.toScreen(lon, lat, alt);
     const segDist = (a: [number, number], b: [number, number]) => {
       const dx = b[0] - a[0];

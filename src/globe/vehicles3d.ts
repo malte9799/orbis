@@ -635,6 +635,7 @@ export class VehiclesLayer implements GeoPart {
       queueMicrotask(() => this.hooks.modeChanged(on));
     }
     const only = on ? null : this.followed;
+    this.object.visible = on || !!only;
     const hide = (s: VehState) => {
       if (s.obj) s.obj.visible = false;
       this.syncLabel(s, false);

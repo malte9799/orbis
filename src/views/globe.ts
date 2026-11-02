@@ -321,7 +321,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
-    if (extrasChanged) extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+    if (extrasChanged) {
+      extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+      // without aircraft there is nothing left to show or follow in its panel
+      if (!extras?.isOn('aircraft') && !extras?.isOn('airport3d')) flightPanel?.close();
+    }
     if (groupsChanged) {
       ev.apply();
       ev.ensure();

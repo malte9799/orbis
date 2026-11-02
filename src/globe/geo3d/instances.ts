@@ -72,6 +72,7 @@ export class GeoInstances {
 
   dispose() {
     for (const { mesh } of this.slots.values()) mesh.dispose();
+    for (const geometry of Object.values(this.geometries)) geometry.dispose();
     this.material.dispose();
     this.occluder.geometry.dispose();
     (this.occluder.material as THREE.Material).dispose();

@@ -237,6 +237,16 @@ export function applyAir(ctx: ExtraCtx) {
   const st = getState(ctx);
   // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
   st.airport3d?.configure({ layout: ctx.isOn('airport3d'), planes: wantsAircraft(ctx), icons: ctx.isOn('aircraft') });
+  // nothing uses the aircraft any more: the data goes, and switching back on loads at once
+  if (!wantsAircraft(ctx) && st.lastAircraft) {
+    st.lastAircraft = null;
+    st.aircraftAt = 0;
+    st.heliFeatures = [];
+    st.rotorShown = false;
+    ctx.setData('aircraft', empty());
+    ctx.setData('aircraft-rotor', empty());
+    ctx.set('aircraft', { loading: false, count: undefined, note: undefined });
+  }
   refreshAircraftIcons(ctx);
   // the radiosondes fly along with the aircraft: feed their positions into the 3D tracker (again
   // after each toggle and whenever the last feed lies back; the feed itself is fresh every 60 s)

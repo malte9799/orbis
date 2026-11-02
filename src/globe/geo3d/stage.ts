@@ -173,6 +173,13 @@ export class GeoStage implements CustomLayerInterface {
     const now = this.clock ?? performance.now();
     let moving = false;
     for (const p of this.parts) if (p.update(frame, now)) moving = true;
+    // nothing to draw: no framebuffer and no pass over the whole screen
+    if (this.parts.some((p) => p.object.visible)) this.draw(renderer, frame, canvas);
+    if (this.mouse && performance.now() - this.lastHover > HOVER_FRAME_MS) this.updateHover();
+    if (moving && !document.hidden) this.repaint();
+  }
+
+  private draw(renderer: THREE.WebGLRenderer, frame: GeoFrame, canvas: HTMLCanvasElement) {
     this.camera.projectionMatrix.copy(frame.proj);
     // the light comes from the camera's side: on a sphere no fixed direction lights all models
     if (frame.globe) this.sun.position.set(frame.camera[0] - frame.origin[0], frame.camera[1] - frame.origin[1], frame.camera[2] - frame.origin[2]);
@@ -193,8 +200,6 @@ export class GeoStage implements CustomLayerInterface {
       renderer.setRenderTarget(null);
       renderer.render(this.scene, this.camera);
     }
-    if (this.mouse && performance.now() - this.lastHover > HOVER_FRAME_MS) this.updateHover();
-    if (moving && !document.hidden) this.repaint();
   }
 
   /** The next frame for moving objects; the map draws at full rate anyway while the camera moves. */

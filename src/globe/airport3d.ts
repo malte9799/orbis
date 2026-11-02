@@ -295,7 +295,9 @@ export class Airport3D {
       this.planesOn = o.planes;
       for (const id of PLANE_LAYERS) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', o.planes ? 'visible' : 'none');
       if (!o.planes) {
+        this.select(null);
         this.tracker.clear();
+        this.layer.dropCrowd();
         this.setData('ap3d-label', emptyFc());
       }
     }
