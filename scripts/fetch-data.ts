@@ -4,6 +4,8 @@
 // Live sources are refreshed on every run (every 15 min), slow-changing ones once a day;
 // if a download fails, the previous file is kept.
 
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -318,6 +320,117 @@ await task('ccc-us', 7 * DAY, async () => {
     lic: 'CC0 1.0',
     events,
   });
+});
+
+// Zivile Schäden in der Ukraine (Bellingcat „Civilian Harm in Ukraine“, TimeMap): öffentliche
+// Rohdaten der Karte als JSON (Vorfälle mit Ort, Datum, Auswirkung, Waffensystem und Beleg-Links).
+// Lizenz nicht ausdrücklich angegeben – Attribution und Verlinkung zum Original, keine Medien kopiert.
+await task('ukraine-harm', DAY, async () => {
+  type Row = { id?: string; date?: string; location?: string; latitude?: number; longitude?: number; description?: string; impact?: string[]; weapon_system?: string[]; sources?: string[]; graphic?: boolean };
+  const rows = await json<Row[]>('https://bellingcat-embeds.ams3.cdn.digitaloceanspaces.com/production/ukr/timemap/api.json', 120000);
+  const r5 = (n: number) => Math.round(n * 1e5) / 1e5;
+  const events = rows
+    .filter((r) => Number.isFinite(r.latitude) && Number.isFinite(r.longitude) && Math.abs(r.latitude!) <= 90)
+    .map((r) => ({
+      id: r.id ?? '',
+      d: r.date ?? '',
+      l: r.location ?? '',
+      lat: r5(r.latitude!),
+      lon: r5(r.longitude!),
+      t: (r.description ?? '').slice(0, 600),
+      i: r.impact?.length ? r.impact : undefined,
+      w: r.weapon_system?.length ? r.weapon_system : undefined,
+      s: (r.sources ?? []).filter((u) => /^https?:\/\//.test(u)).slice(0, 8),
+      g: r.graphic ? 1 : undefined,
+    }));
+  if (events.length < 500) throw new Error(`Bellingcat: nur ${events.length} Vorfälle – Datei unvollständig?`);
+  write('ukraine-harm.json', {
+    built: new Date().toISOString(),
+    source: 'Bellingcat – Civilian Harm in Ukraine (ukraine.bellingcat.com)',
+    events,
+  });
+});
+
+// Kiel Ukraine Support Tracker (Institut für Weltwirtschaft): Hilfszusagen/-leistungen je Geberland
+// aus der XLSX-Veröffentlichung (Release-Nummer wechselt, daher Link von der Seite lesen). Aus dem Blatt
+// „Country Summary (€)“ nehmen wir die zugewiesenen Beträge (allocations, Mrd. €) nach Finanz-,
+// humanitärer und militärischer Hilfe. Lizenz nicht ausdrücklich angegeben – Attribution und Link.
+await task('ukraine-support', 7 * DAY, async () => {
+  const page = await text('https://www.ifw-kiel.de/topics/war-against-ukraine/ukraine-support-tracker/');
+  const href = /href="([^"]*Ukraine_Support_Tracker[^"]*\.xlsx)"/.exec(page)?.[1];
+  if (!href) throw new Error('Kiel Tracker: kein XLSX-Link auf der Seite');
+  const url = new URL(href, 'https://www.ifw-kiel.de/').toString();
+  const tmp = join(tmpdir(), 'ukraine-support.xlsx');
+  writeFileSync(tmp, Buffer.from(await (await get(url, 240000)).arrayBuffer()));
+  const unz = (name: string) => execFileSync('unzip', ['-p', tmp, name], { maxBuffer: 512 * 1024 * 1024 }).toString('utf8');
+  try {
+    const wb = unz('xl/workbook.xml');
+    const rels = unz('xl/_rels/workbook.xml.rels');
+    const rid = /<sheet [^>]*name="Country Summary \(€\)"[^>]*r:id="([^"]+)"/.exec(wb)?.[1];
+    const target = rid && new RegExp(`<Relationship [^>]*Id="${rid}"[^>]*Target="([^"]+)"|<Relationship [^>]*Target="([^"]+)"[^>]*Id="${rid}"`).exec(rels);
+    const sheetPath = target && (target[1] ?? target[2]);
+    if (!sheetPath) throw new Error('Kiel Tracker: Blatt „Country Summary (€)“ nicht gefunden');
+    const strings = [...unz('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
+    const sheet = unz(`xl/${sheetPath.replace(/^\/?(xl\/)?/, '')}`);
+    const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) ? Number(v) : 0);
+    const rows: Record<string, string>[] = [];
+    for (const r of sheet.matchAll(/<row [^>]*>([\s\S]*?)<\/row>/g)) {
+      const row: Record<string, string> = {};
+      for (const c of r[1].matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const v = /<v>([\s\S]*?)<\/v>/.exec(c[3] ?? '')?.[1];
+        if (v === undefined) continue;
+        row[c[1]] = c[2].includes('t="s"') ? strings[Number(v)] : v;
+      }
+      rows.push(row);
+    }
+    const head = rows.findIndex((r) => r.B === 'Country' && /allocations/i.test(r.E ?? ''));
+    if (head < 0) throw new Error('Kiel Tracker: Tabellenkopf nicht gefunden');
+    const asOf = /between ([A-Z][a-z]+ \d+, \d{4}) and ([A-Z][a-z]+ \d+, \d{4})/.exec(rows.map((r) => r.B ?? r.A ?? '').join('\n'))?.[2] ?? '';
+    // Geber-Positionen: Mittelpunkt des größten Polygons der Landesgrenze (Overrides für Gebiete mit Übersee-Teilen)
+    const geo = JSON.parse(readFileSync('public/data/games/countries.json', 'utf8')) as { features: { properties: { en: string }; geometry: { type: string; coordinates: any } }[] };
+    const OVERRIDE: Record<string, [number, number]> = {
+      'United States of America': [39.8, -98.6], France: [46.6, 2.4], Netherlands: [52.2, 5.3], Norway: [61.0, 9.0], Denmark: [56.0, 10.0],
+      'EU (Commission and Council)': [50.85, 4.35], 'European Investment Bank': [49.61, 6.13],
+    };
+    const ALIAS: Record<string, string> = { 'United States': 'United States of America', Czechia: 'Czech Republic', Turkiye: 'Turkey', China: "People's Republic of China", Korea: 'South Korea' };
+    const centre = (name: string): [number, number] | null => {
+      const key = ALIAS[name] ?? name;
+      if (OVERRIDE[key]) return OVERRIDE[key];
+      const f = geo.features.find((x) => x.properties.en === key);
+      if (!f) return null;
+      const polys: number[][][][] = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+      let best: [number, number] | null = null, area = -1;
+      for (const p of polys) {
+        const ring = p[0];
+        const xs = ring.map((c) => c[0]), ys = ring.map((c) => c[1]);
+        const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+        if (w * h > area) { area = w * h; best = [(Math.min(...ys) + Math.max(...ys)) / 2, (Math.min(...xs) + Math.max(...xs)) / 2]; }
+      }
+      return best;
+    };
+    const countries: { n: string; lat: number; lon: number; fin: number; hum: number; mil: number; tot: number }[] = [];
+    const missing: string[] = [];
+    for (const r of rows.slice(head + 2)) {
+      const n = (r.B ?? '').trim();
+      if (!n || !r.E || n === 'Total') continue;
+      const tot = num(r.H);
+      if (tot <= 0) continue;
+      const c = centre(n);
+      if (!c) { missing.push(n); continue; }
+      countries.push({ n, lat: Math.round(c[0] * 100) / 100, lon: Math.round(c[1] * 100) / 100, fin: num(r.E), hum: num(r.F), mil: num(r.G), tot });
+    }
+    if (missing.length) console.warn(`  Kiel Tracker: ohne Position: ${missing.join(', ')}`);
+    if (countries.length < 20) throw new Error(`Kiel Tracker: nur ${countries.length} Geberländer`);
+    write('ukraine-support.json', {
+      built: new Date().toISOString(),
+      source: 'Kiel Institute for the World Economy – Ukraine Support Tracker',
+      xlsx: url,
+      asOf,
+      countries: countries.sort((a, b) => b.tot - a.tot),
+    });
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------
