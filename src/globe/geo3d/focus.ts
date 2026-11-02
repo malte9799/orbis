@@ -98,6 +98,8 @@ export class GeoFocus {
   private startedAt = 0;
   private lastTick = 0;
   private from: [number, number] = [0, 0];
+  /** the camera's height at the start: on to another object it starts from the height of the last one */
+  private fromElevation = 0;
   private bearing = 0;
   private pitch = 0;
   /** zoom independent of latitude: wanted and shown */
@@ -181,6 +183,7 @@ export class GeoFocus {
     this.changed();
     const c = map.getCenter();
     this.from = [c.lng, c.lat];
+    this.fromElevation = map.getCenterElevation();
     this.lastCentre = [c.lng, c.lat];
     this.aimBearing = this.aimPitch = null;
     this.bearing = map.getBearing();
@@ -289,11 +292,12 @@ export class GeoFocus {
     this.zoom += (this.wanted - this.zoom) * (1 - Math.exp(-dt / ZOOM_SMOOTH_S));
     this.aimCamera(dt);
     const zoom = this.zoom + scale;
-    const state = `${centre[0]}|${centre[1]}|${zoom}|${this.bearing}|${this.pitch}|${p[2] * k}`;
+    const elevation = this.fromElevation + (p[2] - this.fromElevation) * k;
+    const state = `${centre[0]}|${centre[1]}|${zoom}|${this.bearing}|${this.pitch}|${elevation}`;
     if (state === this.last) return;
     this.last = state;
     // a camera update of ours, for whoever listens to the move events
-    map.jumpTo({ center: centre, zoom, bearing: this.bearing, pitch: this.pitch, elevation: p[2] * k }, { geo3dFocus: true });
+    map.jumpTo({ center: centre, zoom, bearing: this.bearing, pitch: this.pitch, elevation }, { geo3dFocus: true });
     const c = map.getCenter();
     this.lastCentre = [c.lng, c.lat];
   };
