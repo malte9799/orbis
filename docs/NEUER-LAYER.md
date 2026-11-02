@@ -49,3 +49,25 @@ Hinweise:
 - Eine Quelle (`source`), die ein Layer-Spec benutzt, muss in `sources`/`rasters` des Moduls stehen
   (sonst wirft MapLibre beim Start „source not found“).
 - Die Stapelreihenfolge richtet sich nach `order`.
+
+## 3D-Objekte auf der Karte
+
+Modelle, Linien und Punkte zeichnet die `GeoStage` (`src/globe/geo3d/`), im Globus, in der Überblendung und auf der flachen
+Karte. Eine Ebene legt keinen eigenen Renderer an, sondern gibt ihr einen Teil: `ctx.stage.add(part)`.
+
+```ts
+class MeineObjekte implements GeoPart {
+  readonly object = new THREE.Group();
+  readonly source = 'meins';                 // Name der Quelle in der Adresse: follow=meins/<slug>
+  update(frame: GeoFrame, now: number) {     // jeden Frame; true: es bewegt sich etwas
+    frame.place(modell.matrix, lon, lat, hoeheM, kursGrad, skalierung);
+    return false;
+  }
+}
+```
+
+- **Platzieren:** `frame.place`, `frame.toScreen`, `frame.occluded`, `frame.metresPerPixel`, `frame.isNear`. Nie selbst in Mercator rechnen.
+- **Bausteine:** `GeoLine` (Linien, Bögen mit `arcPoints`), `GeoWall` (Vorhang zum Boden), `GeoPoints` (tausende Punkte), `GeoInstances` (tausende Modelle).
+- **Klick:** `targets()` startet beim Klick den Fokus; `featureAt()` führt zum `click` der Ebene (`clickLayers` enthält dann den Namen, auch ohne echten Map-Layer).
+- **Folgen:** `GeoTarget` mit `position(now)`. `resolve(slug, params)` findet ein Objekt aus der Adresse, `params()` liefert Zusatzwerte (`follow.t=…`). Die Zeit ist die von `update`: So bleibt das Objekt beim Folgen exakt in der Bildmitte.
+

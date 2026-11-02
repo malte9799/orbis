@@ -64,7 +64,10 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
     return loadGlobalAircraft()
       .then((fc) => {
         if (seq !== st.aircraftSeq || !ctx.isOn('aircraft')) return;
-        ctx.setData('aircraft', fc);
+        st.lastAircraft = fc;
+        // the whole world, nothing else can be missing from it
+        st.airport3d?.feed(fc, { lat: 0, lon: 0, nm: 1e6 });
+        refreshAircraftIcons(ctx);
         ctx.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min; zuvor herangezoomte Gebiete aktueller) – reinzoomen für Live-Details' });
       })
       .catch(() => {

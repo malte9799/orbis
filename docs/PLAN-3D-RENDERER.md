@@ -7,7 +7,7 @@ Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
 ## Stand
 
 Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
-PR. Phase 1 bis 5 sind gebaut, Phase 5 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
+PR. Alle Phasen sind gebaut, Phase 6 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
 `views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
 
 | Datei | Inhalt |
@@ -17,6 +17,7 @@ PR. Phase 1 bis 5 sind gebaut, Phase 5 im Browser aber noch nicht geprüft. Stag
 | `line.ts` | `GeoLine`: Linie mit fester Pixelbreite, Strichelung und Ausblenden, auf Kugel und Karte |
 | `wall.ts` | `GeoWall`: Vorhang von einer Linie zum Boden |
 | `arc.ts` | `arcPoints`: Bogen entlang des Großkreises |
+| `instances.ts` | `GeoInstances`: tausende Modelle, verdeckt von einer unsichtbaren Erde im Tiefenpuffer |
 | `points.ts` | `GeoPoints`: tausende Punkte, die sich zwischen zwei Positionssätzen selbst bewegen |
 | `focus.ts` | `GeoFocus`: Kamera folgt einem Objekt, Drehen und Zoomen um das Objekt |
 | `url.ts` | Fokus in der Adresse: `#/karte?follow=sat/iss&follow.t=…`; Slug und Zusatzwerte gibt die Quelle an |
@@ -33,7 +34,7 @@ Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Ab
 | ✓ 3 | Flugzeuge migriert (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernt; ausgewähltes Flugzeug auf dem Globus, „Folgen“ über `GeoFocus` | Spur und Route auf dem Globus, flache Karte unverändert | gebaut |
 | ✓ 4 | Schiffe, Fahrzeuge, `camview3d` migriert, `GLOBE_FLAT_ZOOM` entfernt, Folgen für Schiffe und Sonden über `GeoFocus` | keine Mercator-Rechnung mehr in Layern (`planetmap.ts` ausgenommen) | gebaut |
 | ✓ 5 | Satelliten: `GeoPoints`, Orbit, ISS-Modell, Seitenleiste, Folgen (`follow=sat/<norad>`) | Starlink flüssig, Orbit beim Anklicken | gebaut |
-| 6 | Weltweite Flugzeuge mit Instancing und Detailstufen (`air.ts:64` befüllt heute nur die 2D-Quelle), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 2 mit vollem Weltdatensatz | 2 |
+| ✓ 6 | Weltweite Flugzeuge als `GeoInstances` ab Zoom 3 (darunter 2D-Icons), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 3 mit vollem Weltdatensatz | gebaut |
 
 Der MapLibre-Patch (Übergang schon bei Zoom 6–7) ist entfernt, die Karte flacht wieder bei Zoom 11–12 ab. Niedrige und hohe Orbits
 erreichen den Übergang damit nie, ihr Zoom-Limit greift vorher. Ganz abschaffen lässt sich die flache Karte nicht: Für Kacheln und Modelle
@@ -77,6 +78,6 @@ Erst möglich, wenn es als PR auf GitHub läuft:
 ## Grenzen des Fokus
 
 - GEO-Objekte: Die Kamera kommt nicht näher als etwa 640 km.
-- Niedrige Orbits: Der Zoom stoppt bei etwa Zoom 7, bevor die Kamera am Objekt vorbei wäre.
+- Niedrige Orbits: Die Kamera kommt nicht näher als etwa 30 % der Flughöhe, aus jeder Richtung. Beim Neigen bleibt der Abstand zum Objekt gleich, nur die Zoomzahl der Karte sinkt.
 - Sehr nah am Pol kann MapLibre die Kartenmitte begrenzen, das Objekt rutscht dann aus der Mitte.
 - Die Adresse enthält das Objekt, nicht Zoom, Neigung und Richtung.

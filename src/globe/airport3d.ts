@@ -15,6 +15,8 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 export const AIRPORT_ZOOM = 11;
 /** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
 const PLANE_ZOOM = 9;
+/** from this zoom on all aircraft are simple models on the globe; further out they are too small to tell */
+const CROWD_ZOOM = 3;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
@@ -102,6 +104,7 @@ export class Airport3D {
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
       target: (hex) => this.followTarget(hex),
+      crowd: () => this.crowd(),
     });
   }
 
@@ -135,6 +138,12 @@ export class Airport3D {
     };
   }
 
+  /** Far out on the globe (from CROWD_ZOOM to PLANE_ZOOM): all aircraft of the 2D layer as simple models. */
+  private crowd(): boolean {
+    const z = this.map.getZoom();
+    return this.planesOn && this.iconsOn && z >= CROWD_ZOOM && z < PLANE_ZOOM && !!this.stage.frame?.globe;
+  }
+
   /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route. */
   private onlySelected(): string | null {
     const hex = this.layer.selected;
@@ -149,6 +158,7 @@ export class Airport3D {
   /** 'off' without aircraft layer or zoomed out; 'flat' while the flat map is not tilted. */
   mode(): PlaneMode {
     if (!this.planesOn) return 'off';
+    if (this.crowd()) return '3d';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
     // far out the selected aircraft is a model: a flat icon means nothing on a ball
     if (this.onlySelected() && this.stage.frame?.globe) return '3d';
@@ -164,7 +174,7 @@ export class Airport3D {
 
   private checkMode() {
     // the 2D icons also change when only the selected aircraft is left far out
-    const mode = this.mode() + (this.onlySelected() ?? '');
+    const mode = this.mode() + (this.onlySelected() ?? '') + (this.crowd() ? 'crowd' : '');
     if (mode === this.lastMode) return;
     this.lastMode = mode;
     this.hooks.modeChanged();
@@ -476,6 +486,7 @@ export class Airport3D {
 
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
+    if (this.crowd()) return this.tracker.planes.has(hex);
     const only = this.onlySelected();
     if (only) return hex === only && this.mode() === '3d';
     return this.mode() === '3d' && this.tracker.planes.has(hex);
@@ -563,6 +574,8 @@ export class Airport3D {
 
   /** Is this radiosonde drawn as a 3D model (so its 2D symbol should disappear)? Like `owns()`. */
   ownsSonde(serial: string) {
+    // far out the models are only for aircraft, also when the selected one makes the mode '3d'
+    if (this.map.getZoom() < PLANE_ZOOM && this.layer.selected !== `sonde:${serial}`) return false;
     if (!this.tracker.planes.has(`sonde:${serial}`)) return false;
     const mode = this.mode();
     return mode === '3d' || (mode === 'flat' && !this.iconsOn);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Map as MlMap } from 'maplibre-gl';
 import type { GeoFrame, Vec3 } from './geo3d/frame';
+import { GeoInstances } from './geo3d/instances';
 import { GeoLine } from './geo3d/line';
 import type { GeoPart, GeoTarget } from './geo3d/stage';
 import { GeoWall } from './geo3d/wall';
@@ -72,6 +73,15 @@ const WALL_MAX_M = 1500;
 const EXTRAPOLATE = 1;
 const M_PER_DEG = 111320;
 const YELLOW = 0xf2c94c;
+/** far out, aircraft are this much smaller than near ones (there are thousands of them) */
+const CROWD_SCALE = 0.4;
+/** how often the far aircraft are worked out anew (ms): they hardly move on the screen */
+const CROWD_IDLE_MS = 1000;
+const CROWD_MOVING_MS = 100;
+/** an aircraft this far outside of the screen (CSS px) is left out */
+const CROWD_MARGIN_PX = 60;
+/** how close to a far aircraft (CSS px) a click still hits it */
+const CROWD_PICK_PX = 12;
 const RED = 0xff2d55;
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -256,6 +266,23 @@ function airliner(k: number): THREE.BufferGeometry {
     return n;
   });
   return mergeGeometries(flat)!;
+}
+
+/** The same aircraft with very few triangles, for thousands of them far out. */
+function farAirliner(k: number): THREE.BufferGeometry {
+  const L = 37.6 * k;
+  const r = 1.95 * k;
+  const parts: THREE.BufferGeometry[] = [
+    new THREE.CylinderGeometry(r, r * 0.4, L, 5).translate(0, 0, 3.3 * k),
+    ...wingPanel(r * 0.7, 17.9 * k, 3.2 * k, 6.5 * k, 1.6 * k, 7.5 * k, 0.5 * k, 2.2 * k),
+    ...wingPanel(r * 0.5, 6.2 * k, -L * 0.34, 4.2 * k, 1.3 * k, 3.4 * k, 0.35 * k, 3.6 * k),
+    new THREE.BoxGeometry(0.5 * k, 7 * k, 6.4 * k).translate(0, -L * 0.4, 7 * k),
+  ];
+  return mergeGeometries(parts.map((g) => {
+    const n = g.index ? g.toNonIndexed() : g;
+    n.deleteAttribute('uv');
+    return n;
+  }))!;
 }
 
 /** Parts of the helicopter: body, windscreen, main rotor blades, tail rotor blades (x right, y nose, z up). */
@@ -656,6 +683,8 @@ export interface PlanesLayerHooks {
   frame(planes: PlaneState[]): void;
   /** what the camera follows for this aircraft */
   target(hex: string): GeoTarget | null | Promise<GeoTarget | null>;
+  /** far out on the globe: all aircraft as simple models at once, only the selected one in full */
+  crowd(): boolean;
 }
 
 export class PlanesLayer implements GeoPart {
@@ -676,6 +705,12 @@ export class PlanesLayer implements GeoPart {
   /** callsign labels: plain elements moved every frame with the same matrix as the models (no lag when zooming) */
   private labelBox = document.createElement('div');
   private labels = new Map<string, HTMLDivElement>();
+  private far: GeoInstances | null = null;
+  private lastCrowd = 0;
+  private crowdCamera = '';
+  /** where the far aircraft are on the screen, for clicks and the cursor */
+  private crowdHits: { hex: string; x: number; y: number }[] = [];
+  private repaintTimer = 0;
 
   /** Route of an aircraft (null: none): a grey dashed line is drawn while it is the selected one. */
   setRoute(hex: string, route: { origin: [number, number]; destination: [number, number] } | null) {
@@ -704,6 +739,8 @@ export class PlanesLayer implements GeoPart {
     for (const line of this.forecast) line.dispose();
     this.labelBox.remove();
     this.labels.clear();
+    clearTimeout(this.repaintTimer);
+    this.far?.dispose();
   }
 
   update(frame: GeoFrame, now: number) {
@@ -723,6 +760,12 @@ export class PlanesLayer implements GeoPart {
     const models = !flat || !this.hooks.icons();
     const only = this.hooks.only();
     this.tracker.step(now);
+    const crowd = this.hooks.crowd();
+    if (crowd) this.updateCrowd(frame, now);
+    else if (this.far) {
+      this.far.object.visible = false;
+      this.crowdHits = [];
+    }
     const drawn: PlaneState[] = [];
     const map = this.map;
     const terrain = map.getTerrain();
@@ -739,6 +782,7 @@ export class PlanesLayer implements GeoPart {
       p.rig?.hide();
     };
     for (const p of this.tracker.planes.values()) {
+      if (crowd && p.hex !== this.selected) continue;
       if (only && p.hex !== only) {
         hideAll(p);
         continue;
@@ -811,7 +855,57 @@ export class PlanesLayer implements GeoPart {
       this.lastFrameHook = now;
       this.hooks.frame(drawn);
     }
+    if (crowd && !this.selected) {
+      // far out an aircraft crosses a pixel in seconds: no need to draw the whole map every frame
+      if (!this.repaintTimer) {
+        this.repaintTimer = window.setTimeout(() => {
+          this.repaintTimer = 0;
+          map.triggerRepaint();
+        }, CROWD_IDLE_MS);
+      }
+      return false;
+    }
     return this.tracker.planes.size > 0;
+  }
+
+  /** All aircraft but the selected one as simple models. */
+  private updateCrowd(frame: GeoFrame, now: number) {
+    this.far ??= this.newCrowd();
+    const far = this.far;
+    far.object.visible = true;
+    const map = this.map;
+    const c = map.getCenter();
+    const camera = `${c.lng}|${c.lat}|${map.getZoom()}|${map.getBearing()}|${map.getPitch()}`;
+    const moving = camera !== this.crowdCamera;
+    this.crowdCamera = camera;
+    far.update(frame);
+    if (now - this.lastCrowd < (moving ? CROWD_MOVING_MS : CROWD_IDLE_MS)) return;
+    this.lastCrowd = now;
+    far.start(frame, this.tracker.planes.size);
+    const hits: { hex: string; x: number; y: number }[] = [];
+    const m = new THREE.Matrix4();
+    for (const p of this.tracker.planes.values()) {
+      if (p.hex === this.selected) continue;
+      for (const o of [p.obj, p.shadow, p.drop, p.pulse]) if (o) o.visible = false;
+      p.rig?.hide();
+      if (p.model === 'car' || p.model === 'tug' || p.model === 'sonde') continue;
+      const alt = p.ground ? 0.2 : p.dAlt;
+      const pos = frame.toScreen(p.dLon, p.dLat, alt);
+      if (!pos || pos[0] < -CROWD_MARGIN_PX || pos[1] < -CROWD_MARGIN_PX || pos[0] > frame.width + CROWD_MARGIN_PX || pos[1] > frame.height + CROWD_MARGIN_PX) continue;
+      hits.push({ hex: p.hex, x: pos[0], y: pos[1] });
+      const boost = Math.max(1, 0.65 * CROWD_SCALE * frame.metresPerPixel(p.dLon, p.dLat, alt));
+      frame.place(m, p.dLon, p.dLat, alt, p.dTrack, boost);
+      far.add(p.model, m, p.emergency ? RED : YELLOW);
+    }
+    far.finish();
+    far.update(frame);
+    this.crowdHits = hits;
+  }
+
+  private newCrowd() {
+    const far = new GeoInstances({ narrow: farAirliner(1), wide: farAirliner(1.68), heli: farAirliner(0.45) });
+    this.object.add(far.object);
+    return far;
   }
 
   /** Callsign above every drawn model; moved here every frame so it never trails behind while zooming. */
@@ -882,6 +976,10 @@ export class PlanesLayer implements GeoPart {
         best = hex;
       }
     };
+    for (const h of this.crowdHits) {
+      const d = Math.hypot(x - h.x, y - h.y);
+      if (d <= CROWD_PICK_PX) consider(h.hex, d);
+    }
     for (const p of this.tracker.planes.values()) {
       if (!p.rig?.line.object.visible) continue;
       const flat = this.flatNow;
