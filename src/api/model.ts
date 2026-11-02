@@ -1,4 +1,5 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
+import { wxDeps, type WxLayer } from './wxmodel';
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
@@ -39,9 +40,35 @@ export interface ModelGrid {
   data: Record<ModelVar, Float32Array>;
 }
 
+/** One variable of the ICON fields (src/api/wxmodel.ts) on a regular grid. */
+export interface WxGrid {
+  lat0: number;
+  lon0: number;
+  dx: number;
+  dy: number;
+  nx: number;
+  ny: number;
+  wrap: boolean;
+  /** values of one time step, [y * nx + x]; a grid with a single step answers every t with it */
+  step(t: number): Float32Array;
+}
+
+type Geo = Pick<ModelGrid, 'lat0' | 'lon0' | 'dx' | 'dy' | 'nx' | 'ny' | 'wrap'>;
+
 export { OpenMeteoLimitError as ModelLimitError };
 
-const FORECAST_DAYS = 5;
+/**
+ * A grid without data that only carries the time axis: when the ICON fields serve everything, the Open-Meteo
+ * grid is not fetched at all and the sampler's Open-Meteo path yields NaN.
+ */
+export function emptyModelGrid(times: number[]): ModelGrid {
+  const n = times.length * 4;
+  const data = {} as Record<ModelVar, Float32Array>;
+  for (const v of [...MODEL_VARS, ...DERIVED]) data[v] = new Float32Array(n).fill(NaN);
+  return { lat0: 90, lon0: -180, dx: 360, dy: 180, nx: 2, ny: 2, wrap: true, times, data };
+}
+
+const FORECAST_DAYS = 3;
 
 type HourlyRow = { hourly: Record<string, (number | null)[]> & { time: string[] } };
 
@@ -122,7 +149,7 @@ async function fetchGrid(lat0: number, lon0: number, dx: number, dy: number, nx:
 // ---------------------------------------------------------------------------
 // Global grid (15° × 10°, 408 points = 408 API calls) – cached in memory and localStorage for 1 h.
 
-const CACHE_KEY = 'wg.model.v3';
+const CACHE_KEY = 'wg.model.v4';
 const CACHE_MS = 60 * 60 * 1000;
 let globalGrid: ModelGrid | null = null;
 let globalAt = 0;
@@ -166,6 +193,8 @@ function writeCache(g: ModelGrid, key = CACHE_KEY) {
   try {
     localStorage.removeItem('wg.cache.grid'); // older caches
     localStorage.removeItem('wg.model.v2');
+    localStorage.removeItem('wg.model.v3');
+    localStorage.removeItem('wg.region.v2');
     const data: Record<string, string> = {};
     for (const [k, v] of Object.entries(g.data)) if (!(DERIVED as readonly string[]).includes(k)) data[k] = toB64(v);
     localStorage.setItem(key, JSON.stringify({ at: Date.now(), g: { ...g, data } }));
@@ -193,7 +222,7 @@ function readCache(key = CACHE_KEY): { at: number; grid: ModelGrid } | null {
 // Regional grid around a place for the forecast page map: 17 × 9 points at 1° (153 calls),
 // the last region is kept in localStorage for an hour.
 
-const REGION_KEY = 'wg.region.v2';
+const REGION_KEY = 'wg.region.v3';
 const REGION_HALF_LON = 8;
 const REGION_HALF_LAT = 4;
 const regionCache = new Map<string, Promise<ModelGrid>>();
@@ -286,7 +315,7 @@ export function getDetailModel(req: NonNullable<ReturnType<typeof detailRequest>
 // ---------------------------------------------------------------------------
 // Sampling
 
-function bilinear(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bilinear(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   let y = (g.lat0 - lat) / g.dy;
   if (g.wrap) {
@@ -320,7 +349,7 @@ function bspline(t: number, w: Float64Array) {
 const WX = new Float64Array(4);
 const WY = new Float64Array(4);
 
-function bicubic(g: ModelGrid, arr: Float32Array, t: number, lat: number, lon: number): number {
+function bicubic(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let x = (lon - g.lon0) / g.dx;
   const y = Math.max(0, Math.min(g.ny - 1, (g.lat0 - lat) / g.dy));
   if (g.wrap) x = ((x % g.nx) + g.nx) % g.nx;
@@ -355,7 +384,9 @@ const TRANSFORMS: Partial<Record<ModelVar, [(x: number) => number, (y: number) =
 };
 const transformed = new WeakMap<Float32Array, Float32Array>();
 function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
-  const src = g.data[v];
+  return transformArray(g.data[v], v);
+}
+function transformArray(src: Float32Array, v: ModelVar): Float32Array {
   const tf = TRANSFORMS[v];
   if (!tf) return src;
   let out = transformed.get(src);
@@ -367,11 +398,39 @@ function fieldArray(g: ModelGrid, v: ModelVar): Float32Array {
   return out;
 }
 
-function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
-  const arr = fieldArray(g, v);
+function smoothArr(g: Geo, arr: Float32Array, t: number, lat: number, lon: number): number {
   let r = bicubic(g, arr, t, lat, lon);
   if (Number.isNaN(r)) r = bilinear(g, arr, t, lat, lon); // NaN neighbour (e.g. no data over sea)
   return r;
+}
+
+function smooth(g: ModelGrid, v: ModelVar, t: number, lat: number, lon: number): number {
+  return smoothArr(g, fieldArray(g, v), t, lat, lon);
+}
+
+const LAPSE_K_PER_M = 0.0065;
+/** the dew point falls with height about 2 K/km (the temperature 6.5 K/km) */
+export const TD_LAPSE_RATIO = 0.002 / 0.0065;
+const MAX_LAPSE_DELTA = 15;
+
+/** 1 inside a grid, fading to 0 over `deg` degrees towards its edge */
+function edgeWeight(g: Geo, lat: number, lon: number, deg: number): number {
+  const x = (lon - g.lon0) / g.dx;
+  const y = (g.lat0 - lat) / g.dy;
+  if (x < 0 || y < 0 || x > g.nx - 1 || y > g.ny - 1) return 0;
+  const f = Math.min(1, Math.min(x * g.dx, y * g.dy, (g.nx - 1 - x) * g.dx, (g.ny - 1 - y) * g.dy) / deg);
+  return f * f * (3 - 2 * f);
+}
+
+/** Weight of a detail grid at this point (0 outside, 1 well inside), feathered so resolutions blend without a frame. */
+function featherWeight(d: Geo, lat: number, lon: number): number {
+  const x = (lon - d.lon0) / d.dx;
+  const y = (d.lat0 - lat) / d.dy;
+  if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
+  const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
+  const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
+  const f = Math.min(1, edge / feather);
+  return f * f * (3 - 2 * f);
 }
 
 /** Combined sampler: detail grid where available (feathered edges), global grid elsewhere. */
@@ -381,7 +440,11 @@ export class ModelSampler {
     readonly detail: ModelGrid | null,
     /** time index into global.times; between two steps (e.g. 1.5) the neighbours are mixed */
     readonly t: number,
-  ) {}
+    /** ICON fields: used for the variables they contain (where their time range covers the moment) */
+    readonly wx: WxLayer | null = null,
+  ) {
+    this.wxF = this.computeWxPosition();
+  }
 
   private detailT = new Map<number, number>();
 
@@ -394,16 +457,7 @@ export class ModelSampler {
 
   /** Weight of the detail grid at this point (0 outside, 1 well inside). */
   private detailWeight(lat: number, lon: number): number {
-    const d = this.detail;
-    if (!d) return 0;
-    const x = (lon - d.lon0) / d.dx;
-    const y = (d.lat0 - lat) / d.dy;
-    if (x < 0 || y < 0 || x > d.nx - 1 || y > d.ny - 1) return 0;
-    const edge = Math.min(x, y, d.nx - 1 - x, d.ny - 1 - y);
-    // wide feather so the two resolutions blend without a visible frame
-    const feather = Math.max(1.5, 0.25 * Math.min(d.nx - 1, d.ny - 1));
-    const f = Math.min(1, edge / feather);
-    return f * f * (3 - 2 * f);
+    return this.detail ? featherWeight(this.detail, lat, lon) : 0;
   }
 
   /** Effective grid spacing [deg] at this point – used to scale cosmetic detail. */
@@ -432,7 +486,145 @@ export class ModelSampler {
     return r;
   }
 
-  sample(v: ModelVar, lat: number, lon: number): number {
+  /** current moment as a (fractional) index into the ICON time steps; NaN when their time range does not cover it */
+  private wxPosition(): number {
+    return this.wxF;
+  }
+
+  private computeWxPosition(): number {
+    const wx = this.wx;
+    if (!wx?.times?.length) return NaN;
+    const f = (this.time - wx.times[0]) / wx.stepMs;
+    return f >= -1e-6 && f <= wx.times.length - 1 + 1e-6 ? f : NaN;
+  }
+
+  /** the sampler never changes its moment, so the position in the ICON time steps is worked out once (in the constructor: field initialisers run before the parameter properties are set) */
+  private wxF = NaN;
+
+  /** one time step of a variable: the overview, mixed with the detail grid where there is one (no allocations: runs per pixel and per particle) */
+  private wxAt(base: WxGrid, detail: WxGrid | undefined, w: number, v: ModelVar, t: number, lat: number, lon: number): number {
+    let r = smoothArr(base, transformArray(base.step(t), v), 0, lat, lon);
+    if (w > 0) {
+      const dv = smoothArr(detail!, transformArray(detail!.step(t), v), 0, lat, lon);
+      if (dv === dv) r = r !== r ? dv : dv * w + r * (1 - w);
+    }
+    return r;
+  }
+
+  /** value from the ICON fields at the current moment, NaN where they do not cover it */
+  private sampleWx(v: ModelVar, lat: number, lon: number): number {
+    const f = this.wxF;
+    if (f !== f) return NaN;
+    const wx = this.wx!;
+    const base = wx.overviewOf(v)!;
+    const last = wx.times.length - 1;
+    const i = Math.max(0, Math.min(Math.floor(f), Math.max(0, last - 1)));
+    const fr = Math.min(1, Math.max(0, f - i));
+    const detail = wx.detail.get(v);
+    const w = detail ? featherWeight(detail, lat, lon) : 0;
+    let r = this.wxAt(base, detail, w, v, i, lat, lon);
+    if (fr > 1e-6 && i + 1 <= last) {
+      const r2 = this.wxAt(base, detail, w, v, i + 1, lat, lon);
+      r = r !== r ? r2 : r2 !== r2 ? r : r + (r2 - r) * fr;
+    }
+    const tf = TRANSFORMS[v];
+    return tf && r === r ? tf[1](r) : r;
+  }
+
+  /**
+   * true when the ICON fields answer for `v` at the current moment (all stored variables behind it are loaded).
+   * The cosmetic sub-grid noise (organic fields in overlay.ts) is scaled to the coarse Open-Meteo grid and must not be
+   * applied to ICON data, which has its own real structure.
+   */
+  wxActive(v: ModelVar): boolean {
+    const wx = this.wx;
+    if (!wx || Number.isNaN(this.wxPosition())) return false;
+    const deps = wxDeps(v);
+    return deps.length > 0 && deps.every((d) => wx.has(d));
+  }
+
+  /**
+   * true while terrain heights are loaded for the view and the ICON values of `v` (temperature or dew point) answer at
+   * the current moment (otherwise the Open-Meteo values are shown, which must not get the correction)
+   */
+  hasTerrain(v: ModelVar = 'temperature_2m'): boolean {
+    const wx = this.wx;
+    return !!wx?.terrain && wx.has(v) && !Number.isNaN(this.wxPosition());
+  }
+
+  /**
+   * Temperature correction [K] for the difference between the model's smoothed surface and the real terrain
+   * (standard lapse rate): colder on peaks, warmer in valleys. Fades out over 2° at the edge of the loaded area.
+   */
+  terrainDelta(lat: number, lon: number): number {
+    const t = this.wx?.terrain;
+    if (!t) return 0;
+    const w = edgeWeight(t.dem, lat, lon, 2);
+    if (w <= 0) return 0;
+    const hs = bilinear(t.hs, t.hs.step(0), 0, lat, lon);
+    const dem = bilinear(t.dem, t.dem.step(0), 0, lat, lon);
+    if (Number.isNaN(hs) || Number.isNaN(dem)) return 0;
+    return w * Math.max(-MAX_LAPSE_DELTA, Math.min(MAX_LAPSE_DELTA, LAPSE_K_PER_M * (hs - dem)));
+  }
+
+  /** a variable straight from the ICON fields (NaN if it is not loaded or outside their time range) */
+  private wxVar(v: ModelVar, lat: number, lon: number): number {
+    return this.wxHas(v) ? this.sampleWx(v, lat, lon) : NaN;
+  }
+
+  /** WxLayer.has() looks at the clock; a sampler lives for one moment, so each variable is asked only once */
+  private wxHasCache = new Map<ModelVar, boolean>();
+  private wxHas(v: ModelVar): boolean {
+    let h = this.wxHasCache.get(v);
+    if (h === undefined) {
+      h = this.wx!.has(v);
+      this.wxHasCache.set(v, h);
+    }
+    return h;
+  }
+
+  /**
+   * Variables the ICON fields carry directly (temperature, dew point, wind components, …) or that follow from them
+   * like the Open-Meteo ones did (wind speed/direction, humidity, apparent temperature). NaN where they are not available.
+   */
+  private sampleFromWx(v: ModelVar, lat: number, lon: number, terrain: boolean): number {
+    switch (v) {
+      case 'temperature_2m':
+        return this.wxVar(v, lat, lon) + (terrain ? this.terrainDelta(lat, lon) : 0);
+      case 'dew_point_2m':
+        return this.wxVar(v, lat, lon) + (terrain ? this.terrainDelta(lat, lon) * TD_LAPSE_RATIO : 0);
+      case 'wind_speed_10m':
+        return Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon)) * 3.6;
+      case 'wind_direction_10m':
+        return ((Math.atan2(-this.wxVar('u', lat, lon), -this.wxVar('v', lat, lon)) * 180) / Math.PI + 360) % 360;
+      case 'relative_humidity_2m':
+        return this.wxHumidity(lat, lon, terrain);
+      case 'apparent_temperature': {
+        const rh = this.wxHumidity(lat, lon, terrain);
+        return apparent(this.wxT, rh, Math.hypot(this.wxVar('u', lat, lon), this.wxVar('v', lat, lon)));
+      }
+      default:
+        return this.wxVar(v, lat, lon);
+    }
+  }
+
+  /** the (terrain-corrected) temperature of the last wxHumidity() call, so apparent temperature needs no second lookup */
+  private wxT = NaN;
+
+  private wxHumidity(lat: number, lon: number, terrain: boolean): number {
+    const delta = terrain ? this.terrainDelta(lat, lon) : 0;
+    const t = this.wxVar('temperature_2m', lat, lon) + delta;
+    const d = Math.min(this.wxVar('dew_point_2m', lat, lon) + delta * TD_LAPSE_RATIO, t);
+    this.wxT = t;
+    return Math.max(0, Math.min(100, 100 * Math.exp((17.62 * d) / (243.12 + d) - (17.62 * t) / (243.12 + t))));
+  }
+
+  /** @param terrain add the terrain correction (readouts); tile rendering applies it per pixel itself */
+  sample(v: ModelVar, lat: number, lon: number, terrain = true): number {
+    if (this.wx) {
+      const r = this.sampleFromWx(v, lat, lon, terrain);
+      if (!Number.isNaN(r)) return r;
+    }
     const w = this.detailWeight(lat, lon);
     const i = Math.min(Math.floor(this.t), this.global.times.length - 1);
     const fr = this.t - i;

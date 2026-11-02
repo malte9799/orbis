@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
+import { snapshotOrNull } from './osmtiles';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -74,6 +75,22 @@ export function loadDigitrafficCams(): Promise<FeatureCollection<Point>> {
 
 /** Webcams mapped in OpenStreetMap inside the bounds (needs a zoomed-in view). */
 export async function loadOsmWebcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  const snap = await snapshotOrNull<[number, number, number, string, string, number, string, number]>('webcam', b);
+  if (snap) {
+    return {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, name, operator, panning, link, id]) => {
+        const cam: Webcam = {
+          id: `osm-node-${id}`,
+          title: name || 'Webcam',
+          subtitle: [operator, panning ? 'Schwenkkamera' : ''].filter(Boolean).join(' · ') || 'Webcam (OpenStreetMap)',
+          url: link,
+          source: 'OpenStreetMap',
+        };
+        return point(lon, lat, { ...cam, kind: 'osm', dir });
+      }),
+    };
+  }
   const bb = bboxStr(b);
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(
     `[out:json][timeout:25];(nwr["webcam"](${bb});nwr["contact:webcam"](${bb});nwr["surveillance"="webcam"](${bb}););out center tags 1500;`,
@@ -117,15 +134,22 @@ export async function loadWindyWebcams(lat: number, lon: number, radiusKm: numbe
   const key = store.getKeys().windy;
   if (!key) return { type: 'FeatureCollection', features: [] };
   const r = Math.max(5, Math.min(250, Math.round(radiusKm)));
-  const json = await fetchJson<{ webcams: WindyCam[] }>(
+  const res = await fetch(
     `https://api.windy.com/webcams/api/v3/webcams?nearby=${lat.toFixed(3)},${lon.toFixed(3)},${r}&limit=50&include=images,location,player,urls&lang=de`,
-    { headers: { 'x-windy-api-key': key } },
-    15000,
+    { headers: { 'x-windy-api-key': key }, signal: AbortSignal.timeout(15000) },
   );
+  // Windy sends no CORS headers on error responses, so the browser replaces the
+  // real status with an origin error – surface the status explicitly instead.
+  if (!res.ok) {
+    if (res.status === 401) throw new Error('Windy-Schlüssel ungültig (api.windy.com/keys)');
+    if (res.status === 403) throw new Error('Windy-Schlüssel ohne Webcams-API-Freigabe (api.windy.com/keys)');
+    throw new Error(`Windy HTTP ${res.status}`);
+  }
+  const json = (await res.json()) as { webcams?: WindyCam[] };
   return {
     type: 'FeatureCollection',
-    features: json.webcams
-      .filter((w) => w.location)
+    features: (json.webcams ?? [])
+      .filter((w) => w && w.location)
       .map((w) =>
         point(w.location!.longitude, w.location!.latitude, {
           id: `windy-${w.webcamId}`,
@@ -151,6 +175,28 @@ export const ALPR_TILES_CA = 'https://tiles.dontgetflocked.com/cameras-ca-hourly
 export const ALPR_SOURCE_LAYER = 'cameras';
 
 export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
+  const snap = await snapshotOrNull<[number, number, number, string, number, string, string, string, string, string, number]>('alpr', b);
+  if (snap) {
+    return {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, brand, flock, mount, operator, zone, since, ref, id]) =>
+        point(lon, lat, {
+          title: flock ? 'Flock-Kamera (ALPR)' : 'Kennzeichenerfassung (ALPR)',
+          subtitle: [brand, operator].filter(Boolean).join(' · '),
+          flock: !!flock,
+          dir,
+          mount,
+          operator,
+          zone,
+          since,
+          ref,
+          brand,
+          url: `https://www.openstreetmap.org/node/${id}`,
+          deflock: `https://maps.deflock.org/?lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&zoom=17`,
+        }),
+      ),
+    };
+  }
   const bb = bboxStr(b);
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(`[out:json][timeout:25];nwr["surveillance:type"="ALPR"](${bb});out center tags 5000;`, 'alpr', 30000);
   const features: Feature<Point>[] = [];
@@ -190,12 +236,30 @@ export async function loadAlpr(b: Bounds): Promise<FeatureCollection<Point>> {
 // locations, not a warning system – in Germany using one while driving is
 // illegal (§ 23 StVO).
 
+const SNAP_TITLE: Record<string, [string, string]> = {
+  cam: ['Ortsfester Blitzer', 'Geschwindigkeit'],
+  section: ['Abschnittskontrolle', 'Durchschnittsgeschwindigkeit'],
+  signals: ['Rotlicht-Blitzer', 'Geschwindigkeit & Ampel'],
+};
+
 const speedcamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
 
 export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bboxStr(b);
   const hit = speedcamCache.get(bb);
   if (hit && Date.now() - hit.at < 10 * 60000) return hit.fc;
+  // monthly extract (same run as the CCTV tiles); Overpass only when it is unavailable
+  const snap = await snapshotOrNull<[number, number, number, string, string, string, string, number]>('blitzer', b);
+  if (snap) {
+    const fc: FeatureCollection<Point> = {
+      type: 'FeatureCollection',
+      features: snap.map(([lon, lat, dir, kind, speed, operator, ref, id]) =>
+        point(lon, lat, { kind, title: SNAP_TITLE[kind]?.[0] ?? SNAP_TITLE.cam[0], subtitle: SNAP_TITLE[kind]?.[1] ?? SNAP_TITLE.cam[1], dir, speed, operator, ref, url: `https://www.openstreetmap.org/node/${id}` }),
+      ),
+    };
+    speedcamCache.set(bb, { at: Date.now(), fc });
+    return fc;
+  }
   // `rel` statt `nwr`: type=enforcement gibt es nur als Relation – nwr würde alle Knoten und Wege danach durchsuchen (viel langsamer)
   const { elements: els } = await overpass<{ elements: OsmElement[] }>(
     `[out:json][timeout:25];(node["highway"="speed_camera"](${bb});rel["type"="enforcement"](${bb}););out center tags 4000;`,

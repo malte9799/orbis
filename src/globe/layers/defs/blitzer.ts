@@ -47,6 +47,7 @@ function loadNow(ctx: ExtraCtx) {
   if (key === st.key) return;
   st.key = key;
   ctx.set('blitzer', { loading: true, note: undefined });
+  // Monatsauszug (gleicher Lauf wie die CCTV-Kacheln); Overpass nur, wenn er nicht erreichbar/unvollständig ist
   loadSpeedcams(b)
     .then((fc) => {
       if (st.key !== key) return;
@@ -71,7 +72,7 @@ export default defineExtra({
   section: 'infra',
   cat: 'verkehr',
   label: 'Blitzer & Rotlicht',
-  hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap; Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)',
+  hint: 'ortsfeste Messstellen, Strecken-Abschnitte und Ampel-Kameras (ab Zoom 9) – OpenStreetMap (Monatsauszug, Overpass als Fallback); Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)',
   glyph: 'blitzer',
   icon: 'blitzer',
   color: '#e53935',

@@ -1,12 +1,18 @@
 // Mockup: records every fetch() the page makes, so the raw-data inspector can show what came back.
 // Only the main thread is covered (MapLibre tiles and style files are fetched in a worker).
 
+import { proxyBase } from '../api/proxy';
+
 export type Kind = 'json' | 'xml' | 'text' | 'image' | 'model' | 'binary';
 
 export interface Capture {
   id: number;
+  /** URL the browser really requested (the proxy URL for proxied requests) */
   url: string;
+  /** host of the API that was asked (for proxied requests: the target, not the proxy) */
   host: string;
+  /** proxied request: the API URL the proxy was asked to fetch; `url` is then the proxy URL */
+  target?: string;
   method: string;
   status: number;
   ok: boolean;
@@ -33,6 +39,16 @@ export interface Capture {
   /** only the first N bytes of a very large text body were kept */
   truncated?: number;
   error?: string;
+  /** error class (AbortError, TypeError …) */
+  errorName?: string;
+  /** the page cancelled the request itself (AbortController, timeout) */
+  aborted?: boolean;
+  statusText?: string;
+  /** what the page sent */
+  reqHeaders?: [string, string][];
+  reqBody?: string;
+  /** what came back (headers the browser lets scripts read) */
+  resHeaders?: [string, string][];
 }
 
 /** the real fetch, for requests the inspector makes itself (they must not show up in the list) */
@@ -55,6 +71,17 @@ let installed = false;
 export function currentRoute(): string {
   const p = location.hash.replace(/^#/, '').split('?')[0];
   return p.startsWith('/spiele') ? 'games' : p.startsWith('/planet') || p.startsWith('/weltall') ? 'space' : p.startsWith('/vorhersage') ? 'forecast' : 'globe';
+}
+
+/** Empties the list: everything, or only the requests made on one route. */
+export function clearCaptures(route?: string) {
+  for (let i = captures.length - 1; i >= 0; i--) {
+    const c = captures[i];
+    if (route && c.route !== route) continue;
+    if (c.objectUrl) URL.revokeObjectURL(c.objectUrl);
+    captures.splice(i, 1);
+  }
+  notify();
 }
 
 export function getCaptures(): Capture[] {
@@ -88,6 +115,22 @@ function evict() {
     const old = captures.shift()!;
     if (old.objectUrl) URL.revokeObjectURL(old.objectUrl);
   }
+}
+
+/** Proxied requests look like `<proxy>/?url=<api url>`: returns the API URL, null for everything else. */
+export function proxyTarget(abs: URL): string | null {
+  const t = abs.searchParams.get('url');
+  if (!t || !/^https?:\/\//i.test(t)) return null;
+  const base = proxyBase();
+  try {
+    if (base) {
+      const b = new URL(base, location.href);
+      if (b.host === abs.host && abs.pathname.startsWith(b.pathname.replace(/\/$/, '') || '/')) return t;
+    }
+  } catch {
+    /* unusable proxy setting */
+  }
+  return abs.host.endsWith('.workers.dev') ? t : null;
 }
 
 /** Resources the page loads without fetch() (<img>, textures, CSS images) only show up in the resource timeline. */
@@ -139,10 +182,12 @@ export function installCapture() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (!/^https?:/.test(url) && !url.startsWith('/') && !url.startsWith('./')) return orig(input, init);
     const abs = new URL(url, location.href);
+    const target = proxyTarget(abs);
     const cap: Capture = {
       id: ++seq,
       url: abs.href,
-      host: abs.host,
+      host: target ? new URL(target).host : abs.host,
+      target: target ?? undefined,
       method: (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase(),
       status: 0,
       ok: false,
@@ -153,6 +198,7 @@ export function installCapture() {
       size: null,
       route: currentRoute(),
     };
+    describeRequest(cap, input, init);
     captures.push(cap);
     evict();
     notify();
@@ -163,11 +209,15 @@ export function installCapture() {
     } catch (e) {
       cap.ms = Math.round(performance.now() - t0);
       cap.error = e instanceof Error ? e.message : String(e);
+      cap.errorName = e instanceof Error ? e.name : typeof e;
+      cap.aborted = cap.errorName === 'AbortError' || cap.errorName === 'TimeoutError' || !!(init?.signal ?? (input instanceof Request ? input.signal : null))?.aborted;
       notify();
       throw e;
     }
     cap.ms = Math.round(performance.now() - t0);
     cap.status = res.status;
+    cap.statusText = res.statusText;
+    cap.resHeaders = [...res.headers.entries()];
     cap.ok = res.ok;
     cap.mime = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     cap.kind = kindOf(cap.mime, abs.pathname);
@@ -175,6 +225,25 @@ export function installCapture() {
     void readBody(cap, res.clone());
     return res;
   };
+}
+
+/** headers and body the page sent (for the "Gesendet" tab) */
+function describeRequest(cap: Capture, input: RequestInfo | URL, init?: RequestInit) {
+  try {
+    const h = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init?.headers).forEach((v, k) => h.set(k, v));
+    cap.reqHeaders = [...h.entries()];
+    const b = init?.body;
+    if (typeof b === 'string') cap.reqBody = b.slice(0, 100_000);
+    else if (b instanceof URLSearchParams) cap.reqBody = b.toString();
+    else if (b instanceof FormData) cap.reqBody = [...b.entries()].map(([k, v]) => `${k}=${typeof v === 'string' ? v : `[Datei ${v.name}]`}`).join('\n');
+    else if (b) cap.reqBody = '[Binärdaten]';
+    else if (input instanceof Request && input.method !== 'GET' && input.method !== 'HEAD') {
+      void input.clone().text().then((t) => (cap.reqBody = t.slice(0, 100_000)), () => undefined);
+    }
+  } catch {
+    /* exotic request object */
+  }
 }
 
 /** drop the bodies of the oldest requests once the kept text exceeds the budget */

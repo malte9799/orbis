@@ -29,6 +29,8 @@ export interface CamPose {
 interface Entry {
   d: number;
   p?: CamPose;
+  /** corrected position [lng, lat] */
+  pos?: [number, number];
 }
 
 /** corrections from the worker (camera key → heading, pose) and what is being previewed in the panel right now */
@@ -45,14 +47,22 @@ export const onCamDirsChange = (fn: () => void) => {
 
 export const dirOverride = (key: string): number | undefined => (local.get(key) ?? remote.get(key))?.d;
 export const hasRemoteDir = (key: string) => remote.has(key);
+export const remoteEntry = (key: string) => remote.get(key);
 
 /** the feature with its corrected direction (`dirset` marks it as not estimated), or itself without a correction */
 export function withCloudDir<T extends Feature<Point>>(f: T): T {
   const c = f.geometry.coordinates;
-  const e = local.get(cloudKey(f.properties?.id, c[0], c[1])) ?? remote.get(cloudKey(f.properties?.id, c[0], c[1]));
+  const key = cloudKey(f.properties?.id, c[0], c[1]);
+  const e = local.get(key) ?? remote.get(key);
   if (!e) return f;
-  // the pose goes along as flat properties (map features only carry plain values)
-  return { ...f, properties: { ...f.properties, dir: e.d, dirset: true, ...(e.p ? { pdown: e.p.down, palt: e.p.alt, proll: e.p.roll, pfov: e.p.fov } : {}) } };
+  // the pose goes along as flat properties (map features only carry plain values); a moved camera keeps the key
+  // and the place it was found at, so it can be saved and reset
+  const moved = e.pos ? { ckey: key, olon: c[0], olat: c[1] } : {};
+  return {
+    ...f,
+    ...(e.pos ? { geometry: { ...f.geometry, coordinates: e.pos } } : {}),
+    properties: { ...f.properties, dir: e.d, dirset: true, ...moved, ...(e.p ? { pdown: e.p.down, palt: e.p.alt, proll: e.p.roll, pfov: e.p.fov } : {}) },
+  };
 }
 
 /** the pose stored in a camera feature's properties (see withCloudDir), if there is one */
@@ -61,10 +71,10 @@ export function poseOf(p: Record<string, unknown> | null | undefined): CamPose |
   return p && p.pdown !== undefined && n.every(Number.isFinite) ? { down: n[0], alt: n[1], roll: n[2], fov: n[3] } : undefined;
 }
 
-/** shows a heading right away (before it is saved); null drops the preview */
-export function previewDir(key: string, dir: number | null) {
+/** shows a heading (and pose, position) right away, before it is saved; null drops the preview */
+export function previewDir(key: string, dir: number | null, pose?: CamPose, pos?: [number, number]) {
   if (dir === null) local.delete(key);
-  else local.set(key, { d: ((dir % 360) + 360) % 360, p: remote.get(key)?.p });
+  else local.set(key, { d: ((dir % 360) + 360) % 360, p: pose ?? remote.get(key)?.p, pos });
   emit();
 }
 
@@ -78,13 +88,14 @@ export async function loadCamDirs(force = false) {
   if (!force && loadedBase === base && Date.now() - loadedAt < 300_000) return;
   const res = await fetch(`${base}/dirs`);
   if (!res.ok) throw new Error(`Kamera-Richtungen: HTTP ${res.status}`);
-  const json = (await res.json()) as { dirs?: Record<string, { d?: number; p?: Partial<CamPose> }> };
+  const json = (await res.json()) as { dirs?: Record<string, { d?: number; p?: Partial<CamPose>; pos?: number[] }> };
   remote.clear();
   for (const [k, v] of Object.entries(json.dirs ?? {})) {
     if (typeof v?.d !== 'number' || !Number.isFinite(v.d)) continue;
     const p = v.p;
     const ok = p && [p.down, p.alt, p.roll, p.fov].every((x) => typeof x === 'number' && Number.isFinite(x));
-    remote.set(k, { d: v.d, p: ok ? (p as CamPose) : undefined });
+    const pos = Array.isArray(v.pos) && v.pos.length === 2 && v.pos.every((x) => Number.isFinite(x)) ? ([v.pos[0], v.pos[1]] as [number, number]) : undefined;
+    remote.set(k, { d: v.d, p: ok ? (p as CamPose) : undefined, pos });
   }
   loadedAt = Date.now();
   loadedBase = base;
@@ -103,11 +114,11 @@ async function send(method: 'PUT' | 'DELETE', path: string, body?: unknown) {
   if (!res.ok) throw new Error(`Worker antwortet mit HTTP ${res.status}`);
 }
 
-/** stores a corrected heading (and the pose of the camera, if it was worked out) in the worker (admin token) */
-export async function saveCamDir(key: string, dir: number, pose?: CamPose) {
+/** stores a corrected heading (and the pose / moved position of the camera, if any) in the worker (admin token) */
+export async function saveCamDir(key: string, dir: number, pose?: CamPose, pos?: [number, number]) {
   const d = ((dir % 360) + 360) % 360;
-  await send('PUT', '/dirs', { key, dir: d, ...(pose ? { pose } : {}) });
-  remote.set(key, { d, p: pose });
+  await send('PUT', '/dirs', { key, dir: d, ...(pose ? { pose } : {}), ...(pos ? { pos } : {}) });
+  remote.set(key, { d, p: pose, pos });
   local.delete(key);
   emit();
 }

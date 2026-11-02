@@ -20,6 +20,7 @@ const DIST_M = 120;
 const COLOR = 0x7cfc9a;
 /** with a known pose: how far the floor reaches before the picture continues upright as a wall (metres) */
 const WALL_M = 90;
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
 export interface CamView {
   lon: number;
@@ -32,6 +33,8 @@ export interface CamView {
   image?: string;
   /** pose of the camera: the picture is then projected onto the ground (otherwise it stands upright as a typical-values board) */
   pose?: CamPose;
+  /** with a pose: how far (metres) the floor reaches before the picture continues as a wall that fades out upwards */
+  reach?: number;
   /** the panel element: when it leaves the page or is hidden, the view is removed */
   anchor: HTMLElement;
 }
@@ -70,6 +73,7 @@ export class CamViewLayer implements CustomLayerInterface {
   /** board height follows the picture's aspect ratio; the pyramid runs from the camera to its corners */
   private layout() {
     if (this.view?.pose) return this.layoutPose(this.view.pose);
+    this.setFade(false);
     if (!(this.board.geometry instanceof THREE.PlaneGeometry)) {
       this.board.geometry.dispose();
       const geo = new THREE.PlaneGeometry(1, 1);
@@ -94,15 +98,27 @@ export class CamViewLayer implements CustomLayerInterface {
     this.frame.geometry.computeBoundingSphere();
   }
 
+  private setFade(on: boolean) {
+    const mat = this.board.material;
+    if (mat.vertexColors === on) return;
+    mat.vertexColors = on;
+    mat.needsUpdate = true;
+  }
+
   /** the picture as floor + wall: every grid point sits on its own ray, at the ground or at the maximum distance */
   private layoutPose(pose: CamPose) {
     const NX = 32;
-    const NY = 24;
+    const NY = 48;
+    const reach = this.view?.reach ?? WALL_M;
+    // the wall fades out with its height above the ground; the higher the reach, the higher it still shows
+    const fadeH = Math.max(15, reach * 0.35);
     const pos: number[] = [];
     const uv: number[] = [];
+    const col: number[] = [];
     for (let j = 0; j <= NY; j++)
       for (let i = 0; i <= NX; i++) {
-        const [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, WALL_M);
+        const [x, y, z] = rayPoint(pose, (-1 + (2 * i) / NX) * this.aspect, -1 + (2 * j) / NY, reach);
+        col.push(1, 1, 1, clamp01(1 - Math.max(0, z + pose.alt - 0.5) / fadeH));
         // unit of the scene is DIST_M metres, the local frame has y north: the heading is applied by the matrix
         pos.push(x / DIST_M, y / DIST_M, z / DIST_M);
         uv.push(i / NX, j / NY);
@@ -116,7 +132,9 @@ export class CamViewLayer implements CustomLayerInterface {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 4));
     geo.setIndex(index);
+    this.setFade(true);
     this.board.geometry.dispose();
     this.board.geometry = geo;
     this.board.position.set(0, 0, 0);
@@ -132,6 +150,14 @@ export class CamViewLayer implements CustomLayerInterface {
     for (const [i, j] of [[0, 0], [NX, 0], [NX, NY], [0, NY]]) edge.push([0, 0, 0], at(i, j));
     this.frame.geometry.setAttribute('position', new THREE.Float32BufferAttribute(edge.flat(), 3));
     this.frame.geometry.computeBoundingSphere();
+  }
+
+  /** same view again with changed values (direction, pose, position, reach) – keeps the picture's texture */
+  update(view: CamView) {
+    if (!this.view) return;
+    this.view = view;
+    this.layout();
+    this.map?.triggerRepaint();
   }
 
   show(map: MlMap, view: CamView) {

@@ -8,6 +8,7 @@ export default defineMenuCat({
   rows: [
     { label: 'Live-Kameras', layers: ['webcams'] },
     { label: 'Kennzeichen-Kameras', layers: ['alpr'] },
+    { label: 'Überwachungskameras (CCTV)', layers: ['cctv'] },
     { label: 'Blitzer & Rotlicht', layers: ['blitzer'] },
   ],
 });

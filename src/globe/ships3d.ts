@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 import { shipCat, type Ship, type ShipCat } from '../api/transport';
+import { GLOBE_FLAT_ZOOM } from './style';
 
 // 3D ships: low-poly models in a three.js layer inside MapLibre's GL context. Used from
 // SHIP_ZOOM on the flat map (the 2D icon layer steps aside then). Positions are reported every
@@ -372,7 +373,7 @@ export class ShipsLayer implements CustomLayerInterface {
   }
 
   private active() {
-    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM && !(this.map.getProjection()?.type === 'globe' && this.map.getZoom() < 12);
+    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM && !(this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM);
   }
 
   render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {

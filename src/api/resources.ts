@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
+import { snapshotOrNull } from './osmtiles';
 
 // Mineral and energy resources at three levels of detail:
 // • worldwide: mines, oil, gas and coal fields from Wikidata (CC0)
@@ -199,11 +200,26 @@ const bbox = (b: Bounds) => `${b.south.toFixed(4)},${b.west.toFixed(4)},${b.nort
 
 export async function loadOsmResources(b: Bounds): Promise<FeatureCollection<Point>> {
   const bb = bbox(b);
+  // points come from the monthly extract; Overpass then only has to deliver the ways and areas
+  const snap = await snapshotOrNull<[number, number, string, string, string, string, string, number]>('resource', b);
+  const sels = ['["landuse"="quarry"]', '["industrial"="mine"]', '["man_made"~"^(mineshaft|adit|petroleum_well|pumpjack)$"]', '["industrial"~"^(oil|gas|refinery)$"]'];
+  const parts = sels.map((s) => (snap ? `way${s}(${bb});rel${s}(${bb});` : `nwr${s}(${bb});`)).join('');
   const j = await overpass<{ elements: { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }[] }>(
-    `[out:json][timeout:30];(nwr["landuse"="quarry"](${bb});nwr["industrial"="mine"](${bb});nwr["man_made"~"^(mineshaft|adit|petroleum_well|pumpjack)$"](${bb});nwr["industrial"~"^(oil|gas|refinery)$"](${bb}););out center tags 4000;`,
+    `[out:json][timeout:30];(${parts});out center tags 4000;`,
     'resources',
   );
   const features: Feature<Point>[] = [];
+  for (const [lon, lat, name, kind, res, resource, operator, id] of snap ?? []) {
+    features.push(
+      point(lon, lat, res ? classify(res) : kind === 'Steinbruch/Tagebau' ? 'stone' : 'other', {
+        title: name || kind,
+        subtitle: [kind, resource, operator].filter(Boolean).join(' · '),
+        url: `https://www.openstreetmap.org/node/${id}`,
+        source: 'OpenStreetMap',
+        lvl: 2,
+      }),
+    );
+  }
   for (const el of j.elements) {
     const lat = el.lat ?? el.center?.lat;
     const lon = el.lon ?? el.center?.lon;

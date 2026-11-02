@@ -34,7 +34,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
-| [Open-Meteo](https://open-meteo.com) – [Forecast](https://open-meteo.com/en/docs) | Aktuelles Wetter, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Sonnenzeiten; globales Modellraster (Wind, Böen, Temperatur, Feuchte, Niederschlag, Bewölkung, Luftdruck, Schnee, CAPE) für die Kartenebenen | 🟢 CC BY 4.0, 🚫 nicht-kommerziell, 10 000 Aufrufe/Tag |
+| [Deutscher Wetterdienst – ICON global](https://opendata.dwd.de/weather/nwp/icon/grib/) | **Wetterkarten** (Wind, Böen, Temperatur, gefühlt, Feuchte, Taupunkt, Niederschlag, Bewölkung, Luftdruck, Schnee, CAPE) und Vorhersage-Seitenkarte: Modell-Rohdaten (GRIB2, 13 km, 72 h), per [GitHub-Action](../.github/workflows/wx.yml) in 0,125°-Kacheln gewandelt und über einen Cloudflare-Worker ausgeliefert; Format: [WETTERDATEN-FORMAT.md](WETTERDATEN-FORMAT.md), Plan: [PLAN-GRIB-WETTERKARTEN.md](PLAN-GRIB-WETTERKARTEN.md) | 🟢 📦 CC BY 4.0 (Quellenangabe „Deutscher Wetterdienst, ICON, verändert“) |
+| [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) (AWS Open Data) | Geländehöhen (Terrarium, Zoom 5) für die Höhenkorrektur der Temperatur und des Taupunkts in den Wetterkarten | 🟢 Quellenangaben siehe Link |
+| [Open-Meteo](https://open-meteo.com) – [Forecast](https://open-meteo.com/en/docs) | Aktuelles Wetter, 48-h-Diagramm, 14-Tage-Vorhersage, Wind, UV, Sonnenzeiten; globales Modellraster für die Kartenebenen nur noch als **Rückfall**, wenn die ICON-Daten fehlen oder älter als 30 h sind (`?wx=0` erzwingt ihn) | 🟢 CC BY 4.0, 🚫 nicht-kommerziell, 10 000 Aufrufe/Tag |
 | [Open-Meteo Air Quality](https://open-meteo.com/en/docs/air-quality-api) | Luftqualität & Pollen (Copernicus CAMS) | 🟢 Pflichtsatz „Generated using Copernicus Atmosphere Monitoring Service information“ |
 | [Copernicus Atmosphere Monitoring Service](https://atmosphere.copernicus.eu) | Datengrundlage für Luftqualität & Pollen | 🟢 |
 | [Open-Meteo Geocoding](https://open-meteo.com/en/docs/geocoding-api) | Ortssuche | 🟢 |
@@ -134,6 +136,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [NGA World Port Index](https://msi.nga.mil/Publications/WPI) (Pub. 150) | Häfen: ~3.800 Häfen mit Größe, Tiefen, Schiffsgrenzen und Umschlag; Werk der US-Regierung (NGA), kein Urheberrecht beansprucht; vorab erzeugt in `public/data/ports.json` (`scripts/ports.mjs`) | 🟢 gemeinfrei, 📦 |
 | [Upply Seaports Locations Data](https://opendata.upply.com/seaports) (UN/LOCODE) | Häfen: ~12.000 weitere Seehäfen mit Koordinaten, die der World Port Index nicht führt | 🟢 CC BY 4.0, 📦 |
 | [Transitous (MOTIS)](https://transitous.org) | Züge Deutschland & Europa; Busse, Trams, U-Bahnen (ab Stadtzoom) | 🟢 |
+| [DB API Marketplace – Timetables](https://developers.deutschebahn.com) (CC BY 4.0, Schlüssel im eigenen Worker) | Fahrplan: Echtzeit-Verspätungen, Gleise und Ausfälle der Bahn, nachträglich zu den Transitous-Verbindungen | 🟡 |
 | [Amtraker](https://amtraker.com) | Züge USA (Amtrak) | 🟢 |
 | [Entur](https://developer.entur.org) | Nahverkehr & Bahn Norwegen | 🟢 NLOD |
 | [MBTA](https://api-v3.mbta.com) | Boston | 🟢 |
@@ -199,6 +202,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [QLDTraffic](https://qldtraffic.qld.gov.au/more/Developers-and-Data/) | Queensland – Webcams (GeoJSON, Pfad `/v1/webcams`, Felder ungetestet) | 🔑 `QLDTRAFFIC_KEY`, 📦 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
 | [DeFlock](https://deflock.org) · [deflock-data](https://github.com/flockhopper3/deflock-data) · [Tiles](https://tiles.dontgetflocked.com) | Kennzeichen-Kameras (ALPR) mit Blickrichtung | 🟢 OSM-basiert |
+| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Geofabrik-Extrakte) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), aus monatlichen [Geofabrik](https://download.geofabrik.de)-Auszügen (`scripts/cctv-heat.mjs`, Branch `data-osm`): Dichte-Heatmap und Einzelkameras in 0,5°-Kacheln ab Zoom 11, kein Live-Overpass; derselbe Lauf liefert als Knoten-Kacheln auch Blitzer/Rotlicht (`highway=speed_camera`, `type=enforcement`), ALPR, OSM-Webcams, Windräder (`generator:source=wind`) sowie Schächte/Stollen/Bohrlöcher/Bergwerks-Punkte (`blitzer-*`, `alpr-*`, `webcam-*`, `wind-*`, `resource-*`); Wege und Flächen nicht enthalten, Overpass bleibt Fallback bzw. liefert diese | 🟢 ODbL, 📦 |
 | [Radio Browser](https://www.radio-browser.info) | Über 50.000 Radiosender, eingebauter Player | 🟢 📦 |
 
 ## 9. Infrastruktur

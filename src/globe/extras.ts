@@ -23,11 +23,14 @@ import { OPTIONS_EVENT } from '../store';
 // infrastructure. Every source is free and keyless.
 
 export type { ExtraDef, ExtraId, SectionId } from './layers';
+import type { InfoPanelData } from './infopanel';
 export { EXTRAS, EXTRA_CLICK_LAYERS, SECTIONS } from './layers';
 
 export type ClickResult =
   | { type: 'html'; html: string; lng: number; lat: number; after?: (node: HTMLElement) => void }
   | { type: 'weather'; lng: number; lat: number }
+  /** a static detail card in the right-hand info panel */
+  | { type: 'panel'; data: InfoPanelData; lng: number; lat: number }
   /** an aircraft was clicked: the flight panel shows it */
   | { type: 'flight'; hex: string; lng: number; lat: number }
   /** a ship was clicked: the ship panel shows it */

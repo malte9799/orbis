@@ -5,6 +5,7 @@ import { isSuperseded } from '../api/overpass';
 import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
+import { GLOBE_FLAT_ZOOM } from './style';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
@@ -16,8 +17,6 @@ export const AIRPORT_ZOOM = 11;
 const PLANE_ZOOM = 9;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
-/** The globe projection is fully flat (mercator) from this zoom on, so the 3D layers work there too. */
-const GLOBE_FLAT_ZOOM = 12;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
 /**

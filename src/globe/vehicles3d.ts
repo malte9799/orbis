@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
+import { GLOBE_FLAT_ZOOM } from './style';
 
 // 3D public transport vehicles: trains, S-Bahn, subway, trams, buses, coaches (and the odd GPS
 // ferry). Low-poly models in a three.js layer inside MapLibre's GL context, painted in the
@@ -9,8 +10,8 @@ import type { Feature, Point } from 'geojson';
 // map; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
 // towards every new report; speeds with bearing are dead-reckoned in between.
 
-/** from this zoom on the 3D models may replace the 2D dots (zoom 12 ≈ city blocks) */
-const VEH_ZOOM = 12;
+/** from this zoom on the 3D models may replace the 2D dots (zoom 9 = the same zoom as on ships/planes) */
+const VEH_ZOOM = 9;
 /** the 3D models only take over while this many vehicles are in view (active: more of them stay on) */
 const VEH_MAX_ON = 120;
 /** the 2D dots take back over above this many vehicles in view (hysteresis against flickering) */
@@ -542,7 +543,7 @@ export class VehiclesLayer implements CustomLayerInterface {
   }
 
   private active() {
-    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe' && this.map.getZoom() < 12) return false;
+    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM) return false;
     // the models lag when there are too many at once (a whole city at once): only take over
     // while the view is small enough, with hysteresis so switching does not flicker
     const b = this.map.getBounds();
