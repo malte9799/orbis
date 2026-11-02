@@ -8,6 +8,9 @@ import {
   type RasterTileSource,
 } from 'maplibre-gl';
 import { cameraHeld } from '../mapctl';
+import { GeoFocus } from '../globe/geo3d/focus';
+import { GeoStage } from '../globe/geo3d/stage';
+import { bindFollowUrl } from '../globe/geo3d/url';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import {
   kindColor,
@@ -212,6 +215,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   // ----- event feeds (fires, storms, quakes …): see src/globe/events ----------
   let extras: ExtraLayers | null = null;
+  let geoStage: GeoStage | null = null;
+  let geoFocus: GeoFocus | null = null;
   let flightPanel: FlightPanel | null = null;
   let wahlenPanel: WahlPanel | null = null;
   let sondePanel: SondePanel | null = null;
@@ -1433,15 +1438,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     routeCtl.querySelector('button')!.addEventListener('click', () => routing?.open());
     map.addControl({ onAdd: () => routeCtl, onRemove: () => routeCtl.remove() }, 'bottom-right');
 
-    let geo3dClick: ((x: number, y: number) => boolean) | null = null;
     map.on('load', () => {
       ready = true;
-      if (import.meta.env.DEV && new URLSearchParams(location.search).has('geo3d')) void import('../globe/geo3d/debug').then((m) => (geo3dClick = m.startGeo3dDebug(map!)));
+      geoStage = new GeoStage(map!);
+      geoFocus = new GeoFocus(map!, geoStage);
+      bindFollowUrl(geoFocus, geoStage);
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
+      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
       routing = createRouting(
         map!,
@@ -1631,7 +1637,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (longPressAt && performance.now() - longPressAt < 700) return;
       // the route planner owns the click while it picks a point / chooses an alternative / is open
       if (routing?.click(e)) return;
-      if (geo3dClick?.(e.point.x, e.point.y)) return;
+      // a click that ends the focus still selects what it hits, but brings up no weather
+      const wasFollowing = !!geoFocus?.target;
+      if (geoFocus?.click(e.point.x, e.point.y)) return;
       if (hud?.placeOpen()) {
         // a second tap on the map closes the place sheet
         hud.clearPlace();
@@ -1670,7 +1678,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       extras?.clearSelection();
       infoPanel?.close();
-      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null) ?? extras?.pickStage(e.point.x, e.point.y, e.lngLat);
       if (extraResult?.type === 'wahlen') {
         camPanel?.close();
         shipPanel?.close();
@@ -1728,7 +1736,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else if (isWeatherKarte(curKarte)) {
+      } else if (!wasFollowing && isWeatherKarte(curKarte)) {
         if (store.getOptions().clickWx) {
           const { lng, lat } = e.lngLat;
           const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
@@ -1771,11 +1779,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       focusPlace(p.lat, p.lon, 7, true);
     },
     openSettings,
-    zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+    zoomBy: (d) => geoFocus?.zoomBy(d) || map?.zoomTo(map.getZoom() + d, { duration: 250 }),
     locate: () => locateMe(),
     route: () => routing?.open(),
-    setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
-    resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
+    setPitch: (deg, animate) => geoFocus?.setPitch(deg, animate) || (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+    resetNorth: () => geoFocus?.setBearing(0) || map?.easeTo({ bearing: 0, duration: 400 }),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });

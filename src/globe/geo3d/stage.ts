@@ -25,6 +25,12 @@ export interface GeoTarget {
   released?(): void;
 }
 
+/** Something on the stage that is not followed but opens the usual click handling of a layer. */
+export interface GeoFeature {
+  layerId: string;
+  properties: Record<string, unknown>;
+}
+
 /** how close to a target (CSS px) a click still hits it */
 const PICK_PX = 24;
 /** how often the cursor looks for a target below it (ms): when the mouse moves, and when only the objects do */
@@ -39,6 +45,8 @@ export interface GeoPart {
   readonly source?: string;
   /** what can be clicked in this part */
   targets?(): GeoTarget[];
+  /** The feature at a screen point, for parts whose objects can only be clicked. */
+  featureAt?(frame: GeoFrame, x: number, y: number): GeoFeature | null;
   /** The target an address names; by default found by its slug among the targets. */
   resolve?(slug: string, params: Record<string, string>): GeoTarget | null | Promise<GeoTarget | null>;
   /** Called every frame before drawing; true: keeps the map repainting (something moves). */
@@ -73,7 +81,6 @@ export class GeoStage implements CustomLayerInterface {
   frame: GeoFrame | null = null;
   /** set: the time parts are drawn at, so that a moving focus and the camera following it agree exactly */
   clock: number | null = null;
-  private map!: MlMap;
   private renderer?: THREE.WebGLRenderer;
   private target?: THREE.WebGLRenderTarget;
   private scene = new THREE.Scene();
@@ -99,7 +106,10 @@ export class GeoStage implements CustomLayerInterface {
   private lastHover = 0;
   private repaintTimer = 0;
 
-  constructor() {
+  /** a source was added: the address may be waiting for it */
+  onSource: (() => void) | null = null;
+
+  constructor(private map: MlMap) {
     this.scene.add(new THREE.AmbientLight(0xffffff, 1.5), this.sun);
     const triangle = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
     const cover = new THREE.Mesh(triangle, this.overlayMat);
@@ -107,10 +117,13 @@ export class GeoStage implements CustomLayerInterface {
     this.overlay.add(cover);
   }
 
+  /** The layer only joins the map with its first part: until then the map draws as if the stage did not exist. */
   add(part: GeoPart) {
     this.parts.push(part);
     this.scene.add(part.object);
-    this.map?.triggerRepaint();
+    if (!this.map.getLayer(this.id)) this.map.addLayer(this);
+    this.map.triggerRepaint();
+    if (part.source) this.onSource?.();
   }
 
   remove(part: GeoPart) {
@@ -120,7 +133,6 @@ export class GeoStage implements CustomLayerInterface {
   }
 
   onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
     this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
     this.renderer.autoClear = false;
     map.on('mousemove', this.onMouseMove);
@@ -207,7 +219,7 @@ export class GeoStage implements CustomLayerInterface {
 
   private updateHover() {
     this.lastHover = performance.now();
-    this.setHover(!!this.mouse && !!this.pick(this.mouse.x, this.mouse.y));
+    this.setHover(!!this.mouse && (!!this.pick(this.mouse.x, this.mouse.y) || !!this.pickFeature(this.mouse.x, this.mouse.y)));
   }
 
   /** On the container, not the canvas: the app sets and clears the canvas' cursor for its own layers. */
@@ -215,6 +227,10 @@ export class GeoStage implements CustomLayerInterface {
     if (over === this.hovering) return;
     this.hovering = over;
     this.map.getCanvasContainer().style.cursor = over ? 'pointer' : '';
+  }
+
+  hasSource(source: string) {
+    return this.parts.some((p) => p.source === source);
   }
 
   /** The target an address names; null: no such source or object. */
@@ -245,6 +261,17 @@ export class GeoStage implements CustomLayerInterface {
       }
     }
     return best;
+  }
+
+  /** The feature at a screen point (CSS px). */
+  pickFeature(x: number, y: number): GeoFeature | null {
+    const frame = this.frame;
+    if (!frame) return null;
+    for (const part of this.parts) {
+      const f = part.object.visible ? part.featureAt?.(frame, x, y) : null;
+      if (f) return f;
+    }
+    return null;
   }
 
   private renderTarget(w: number, h: number) {

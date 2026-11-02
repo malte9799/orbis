@@ -1,3 +1,4 @@
+import type { GeoStage } from './geo3d/stage';
 import type { GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
@@ -137,11 +138,13 @@ export class ExtraLayers {
 
   constructor(
     private map: MlMap,
+    private stage: GeoStage,
     private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void },
   ) {
     const self = this;
     this.ctx = {
       map,
+      stage,
       hidden: { visibility: 'none' },
       add: (layer, before) => {
         if (!map.getLayer(layer.id)) map.addLayer(layer, before && map.getLayer(before) ? before : undefined);
@@ -152,6 +155,7 @@ export class ExtraLayers {
         if (!this.layerState.has(key)) this.layerState.set(key, init());
         return this.layerState.get(key) as ReturnType<typeof init>;
       },
+      hasState: (key) => this.layerState.has(key),
       viewBounds: (step) => this.viewBounds(step),
       set: (id, info) => this.set(id, info),
       info: (id) => this.info[id],
@@ -246,6 +250,7 @@ export class ExtraLayers {
 
   private applyOpacity(id: ExtraId) {
     const f = this.opacity[id] ?? 1;
+    EXTRAS.find((d) => d.id === id)?.setOpacity?.(this.ctx, f);
     for (const lid of LAYERS[id]) {
       const type = this.map.getLayer(lid)?.type;
       const props = type ? OPACITY_PROPS[type] : undefined;
@@ -326,6 +331,12 @@ export class ExtraLayers {
   /** True while the 3D ship models are drawn: the 2D icons are not clickable then (see pickShip). */
   ships3dActive() {
     return shipsApi.active(this.ctx);
+  }
+
+  /** An object of the 3D stage under a screen point as a click result, if any. */
+  pickStage(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const f = this.stage.pickFeature(x, y);
+    return f ? this.click({ layer: { id: f.layerId }, properties: f.properties, geometry: { type: 'LineString' } } as unknown as MapGeoJSONFeature, at) : null;
   }
 
   /** The 3D ship model under a screen point as a click result (popup), if any. */

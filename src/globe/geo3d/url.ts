@@ -65,6 +65,8 @@ export function bindFollowUrl(focus: GeoFocus, stage: GeoStage) {
       return;
     }
     if (focus.target && same(followOf(focus.target), wanted)) return;
+    // layers start later than the address is read; stage.onSource comes back here
+    if (!stage.hasSource(wanted.source)) return;
     // a source may have to load its object first
     void Promise.resolve(stage.resolve(wanted.source, wanted.slug, wanted.params)).then((t) => {
       if (ask !== asked) return;
@@ -72,6 +74,7 @@ export function bindFollowUrl(focus: GeoFocus, stage: GeoStage) {
       else write(null);
     });
   };
+  stage.onSource = apply;
   window.addEventListener('hashchange', apply);
   apply();
 }

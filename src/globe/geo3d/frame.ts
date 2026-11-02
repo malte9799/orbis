@@ -82,6 +82,7 @@ export class GeoFrame {
   readonly height: number;
   private readonly ratio: number;
   private readonly lng: number;
+  private readonly lat: number;
   /** the distance (w) at which one view unit is one CSS pixel: camera to map centre */
   readonly pxDistance: number;
   /** view units per render unit */
@@ -95,6 +96,7 @@ export class GeoFrame {
     this.height = input.height;
     this.ratio = input.ratio ?? 1;
     this.lng = input.center.lng;
+    this.lat = input.center.lat;
     this.pxDistance = input.height / 2 / Math.tan(input.fov / 2);
     this.mercMatrix.fromArray(this.globe ? (input.fallbackMatrix as number[]) : (input.mainMatrix as number[]));
     const main = new THREE.Matrix4().fromArray(input.mainMatrix as number[]);
@@ -205,6 +207,11 @@ export class GeoFrame {
     const w = Math.abs(this.clip(lon, lat, altM).w);
     const unitM = this.globe ? EARTH_RADIUS_M : CIRCUMFERENCE_M * Math.cos(rad(Math.max(-MAX_MERCATOR_LAT, Math.min(MAX_MERCATOR_LAT, lat))));
     return (w / this.pxDistance) * (unitM / this.unitPx);
+  }
+
+  /** Metres covered by one CSS pixel at the map centre. */
+  get centreMetresPerPixel(): number {
+    return this.metresPerPixel(this.lng, this.lat);
   }
 
   /** Is the globe in the way between the camera and this point? */

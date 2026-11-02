@@ -27,6 +27,11 @@ const BEARING_PER_PIXEL = 0.8;
 const PITCH_PER_PIXEL = 0.5;
 /** further than this the pointer did not click */
 const DRAG_PX = 4;
+/** time constant of a turn asked for by a button (s), and when it has arrived (degrees) */
+const AIM_SMOOTH_S = 0.12;
+const AIM_DONE_DEG = 0.05;
+/** the map centre moved further than this without us (degrees) */
+const OTHER_CAMERA_DEG = 1e-6;
 /** the camera stays this far from the object on the globe: at most (radii), and in share of its way */
 const MIN_GAP_RADII = 0.1;
 const MIN_GAP_SHARE = 0.3;
@@ -105,22 +110,57 @@ export class GeoFocus {
   /** the pointer travelled since it went down: what follows is the end of a drag, not a click */
   private dragged = false;
   private travel = 0;
+  /** where the buttons want the camera; a drag takes over */
+  private aimBearing: number | null = null;
+  private aimPitch: number | null = null;
+  /** the centre set last: a different one means someone else moves the camera */
+  private lastCentre: [number, number] = [0, 0];
 
   constructor(
     private map: MlMap,
     private stage: GeoStage,
   ) {}
 
-  /** A click on the map (CSS px): focuses what it hits, ends the focus when it hits nothing. True: the click is used up. */
+  /**
+   * A click on the map (CSS px): focuses what it hits, ends the focus when it hits nothing. True: the click
+   * is used up. False: it is free for whatever else is at that point, also when it ended the focus.
+   */
   click(x: number, y: number): boolean {
     if (this.dragged) {
       this.dragged = false;
       return true;
     }
     const target = this.stage.pick(x, y);
-    if (target) this.start(target);
-    else if (this.target) this.stop();
-    else return false;
+    if (!target) {
+      this.stop();
+      return false;
+    }
+    this.start(target);
+    return true;
+  }
+
+  /** The zoom buttons, while following. False: not following, the map does it itself. */
+  zoomBy(delta: number): boolean {
+    if (!this.target) return false;
+    this.wanted += delta;
+    return true;
+  }
+
+  /** The tilt control, while following. */
+  setPitch(deg: number, animate: boolean): boolean {
+    if (!this.target) return false;
+    if (animate) this.aimPitch = deg;
+    else {
+      this.aimPitch = null;
+      this.pitch = deg;
+    }
+    return true;
+  }
+
+  /** The compass, while following. */
+  setBearing(deg: number): boolean {
+    if (!this.target) return false;
+    this.aimBearing = deg;
     return true;
   }
 
@@ -133,6 +173,8 @@ export class GeoFocus {
     this.onChange?.(target);
     const c = map.getCenter();
     this.from = [c.lng, c.lat];
+    this.lastCentre = [c.lng, c.lat];
+    this.aimBearing = this.aimPitch = null;
     this.bearing = map.getBearing();
     this.pitch = map.getPitch();
     this.zoom = this.wanted = map.getZoom() - latScale(c.lat);
@@ -155,11 +197,13 @@ export class GeoFocus {
     box.addEventListener('pointercancel', this.onUp);
     box.addEventListener('contextmenu', this.onContext);
     window.addEventListener('keydown', this.onKey);
+    map.on('move', this.onCameraMove);
     this.lastTick = performance.now();
     this.raf = requestAnimationFrame(this.tick);
   }
 
-  stop() {
+  /** `handedOver`: someone else flies the camera already, so it must not be touched. */
+  stop(handedOver = false) {
     if (!this.target) return;
     this.target.released?.();
     this.target = null;
@@ -178,12 +222,18 @@ export class GeoFocus {
     box.removeEventListener('pointercancel', this.onUp);
     box.removeEventListener('contextmenu', this.onContext);
     window.removeEventListener('keydown', this.onKey);
+    map.off('move', this.onCameraMove);
     const r = this.restore!;
     this.restore = null;
     for (const h of r.handlers) map[h as (typeof HANDLERS)[number]].enable();
     box.style.touchAction = r.touchAction;
     cameraHeld.delete(map);
     map.setCenterClampedToGround(r.clamped);
+    if (handedOver) {
+      // written through the camera (as in mapctl.ts): a camera call would end the flight that just began
+      (map as unknown as { _camera: { applyTransformChange(change: (tr: { setElevation(e: number): void }) => void): void } })._camera.applyTransformChange((tr) => tr.setElevation(0));
+      return;
+    }
     // back down to the ground as well, the map does not know anything else
     const back = { elevation: 0 };
     const release = cameraRelease.get(map);
@@ -217,12 +267,38 @@ export class GeoFocus {
     const scale = latScale(centre[1]);
     this.wanted = Math.max(map.getMinZoom() + 0.05 - scale, Math.min(map.getMaxZoom() - scale, this.wanted));
     this.zoom += (this.wanted - this.zoom) * (1 - Math.exp(-dt / ZOOM_SMOOTH_S));
+    this.aimCamera(dt);
     const zoom = this.zoom + scale;
     const state = `${centre[0]}|${centre[1]}|${zoom}|${this.bearing}|${this.pitch}|${p[2] * k}`;
     if (state === this.last) return;
     this.last = state;
     // a camera update of ours, for whoever listens to the move events
     map.jumpTo({ center: centre, zoom, bearing: this.bearing, pitch: this.pitch, elevation: p[2] * k }, { geo3dFocus: true });
+    const c = map.getCenter();
+    this.lastCentre = [c.lng, c.lat];
+  };
+
+  /** Eases towards what the buttons asked for. */
+  private aimCamera(dt: number) {
+    const k = 1 - Math.exp(-dt / AIM_SMOOTH_S);
+    if (this.aimBearing !== null) {
+      const delta = ((this.aimBearing - this.bearing + 540) % 360) - 180;
+      this.bearing += Math.abs(delta) < AIM_DONE_DEG ? delta : delta * k;
+      if (Math.abs(delta) < AIM_DONE_DEG) this.aimBearing = null;
+    }
+    if (this.aimPitch !== null) {
+      const delta = this.aimPitch - this.pitch;
+      this.pitch += Math.abs(delta) < AIM_DONE_DEG ? delta : delta * k;
+      if (Math.abs(delta) < AIM_DONE_DEG) this.aimPitch = null;
+    }
+  }
+
+  /** A flight or a jump from elsewhere (search, a panel): that wins, the focus lets go. A resize keeps the centre. */
+  private onCameraMove = (e: object) => {
+    if ((e as { geo3dFocus?: boolean }).geo3dFocus) return;
+    const c = this.map.getCenter();
+    const dLng = ((c.lng - this.lastCentre[0] + 540) % 360) - 180;
+    if (Math.abs(dLng) > OTHER_CAMERA_DEG || Math.abs(c.lat - this.lastCentre[1]) > OTHER_CAMERA_DEG) this.stop(true);
   };
 
   private onWheel = (e: WheelEvent) => {
@@ -237,6 +313,7 @@ export class GeoFocus {
     this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     this.travel = 0;
     this.dragged = false;
+    this.aimBearing = this.aimPitch = null;
     this.map.getCanvasContainer().setPointerCapture?.(e.pointerId);
   };
 
