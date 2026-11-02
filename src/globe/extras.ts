@@ -215,10 +215,13 @@ export class ExtraLayers {
     return this.on.has(id);
   }
 
-  /** 3D-Gelände: echtes Höhenmodell an/aus – gezeichnet wird nie etwas davon (keine eigene Ebene) */
+  /** 3D-Gelände: echtes Höhenmodell an/aus – gezeichnet wird nie etwas davon (keine eigene Ebene).
+   *  Verzerrung (exaggeration) bleibt 1: alles echte 3D hier (3D-Kacheln, Gebäude, Flugzeuge) ist
+   *  maßstabsgetreu; ein überhöhtes Gelände passt nur am Messpunkt und lässt sonst jede Stadt
+   *  um 0,4 × Höhendifferenz schwimmen oder einsinken. */
   setTerrain(on: boolean) {
     const has = !!this.map.getTerrain();
-    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.4 });
+    if (on && !has) this.map.setTerrain({ source: 'terrain-dem', exaggeration: 1 });
     else if (!on && has) this.map.setTerrain(null);
   }
 
