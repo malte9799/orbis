@@ -237,6 +237,16 @@ export class GeoFrame {
     return sphereHides(this.camera, toUnit(lon, lat, altM));
   }
 
+  /** Position in CSS pixels of a point on the unit sphere's scale, on the globe; null behind the camera. The globe is not asked. */
+  unitToScreen(x: number, y: number, z: number): [number, number] | null {
+    const e = this.globeMatrix.elements;
+    const w = e[3] * x + e[7] * y + e[11] * z + e[15];
+    if (w <= 0) return null;
+    const cx = e[0] * x + e[4] * y + e[8] * z + e[12];
+    const cy = e[1] * x + e[5] * y + e[9] * z + e[13];
+    return [(cx / w * 0.5 + 0.5) * this.width, (1 - (cy / w * 0.5 + 0.5)) * this.height];
+  }
+
   /** Position in CSS pixels; null behind the camera or behind the globe. */
   toScreen(lon: number, lat: number, altM = 0): [number, number] | null {
     if (this.occluded(lon, lat, altM)) return null;

@@ -10,6 +10,7 @@ import {
 import { fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
+import { satsApi } from './layers/shared/sats';
 import { shipsApi } from './layers/shared/ships';
 import { vehiclesApi } from './layers/shared/vehicles';
 import { launchesApi } from './layers/defs/launches';
@@ -39,6 +40,8 @@ export type ClickResult =
   | { type: 'ship'; mmsi: number; lng: number; lat: number }
   /** a train or a bus was clicked: the vehicle panel shows it */
   | { type: 'vehicle'; key: string; lng: number; lat: number }
+  /** a satellite was clicked: the satellite panel shows it */
+  | { type: 'sat'; id: string; lng: number; lat: number }
   /** a webcam was clicked: the camera panel shows it */
   | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
@@ -359,6 +362,14 @@ export class ExtraLayers {
   }
 
   /** Current data of a ship for the ship panel. */
+  satellite(id: string) {
+    return satsApi.sat(this.ctx, id);
+  }
+
+  selectSatellite(id: string | null) {
+    satsApi.select(this.ctx, id);
+  }
+
   vehicleInfo(key: string) {
     return vehiclesApi.info(this.ctx, key);
   }
@@ -499,7 +510,4 @@ export class ExtraLayers {
     return null;
   }
 
-  clearSelection() {
-    this.setData('sat-track', empty());
-  }
 }

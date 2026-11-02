@@ -52,6 +52,7 @@ import { SondePanel } from '../globe/sondepanel';
 import { InfoPanel } from '../globe/infopanel';
 import { ShipPanel } from '../globe/shippanel';
 import { VehiclePanel } from '../globe/vehiclepanel';
+import { SatPanel } from '../globe/satpanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
 import { DetailPanel } from '../globe/detailpanel';
@@ -225,6 +226,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let infoPanel: InfoPanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let vehiclePanel: VehiclePanel | null = null;
+  let satPanel: SatPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let camPanel: CamPanel | null = null;
   let detailPanel: DetailPanel | null = null;
@@ -1291,6 +1293,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     flightPanel?.close();
     shipPanel?.close();
     vehiclePanel?.close();
+    satPanel?.close();
     wahlenPanel?.close();
     let d: LaunchDetail;
     try {
@@ -1481,6 +1484,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map, follow: (mmsi) => followIn('ship', String(mmsi)), unfollow: () => geoFocus?.stop() });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map, follow: (serial) => followIn('plane', `sonde:${serial}`), unfollow: () => geoFocus?.stop() });
       vehiclePanel = new VehiclePanel(el, { info: (key) => extras?.vehicleInfo(key) ?? null, map: () => map, follow: (key) => followIn('vehicle', key), unfollow: () => geoFocus?.stop() });
+      satPanel = new SatPanel(el, { sat: (id) => extras?.satellite(id) ?? null, select: (id) => extras?.selectSatellite(id), map: () => map, follow: (id) => followIn('sat', id), unfollow: () => geoFocus?.stop() });
       // the buttons in the panels go along when the camera lets go
       geoFocus?.listen((t) => {
         const plane = t?.source === 'plane' ? t.slug : null;
@@ -1488,6 +1492,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         sondePanel?.focusChanged(plane?.startsWith('sonde:') ? plane.slice('sonde:'.length) : null);
         shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
         vehiclePanel?.focusChanged(t?.source === 'vehicle' ? t.slug : null);
+        satPanel?.focusChanged(t?.source === 'sat' ? t.slug : null);
       });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
@@ -1496,6 +1501,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1509,6 +1515,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         detailPanel?.close();
@@ -1517,6 +1524,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1698,6 +1706,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (picked) {
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         launchPanel?.close();
         camPanel?.close();
         detailPanel?.close();
@@ -1713,13 +1722,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         }
         return;
       }
-      extras?.clearSelection();
       infoPanel?.close();
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null) ?? extras?.pickStage(e.point.x, e.point.y, e.lngLat);
       if (extraResult?.type === 'wahlen') {
         camPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
@@ -1731,6 +1740,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         camPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         launchPanel?.close();
         sondePanel?.close();
         wahlenPanel?.close();
@@ -1740,12 +1750,25 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         camPanel?.close();
         shipPanel?.close();
         vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         sondePanel?.open(extraResult.serial);
         followNext = () => sondePanel?.followThis();
+      } else if (extraResult?.type === 'sat') {
+        camPanel?.close();
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        detailPanel?.close();
+        wahlenPanel?.close();
+        vehiclePanel?.close();
+        popup?.remove();
+        satPanel?.open(extraResult.id);
+        followNext = () => satPanel?.followThis();
       } else if (extraResult?.type === 'vehicle') {
         camPanel?.close();
         shipPanel?.close();
@@ -1754,11 +1777,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
+        satPanel?.close();
         popup?.remove();
         vehiclePanel?.open(extraResult.key);
         followNext = () => vehiclePanel?.followThis();
       } else if (extraResult?.type === 'ship') {
         vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();

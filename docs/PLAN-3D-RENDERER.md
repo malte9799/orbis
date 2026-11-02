@@ -7,7 +7,7 @@ Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
 ## Stand
 
 Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
-PR. Phase 1 bis 4 sind gebaut, Phase 4 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
+PR. Phase 1 bis 5 sind gebaut, Phase 5 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
 `views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
 
 | Datei | Inhalt |
@@ -17,6 +17,7 @@ PR. Phase 1 bis 4 sind gebaut, Phase 4 im Browser aber noch nicht geprüft. Stag
 | `line.ts` | `GeoLine`: Linie mit fester Pixelbreite, Strichelung und Ausblenden, auf Kugel und Karte |
 | `wall.ts` | `GeoWall`: Vorhang von einer Linie zum Boden |
 | `arc.ts` | `arcPoints`: Bogen entlang des Großkreises |
+| `points.ts` | `GeoPoints`: tausende Punkte, die sich zwischen zwei Positionssätzen selbst bewegen |
 | `focus.ts` | `GeoFocus`: Kamera folgt einem Objekt, Drehen und Zoomen um das Objekt |
 | `url.ts` | Fokus in der Adresse: `#/karte?follow=sat/iss&follow.t=…`; Slug und Zusatzwerte gibt die Quelle an |
 
@@ -31,7 +32,7 @@ Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Ab
 | ✓ 2 | Geldflüsse als echte Bögen | Bögen in beiden Projektionen, Klicks gehen | gebaut |
 | ✓ 3 | Flugzeuge migriert (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernt; ausgewähltes Flugzeug auf dem Globus, „Folgen“ über `GeoFocus` | Spur und Route auf dem Globus, flache Karte unverändert | gebaut |
 | ✓ 4 | Schiffe, Fahrzeuge, `camview3d` migriert, `GLOBE_FLAT_ZOOM` entfernt, Folgen für Schiffe und Sonden über `GeoFocus` | keine Mercator-Rechnung mehr in Layern (`planetmap.ts` ausgenommen) | gebaut |
-| 5 | Satelliten: `GeoPoints`, `GeoOrbit`, ISS-Modell | Starlink flüssig, Orbit beim Anklicken | 2–3 |
+| ✓ 5 | Satelliten: `GeoPoints`, Orbit, ISS-Modell, Seitenleiste, Folgen (`follow=sat/<norad>`) | Starlink flüssig, Orbit beim Anklicken | gebaut |
 | 6 | Weltweite Flugzeuge mit Instancing und Detailstufen (`air.ts:64` befüllt heute nur die 2D-Quelle), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 2 mit vollem Weltdatensatz | 2 |
 
 Nach Phase 4 entscheiden: Patch `patches/maplibre-gl@6.14.0.patch` entfernen (Übergang wieder bei Zoom
