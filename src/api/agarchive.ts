@@ -5,7 +5,7 @@ import { viaProxy } from './proxy';
 // baut auf offenen statischen JSON-Dateien. Exakte GPS-Pins und externe Verortungen werden als
 // klickbare Punkte gezeigt, approximierte Ortsangaben nur als Heatmap (Regel des Archivs: ein
 // Ortsname wird nie als exakter Punkt gezeichnet). Inhalts-links führen zur Archivseite und zum
-// Original-Post, es wird kein Bild/Video inline gezeigt.
+// Original-Post; das Detail-Panel bettet Video bzw. Foto vom Medien-Host des Archivs ein.
 // Zugriff: ohne CORS – daher über den Daten-Proxy (proxy/cloudflare-worker.js).
 
 const ORIGIN = 'https://archivegenocide.com';
@@ -102,12 +102,23 @@ export interface AgClip {
   c: string;
   d: string;
   a: string;
+  /** 'video' | 'photo' */
   k: string;
   cat?: string;
   et?: string;
-  pu?: string;
+  pu?: string | null;
   du?: string | null;
   lvl?: string;
+  /** Medienordner (Unterverzeichnis des Medien-Hosts) und Dateipfade darin */
+  mb?: string;
+  f?: string;
+  t?: string | null;
+  /** Ereignistitel, Ortsname (Verortung), Status der Verortung, Methode */
+  cp?: string;
+  st?: string;
+  m?: string;
+  /** Belege der Verortung: je Eintrag Autor/Methode und Links ([url, label]) */
+  pv?: { by?: string; method?: string; status?: string; level?: string; url?: string; links?: [string, string][] }[];
 }
 
 const buckets = new Map<string, Promise<Record<string, AgClip>>>();
@@ -181,6 +192,14 @@ export function featuresOf(places: AgPlace[], kinds: AgPlace['kind'][]): Feature
       },
     }));
 }
+
+const encPath = (p: string) => p.split('/').map(encodeURIComponent).join('/');
+/** öffentliche URL der Mediendatei bzw. des Vorschaubilds eines Clips (wie js/geomap.js des Archivs) */
+export const mediaUrl = (c: AgClip) => (c.mb && c.f ? `${MEDIA}${encPath(c.mb)}/${encPath(c.f)}` : '');
+export const thumbUrl = (c: AgClip) => {
+  const p = c.t || (c.k === 'photo' ? c.f : '');
+  return p && c.mb ? `${MEDIA}${encPath(c.mb)}/${encPath(p)}` : '';
+};
 
 export const clipUrl = (id: number) => `${GEO}#v=${id}`;
 

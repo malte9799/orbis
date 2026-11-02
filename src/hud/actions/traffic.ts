@@ -1,13 +1,12 @@
 import type { ActFn, HudCore } from '../core';
-import { INFRA_LAYER_IDS, INFRA_MENU, TRAFFIC_LAYER_IDS, TRAFFIC_MENU } from '../catalog';
+import { radioMenu } from '../catalog';
 
 export default (c: HudCore): Record<string, ActFn> => {
   const { afterEdit, edit, tmodeOf } = c;
   return {
     tcat: (id) => {
       const d = edit();
-      const menu = d.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
-      const ids = d.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
+      const { cats: menu, ids } = radioMenu(d.menu);
       const on = tmodeOf(d) === id;
       d.layers = d.layers.filter((l) => !ids.has(l.id));
       d.tmode = on ? '' : id;

@@ -13,14 +13,9 @@ import {
   CATALOG,
   CATS,
   catalogOf,
-  INFRA_LAYER_IDS,
-  INFRA_MENU,
-  infraCatOf,
+  radioMenu,
   ISOBAR_OPTION_MAINS,
   BASE_GROUPS,
-  TRAFFIC_LAYER_IDS,
-  TRAFFIC_MENU,
-  trafficCatOf,
   WX_MENU,
   type CatalogEntry,
   type WxMenuItem,
@@ -356,25 +351,6 @@ export function createHud(host: HudHost): Hud {
     return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div><h5>Offene Datensätze der Karte</h5><div class="qlist qweb">${open}</div></div>`;
   }
   function modesInner(k: Karte): string {
-    // Zeugen-Karte: Quellen-Panel (Liste der Herkünfte, einmal geladen) + Ebenen-Schalter
-    if (k.menu === 'zeugen') {
-      const toggles = [
-        { id: 'demos', label: 'Versammlungen D/AT/CH', color: '#e8833a' },
-        { id: 'usprotests', label: 'US-Proteste', color: '#8f7bff' },
-        { id: 'moneyflow', label: 'Geldflüsse', color: '#d4a800' },
-      ]
-        .map((t) => {
-          const on = k.layers.some((l) => l.id === t.id && !l.hidden);
-          const n = on ? host.info(t.id)?.count : null;
-          return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${t.id}" aria-pressed="${on}"><span>${t.label}</span><em class="n" data-n="${t.id}">${on && n != null ? n.toLocaleString('de-DE') : ''}</em><i class="dot" style="background:${t.color}"></i></button>`;
-        })
-        .join('');
-      return `<div class="wxm hud-glass" role="group" aria-label="Dokumentation"><div class="mrow cats">
-        <button type="button" data-act="zq" class="${ui.zq ? 'on' : ''}" aria-expanded="${ui.zq}" aria-pressed="${ui.zq}" title="Belegquellen der Archiv-Daten"><i>${ico('list', 2)}</i><span>Quellen</span></button>
-        ${ui.zq ? `<div class="subs">${quellenInner()}</div>` : ''}
-        ${toggles}
-      </div></div>`;
-    }
     if (k.menu === 'wx') {
       const f = mainFam(k);
       const curVar = f ? (k.mainVar ?? f.variants[0][0]) : '';
@@ -416,7 +392,7 @@ export function createHud(host: HudHost): Hud {
       return `<button type="button" data-act="wxcat" data-id="${esc(it.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(it.color)}" title="${esc(it.hint)}"><i>${ico(it.icon, 2)}</i><span>${esc(it.label)}</span></button>${on ? subs(it) : ''}`;
       }).join('')}</div></div>`;
     }
-    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+    const menu = radioMenu(k.menu).cats;
     const cur = tmodeOf(k);
     const have = (id: string) => k.layers.some((l) => l.id === id && !l.hidden);
     const toggle = (label: string, layers: string[]) => {
@@ -426,16 +402,20 @@ export function createHud(host: HudHost): Hud {
       // statt eines Schalters zeigt die Reihe den Farbpunkt der Ebene quasi als Legende
       return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${esc(layers.join(','))}" aria-pressed="${on}"><span>${esc(label)}</span><em class="n" data-n="${esc(layers[0])}">${n != null ? n.toLocaleString('de-DE') : ''}</em>${c ? `<i class="dot" style="background:${esc(c.color)}"></i>` : ''}</button>`;
     };
-    const label = k.menu === 'infra' ? 'Infrastruktur' : 'Verkehrsmittel';
+    // Zeugen-Karte: unterhalb der Kategorien die Quellen-Liste (Herkünfte, einmal geladen)
+    const quellen =
+      k.menu === 'zeugen'
+        ? `<button type="button" data-act="zq" class="${ui.zq ? 'on' : ''}" aria-expanded="${ui.zq}" aria-pressed="${ui.zq}" title="Belegquellen der Karte"><i>${ico('list', 2)}</i><span>Quellen</span></button>${ui.zq ? `<div class="subs">${quellenInner()}</div>` : ''}`
+        : '';
+    const label = k.menu === 'infra' ? 'Infrastruktur' : k.menu === 'zeugen' ? 'Dokumentation' : 'Verkehrsmittel';
     return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
       return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
-    }).join('')}</div></div>`;
+    }).join('')}${quellen}</div></div>`;
   }
   /** the chosen menu category (Karten saved before the menu: the one their layers belong to) */
   function tmodeOf(k: Karte): string {
-    const ids = k.menu === 'infra' ? INFRA_LAYER_IDS : TRAFFIC_LAYER_IDS;
-    const catOf = k.menu === 'infra' ? infraCatOf : trafficCatOf;
+    const { ids, catOf } = radioMenu(k.menu);
     return k.tmode ?? catOf(k.layers.find((l) => ids.has(l.id))?.id ?? '')?.id ?? '';
   }
   /** the one line of the folded menu: the layer / category chosen right now, e. g. "Satellit (HD)" */
@@ -455,17 +435,7 @@ export function createHud(host: HudHost): Hud {
       }
       return { label: f.label, icon: f.icon, color: f.color };
     }
-    if (k.menu === 'zeugen') {
-      const on = [
-        { id: 'usprotests', label: 'US-Proteste', icon: 'crowd' },
-        { id: 'demos', label: 'Versammlungen D/AT/CH', icon: 'placard' },
-        { id: 'moneyflow', label: 'Geldflüsse', icon: 'list' },
-      ].find((t) => k.layers.some((l) => l.id === t.id && !l.hidden));
-      return on
-        ? { label: `Zeugen-Archiv · ${on.label}`, icon: on.icon, color: k.color }
-        : { label: 'Zeugen-Archiv · Videopositionen', icon: 'warn', color: k.color };
-    }
-    const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;
+    const menu = radioMenu(k.menu).cats;
     const cat = menu.find((c) => c.id === tmodeOf(k));
     if (cat) {
       // erste aktive Reihe zeigen (z. B. "Auto · Straßen"); ohne aktive Reihe nur die Kategorie

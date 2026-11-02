@@ -85,7 +85,7 @@ export const STANDARD: Karte[] = [
   {
     id: 'zeugen', name: 'Zeitzeugen', icon: 'cam', color: '#c0392b', std: true, menu: 'zeugen', warn: 'zeugen',
     base: 'dark', labels: true, night: 'auto', main: null,
-    layers: [{ id: 'warfootage' }],
+    tmode: 'archiv', layers: [{ id: 'warfootage' }],
     view: { center: [34.47, 31.5], zoom: 10.6, name: 'Gaza' },
   },
 ];
