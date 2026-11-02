@@ -26,6 +26,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 12. [3D-Modelle](#12-3d-modelle)
 13. [Software & Bibliotheken](#13-software--bibliotheken)
 14. [Optionale Schlüssel](#14-optionale-schlüssel)
+15. [Zeugen-Karte (Dokumentation)](#15-zeugen-karte-dokumentation)
 
 ---
 
@@ -323,3 +324,21 @@ Alle kostenlos; werden nur im `localStorage` des Browsers gespeichert (außer de
 | Windy Webcams | weltweite Webcams | [api.windy.com](https://api.windy.com/webcams) |
 | NPS API | Nationalpark-Webcams | [nps.gov/developer](https://www.nps.gov/subjects/developer/get-started.htm) |
 | Transport Victoria · CTA · Trafiklab | Fahrzeuge Melbourne · Chicago · Schweden | siehe Tabelle Verkehr |
+
+## 15. Zeugen-Karte (Dokumentation)
+
+Quellen der Standardkarte „Zeitzeugen". Inhalte beziehen sich auf Kriegsdokumentation und
+politische Ereignisse – mit Inhalts-Warnung beim ersten Öffnen.
+
+| Anbieter | Verwendung in Orbis | Zugang |
+|---|---|---|
+| [Archive Genocide](https://archivegenocide.com/) 🟢🌐📦 | `warfootage` – Videopositionen (exakte Pins, approximierte Clips als Heatmap), Backend-JSON `/geolocation/data` | Web |
+| [whofundedgenocide.com](https://whofundedgenocide.com/) (FEC-Bulkdaten) 🟢📦 | `moneyflow` – PAC-Geldflüsse pro Kongresswahlbezirk; Skript `scripts/moneyflow.mjs` → `public/data` | Web |
+| [demonstrations.org](https://demonstrations.org/) (Demos Berlin e.V.) 🟢📦 | `demos` – angemeldete Versammlungen D/AT/CH der kommenden Tage; API-Spiegel der amtlichen Versammlungslisten (GeoJSON, Routen als LineString); Task `demos` in `scripts/fetch-data.ts` alle 15 min → `data`-Branch | [API](https://api.demonstrations.org/v1/docs) · **CC BY-SA 4.0** |
+| [Crowd Counting Consortium](https://dataverse.harvard.edu/dataverse/crowdcountingconsortium) (Harvard/UConn) 🟢📦 | `usprotests` – US-Protestevents mit Geocodierung, Datum, Größe, Themen; Task `ccc-us` wöchentlich → `data`-Branch | [DOI 10.7910/DVN/RI9JFU](https://doi.org/10.7910/DVN/RI9JFU) · **CC0 1.0** |
+
+**Lizenzen der neuen Quellen:** demonstrations.org **CC BY-SA 4.0** (Attribution wie im
+[Layer](../src/globe/layers/defs/demos.ts) verlinkt, enthaltene Weitergabe unter gleichen
+Bedingungen); Crowd Counting Consortium **CC0 1.0** (frei nutzbar, Zitation willkommen). Beide
+ohne Anmeldung; der 15-min- bzw. wöchentliche Abruf läuft im GitHub Action, der Browser
+kontaktiert die Anbieter nie direkt.

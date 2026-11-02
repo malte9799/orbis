@@ -347,17 +347,30 @@ export function createHud(host: HudHost): Hud {
       .map((s) => anchor(s.url, s.name, [s.platform, s.count].filter(Boolean).join(' · ')))
       .join('');
     const web = sourcesList.websites.map((w) => anchor(w.url, w.domain, w.desc)).join('');
-    return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div></div>`;
+    const open = [
+      anchor('https://api.demonstrations.org/v1/docs', 'demonstrations.org', 'Versammlungen D/AT/CH · CC BY-SA 4.0'),
+      anchor('https://dataverse.harvard.edu/dataverse/crowdcountingconsortium', 'Crowd Counting Consortium', 'Harvard/UConn · US-Proteste · CC0 1.0'),
+    ].join('');
+    return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div><h5>Offene Datensätze der Karte</h5><div class="qlist qweb">${open}</div></div>`;
   }
   function modesInner(k: Karte): string {
-    // Zeugen-Karte: Quellen-Panel (Liste der Herkünfte, einmal geladen) + Geldflüsse-Schalter
+    // Zeugen-Karte: Quellen-Panel (Liste der Herkünfte, einmal geladen) + Ebenen-Schalter
     if (k.menu === 'zeugen') {
-      const flow = k.layers.some((l) => l.id === 'moneyflow' && !l.hidden);
-      const n = flow ? host.info('moneyflow').count : null;
+      const toggles = [
+        { id: 'demos', label: 'Versammlungen D/AT/CH', color: '#e8833a' },
+        { id: 'usprotests', label: 'US-Proteste', color: '#8f7bff' },
+        { id: 'moneyflow', label: 'Geldflüsse', color: '#d4a800' },
+      ]
+        .map((t) => {
+          const on = k.layers.some((l) => l.id === t.id && !l.hidden);
+          const n = on ? host.info(t.id)?.count : null;
+          return `<button type="button" class="tgl ${on ? 'on' : ''}" data-act="ttog" data-id="${t.id}" aria-pressed="${on}"><span>${t.label}</span><em class="n" data-n="${t.id}">${on && n != null ? n.toLocaleString('de-DE') : ''}</em><i class="dot" style="background:${t.color}"></i></button>`;
+        })
+        .join('');
       return `<div class="wxm hud-glass" role="group" aria-label="Dokumentation"><div class="mrow cats">
         <button type="button" data-act="zq" class="${ui.zq ? 'on' : ''}" aria-expanded="${ui.zq}" aria-pressed="${ui.zq}" title="Belegquellen der Archiv-Daten"><i>${ico('list', 2)}</i><span>Quellen</span></button>
         ${ui.zq ? `<div class="subs">${quellenInner()}</div>` : ''}
-        <button type="button" class="tgl ${flow ? 'on' : ''}" data-act="ttog" data-id="moneyflow" aria-pressed="${flow}"><span>Geldflüsse</span><em class="n" data-n="moneyflow">${flow && n != null ? n.toLocaleString('de-DE') : ''}</em><i class="dot" style="background:#d4a800"></i></button>
+        ${toggles}
       </div></div>`;
     }
     if (k.menu === 'wx') {
@@ -441,9 +454,13 @@ export function createHud(host: HudHost): Hud {
       return { label: f.label, icon: f.icon, color: f.color };
     }
     if (k.menu === 'zeugen') {
-      const flow = k.layers.some((l) => l.id === 'moneyflow' && !l.hidden);
-      return flow
-        ? { label: 'Zeugen-Archiv · Geldflüsse', icon: 'list', color: k.color }
+      const on = [
+        { id: 'usprotests', label: 'US-Proteste', icon: 'crowd' },
+        { id: 'demos', label: 'Versammlungen D/AT/CH', icon: 'placard' },
+        { id: 'moneyflow', label: 'Geldflüsse', icon: 'list' },
+      ].find((t) => k.layers.some((l) => l.id === t.id && !l.hidden));
+      return on
+        ? { label: `Zeugen-Archiv · ${on.label}`, icon: on.icon, color: k.color }
         : { label: 'Zeugen-Archiv · Videopositionen', icon: 'warn', color: k.color };
     }
     const menu = k.menu === 'infra' ? INFRA_MENU : TRAFFIC_MENU;

@@ -126,6 +126,201 @@ await task('firms', 0, async () => {
 });
 
 // ---------------------------------------------------------------------------
+// dokumentation (Zeugen-Karte): Angemeldete Versammlungen (DE/AT/CH) + US-Proteste
+
+// Angemeldete Versammlungen aus der öffentliche API von demonstrations.org (Demos Berlin e.V.)
+// – CC BY-SA 4.0, keine Registrierung. Die API sortiert nach Startzeit absteigend; wir blättern,
+// bis ein Start älter als 24 h ist. Jeder Treffpunkt wird zu einem eigenen Eintrag; das Detail-
+// Panel bekommt zusätzlich Kurz-/Beschreibung, alle Treffpunkte und die Route (falls gemeldet).
+await task('demos', 0, async () => {
+  type Src = {
+    id: number; name: string; slug: string; is_llm_parsed: boolean;
+    short_description?: string | null; description?: string | null;
+    start_time: string; end_time: string; timezone?: string;
+    route_geography?: { type: 'LineString'; coordinates: number[][] } | null;
+    raw_location?: string | null; raw_estimated_participants?: string | null; raw_organiser?: string | null;
+    is_march?: boolean;
+    locations?: {
+      street?: string | null; city?: string | null; country?: string | null; role?: string | null;
+      geography?: { coordinates: [number, number] } | null;
+    }[];
+    topics?: { id: number; names: Record<string, string> }[];
+    url?: string | null;
+  };
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, '2026-01-01T00:00:00'.length); // UTC-Vergleich reicht
+  /** Route glätten (max 240 Punkte) und identische Strecken nur einmal speichern: Index in `routes` */
+  const route = (g: Src['route_geography']): number | undefined => {
+    const pts = g?.coordinates?.filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])) ?? [];
+    if (pts.length < 2) return undefined;
+    const stride = Math.max(1, Math.ceil(pts.length / 240));
+    const out: number[][] = [];
+    for (let i = 0; i < pts.length; i += stride) out.push([Math.round(pts[i][0] * 1e5) / 1e5, Math.round(pts[i][1] * 1e5) / 1e5]);
+    const last = pts[pts.length - 1];
+    if (out[out.length - 1][0] !== last[0] || out[out.length - 1][1] !== last[1]) out.push([Math.round(last[0] * 1e5) / 1e5, Math.round(last[1] * 1e5) / 1e5]);
+    const key = out.map((p) => `${p[0]},${p[1]}`).join('|');
+    let idx = routeIdx.get(key);
+    if (idx === undefined) {
+      idx = routes.length;
+      routes.push(out);
+      routeIdx.set(key, idx);
+    }
+    return idx;
+  };
+  const events: {
+    n: string; s: string; e?: string; c: string; city: string; place?: string;
+    lon: number; lat: number; r?: string; topics?: string[]; org?: string; est?: string;
+    march?: boolean; src?: string; u: string;
+    sd?: string; ds?: string; lc?: { a?: string; y?: string; r?: string }[]; /** Index in `routes`, -1/kex fehlt = keine */
+    ri?: number;
+  }[] = [];
+  const routes: number[][][] = [];
+  const routeIdx = new Map<string, number>();
+  const clamp = (v: string | null | undefined, n: number) => {
+    const s = (v ?? '').trim();
+    return s.length > n ? `${s.slice(0, n).trimEnd()}…` : s || undefined;
+  };
+  let offset = 0;
+  for (;;) {
+    const res = await fetch('https://api.demonstrations.org/v1/event/all', {
+      method: 'POST',
+      headers: { ...UA, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sorting_key: 'start_time', sorting_direction: 'desc', offset, limit: 200 }),
+      signal: AbortSignal.timeout(90000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} – api.demonstrations.org`);
+    const body = (await res.json()) as { events: Src[]; total_event_count: number };
+    const list = body.events;
+    if (!list?.length) break;
+    let exhausted = false;
+    for (const ev of list) {
+      if (ev.start_time < cutoff) { exhausted = true; break; }
+      const locs = ev.locations?.filter((l) => l.geography?.coordinates?.length === 2) ?? [];
+      if (!locs.length) continue;
+      const topicNames = ev.topics?.map((t) => t.names.de || Object.values(t.names)[0]).filter(Boolean) as string[] | undefined;
+      const sd = clamp(ev.short_description, 200);
+      const rawDs = clamp(ev.description, 2500);
+      // die Behörden wiederholen oft nur den Namen als Beschreibung: dann weglassen
+      const ds = rawDs && rawDs.trim().toLowerCase() !== ev.name.trim().toLowerCase() ? rawDs : undefined;
+      const lc = ev.locations?.map((l) => ({ a: l.street || undefined, y: l.city || undefined, r: l.role || undefined })).slice(0, 12);
+      const ri = route(ev.route_geography);
+      for (const l of locs) {
+        events.push({
+          n: ev.name.slice(0, 160),
+          s: ev.start_time,
+          e: ev.end_time || undefined,
+          c: l.country ?? '',
+          city: l.city ?? '',
+          place: (l.street ?? undefined) || undefined,
+          lon: Math.round(l.geography!.coordinates[0] * 1e5) / 1e5,
+          lat: Math.round(l.geography!.coordinates[1] * 1e5) / 1e5,
+          r: l.role ?? undefined,
+          topics: topicNames?.length ? topicNames.slice(0, 4) : undefined,
+          org: ev.raw_organiser || undefined,
+          est: ev.raw_estimated_participants || undefined,
+          march: ev.is_march || undefined,
+          src: ev.url ? new URL(ev.url, 'https://demonstrations.org/').toString() : undefined,
+          u: `https://demonstrations.org/de/events/${ev.slug}`,
+          sd,
+          ds,
+          lc: lc && lc.length > 1 ? lc : undefined,
+          ri,
+        });
+      }
+    }
+    if (exhausted || events.length > 6000 || offset + list.length >= body.total_event_count) break;
+    offset += list.length;
+  }
+  if (!events.length) throw new Error('demonstrations.org: keine künftigen Versammlungen gefunden');
+  write('demos.json', {
+    built: new Date().toISOString(),
+    source: 'demonstrations.org (Demos Berlin e.V.) – spiegelt Versammlungslisten der Behörden',
+    lic: 'CC BY-SA 4.0',
+    events,
+    routes,
+  });
+});
+
+// US-Protest-Events des Crowd Counting Consortium (Harvard/UConn) – CC0 1.0. Die Dataverse-Datei
+// ist eine 47-MB-CSV; wir reduzieren auf die Felder, die die Karte zeigt (wöchentlich frisch).
+await task('ccc-us', 7 * DAY, async () => {
+  const FILE_ID = 14226873; // ccc-phase3-public.csv, DOI 10.7910/DVN/RI9JFU
+  const res = await get(`https://dataverse.harvard.edu/api/access/datafile/${FILE_ID}`, 480000);
+  if (!res.ok) throw new Error(`HTTP ${res.status} – Dataverse`);
+  const csv = await res.text();
+  // kleiner quoted-CSV-Reader: Feldern mit "…" inklusive Kommas und Newlines
+  const parse = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (q) {
+        if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { out.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  };
+  // Zeilen: CSV kann Zeilenumbrüche in Anführung enthalten → zäh Anführungszeichen
+  const rows: string[][] = [];
+  let buf = '';
+  let qn = 0;
+  for (const line of csv.split('\n')) {
+    buf += (buf ? '\n' : '') + line;
+    qn += line.split('"').length - 1;
+    if (qn % 2 === 0) { rows.push(parse(buf.replace(/\r$/, ''))); buf = ''; qn = 0; }
+  }
+  if (buf) rows.push(parse(buf));
+  const head = rows[0];
+  const col = (n: string) => head.indexOf(n);
+  const WANTED = ['date', 'locality', 'state', 'lat', 'lon', 'title', 'event_type', 'size_mean', 'size_text', 'issues', 'arrests', 'source1', 'source2', 'size_low', 'size_high', 'claims_summary', 'police_measures', 'property_damage', 'participant_injuries', 'police_injuries', 'participant_deaths', 'police_deaths'];
+  const idx: Record<string, number> = {};
+  for (const w of WANTED) idx[w] = col(w);
+  const num = (v: string | undefined) => { const x = Number(v); return Number.isFinite(x) && x !== 0 ? x : undefined; };
+  const nz = (v: string, cap = 160) => { const s = (v || '').trim(); return s && s !== 'NA' ? s.slice(0, cap) : undefined; };
+  const events = rows.slice(1).flatMap((r) => {
+    const lat = Number(r[idx.lat]); const lon = Number(r[idx.lon]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+    const ar = num(r[idx.arrests]);
+    const ev = {
+      d: (r[idx.date] || '').slice(0, 10),
+      t: nz(r[idx.title], 140),
+      ty: nz(r[idx.event_type], 60),
+      city: nz(r[idx.locality], 60),
+      st: nz(r[idx.state], 20),
+      lon: Math.round(lon * 1e4) / 1e4,
+      lat: Math.round(lat * 1e4) / 1e4,
+      s: num(r[idx.size_mean]),
+      sb: nz(r[idx.size_text], 60),
+      is: nz(r[idx.issues]),
+      ar,
+      so: nz(r[idx.source1], 240),
+      // für das Detail-Panel: Reichweite der Schätzung, Anliegen, Polizei, Schaden, Verletzte, zweite Quelle
+      slo: num(r[idx.size_low]),
+      shi: num(r[idx.size_high]),
+      cl: nz(r[idx.claims_summary], 240),
+      pl: nz(r[idx.police_measures], 100),
+      dmg: nz(r[idx.property_damage], 60),
+      pi: nz(r[idx.participant_injuries], 30),
+      poi: nz(r[idx.police_injuries], 30),
+      pd: nz(r[idx.participant_deaths], 30),
+      pod: nz(r[idx.police_deaths], 30),
+      so2: (() => { const a = nz(r[idx.source1], 80); const b = nz(r[idx.source2], 80); return b && b !== a ? b : undefined; })(),
+    };
+    return [ev];
+  });
+  if (events.length < 1000) throw new Error(`CCC: nur ${events.length} geortete Events – Download unvollständig?`);
+  write('ccc-us.json', {
+    built: new Date().toISOString(),
+    source: 'Crowd Counting Consortium (Harvard Kennedy School / UConn) – Phase 3, Dataverse DOI 10.7910/DVN/RI9JFU',
+    lic: 'CC0 1.0',
+    events,
+  });
+});
+
+// ---------------------------------------------------------------------------
 // daily
 
 // Submarine telecom cables from OpenStreetMap (ODbL). Replaces the former TeleGeography

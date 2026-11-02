@@ -17,6 +17,7 @@ import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
 import { cardHtml } from './popup';
 import { heightNum } from '../units';
+import type { DetailContent } from './detailpanel';
 import { OPTIONS_EVENT } from '../store';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
@@ -38,7 +39,9 @@ export type ClickResult =
   /** a webcam was clicked: the camera panel shows it */
   | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
-  | { type: 'sonde'; serial: string; lng: number; lat: number };
+  | { type: 'sonde'; serial: string; lng: number; lat: number }
+  /** a documentation point was clicked: the detail panel shows everything about it */
+  | { type: 'detail'; d: DetailContent; lng: number; lat: number };
 
 /** What the ship panel shows about one vessel. */
 export interface ShipInfo {

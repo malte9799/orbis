@@ -39,7 +39,9 @@ export type ExtraGlyph =
   | 'bike'
   | 'markings'
   | 'witness'
-  | 'money';
+  | 'money'
+  | 'placard'
+  | 'crowd';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -147,6 +149,16 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   // Politische Geldflüsse: Kreis mit $-Zeichen
   money: [
     { mode: 'stroke', width: 1.6, d: 'M12 3a9 9 0 1 0 0 18a9 9 0 0 0 0-18zM12 6.6v10.8M14.7 8.8c-.5-1.2-1.5-1.8-2.7-1.8-1.6 0-2.9.9-2.9 2.2 0 3 5.8 1.4 5.8 4.4 0 1.3-1.3 2.2-2.9 2.2-1.3 0-2.4-.7-2.8-1.9' },
+  ],
+  // Angemeldete Versammlungen: erhöhtes Schild (Placard)
+  placard: [
+    { mode: 'stroke', width: 2, d: 'M6.5 3.5h11v8h-11zM12 11.5v9M9 20.5h6' },
+    { mode: 'stroke', width: 1.4, d: 'M9.4 6h5.2M9.4 9h3.4' },
+  ],
+  // Protestmengen (Crowd Counting Consortium): zwei Personen
+  crowd: [
+    { mode: 'fill', d: 'M9.3 4.6a2.4 2.4 0 1 1 0 4.8a2.4 2.4 0 0 1 0-4.8zM16.6 6.4a1.9 1.9 0 1 1 0 3.8a1.9 1.9 0 0 1 0-3.8z' },
+    { mode: 'stroke', width: 2, d: 'M4 20.2c0-3 2.4-5 5.3-5s5.3 2 5.3 5M13.6 19.4c.5-2.2 2-3.6 4-3.6 1.9 0 3.4 1.3 4 3.4' },
   ],
 };
 

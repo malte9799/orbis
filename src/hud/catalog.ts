@@ -32,7 +32,7 @@ export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra' | 'zeugen', Set<stri
   wx: new Set(),
   traffic: TRAFFIC_LAYER_IDS,
   infra: INFRA_LAYER_IDS,
-  zeugen: new Set(['moneyflow']),
+  zeugen: new Set(['demos', 'usprotests', 'moneyflow']),
 };
 
 /** families whose forecast model provides isobars as an option */
@@ -50,7 +50,7 @@ export const CATS: { id: CatId; label: string; icon: string }[] = [
   { id: 'erde', label: 'Erde & Umwelt', icon: 'leaf' },
   { id: 'netze', label: 'Netze & Infrastruktur', icon: 'rail' },
   { id: 'medien', label: 'Kameras & Radio', icon: 'cam' },
-  { id: 'politik', label: 'Dokumentation & Geldflüsse', icon: 'list' },
+  { id: 'politik', label: 'Dokumentation & Versammlungen', icon: 'list' },
 ];
 
 export interface CatalogEntry {
