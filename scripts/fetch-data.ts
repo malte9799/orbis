@@ -433,6 +433,239 @@ await task('ukraine-support', 7 * DAY, async () => {
   }
 });
 
+// Hunger im Gazastreifen (IPC Acute Food Insecurity, HDX): Gebiete der aktuellen Analyse als GeoJSON
+// plus die Phasenanteile aller Analyse-Zeiträume je Governorate. CC0 / Public Domain. Die HDX-
+// Dateien haben nur CORS für data.humdata.org, deshalb als Snapshot.
+await task('ipc-gaza', DAY, async () => {
+  const base = 'https://data.humdata.org/dataset/a7f087b6-13f9-4426-b8bc-f107397eb073/resource/';
+  const geo = await json<{ features: { geometry: unknown; properties: Record<string, string | number | null> }[] }>(`${base}45732a0a-5022-468a-9323-dbb52b6c0953/download/ipc_pse.geojson`);
+  const csv = await text(`${base}5c6c32d0-8a39-4d8f-bfef-45b46b17caea/download/ipc_pse_area_long.csv`);
+  const lines = csv.trim().split(/\r?\n/);
+  const cells = (l: string) => l.split(',');
+  const head = cells(lines[0]);
+  const col = (n: string) => head.indexOf(n);
+  const [cA, cV, cF, cT, cP, cPct, cN, cD] = ['Area', 'Validity period', 'From', 'To', 'Phase', 'Percentage', 'Number', 'Date of analysis'].map(col);
+  if ([cA, cV, cF, cT, cP, cPct].some((i) => i < 0)) throw new Error('IPC: unerwartete Spalten');
+  type Per = { from: string; to: string; kind: string; analysis: string; p: Record<string, number>; n: Record<string, number> };
+  const hist = new Map<string, Map<string, Per>>();
+  for (const l of lines.slice(1)) {
+    const c = cells(l);
+    const area = c[cA];
+    if (!area) continue;
+    const key = `${c[cF]}|${c[cT]}|${c[cV]}`;
+    const m = hist.get(area) ?? new Map<string, Per>();
+    const per = m.get(key) ?? { from: c[cF], to: c[cT], kind: c[cV], analysis: c[cD], p: {}, n: {} };
+    per.p[c[cP]] = Number(c[cPct]) || 0;
+    per.n[c[cP]] = Number(c[cN]) || 0;
+    m.set(key, per);
+    hist.set(area, m);
+  }
+  const areas = geo.features.map((f) => {
+    const name = String(f.properties.title ?? '');
+    const pr = f.properties;
+    return {
+      name,
+      geometry: f.geometry,
+      phase: Number(pr.overall_phase) || 0,
+      period: String(pr.ipc_period ?? ''),
+      pop: Number(pr.estimated_population) || 0,
+      shares: [1, 2, 3, 4, 5].map((i) => Number(pr[`phase${i}_percent`]) || 0),
+      people: [1, 2, 3, 4, 5].map((i) => Number(pr[`phase${i}_population`]) || 0),
+      history: [...(hist.get(name)?.values() ?? [])].sort((a, b) => a.from.localeCompare(b.from)),
+    };
+  });
+  if (areas.length < 3) throw new Error(`IPC: nur ${areas.length} Gebiete`);
+  write('ipc-gaza.json', {
+    built: new Date().toISOString(),
+    source: 'IPC – Integrated Food Security Phase Classification, State of Palestine (via HDX, CC0)',
+    areas,
+  });
+});
+
+// Gaza/Westjordanland aus HDX: Vertreibungs-Ereignisse (IDMC Internal Displacement Updates, CC BY-IGO)
+// und Gesundheitseinrichtungen (Healthsites/OpenStreetMap, ODbL). Beide Dateien haben nur CORS für
+// data.humdata.org, deshalb als Snapshot (Einrichtungen als Punkt statt Umriss).
+await task('gaza-hdx', DAY, async () => {
+  const hdx = 'https://data.humdata.org/dataset/';
+  // quoted-CSV (Felder mit "…", Kommas und Zeilenumbrüchen)
+  const csvRows = (src: string): string[][] => {
+    const rows: string[][] = [];
+    let row: string[] = [], cur = '', q = false;
+    for (let i = 0; i < src.length; i++) {
+      const ch = src[i];
+      if (q) {
+        if (ch === '"') { if (src[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+        else cur += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && src[i + 1] === '\n') i++;
+        row.push(cur); cur = '';
+        if (row.length > 1 || row[0]) rows.push(row);
+        row = [];
+      } else cur += ch;
+    }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    return rows;
+  };
+  const csv = csvRows((await text(`${hdx}a641dda7-9b19-4103-b811-76a3963d29d2/resource/e6e48083-1276-4dce-a827-a12b21f3dbac/download/pse_idmc_idu_events.csv`)).replace(/^﻿/, ''));
+  const head = csv[0];
+  const ix = (n: string) => head.indexOf(n);
+  const [iLat, iLon, iFig, iDate, iName, iType, iSub, iSrc, iDesc, iLoc, iKind] = ['latitude', 'longitude', 'figure', 'displacement_date', 'event_name', 'type', 'subtype', 'sources', 'description', 'locations_name', 'displacement_type'].map(ix);
+  if ([iLat, iLon, iFig, iDate].some((i) => i < 0)) throw new Error('IDMC: unerwartete Spalten');
+  const displacement = csv.slice(1)
+    .filter((c) => Number.isFinite(Number(c[iLat])) && Number.isFinite(Number(c[iLon])) && c[iLat] !== '')
+    .map((c) => ({
+      d: c[iDate], lat: Number(c[iLat]), lon: Number(c[iLon]), f: Number(c[iFig]) || 0,
+      l: c[iLoc], t: [c[iType], c[iSub]].filter(Boolean).join(' · '), k: c[iKind], e: c[iName], s: c[iSrc], x: (c[iDesc] ?? '').slice(0, 500),
+    }));
+  if (displacement.length < 50) throw new Error(`IDMC: nur ${displacement.length} Ereignisse`);
+  write('gaza-displacement.json', {
+    built: new Date().toISOString(),
+    source: 'IDMC Internal Displacement Updates, State of Palestine (via HDX, CC BY-IGO)',
+    events: displacement,
+  });
+
+  const hs = await json<{ features: { geometry: { type: string; coordinates: any }; properties: Record<string, string | number | null> }[] }>(`${hdx}b73187f1-79c6-4d05-83a3-467a5ffe9a32/resource/e456e100-ed75-4970-87a8-a6a0e086efa0/download/palestinian-territories.geojson`);
+  const mid = (g: { type: string; coordinates: any }): [number, number] | null => {
+    const pts: number[][] = g.type === 'Point' ? [g.coordinates] : g.type === 'Polygon' ? g.coordinates[0] : g.type === 'MultiPolygon' ? g.coordinates[0][0] : [];
+    if (!pts.length) return null;
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    return [Math.round(((Math.min(...xs) + Math.max(...xs)) / 2) * 1e5) / 1e5, Math.round(((Math.min(...ys) + Math.max(...ys)) / 2) * 1e5) / 1e5];
+  };
+  const places = hs.features.flatMap((f) => {
+    const c = mid(f.geometry);
+    if (!c) return [];
+    const pr = f.properties;
+    return [{ lon: c[0], lat: c[1], a: String(pr.amenity || pr.healthcare || ''), n: String(pr.name || pr['name:en'] || ''), o: String(pr.operator || ''), u: pr.osm_type && pr.osm_id ? `https://www.openstreetmap.org/${pr.osm_type}/${pr.osm_id}` : '' }];
+  });
+  if (places.length < 100) throw new Error(`Healthsites: nur ${places.length} Einrichtungen`);
+  write('healthsites-pse.json', {
+    built: new Date().toISOString(),
+    source: 'Healthsites.io / OpenStreetMap-Mitwirkende (ODbL), via HDX',
+    places,
+  });
+});
+
+// Ukraine: Lage nach Oblast. (1) Insecurity Insight „Explosive Weapons Incident Data“ (HDX, CC BY-SA):
+// die Koordinaten sind dort gelöscht („censored“), nutzbar ist die Region (Admin 1) – wir zählen Vorfälle
+// je Oblast, Jahr, Sektor und Waffe. (2) Offizielle Luftalarme (Vadimkin/ukrainian-air-raid-sirens-dataset,
+// MIT): Alarmstunden je Oblast und Monat. (3) WHO SSA (CC BY, HDX): Angriffe aufs Gesundheitswesen je Monat.
+await task('ukraine-oblast', DAY, async () => {
+  const hdx = 'https://data.humdata.org/dataset/';
+  const norm = (s: string) => s.toLowerCase().replace(/\s*(oblast|city|region)$/, '').replace(/[^a-z]/g, '');
+  const ALIAS: Record<string, string> = {
+    cherkaska: 'cherkasy', chernihivska: 'chernihiv', chernivetska: 'chernivtsi', dnipropetrovska: 'dnipropetrovsk', donetska: 'donetsk',
+    ivanofrankivska: 'ivanofrankivsk', kharkivska: 'kharkiv', khersonska: 'kherson', khmelnytska: 'khmelnytskyi', kirovohradska: 'kirovohrad',
+    kyivska: 'kyiv', luhanska: 'luhansk', lvivska: 'lviv', mykolaivska: 'mykolaiv', odeska: 'odessa', odesa: 'odessa', poltavska: 'poltava',
+    rivnenska: 'rivne', sumska: 'sumy', ternopilska: 'ternopil', vinnytska: 'vinnytsia', volynska: 'volyn', zakarpatska: 'zakarpattia',
+    zaporizka: 'zaporizhzhia', zaporizhia: 'zaporizhzhia', zhytomyrska: 'zhytomyr', beryslavraion: 'kherson', khersonraion: 'kherson', henicheskraion: 'kherson',
+  };
+  const KYIV_CITY = 'kyivcity';
+  /** Schlüssel einer Region: 'kyiv' = Gebiet Kiew, 'kyivcity' = Stadt Kiew (Stadtbezirke → Stadt) */
+  const regionKey = (raw: string): string | null => {
+    const t = raw.trim();
+    if (!t || /no information/i.test(t)) return null;
+    if (/^kyiv city$/i.test(t) || /(shevchenkivskyi|pecherskyi|solomianskyi|dniprovskyi|desnianskyi|podilskyi|darnytskyi|holosiivskyi|obolonskyi|sviatoshynskyi) district/i.test(t)) return KYIV_CITY;
+    if (/^kyiv$/i.test(t)) return KYIV_CITY;
+    const k = norm(t);
+    return ALIAS[k] ?? ALIAS[k.replace(/raion$/, 'raion')] ?? k;
+  };
+  type Reg = { ew: number; year: Record<string, number>; sector: Record<string, number>; weapon: Record<string, number>; killed: Record<string, number>; last: string; air: Record<string, number> };
+  const regs = new Map<string, Reg>();
+  const reg = (k: string) => {
+    let r = regs.get(k);
+    if (!r) regs.set(k, (r = { ew: 0, year: {}, sector: {}, weapon: {}, killed: {}, last: '', air: {} }));
+    return r;
+  };
+  const inc = (o: Record<string, number>, k: string, n = 1) => { o[k] = (o[k] ?? 0) + n; };
+
+  // (1) Insecurity Insight XLSX (einzelnes Blatt)
+  const tmp = join(tmpdir(), 'ukraine-ew.xlsx');
+  writeFileSync(tmp, Buffer.from(await (await get(`${hdx}f21002e5-4e00-4c95-bff1-ecd698bf9ff4/resource/22b007ec-7996-4ae5-99eb-aace8dda3da1/download/2020-2026-ukr-explosive-weapons-incident-data.xlsx`, 120000)).arrayBuffer()));
+  let unresolved = 0;
+  try {
+    const unz = (name: string) => execFileSync('unzip', ['-p', tmp, name], { maxBuffer: 256 * 1024 * 1024 }).toString('utf8');
+    const strings = [...unz('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => m[1].replace(/<[^>]+>/g, ''));
+    const sheet = unz('xl/worksheets/sheet1.xml');
+    const rows = [...sheet.matchAll(/<row [^>]*>([\s\S]*?)<\/row>/g)].map((r) => {
+      const row: Record<string, string> = {};
+      for (const c of r[1].matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const v = /<v>([\s\S]*?)<\/v>/.exec(c[3] ?? '')?.[1];
+        if (v !== undefined) row[c[1]] = c[2].includes('t="s"') ? strings[Number(v)] : v;
+      }
+      return row;
+    });
+    const h = rows[0] ?? {};
+    const col = (n: string) => Object.keys(h).find((k) => h[k] === n) ?? '';
+    const [cD, cA1, cSec, cWp, cAid, cHe, cEd, cSt] = ['Date', 'Admin 1', 'Sector Affected', 'Explosive Weapon Type', 'Aid Workers Killed', 'Health Workers Killed', 'Educators Killed', 'Students Killed'].map(col);
+    if (!cD || !cA1) throw new Error('Insecurity Insight: unerwartete Spalten');
+    for (const r of rows.slice(1)) {
+      const key = regionKey(r[cA1] ?? '');
+      if (!key) { unresolved++; continue; }
+      const g = reg(key);
+      const iso = new Date(Date.UTC(1899, 11, 30) + Number(r[cD]) * 86400000).toISOString().slice(0, 10);
+      g.ew++;
+      inc(g.year, iso.slice(0, 4));
+      for (const sec of (r[cSec] ?? 'unbekannt').split(',')) inc(g.sector, sec.trim());
+      inc(g.weapon, r[cWp] || 'unbekannt');
+      inc(g.killed, 'aid', Number(r[cAid]) || 0);
+      inc(g.killed, 'health', Number(r[cHe]) || 0);
+      inc(g.killed, 'educators', Number(r[cEd]) || 0);
+      inc(g.killed, 'students', Number(r[cSt]) || 0);
+      if (iso > g.last) g.last = iso;
+    }
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+
+  // (2) Luftalarme: nur Oblast-Zeilen (Raion/Hromada würden doppelt zählen), Stunden je Startmonat
+  const air = (await text('https://raw.githubusercontent.com/Vadimkin/ukrainian-air-raid-sirens-dataset/main/datasets/official_data_en.csv')).split(/\r?\n/);
+  const ah = air[0].split(',');
+  const [aO, aL, aS, aF] = ['oblast', 'level', 'started_at', 'finished_at'].map((n) => ah.indexOf(n));
+  if ([aO, aL, aS, aF].some((i) => i < 0)) throw new Error('Luftalarme: unerwartete Spalten');
+  for (const line of air.slice(1)) {
+    const c = line.split(',');
+    if (c[aL] !== 'oblast') continue;
+    const k = regionKey(c[aO] ?? '');
+    const t0 = Date.parse(c[aS].replace(' ', 'T')), t1 = Date.parse(c[aF].replace(' ', 'T'));
+    if (!k || !Number.isFinite(t0) || !Number.isFinite(t1) || t1 < t0) continue;
+    inc(reg(k).air, c[aS].slice(0, 7), Math.round(((t1 - t0) / 3600000) * 10) / 10);
+  }
+
+  // (3) WHO SSA: Angriffe aufs Gesundheitswesen je Monat (ohne Ortsangabe)
+  const who = await text('https://docs.google.com/spreadsheets/d/e/2PACX-1vTDw_w3n9b0_frBtvJWtZTJGb5Bn72sZsjJSRXLhIxMa6I1ZECFjb1LTsTZ0PmIHiQOw4SEPCO4uIFv/pub?gid=1932484940&single=true&output=csv');
+  const wl = who.trim().split(/\r?\n/);
+  const wh = wl[0].split(',');
+  const [wT, wI, wD] = ['ATTACKTIMESTAMP', 'VICTIMSTOTALINJURED', 'VICTIMSTOTALDEATH'].map((n) => wh.indexOf(n));
+  const months: Record<string, { attacks: number; killed: number; injured: number }> = {};
+  for (const line of wl.slice(1)) {
+    // Freitext-Felder enthalten Kommas in Anführungszeichen; die Zählfelder stehen hinter ihnen – deshalb ein quoted-Split
+    const c: string[] = [];
+    let cur = '', q = false;
+    for (const ch of line) {
+      if (ch === '"') q = !q;
+      else if (ch === ',' && !q) { c.push(cur); cur = ''; } else cur += ch;
+    }
+    c.push(cur);
+    const m = (c[wT] ?? '').slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(m)) continue;
+    const e = (months[m] ??= { attacks: 0, killed: 0, injured: 0 });
+    e.attacks++;
+    e.killed += Number(c[wD]) || 0;
+    e.injured += Number(c[wI]) || 0;
+  }
+
+  if (regs.size < 15) throw new Error(`Ukraine-Oblast: nur ${regs.size} Regionen`);
+  write('ukraine-oblast.json', {
+    built: new Date().toISOString(),
+    source: 'Insecurity Insight (CC BY-SA), Vadimkin Luftalarm-Datensatz (MIT), WHO SSA (CC BY) – alle über HDX/GitHub',
+    unresolved,
+    regions: Object.fromEntries(regs),
+    who: months,
+  });
+});
+
 // ---------------------------------------------------------------------------
 // daily
 

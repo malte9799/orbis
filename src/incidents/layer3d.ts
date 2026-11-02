@@ -1,11 +1,14 @@
 import * as THREE from 'three';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
+import type { GeoFrame, Vec3 } from '../globe/geo3d/frame';
+import { GeoLine } from '../globe/geo3d/line';
+import type { GeoPart } from '../globe/geo3d/stage';
+import { GeoWall } from '../globe/geo3d/wall';
 import { airliner } from '../globe/planes3d';
-import { GLOBE_FLAT_ZOOM } from '../globe/style';
 
-// 3D-Flugzeug der Rekonstruktion: eigene three.js-Ebene im GL-Kontext von MapLibre (wie planes3d). Gezeigt werden
-// das Modell an der Stelle der Spur zur Wiedergabezeit, die bisher geflogene Spur in echter Höhe, eine Linie zum
-// Boden und der Schatten. Die Neigung ist aus Sinkrate und Geschwindigkeit abgeleitet.
+// 3D der Rekonstruktion als Teil der GeoStage (src/globe/geo3d): Flugzeugmodell, geflogene Spur nach Höhe eingefärbt, Wand zum
+// Boden, gestrichelte Gesamtspur, Linie und Schatten unter dem Flugzeug und Ereignismarken in Spurhöhe. Alles ist nach Länge,
+// Breite und Höhe platziert, also gilt es bei jedem Zoom und in jeder Projektion. Die Neigung ist aus der Bahn abgeleitet.
 
 const FT = 0.3048;
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -13,7 +16,7 @@ const rad = (d: number) => (d * Math.PI) / 180;
 export interface IncidentPose {
   lon: number;
   lat: number;
-  /** m über Grund; null: Flugzeug nicht zeigen (z. B. nach dem Ende der Spur) */
+  /** m über Grund */
   altM: number;
   /** Kurs in ° */
   track: number;
@@ -40,107 +43,128 @@ export function pitchOf(vsFpm: number | null, gsKn: number): number {
 }
 
 const STOPS: [number, number][] = [[0, 0x29b6f6], [15000, 0x66bb6a], [30000, 0xffca28], [41000, 0xef5350]];
-/** Farbe nach Höhe in ft – dieselbe Skala wie die Spur auf der flachen Karte */
-function altColor(ft: number, out: THREE.Color): THREE.Color {
+const BANDS = 10;
+/** Farbe nach Höhe in ft, in BANDS Stufen (jede Stufe ist eine eigene Linie) */
+function bandColor(ft: number): { band: number; color: string } {
   const f = Math.max(0, Math.min(41000, ft));
+  const band = Math.min(BANDS - 1, Math.floor((f / 41000) * BANDS));
+  const mid = ((band + 0.5) / BANDS) * 41000;
+  const c = new THREE.Color();
   for (let i = 1; i < STOPS.length; i++) {
-    if (f <= STOPS[i][0]) {
-      const k = (f - STOPS[i - 1][0]) / (STOPS[i][0] - STOPS[i - 1][0]);
-      return out.setHex(STOPS[i - 1][1]).lerp(new THREE.Color(STOPS[i][1]), k);
+    if (mid <= STOPS[i][0]) {
+      c.setHex(STOPS[i - 1][1]).lerp(new THREE.Color(STOPS[i][1]), (mid - STOPS[i - 1][0]) / (STOPS[i][0] - STOPS[i - 1][0]));
+      return { band, color: `#${c.getHexString()}` };
     }
   }
-  return out.setHex(STOPS[STOPS.length - 1][1]);
+  return { band, color: '#ef5350' };
 }
 
-export class IncidentLayer implements CustomLayerInterface {
-  readonly id = 'incident3d';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer!: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
+/** Modell mindestens so lang auf dem Bildschirm (CSS px), damit man es beim Auszoomen noch sieht */
+const MIN_PX = 26;
+const MODEL_LENGTH_M = 18.8;
+const MARK_PX = 5;
+const FLATTEN = new THREE.Matrix4().makeScale(1, 1, 0.001);
+
+export class IncidentScene implements GeoPart {
+  readonly object = new THREE.Group();
   private plane = new THREE.Mesh(airliner(0.5), new THREE.MeshLambertMaterial({ color: 0xff5a4a, side: THREE.DoubleSide }));
   private shadow = new THREE.Mesh(airliner(0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
-  private drop = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }));
-  private trailLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true }));
-  /** senkrechte Wand von der Spur zum Boden, nach Höhe eingefärbt – macht die Höhe lesbar */
-  private wall = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }));
   private markGeo = new THREE.SphereGeometry(1, 14, 10);
   private marks: { data: IncidentMark; mesh: THREE.Mesh }[] = [];
-  /** gesamte Spur (auch der noch nicht geflogene Teil) als gestrichelte Linie in echter Höhe */
-  private full = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffffff, transparent: true, opacity: 0.75, dashSize: 1, gapSize: 1 }));
-  private fullPts: [number, number, number][] = [];
-  private proj = new THREE.Matrix4();
+  /** gestrichelte Gesamtspur (auch der noch nicht geflogene Teil) */
+  private full: GeoLine | null = null;
+  /** geflogene Spur: eine Linie je Höhenstufe */
+  private runs: { line: GeoLine; end: Vec3 }[] = [];
+  private wall = new GeoWall({ color: '#ffb74d', fullM: 60000, goneM: 70000 });
+  private drop: GeoLine | null = null;
   private pose: IncidentPose | null = null;
+  private trailLen = 0;
   /** Bildschirmposition (CSS px) des Modells im zuletzt gezeichneten Bild, null ohne Modell */
   private screenPos: [number, number] | null = null;
-  /** bisher geflogene Spur [lon, lat, altM] */
-  private trail: [number, number, number][] = [];
 
-  constructor() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(0.4, -0.6, 1);
-    this.scene.add(sun);
-    this.plane.matrixAutoUpdate = false;
-    this.shadow.matrixAutoUpdate = false;
-    this.trailLine.frustumCulled = false;
-    this.drop.frustumCulled = false;
-    this.wall.frustumCulled = false;
-    this.full.frustumCulled = false;
-    this.scene.add(this.full);
-    this.scene.add(this.plane, this.shadow, this.drop, this.trailLine, this.wall);
-  }
-
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-  }
-
-  onRemove() {
-    this.renderer?.dispose();
-    this.plane.geometry.dispose();
-    this.shadow.geometry.dispose();
-    this.drop.geometry.dispose();
-    this.trailLine.geometry.dispose();
-    this.wall.geometry.dispose();
-    this.wall.material.dispose();
-    this.markGeo.dispose();
-    this.full.geometry.dispose();
-    this.full.material.dispose();
-    for (const m of this.marks) (m.mesh.material as THREE.Material).dispose();
+  constructor(private map: MlMap) {
+    for (const m of [this.plane, this.shadow]) m.matrixAutoUpdate = false;
+    this.object.add(this.shadow, this.plane, this.wall.object);
+    this.wall.setStyle(0.28, 0);
   }
 
   /** Gesamte Spur [lon, lat, m über Grund] für die gestrichelte Linie */
-  setFullTrack(pts: [number, number, number][]) {
-    this.fullPts = pts;
-    this.map?.triggerRepaint();
+  setFullTrack(pts: Vec3[]) {
+    if (this.full) {
+      this.object.remove(this.full.object);
+      this.full.dispose();
+      this.full = null;
+    }
+    if (pts.length > 1) {
+      this.full = new GeoLine(pts, { color: '#ffffff', width: 1.5, opacity: 0.75, dash: [5, 4] });
+      this.object.add(this.full.object);
+    }
+    this.map.triggerRepaint();
   }
 
   /** Ereignismarken (ersetzt die bisherigen); sie schweben in der Höhe der Spur */
   setMarks(list: IncidentMark[]) {
     for (const m of this.marks) {
-      this.scene.remove(m.mesh);
+      this.object.remove(m.mesh);
       (m.mesh.material as THREE.Material).dispose();
     }
     this.marks = list.map((data) => {
       const mesh = new THREE.Mesh(this.markGeo, new THREE.MeshBasicMaterial({ color: data.color }));
       mesh.matrixAutoUpdate = false;
-      this.scene.add(mesh);
+      this.object.add(mesh);
       return { data, mesh };
     });
-    this.map?.triggerRepaint();
+    this.map.triggerRepaint();
   }
 
-  /** Zustand zur Wiedergabezeit; trail = bisher geflogene Punkte (null: unverändert lassen) */
-  set(pose: IncidentPose | null, trail?: [number, number, number][]) {
-    this.pose = pose;
-    if (trail) {
-      this.trail = trail;
+  /** Bisher geflogene Spur [lon, lat, m]; der letzte Punkt ist das Flugzeug. Aufrufen, wenn ein Punkt dazukommt. */
+  setTrail(pts: Vec3[]) {
+    for (const r of this.runs) {
+      this.object.remove(r.line.object);
+      r.line.dispose();
     }
-    this.map?.triggerRepaint();
+    this.runs = [];
+    this.trailLen = pts.length;
+    if (pts.length > 1) {
+      // aufeinanderfolgende Teilstücke gleicher Höhenstufe werden eine Linie; der Endpunkt gehört auch zur nächsten
+      let start = 0;
+      let cur = bandColor(((pts[0][2] + pts[1][2]) / 2) / FT);
+      const flush = (end: number) => {
+        const line = new GeoLine(pts.slice(start, end + 1), { color: cur.color, width: 3.2, opacity: 0.95 });
+        this.object.add(line.object);
+        this.runs.push({ line, end: pts[end] });
+      };
+      for (let i = 1; i < pts.length - 1; i++) {
+        const b = bandColor(((pts[i][2] + pts[i + 1][2]) / 2) / FT);
+        if (b.band !== cur.band) {
+          flush(i);
+          start = i;
+          cur = b;
+        }
+      }
+      flush(pts.length - 1);
+      this.wall.setPoints(pts, pts.map(() => 0));
+    }
+    this.map.triggerRepaint();
+  }
+
+  /** Zustand zur Wiedergabezeit (null: Flugzeug nicht zeigen) */
+  setPose(pose: IncidentPose | null) {
+    this.pose = pose;
+    if (pose && this.trailLen > 1) {
+      const head: Vec3 = [pose.lon, pose.lat, pose.altM];
+      this.runs.at(-1)?.line.setHead(head);
+      this.wall.setHead(head);
+    }
+    if (pose) {
+      const pts: Vec3[] = [[pose.lon, pose.lat, pose.altM], [pose.lon, pose.lat, 0]];
+      if (this.drop) this.drop.setPoints(pts);
+      else {
+        this.drop = new GeoLine(pts, { color: '#ffffff', width: 1, opacity: 0.45 });
+        this.object.add(this.drop.object);
+      }
+    }
+    this.map.triggerRepaint();
   }
 
   /** Verschiebung in px, die das Modell in die Kartenmitte bringt (null: noch nicht gezeichnet) */
@@ -150,103 +174,46 @@ export class IncidentLayer implements CustomLayerInterface {
     return [this.screenPos[0] - c.x, this.screenPos[1] - c.y];
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number>; fallbackMatrix?: ArrayLike<number> } }) {
-    const map = this.map;
-    // Im Globus-Modus ist mainMatrix keine Mercator-Matrix (x/y verschieden skaliert) – das Modell läge und fände sich
-    // nicht wieder. fallbackMatrix ist die Mercator-Matrix; solange der Globus noch eine Kugel ist (Zoom < GLOBE_FLAT_ZOOM)
-    // passt auch sie nicht zur Karte, dann zeigen wir nichts.
-    const ball = map.getProjection()?.type === 'globe' && map.getZoom() < GLOBE_FLAT_ZOOM;
-    this.screenPos = null;
-    if (ball) {
-      this.renderer.resetState();
-      return;
-    }
-    const matrix = args.defaultProjectionData.fallbackMatrix ?? args.defaultProjectionData.mainMatrix;
-    // wie in planes3d: alles relativ zur Kartenmitte, sonst zittern Metermodelle bei hohem Zoom (Float32)
-    const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
-    this.proj.fromArray(matrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
+  private lift(lon: number, lat: number) {
+    return this.map.getTerrain() ? (this.map.queryTerrainElevation([lon, lat]) ?? 0) : 0;
+  }
+
+  update(frame: GeoFrame, now: number) {
     const p = this.pose;
-    const terrain = map.getTerrain();
-    const elev = (lon: number, lat: number) => (terrain ? (map.queryTerrainElevation([lon, lat]) ?? 0) : 0);
-    this.plane.visible = this.shadow.visible = this.drop.visible = !!p;
     this.screenPos = null;
+    const lift = p ? this.lift(p.lon, p.lat) : 0;
+    this.plane.visible = this.shadow.visible = !!p && !frame.occluded(p.lon, p.lat, p.altM + lift);
     if (p) {
-      const g = elev(p.lon, p.lat);
-      const at = MercatorCoordinate.fromLngLat([p.lon, p.lat], p.altM + g);
-      const v = new THREE.Vector4(at.x - centre.x, at.y - centre.y, at.z, 1).applyMatrix4(this.proj);
-      if (v.w > 0) {
-        const canvas = map.getCanvas();
-        this.screenPos = [(v.x / v.w * 0.5 + 0.5) * canvas.clientWidth, (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight];
-      }
-      // Modell nie kleiner als ~26 px lang, damit man es beim Auszoomen noch sieht
-      const mpp = (40075016 * Math.cos(rad(map.getCenter().lat))) / (512 * 2 ** map.getZoom());
-      const boost = Math.max(1, 0.65 * mpp);
-      const place = (alt: number) => {
-        const mc = MercatorCoordinate.fromLngLat([p.lon, p.lat], alt);
-        const s = mc.meterInMercatorCoordinateUnits() * boost;
-        // y ist zwischen Mercator (Süden = +y) und Modell (Norden = +y) gespiegelt
-        return new THREE.Matrix4().makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(s, -s, s));
-      };
-      // Modell: y = vorn, z = oben. Kurs um z, Nick um x
-      this.plane.matrix.copy(place(p.altM + g).multiply(new THREE.Matrix4().makeRotationZ(-rad(p.track))).multiply(new THREE.Matrix4().makeRotationX(rad(p.pitch))));
-      // Schatten: gleiche Form flach auf dem Boden
-      const mcg = MercatorCoordinate.fromLngLat([p.lon, p.lat], g + 0.5);
-      const sg = mcg.meterInMercatorCoordinateUnits() * boost;
-      this.shadow.matrix
-        .makeTranslation(mcg.x - centre.x, mcg.y - centre.y, mcg.z)
-        .scale(new THREE.Vector3(sg, -sg, sg * 0.001))
-        .multiply(new THREE.Matrix4().makeRotationZ(-rad(p.track)));
-      const a = MercatorCoordinate.fromLngLat([p.lon, p.lat], p.altM + g);
-      this.drop.geometry.setFromPoints([new THREE.Vector3(a.x - centre.x, a.y - centre.y, a.z), new THREE.Vector3(a.x - centre.x, a.y - centre.y, mcg.z)]);
+      const mpp = frame.metresPerPixel(p.lon, p.lat, p.altM + lift);
+      const scale = Math.max(1, (MIN_PX * mpp) / MODEL_LENGTH_M);
+      frame.place(this.plane.matrix, p.lon, p.lat, p.altM + lift, p.track, scale).multiply(new THREE.Matrix4().makeRotationX(rad(p.pitch)));
+      frame.place(this.shadow.matrix, p.lon, p.lat, lift + 0.5, p.track, scale).multiply(FLATTEN);
+      this.screenPos = frame.toScreen(p.lon, p.lat, p.altM + lift);
     }
-    // gestrichelte Gesamtspur: Strichlänge in Pixeln, also je Bild neu in Mercator-Einheiten
-    const upx = MercatorCoordinate.fromLngLat(map.getCenter(), 0).meterInMercatorCoordinateUnits() * (40075016 * Math.cos(rad(map.getCenter().lat))) / (512 * 2 ** map.getZoom());
-    const fp = new Float32Array(this.fullPts.length * 3);
-    this.fullPts.forEach(([lon, lat, altM], i) => {
-      const mc = MercatorCoordinate.fromLngLat([lon, lat], altM + elev(lon, lat));
-      fp.set([mc.x - centre.x, mc.y - centre.y, mc.z], i * 3);
-    });
-    this.full.geometry.setAttribute('position', new THREE.BufferAttribute(fp, 3));
-    this.full.computeLineDistances();
-    const dm = this.full.material as THREE.LineDashedMaterial;
-    dm.dashSize = upx * 7;
-    dm.gapSize = upx * 6;
-    // Ereignismarken: immer ~5 px groß, egal wie weit herausgezoomt
-    const mppM = (40075016 * Math.cos(rad(map.getCenter().lat))) / (512 * 2 ** map.getZoom());
+    for (const r of this.runs) r.line.update(frame, now, lift);
+    if (this.drop) {
+      if (p) this.drop.update(frame, now, lift);
+      else this.drop.object.visible = false;
+    }
+    this.full?.update(frame, now, lift);
+    if (this.trailLen > 1) this.wall.update(frame, now, lift);
     for (const { data: d, mesh } of this.marks) {
-      const mc = MercatorCoordinate.fromLngLat([d.lon, d.lat], d.altM + elev(d.lon, d.lat));
-      const r = mc.meterInMercatorCoordinateUnits() * mppM * 5;
-      mesh.matrix.makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(r, r, r));
+      mesh.visible = !frame.occluded(d.lon, d.lat, d.altM + lift);
+      frame.place(mesh.matrix, d.lon, d.lat, d.altM + lift, 0, MARK_PX * frame.metresPerPixel(d.lon, d.lat, d.altM + lift));
     }
-    // Spur und Wand: bei jedem Bild neu relativ zur Mitte (Mitte ändert sich), es sind nur wenige hundert Punkte
-    const n = this.trail.length;
-    const line = new Float32Array(n * 3);
-    const wall = new Float32Array(n * 6);
-    const col = new Float32Array(n * 3);
-    const wcol = new Float32Array(n * 6);
-    const c = new THREE.Color();
-    this.trail.forEach(([lon, lat, altM], i) => {
-      const g = elev(lon, lat);
-      const mc = MercatorCoordinate.fromLngLat([lon, lat], altM + g);
-      const gz = MercatorCoordinate.fromLngLat([lon, lat], g).z;
-      line.set([mc.x - centre.x, mc.y - centre.y, mc.z], i * 3);
-      wall.set([mc.x - centre.x, mc.y - centre.y, mc.z, mc.x - centre.x, mc.y - centre.y, gz], i * 6);
-      altColor(altM / FT, c);
-      col.set([c.r, c.g, c.b], i * 3);
-      wcol.set([c.r, c.g, c.b, c.r, c.g, c.b], i * 6);
-    });
-    const lg = this.trailLine.geometry;
-    lg.setAttribute('position', new THREE.BufferAttribute(line, 3));
-    lg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    lg.setDrawRange(0, n);
-    const wg = this.wall.geometry;
-    wg.setAttribute('position', new THREE.BufferAttribute(wall, 3));
-    wg.setAttribute('color', new THREE.BufferAttribute(wcol, 3));
-    const idx: number[] = [];
-    for (let i = 0; i < n - 1; i++) idx.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
-    wg.setIndex(idx);
-    this.camera.projectionMatrix = this.proj;
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
+    return false;
+  }
+
+  dispose() {
+    this.full?.dispose();
+    this.drop?.dispose();
+    for (const r of this.runs) r.line.dispose();
+    this.wall.dispose();
+    this.plane.geometry.dispose();
+    this.shadow.geometry.dispose();
+    this.markGeo.dispose();
+    (this.plane.material as THREE.Material).dispose();
+    (this.shadow.material as THREE.Material).dispose();
+    for (const m of this.marks) (m.mesh.material as THREE.Material).dispose();
   }
 }

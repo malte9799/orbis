@@ -1,3 +1,4 @@
+import type { GeoStage } from '../geo3d/stage';
 import type { FeatureCollection } from 'geojson';
 import type { LayerSpecification, Map as MlMap } from 'maplibre-gl';
 import type { GlyphId } from '../icons';
@@ -33,6 +34,8 @@ export interface ExtraInfo {
 /** What a layer module can use of the map and of ExtraLayers. */
 export interface ExtraCtx {
   map: MlMap;
+  /** the 3D renderer of this map */
+  stage: GeoStage;
   /** layout for layers that start switched off */
   hidden: { visibility: 'none' };
   /** adds the layer unless it exists; with `before` below that layer (when present) */
@@ -40,6 +43,8 @@ export interface ExtraCtx {
   setData(source: string, data: FeatureCollection): void;
   /** per map and layer: state that must not be shared between maps (created by `init` on first use) */
   state<T>(key: ExtraId, init: () => T): T;
+  /** has this state been created yet? */
+  hasState(key: ExtraId): boolean;
   /** view bounds snapped outwards to a grid of 1/`step` degrees */
   viewBounds(step?: number): { west: number; south: number; east: number; north: number };
   /** status line of the layer in the list (count, note, loading) */
@@ -100,6 +105,8 @@ export interface ExtraDef {
   sources?: Record<string, string>;
   /** adds the map layers (once, after the style has loaded) */
   addLayers?(ctx: ExtraCtx): void;
+  /** the opacity (0..1) of what the layer draws outside of map layers (3D stage) */
+  setOpacity?(ctx: ExtraCtx, opacity: number): void;
   /** called on every apply, on or off, before enable/disable – for logic that spans layers */
   apply?(ctx: ExtraCtx): void;
   /** called when the layer is off (every apply) – hide what only this layer shows, stop timers */

@@ -81,8 +81,6 @@ export interface HudHost {
   /** camera tilt in degrees (0 = top-down); animated for the 2D/3D button, immediate while the slider is dragged */
   setPitch(deg: number, animate: boolean): void;
   families(): WxFamily[];
-  /** the stack opened or closed (the map keeps its centre in the free area) */
-  layout(): void;
   /** the persistent element holding legend + timeline (moved into the phone sheet) */
   dock(): HTMLElement;
   /** the place weather in the phone sheet was closed (remove the map marker) */
@@ -648,8 +646,8 @@ export function createHud(host: HudHost): Hud {
 
   // --- add popover
   function addRow(c: CatalogEntry, sub: string, sug = false) {
-    return `<div class="ar ${sug ? 'sug' : ''}" data-act="addlayer" data-id="${esc(c.id)}" role="button" tabindex="0"><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span>
-      <div><b>${esc(c.label)}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div><span class="plus">${ico('plus', 2.4)}</span></div>`;
+    return `<div class="ar ${sug ? 'sug' : ''}" data-act="addlayer" data-id="${esc(c.id)}" role="button" tabindex="0" title="${esc(sub)}"><span class="glyph" style="background:${c.color}">${ico(c.icon, 2)}</span><span class="plus">${ico('plus', 2.4)}</span>
+      <b>${esc(c.label)}</b>${c.region ? `<span class="tagr">${esc(c.region)}</span>` : ''}<small>${esc(sub)}</small></div>`;
   }
   function addList(): string {
     const k = view(cur);
@@ -659,10 +657,10 @@ export function createHud(host: HudHost): Hud {
     const sg = q ? [] : suggestionsFor(k).filter(([id]) => !have.has(id) && catalogOf(id));
     // suggested layers appear in their own block only, not a second time in the categories
     const shown = new Set(sg.map(([id]) => id));
-    if (sg.length) body += `<h4>${ico('sparkle', 2)}Passend zu dieser Karte</h4>${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}`;
+    if (sg.length) body += `<section class="acat"><h4>${ico('sparkle', 2)}Passend zu dieser Karte</h4><div class="agrid">${sg.map(([id, why]) => addRow(catalogOf(id)!, why, true)).join('')}</div></section>`;
     for (const cat of CATS) {
       const items = CATALOG.filter((c) => c.cat === cat.id && !have.has(c.id) && !shown.has(c.id) && (!q || `${c.label} ${c.hint} ${cat.label}`.toLowerCase().includes(q)));
-      if (items.length) body += `<h4>${esc(cat.label)}</h4>${items.map((c) => addRow(c, c.hint)).join('')}`;
+      if (items.length) body += `<section class="acat"><h4>${ico(cat.icon, 2)}${esc(cat.label)}</h4><div class="agrid">${items.map((c) => addRow(c, c.hint)).join('')}</div></section>`;
     }
     return body || `<div class="empty">Keine Ebene für „${esc(ui.q)}“.</div>`;
   }
@@ -867,7 +865,6 @@ export function createHud(host: HudHost): Hud {
   }
 
   let lastShift = '';
-  let lastEdit = false;
   let hadPlace = false;
   function render() {
     layout = calcLayout();
@@ -902,10 +899,6 @@ export function createHud(host: HudHost): Hud {
     if (s !== lastShift) {
       lastShift = s;
       (gv ?? root).style.setProperty('--hud-shift', s);
-    }
-    if (lastEdit !== ui.edit) {
-      lastEdit = ui.edit;
-      host.layout();
     }
   }
 
@@ -1323,14 +1316,9 @@ export function createHud(host: HudHost): Hud {
     }
   }
 
-  function relayout() {
-    render();
-    host.layout();
-  }
-  mqLand.addEventListener('change', relayout);
-  mqPort.addEventListener('change', relayout);
+  mqLand.addEventListener('change', render);
+  mqPort.addEventListener('change', render);
   window.addEventListener('resize', () => {
-    host.layout();
     if (!sheet.dragging() && !sheet.el()?.style.height) syncSheetH();
   });
   render();
@@ -1342,7 +1330,7 @@ export function createHud(host: HudHost): Hud {
     stackWidth: () => 0, // the editing stack overlays the map: keep the map centred when it opens
     importShared,
     layout: () => layout,
-    relayout,
+    relayout: render,
     showPlace(node) {
       placeNode = node;
       ui.edit = false;

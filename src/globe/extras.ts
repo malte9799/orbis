@@ -1,3 +1,4 @@
+import type { GeoStage } from './geo3d/stage';
 import type { GeoJSONSource, LayerSpecification, Map as MlMap, MapGeoJSONFeature } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
 import { DEM_NATIVE_ZOOM, DEM_TILES, registerDemTiles } from './demhd';
@@ -9,6 +10,7 @@ import {
 import { fmt } from '../util';
 import { registerSilhouettes, type GlyphId } from './icons';
 import { alprTileProps } from './layers/shared/cams';
+import { satsApi } from './layers/shared/sats';
 import { shipsApi } from './layers/shared/ships';
 import { vehiclesApi } from './layers/shared/vehicles';
 import { launchesApi } from './layers/defs/launches';
@@ -36,6 +38,10 @@ export type ClickResult =
   | { type: 'flight'; hex: string; lng: number; lat: number }
   /** a ship was clicked: the ship panel shows it */
   | { type: 'ship'; mmsi: number; lng: number; lat: number }
+  /** a train or a bus was clicked: the vehicle panel shows it */
+  | { type: 'vehicle'; key: string; lng: number; lat: number }
+  /** a satellite was clicked: the satellite panel shows it */
+  | { type: 'sat'; id: string; lng: number; lat: number }
   /** a webcam was clicked: the camera panel shows it */
   | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
@@ -137,11 +143,13 @@ export class ExtraLayers {
 
   constructor(
     private map: MlMap,
+    private stage: GeoStage,
     private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void; openIncident?: (id: string) => void },
   ) {
     const self = this;
     this.ctx = {
       map,
+      stage,
       hidden: { visibility: 'none' },
       add: (layer, before) => {
         if (!map.getLayer(layer.id)) map.addLayer(layer, before && map.getLayer(before) ? before : undefined);
@@ -152,6 +160,7 @@ export class ExtraLayers {
         if (!this.layerState.has(key)) this.layerState.set(key, init());
         return this.layerState.get(key) as ReturnType<typeof init>;
       },
+      hasState: (key) => this.layerState.has(key),
       viewBounds: (step) => this.viewBounds(step),
       set: (id, info) => this.set(id, info),
       info: (id) => this.info[id],
@@ -249,6 +258,7 @@ export class ExtraLayers {
 
   private applyOpacity(id: ExtraId) {
     const f = this.opacity[id] ?? 1;
+    EXTRAS.find((d) => d.id === id)?.setOpacity?.(this.ctx, f);
     for (const lid of LAYERS[id]) {
       const type = this.map.getLayer(lid)?.type;
       const props = type ? OPACITY_PROPS[type] : undefined;
@@ -297,6 +307,11 @@ export class ExtraLayers {
   }
 
   /** Aircraft under a screen point: the model, its trail or the wall below the trail. */
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  hoverFlight(hex: string | null) {
+    airApi.hoverFlight(this.ctx, hex);
+  }
+
   pickFlight(x: number, y: number): string | null {
     return airApi.pickFlight(this.ctx, x, y);
   }
@@ -331,6 +346,12 @@ export class ExtraLayers {
     return shipsApi.active(this.ctx);
   }
 
+  /** An object of the 3D stage under a screen point as a click result, if any. */
+  pickStage(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
+    const f = this.stage.pickFeature(x, y);
+    return f ? this.click({ layer: { id: f.layerId }, properties: f.properties, geometry: { type: 'LineString' } } as unknown as MapGeoJSONFeature, at) : null;
+  }
+
   /** The 3D ship model under a screen point as a click result (popup), if any. */
   pickShip(x: number, y: number, at: { lng: number; lat: number }): ClickResult | null {
     const feature = shipsApi.pick(this.ctx, x, y);
@@ -349,6 +370,18 @@ export class ExtraLayers {
   }
 
   /** Current data of a ship for the ship panel. */
+  satellite(id: string) {
+    return satsApi.sat(this.ctx, id);
+  }
+
+  selectSatellite(id: string | null) {
+    satsApi.select(this.ctx, id);
+  }
+
+  vehicleInfo(key: string) {
+    return vehiclesApi.info(this.ctx, key);
+  }
+
   shipInfo(mmsi: number): ShipInfo | null {
     return shipsApi.info(this.ctx, mmsi);
   }
@@ -485,7 +518,4 @@ export class ExtraLayers {
     return null;
   }
 
-  clearSelection() {
-    this.setData('sat-track', empty());
-  }
 }

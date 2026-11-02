@@ -3,6 +3,7 @@ import { escapeHtml, fmt, safeUrl } from '../util';
 import { glyphSvg } from './icons';
 import { attachHls } from './hls';
 import { CamViewLayer } from './camview3d';
+import type { GeoStage } from './geo3d/stage';
 import { CARDINAL } from './layers/shared/cams';
 import { category, tile } from './sidepanel';
 import { camdirWritable, cloudKey, hasRemoteDir, poseOf, previewDir, removeCamDir, saveCamDir, type CamPose } from '../api/camdircloud';
@@ -15,6 +16,7 @@ import './flightpanel.css';
 
 export interface CamPanelHooks {
   map(): MlMap | null;
+  stage(): GeoStage | null;
 }
 
 export interface CamSelection {
@@ -224,7 +226,7 @@ export class CamPanel {
     // the layer data follows at most once per frame
     cancelAnimationFrame(ed.raf);
     ed.raf = requestAnimationFrame(() => previewDir(ed.key, ed.dir, ed.poseSet ? this.editPose(ed) : undefined, this.movedPos(ed)));
-    this.view.update({ lon: ed.lng, lat: ed.lat, dir: ed.dir, pose: this.editPose(ed), reach: this.reach, ...this.media, anchor: this.root });
+    this.view.setView({ lon: ed.lng, lat: ed.lat, dir: ed.dir, pose: this.editPose(ed), reach: this.reach, ...this.media, anchor: this.root });
   }
 
   private syncEdit() {
@@ -274,7 +276,7 @@ export class CamPanel {
       }
       const s = this.sel;
       const d = this.dir();
-      if (s && d >= 0) this.view.update({ lon: s.lng, lat: s.lat, dir: d, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
+      if (s && d >= 0) this.view.setView({ lon: s.lng, lat: s.lat, dir: d, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
     }
   }
 
@@ -441,8 +443,9 @@ export class CamPanel {
     // stream not playable (offline, blocked): fall back to the still image
     if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));
     const map = this.h.map();
+    const stage = this.h.stage();
     this.media = { video: el ?? undefined, image: img ?? undefined };
-    if (map && dir >= 0) this.view.show(map, { lon: s.lng, lat: s.lat, dir, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
+    if (map && stage && dir >= 0) this.view.show(stage, map, { lon: s.lng, lat: s.lat, dir, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
     else this.view.hide();
   }
 }

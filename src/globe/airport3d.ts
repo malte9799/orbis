@@ -5,7 +5,9 @@ import { isSuperseded } from '../api/overpass';
 import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
-import { GLOBE_FLAT_ZOOM } from './style';
+import type { Vec3 } from './geo3d/frame';
+import { cockpitView } from './geo3d/focus';
+import type { GeoStage, GeoTarget } from './geo3d/stage';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
@@ -15,6 +17,8 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 export const AIRPORT_ZOOM = 11;
 /** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
 const PLANE_ZOOM = 9;
+/** from this zoom on all aircraft are simple models on the globe; further out they are too small to tell */
+const CROWD_ZOOM = 3;
 /** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
 const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
@@ -49,6 +53,8 @@ export interface Ap3dHooks {
   modeChanged(): void;
   /** flat map with 2D icons: refresh their positions from the smoothed state */
   iconsTick(): void;
+  /** fetch this aircraft and feed it (a link names an aircraft the map has not seen yet) */
+  load(hex: string): Promise<void>;
 }
 
 export type PlaneMode = 'off' | 'flat' | '3d';
@@ -89,28 +95,75 @@ export class Airport3D {
 
   constructor(
     private map: MlMap,
+    private stage: GeoStage,
     private before: string,
     private hooks: Ap3dHooks,
   ) {
-    this.layer = new PlanesLayer(this.tracker, {
+    this.layer = new PlanesLayer(map, this.tracker, {
       mode: () => this.mode(),
       only: () => this.onlySelected(),
       icons: () => this.iconsOn,
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
+      target: (hex, cockpit) => this.followTarget(hex, cockpit),
+      crowd: () => this.crowd(),
     });
   }
 
-  /** 'off' without aircraft layer, zoomed out or on the globe; 'flat' while the map is not tilted. */
-  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route (not on the globe). */
-  private onlySelected(): string | null {
-    const hex = this.layer.selected;
-    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && !this.globeShown() && this.tracker.planes.has(hex) ? hex : null;
+  /** What the camera follows for an aircraft; the map has to know it first. */
+  private followTarget(hex: string, cockpit = false): GeoTarget | null | Promise<GeoTarget | null> {
+    if (!this.planesOn) return null;
+    const planes = this.tracker.planes;
+    if (!planes.has(hex)) return this.hooks.load(hex).then(() => (planes.has(hex) ? this.followTarget(hex, cockpit) : null));
+    /** followed by a link: nothing selected it, so it goes when the camera lets go */
+    let selectedHere = false;
+    const place = (p: PlaneState): Vec3 => {
+      const elev = this.map.getTerrain() ? (this.map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
+      return [p.dLon, p.dLat, (p.ground ? 0 : p.dAlt) + elev];
+    };
+    const cockpitOf = (p: PlaneState) => {
+      const [lon, lat, alt] = place(p);
+      return cockpitView(lon, lat, alt, p.dTrack);
+    };
+    return {
+      source: this.layer.source,
+      slug: hex,
+      label: String(planes.get(hex)?.props.callsign ?? hex),
+      position: (now) => {
+        // the stage draws it at this very time: the camera must not lag one step behind
+        this.tracker.step(now);
+        const p = planes.get(hex);
+        if (!p) return null;
+        return cockpit ? cockpitOf(p).position : place(p);
+      },
+      ...(cockpit && {
+        params: () => ({ view: 'cockpit' }),
+        view: () => {
+          const p = planes.get(hex);
+          return p ? cockpitOf(p).view : null;
+        },
+      }),
+      entered: () => {
+        if (this.layer.selected === hex) return;
+        selectedHere = true;
+        this.select(hex);
+      },
+      released: () => {
+        if (selectedHere && this.layer.selected === hex) this.select(null);
+      },
+    };
   }
 
-  /** The globe is really drawn as a ball: from GLOBE_FLAT_ZOOM on MapLibre has faded it into the flat map. */
-  private globeShown(): boolean {
-    return this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM;
+  /** Far out on the globe (from CROWD_ZOOM to PLANE_ZOOM): all aircraft of the 2D layer as simple models. */
+  private crowd(): boolean {
+    const z = this.map.getZoom();
+    return this.planesOn && this.iconsOn && z >= CROWD_ZOOM && z < PLANE_ZOOM && !!this.stage.frame?.globe;
+  }
+
+  /** Far out (below PLANE_ZOOM) the selected aircraft stays: model, trail and route. */
+  private onlySelected(): string | null {
+    const hex = this.layer.selected;
+    return hex && this.planesOn && this.map.getZoom() < PLANE_ZOOM && this.tracker.planes.has(hex) ? hex : null;
   }
 
   /** The selected aircraft, if any. */
@@ -118,9 +171,13 @@ export class Airport3D {
     return this.layer.selected;
   }
 
+  /** 'off' without aircraft layer or zoomed out; 'flat' while the flat map is not tilted. */
   mode(): PlaneMode {
-    if (!this.planesOn || this.globeShown()) return 'off';
+    if (!this.planesOn) return 'off';
+    if (this.crowd()) return '3d';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
+    // far out the selected aircraft is a model: a flat icon means nothing on a ball
+    if (this.onlySelected() && this.stage.frame?.globe) return '3d';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
 
@@ -128,12 +185,12 @@ export class Airport3D {
   private raise() {
     const layers = this.map.getStyle()?.layers;
     if (!layers?.length || layers[layers.length - 1].id === AP3D_HIT_LAYER) return;
-    for (const id of [this.layer.id, ...PLANE_LAYERS]) if (this.map.getLayer(id)) this.map.moveLayer(id);
+    for (const id of [this.stage.id, ...PLANE_LAYERS]) if (this.map.getLayer(id)) this.map.moveLayer(id);
   }
 
   private checkMode() {
     // the 2D icons also change when only the selected aircraft is left far out
-    const mode = this.mode() + (this.onlySelected() ?? '');
+    const mode = this.mode() + (this.onlySelected() ?? '') + (this.crowd() ? 'crowd' : '');
     if (mode === this.lastMode) return;
     this.lastMode = mode;
     this.hooks.modeChanged();
@@ -240,7 +297,7 @@ export class Airport3D {
       layout: hidden,
       paint: { 'circle-radius': 26, 'circle-opacity': 0, 'circle-stroke-width': 0 },
     });
-    if (!m.getLayer(this.layer.id)) m.addLayer(this.layer, before);
+    this.stage.add(this.layer);
     // overlays (radar, forecast …) are added later and must not cover the aircraft
     m.on('styledata', () => this.raise());
     m.on('pitchend', () => this.checkMode());
@@ -254,7 +311,9 @@ export class Airport3D {
       this.planesOn = o.planes;
       for (const id of PLANE_LAYERS) if (this.map.getLayer(id)) this.map.setLayoutProperty(id, 'visibility', o.planes ? 'visible' : 'none');
       if (!o.planes) {
+        this.select(null);
         this.tracker.clear();
+        this.layer.dropCrowd();
         this.setData('ap3d-label', emptyFc());
       }
     }
@@ -273,10 +332,6 @@ export class Airport3D {
   /** Called after the map stopped moving: load the layout for the visible box. */
   onMoveEnd() {
     if (!this.layoutOn) return;
-    if (this.globeShown()) {
-      this.hooks.info({ loading: false, note: 'nur in der flachen Kartenansicht oder auf dem Globus ab Zoomstufe 12' });
-      return;
-    }
     if (this.map.getZoom() < AIRPORT_ZOOM) {
       this.hooks.info({ loading: false, note: `ab Zoomstufe ${AIRPORT_ZOOM} sichtbar – zu einem Flughafen zoomen` });
       return;
@@ -449,6 +504,7 @@ export class Airport3D {
 
   /** Is this aircraft drawn as 3D model (so the 2D icon should disappear)? */
   owns(hex: string) {
+    if (this.crowd()) return this.tracker.planes.has(hex);
     const only = this.onlySelected();
     if (only) return hex === only && this.mode() === '3d';
     return this.mode() === '3d' && this.tracker.planes.has(hex);
@@ -536,6 +592,8 @@ export class Airport3D {
 
   /** Is this radiosonde drawn as a 3D model (so its 2D symbol should disappear)? Like `owns()`. */
   ownsSonde(serial: string) {
+    // far out the models are only for aircraft, also when the selected one makes the mode '3d'
+    if (this.map.getZoom() < PLANE_ZOOM && this.layer.selected !== `sonde:${serial}`) return false;
     if (!this.tracker.planes.has(`sonde:${serial}`)) return false;
     const mode = this.mode();
     return mode === '3d' || (mode === 'flat' && !this.iconsOn);
@@ -594,6 +652,11 @@ export class Airport3D {
   planeInfo(hex: string) {
     const p = this.tracker.planes.get(hex);
     return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist } : null;
+  }
+
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  hover(hex: string | null) {
+    this.layer.setHovered(hex);
   }
 
   /** The aircraft under a screen point (model, trail or wall), if any. */

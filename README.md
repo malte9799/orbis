@@ -138,7 +138,7 @@ automatisch hier; Hineinzoomen auf die Erde führt zurück zur Wetterkarte.
   Mars: HRSC-, CTX- und HiRISE-DEMs). Die Meter-Werte sind angenähert (Trek liefert die Höhen als gestrecktes Graustufenbild).
 - Herauszoomen aus dem Globus bzw. das Weltall-Symbol führt ins Sonnensystem, Hineinzoomen auf den Mars von dort auf die Karte.
   Aus der Weltall-Ansicht öffnet sich die Mondkarte beim Heranzoomen bis dicht über die Oberfläche (`openAt`).
-- Rover erscheinen beim Heranzoomen als 3D-Modell, mit der Zoomstufe mitskalierend (ab ca. Zoom 7 in 2D bzw. 11 im Globus,
+- Rover erscheinen beim Heranzoomen als 3D-Modell, mit der Zoomstufe mitskalierend (ab ca. Zoom 7 in 2D bzw. 12 im Globus,
   bei sehr hoher Zoomstufe in Originalgröße; `modelPx` in `views/planetmap.ts`).
 - In der Weltall-Ansicht haben die Planeten nur ihre feste Textur; Detailkacheln gibt es nur auf der Karte
   (`src/space/planets.ts`: `enabled` – derzeit Erde, Mars, Mond, Merkur, Titan, Saturnmonde, Vesta und Ceres).
@@ -214,9 +214,6 @@ pnpm preview   # Build lokal ansehen
 eigenes Kachel-Protokoll (`wxfield://`) im Browser gerendert, der Wind als Partikelanimation auf einem Canvas über der
 Karte gezeichnet, Isobaren per Marching Squares.
 
-MapLibre wird per Patch (`pnpm patches/maplibre-gl@6.14.0.patch`) angepasst: die Globus-Projektion flacht schon mit
-Zoom 6 → 7 auf die flache 2D-Karte ab statt 11 → 12, damit die 3D-Modelle der Hauptkarte (KFZ, Schiffe, Flugzeuge)
-früher einsetzen können (`GLOBE_FLAT_ZOOM` in `src/globe/style.ts`).
 
 | Ordner | Inhalt |
 |---|---|

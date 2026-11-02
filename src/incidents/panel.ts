@@ -3,7 +3,8 @@ import { sampleAt } from './track';
 import { assetUrl, loadTrack } from './index';
 import type { IncidentDef, IncidentMedia, Sample, TrackPoint } from './types';
 import { embedOf } from './embed';
-import { IncidentLayer, ftToM, pitchOf, type IncidentMark } from './layer3d';
+import { IncidentScene, ftToM, pitchOf, type IncidentMark } from './layer3d';
+import type { GeoStage } from '../globe/geo3d/stage';
 import { escapeHtml, safeUrl, toast } from '../util';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
@@ -17,6 +18,8 @@ export interface IncidentPanelHooks {
   map(): MlMap | null;
   /** schließt die anderen rechten Panels */
   closeOthers(): void;
+  /** die 3D-Bühne der Karte (src/globe/geo3d), auf der die Rekonstruktion gezeichnet wird */
+  stage(): GeoStage | null;
   /** unterer Dock der Karte (Legende/Zeitleiste): die Wiedergabeleiste kommt hierhin */
   dock: HTMLElement;
   /** das Dock hat sich geändert (Handy-Sheet neu anordnen) */
@@ -42,7 +45,9 @@ export class IncidentPanel {
   private curEvent: HTMLElement | null = null;
   private def: IncidentDef | null = null;
   private pts: TrackPoint[] = [];
-  private layer = new IncidentLayer();
+  private layer: IncidentScene | null = null;
+  private lastIdx = -2;
+  private lastGone = false;
   private t = 0;
   private from = 0;
   private to = 0;
@@ -128,9 +133,13 @@ export class IncidentPanel {
     this.t = def.focus.from;
     this.speed = 5;
     this.follow = true;
+    const stage = this.h.stage();
+    if (!stage) return;
+    this.layer = new IncidentScene(map);
+    stage.add(this.layer);
+    this.lastIdx = -2;
     this.layer.setFullTrack(this.pts.map((p, i) => [p[2], p[1], ftToM(p[3] ?? sampleAt(this.pts, this.pts[i][0]).alt ?? 0)]));
     this.layer.setMarks(this.markList());
-    if (!map.getLayer(this.layer.id)) map.addLayer(this.layer);
     if (def.audio?.startUnix != null) {
       this.audio = new Audio(assetUrl(def.audio.src));
       this.audio.preload = 'auto';
@@ -153,8 +162,8 @@ export class IncidentPanel {
     this.root.hidden = true;
     this.bar.hidden = true;
     this.dockOn(false);
-    const map = this.h.map();
-    if (map?.getLayer(this.layer.id)) map.removeLayer(this.layer.id);
+    if (this.layer) this.h.stage()?.remove(this.layer);
+    this.layer = null;
   }
 
   private get win_() {
@@ -267,15 +276,20 @@ export class IncidentPanel {
     // nach dem letzten Punkt bleibt das Flugzeug an dessen Position und sinkt weiter (Höhe fortgeschrieben) bis zum Boden
     const alt = s.alt ?? 0;
     const gone = this.t > end && alt <= 0;
-    this.layer.set(
-      gone ? null : { lon: s.lon, lat: s.lat, altM: ftToM(alt), track: s.trk, pitch: this.pitchAt(s) },
-      this.trailTo(s),
-    );
+    const scene = this.layer;
+    if (!scene) return;
+    // die Spur wird neu gebaut, wenn ein Punkt dazukommt; dazwischen bewegt sich nur ihr Kopf mit dem Flugzeug
+    if (s.i !== this.lastIdx || gone !== this.lastGone) {
+      this.lastIdx = s.i;
+      this.lastGone = gone;
+      scene.setTrail(this.trailTo(s));
+    }
+    scene.setPose(gone ? null : { lon: s.lon, lat: s.lat, altM: ftToM(alt), track: s.trk, pitch: this.pitchAt(s) });
     // jumpTo/panBy würden eine laufende Kamerafahrt (Öffnen, „Ansicht kippen“) abbrechen: währenddessen nicht nachführen
     if (this.follow && !gone && !map.isMoving()) {
       // das Modell schwebt in der Höhe: bei gekippter Karte liegt der Bodenpunkt (Schatten) woanders auf dem Bild,
       // also die Kamera um den Bildschirmabstand zum Modell verschieben, nicht auf den Bodenpunkt zentrieren
-      const off = this.layer.offsetToCentre();
+      const off = scene.offsetToCentre();
       const canvas = map.getCanvas();
       // unplausible Werte (Modell weit außerhalb des Bildes) nie als Verschiebung nehmen: dann auf den Bodenpunkt zentrieren
       if (off && Math.hypot(off[0], off[1]) < Math.max(canvas.clientWidth, canvas.clientHeight)) {
