@@ -44,7 +44,7 @@ ausgewählt. Trifft er nichts, endet nur der Fokus, ohne Wetter-Tooltip.
 
 **Andere Kamerabefehle im Fokus (gebaut):** Zoom-Knöpfe, Neigungsregler und Kompass steuern den Fokus. Verschiebt
 etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. „Folgen“ im Flug-Panel läuft über den Fokus
-(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`) und Sonden (`follow=plane/sonde:<id>`) ebenso. Offen: Cockpit-Ansicht
+(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`), Sonden (`follow=plane/sonde:<id>`), Züge und Busse (`follow=vehicle/<key>`, mit eigener Seitenleiste) ebenso. Offen: Cockpit-Ansicht
 (`flightpanel.ts`) und Navigation (`routing/locator.ts`) führen die Kamera noch selbst. Am Ende gibt es nur noch einen Kamera-Führer.
 
 **Gelände:** Flugzeuge rechnen mit der Geländehöhe (`queryTerrainElevation`), das gilt auch für den Fokus. Noch offen

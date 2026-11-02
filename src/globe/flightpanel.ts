@@ -121,6 +121,11 @@ export class FlightPanel {
     this.root.hidden = true;
   }
 
+  /** The camera takes over this one (also from whatever it followed so far). */
+  followThis() {
+    this.setFollow('follow');
+  }
+
   /** The camera followed `following` until now or from now on (null: nothing). */
   focusChanged(following: string | null) {
     if (this.follow !== 'follow' || following === this.hex) return;

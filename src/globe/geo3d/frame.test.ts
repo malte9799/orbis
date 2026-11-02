@@ -156,3 +156,22 @@ describe('precision', () => {
     expect(Math.fround(delta) / delta).toBeCloseTo(1, 5);
   });
 });
+
+describe('near enough for a name', () => {
+  it('without a followed object it is the distance to the camera', () => {
+    const f = frame(8, 0, 10, 50, 70);
+    expect(f.isNear(10, 50)).toBe(true);
+    // far ahead, near the horizon
+    expect(f.isNear(10, 53)).toBe(false);
+    expect(f.isNear(10, 53, 0, 100)).toBe(true);
+  });
+
+  it('with a followed object it is the distance to that object', () => {
+    const f = frame(8, 0, 10, 50, 70);
+    // the camera looks at the followed object: everything is measured from there, in any direction
+    f.nearPoint = [10, 50, 0];
+    expect(f.isNear(10.01, 50)).toBe(true);
+    expect(f.isNear(10, 55)).toBe(false);
+    expect(f.isNear(10, 45)).toBe(false);
+  });
+});

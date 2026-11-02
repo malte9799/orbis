@@ -15,7 +15,7 @@ const CIRCUMFERENCE_M = 2 * Math.PI * EARTH_RADIUS_M;
 const FAR_RADII = 8;
 const NEAR_SHARE = 0.01;
 const MAX_MERCATOR_LAT = 85.051129;
-/** near enough for a name: up to this far from the camera, compared with the distance to the map centre */
+/** near enough for a name: up to this far, compared with the distance from the camera to the map centre */
 const NEAR_SHARE_OF_CENTRE = 1.5;
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -76,6 +76,8 @@ export class GeoFrame {
   readonly globeMatrix = new THREE.Matrix4();
   /** mercator → clip space */
   readonly mercMatrix = new THREE.Matrix4();
+  /** the object the camera follows [lon, lat, altitude m]: what is near is measured from there */
+  nearPoint: Vec3 | null = null;
   /** camera position on the unit sphere's scale (only meaningful while `globe`) */
   readonly camera: Vec3 = [0, 0, 0];
   /** the map centre in render space */
@@ -216,9 +218,17 @@ export class GeoFrame {
     return this.metresPerPixel(this.lng, this.lat);
   }
 
-  /** Near the camera? With a flat view the whole horizon is in sight: only what is near gets a name. */
-  isNear(lon: number, lat: number, altM = 0): boolean {
-    return this.metresPerPixel(lon, lat, altM) <= this.centreMetresPerPixel * NEAR_SHARE_OF_CENTRE;
+  /**
+   * Near enough for a name? With a flat view the whole horizon is in sight, so only what is near gets one:
+   * near the camera, or near the object the camera follows. `share`: how far, compared with the camera's
+   * distance to the map centre or to that object.
+   */
+  isNear(lon: number, lat: number, altM = 0, share = NEAR_SHARE_OF_CENTRE): boolean {
+    const from = this.nearPoint;
+    if (!from) return this.metresPerPixel(lon, lat, altM) <= this.centreMetresPerPixel * share;
+    const [a, b] = [toUnit(lon, lat, altM), toUnit(from[0], from[1], from[2])];
+    const metres = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * EARTH_RADIUS_M;
+    return metres <= this.pxDistance * this.metresPerPixel(from[0], from[1], from[2]) * share;
   }
 
   /** Is the globe in the way between the camera and this point? */

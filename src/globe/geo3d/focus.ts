@@ -109,6 +109,7 @@ export class GeoFocus {
   /** the pointer travelled since it went down: what follows is the end of a drag, not a click */
   private dragged = false;
   private travel = 0;
+  private holding = false;
   /** where the buttons want the camera; a drag takes over */
   private aimBearing: number | null = null;
   private aimPitch: number | null = null;
@@ -130,8 +131,8 @@ export class GeoFocus {
   }
 
   /**
-   * A click on the map (CSS px): focuses what it hits, ends the focus when it hits nothing. True: the click
-   * is used up. False: it is free for whatever else is at that point, also when it ended the focus.
+   * A click on the map (CSS px): focuses what it hits. True: the click is used up. False: it is free for
+   * whatever else is at that point; whoever handles it decides if the focus ends (see holdWhile).
    */
   click(x: number, y: number): boolean {
     if (this.dragged) {
@@ -141,10 +142,7 @@ export class GeoFocus {
     // the followed object itself: stays followed
     if (this.target && this.stage.hits(this.target, x, y)) return true;
     const target = this.stage.pick(x, y);
-    if (!target) {
-      this.stop();
-      return false;
-    }
+    if (!target) return false;
     this.start(target);
     return true;
   }
@@ -212,9 +210,19 @@ export class GeoFocus {
     this.raf = requestAnimationFrame(this.tick);
   }
 
+  /** Asks to stop while `fn` runs are ignored: the next object may take over without the camera going back in between. */
+  holdWhile(fn: () => void) {
+    this.holding = true;
+    try {
+      fn();
+    } finally {
+      this.holding = false;
+    }
+  }
+
   /** `handedOver`: someone else flies the camera already, so it must not be touched. */
   stop(handedOver = false) {
-    if (!this.target) return;
+    if (!this.target || this.holding) return;
     this.target.released?.();
     this.target = null;
     this.changed();
@@ -222,6 +230,7 @@ export class GeoFocus {
     this.dragged = false;
     cancelAnimationFrame(this.raf);
     this.stage.clock = null;
+    this.stage.nearPoint = null;
     this.pointers.clear();
     const map = this.map;
     const box = map.getCanvasContainer();
@@ -262,6 +271,7 @@ export class GeoFocus {
       return;
     }
     this.stage.clock = time;
+    this.stage.nearPoint = p;
     const dt = Math.min(0.1, Math.max(0, (now - this.lastTick) / 1000));
     this.lastTick = now;
     const frame = this.stage.frame;

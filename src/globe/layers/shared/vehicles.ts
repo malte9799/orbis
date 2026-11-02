@@ -239,7 +239,10 @@ export function moveVehicles(ctx: ExtraCtx) {
   loadSegmentsNow(ctx);
 }
 
-export function vehicleClick({ p, pt }: ClickCtx): ClickResult | null {
+export function vehicleClick({ ctx, p, pt }: ClickCtx): ClickResult | null {
+  // the panel works on the vehicle as the 3D layer tracks it
+  const key = getState(ctx).vehicles3d?.keyAt(p, pt[0], pt[1]);
+  if (key) return { type: 'vehicle', key, lng: pt[0], lat: pt[1] };
   if (p.src === 'transitous' || p.src === 'amtrak' || p.src === 'gps') return vehicleCard(p, pt);
   const num = Number(p.num);
   return {
@@ -276,6 +279,7 @@ export function vehicleClick({ p, pt }: ClickCtx): ClickResult | null {
 }
 
 export const vehiclesApi = {
+  info: (ctx: ExtraCtx, key: string) => getState(ctx).vehicles3d?.info(key) ?? null,
   active: (ctx: ExtraCtx) => !!getState(ctx).vehicles3d?.isActive(),
   /** the 3D vehicle model under a screen point as a map feature, if any */
   pick(ctx: ExtraCtx, x: number, y: number): MapGeoJSONFeature | null {

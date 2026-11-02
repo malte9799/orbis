@@ -520,6 +520,8 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 // ---------------------------------------------------------------------------
 
+/** names reach further than those of ships and vehicles: there are far fewer aircraft on the ground plane */
+const LABEL_NEAR = 3;
 const TRAIL_COLOR = '#ff6a2b';
 const FORECAST_COLOR = '#b8bfcc';
 /** all trails faint and fading out, the one of the selected aircraft complete and at full strength */
@@ -824,7 +826,7 @@ export class PlanesLayer implements GeoPart {
       const alt = this.flatNow ? 1 : p.dAlt;
       const pos = frame?.toScreen(p.dLon, p.dLat, alt);
       // always the selected one
-      if (!pos || (p.hex !== this.selected && !frame!.isNear(p.dLon, p.dLat, alt))) continue;
+      if (!pos || (p.hex !== this.selected && !frame!.isNear(p.dLon, p.dLat, alt, LABEL_NEAR))) continue;
       let el = this.labels.get(p.hex);
       if (!el) {
         el = document.createElement('div');

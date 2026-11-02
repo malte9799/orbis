@@ -5,6 +5,7 @@ import {
   type GeoJSONSource,
   type ImageSource,
   type MapGeoJSONFeature,
+  type MapMouseEvent,
   type RasterTileSource,
 } from 'maplibre-gl';
 import { cameraHeld } from '../mapctl';
@@ -50,6 +51,7 @@ import { wahlenRegions } from '../api/wahlen';
 import { SondePanel } from '../globe/sondepanel';
 import { InfoPanel } from '../globe/infopanel';
 import { ShipPanel } from '../globe/shippanel';
+import { VehiclePanel } from '../globe/vehiclepanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
 import { DetailPanel } from '../globe/detailpanel';
@@ -222,6 +224,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let sondePanel: SondePanel | null = null;
   let infoPanel: InfoPanel | null = null;
   let shipPanel: ShipPanel | null = null;
+  let vehiclePanel: VehiclePanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let camPanel: CamPanel | null = null;
   let detailPanel: DetailPanel | null = null;
@@ -1287,6 +1290,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     camPanel?.close();
     flightPanel?.close();
     shipPanel?.close();
+    vehiclePanel?.close();
     wahlenPanel?.close();
     let d: LaunchDetail;
     try {
@@ -1464,7 +1468,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         (lat, lon) => store.setLastPlace({ name: '', lat, lon }),
       );
       const followIn = (source: string, slug: string) => {
-        void Promise.resolve(geoStage?.resolve(source, slug, {})).then((t) => t && geoFocus?.start(t));
+        void Promise.resolve(geoStage?.resolve(source, slug, {})).then((t) => (t ? geoFocus?.start(t) : geoFocus?.stop()));
       };
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
@@ -1476,12 +1480,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map, follow: (mmsi) => followIn('ship', String(mmsi)), unfollow: () => geoFocus?.stop() });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map, follow: (serial) => followIn('plane', `sonde:${serial}`), unfollow: () => geoFocus?.stop() });
+      vehiclePanel = new VehiclePanel(el, { info: (key) => extras?.vehicleInfo(key) ?? null, map: () => map, follow: (key) => followIn('vehicle', key), unfollow: () => geoFocus?.stop() });
       // the buttons in the panels go along when the camera lets go
       geoFocus?.listen((t) => {
         const plane = t?.source === 'plane' ? t.slug : null;
         flightPanel?.focusChanged(plane);
         sondePanel?.focusChanged(plane?.startsWith('sonde:') ? plane.slice('sonde:'.length) : null);
         shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
+        vehiclePanel?.focusChanged(t?.source === 'vehicle' ? t.slug : null);
       });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
@@ -1489,6 +1495,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         popup?.remove();
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1501,6 +1508,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       camPanel.onOpen = () => {
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         detailPanel?.close();
@@ -1508,6 +1516,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       detailPanel.onOpen = () => {
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1649,9 +1658,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (longPressAt && performance.now() - longPressAt < 700) return;
       // the route planner owns the click while it picks a point / chooses an alternative / is open
       if (routing?.click(e)) return;
-      // a click that ends the focus still selects what it hits, but brings up no weather
-      const wasFollowing = !!geoFocus?.target;
-      if (geoFocus?.click(e.point.x, e.point.y)) return;
+      const focus = geoFocus;
+      if (!focus?.target) {
+        if (!focus?.click(e.point.x, e.point.y)) mapClick(e, false);
+        return;
+      }
+      if (focus.click(e.point.x, e.point.y)) return;
+      // following: another object takes over without letting go of the camera in between, nothing ends it
+      followNext = null;
+      focus.holdWhile(() => mapClick(e, true));
+      if (followNext) (followNext as () => void)();
+      else focus.stop();
+    });
+    /** the panel of the object just clicked: starts following it */
+    let followNext: (() => void) | null = null;
+    /** `wasFollowing`: this click ends or passes on the focus, so it brings up no weather */
+    const mapClick = (e: MapMouseEvent, wasFollowing: boolean) => {
       if (hud?.placeOpen()) {
         // a second tap on the map closes the place sheet
         hud.clearPlace();
@@ -1675,6 +1697,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
+        vehiclePanel?.close();
         launchPanel?.close();
         camPanel?.close();
         detailPanel?.close();
@@ -1682,9 +1705,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (picked.startsWith('sonde:')) {
           flightPanel?.close();
           sondePanel?.open(picked.slice('sonde:'.length));
+          followNext = () => sondePanel?.followThis();
         } else {
           sondePanel?.close();
           flightPanel?.open(picked);
+          followNext = () => flightPanel?.followThis();
         }
         return;
       }
@@ -1694,6 +1719,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (extraResult?.type === 'wahlen') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
@@ -1704,24 +1730,41 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (extraResult?.type === 'flight') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         launchPanel?.close();
         sondePanel?.close();
         wahlenPanel?.close();
         flightPanel?.open(extraResult.hex);
+        followNext = () => flightPanel?.followThis();
       } else if (extraResult?.type === 'sonde') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         sondePanel?.open(extraResult.serial);
+        followNext = () => sondePanel?.followThis();
+      } else if (extraResult?.type === 'vehicle') {
+        camPanel?.close();
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        detailPanel?.close();
+        wahlenPanel?.close();
+        popup?.remove();
+        vehiclePanel?.open(extraResult.key);
+        followNext = () => vehiclePanel?.followThis();
       } else if (extraResult?.type === 'ship') {
+        vehiclePanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         shipPanel?.open(extraResult.mmsi);
+        followNext = () => shipPanel?.followThis();
       } else if (extraResult?.type === 'cam') {
         popup?.remove();
         wahlenPanel?.close();
@@ -1755,7 +1798,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
         }
       }
-    });
+    };
     for (const l of interactive) {
       map.on('mouseenter', l, () => (map!.getCanvas().style.cursor = 'pointer'));
       map.on('mouseleave', l, () => (map!.getCanvas().style.cursor = ''));

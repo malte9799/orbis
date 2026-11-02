@@ -37,6 +37,8 @@ export type ClickResult =
   | { type: 'flight'; hex: string; lng: number; lat: number }
   /** a ship was clicked: the ship panel shows it */
   | { type: 'ship'; mmsi: number; lng: number; lat: number }
+  /** a train or a bus was clicked: the vehicle panel shows it */
+  | { type: 'vehicle'; key: string; lng: number; lat: number }
   /** a webcam was clicked: the camera panel shows it */
   | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
@@ -357,6 +359,10 @@ export class ExtraLayers {
   }
 
   /** Current data of a ship for the ship panel. */
+  vehicleInfo(key: string) {
+    return vehiclesApi.info(this.ctx, key);
+  }
+
   shipInfo(mmsi: number): ShipInfo | null {
     return shipsApi.info(this.ctx, mmsi);
   }

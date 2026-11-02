@@ -81,6 +81,8 @@ export class GeoStage implements CustomLayerInterface {
   frame: GeoFrame | null = null;
   /** set: the time parts are drawn at, so that a moving focus and the camera following it agree exactly */
   clock: number | null = null;
+  /** set: names are given by the distance to this object, not to the camera */
+  nearPoint: Vec3 | null = null;
   private renderer?: THREE.WebGLRenderer;
   private target?: THREE.WebGLRenderTarget;
   private scene = new THREE.Scene();
@@ -166,6 +168,7 @@ export class GeoStage implements CustomLayerInterface {
       height: canvas.clientHeight,
       ratio: canvas.width / canvas.clientWidth,
     });
+    frame.nearPoint = this.nearPoint;
     this.frame = frame;
     const now = this.clock ?? performance.now();
     let moving = false;

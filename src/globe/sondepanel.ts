@@ -101,6 +101,11 @@ export class SondePanel {
     if (i && map) map.easeTo({ center: [i.lon, i.lat], zoom: Math.max(map.getZoom(), 12), duration: 700 });
   }
 
+  /** The camera takes over this one (also from whatever it followed so far). */
+  followThis() {
+    this.setFollow(true);
+  }
+
   /** The camera follows this one (null: something else or nothing): the button goes along. */
   focusChanged(following: string | null) {
     if (!this.following || following === this.serial) return;

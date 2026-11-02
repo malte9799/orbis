@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Map as MlMap } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
 import type { GeoFrame } from './geo3d/frame';
-import type { GeoPart } from './geo3d/stage';
+import type { GeoPart, GeoTarget } from './geo3d/stage';
 
 // 3D public transport vehicles: trains, S-Bahn, subway, trams, buses, coaches (and the odd GPS
 // ferry). Low-poly models, a part of the 3D stage, painted in the livery colour of their mode (the
@@ -16,6 +16,10 @@ const VEH_ZOOM = 9;
 const VEH_MAX_ON = 120;
 /** the 2D dots take back over above this many vehicles in view (hysteresis against flickering) */
 const VEH_MAX_OFF = 200;
+/** how long a link to a vehicle waits for reports that contain it (ms) */
+const REPORT_WAIT_MS = 20000;
+/** the followed vehicle stays this long after the last report that named it (ms) */
+const FOLLOWED_STALE_MS = 60000;
 /** names are shown from this zoom on */
 const LABEL_ZOOM = 8;
 /** the smallest length of a model on screen (px) so vehicles stay visible when zoomed out */
@@ -374,6 +378,11 @@ export interface VehiclesLayerHooks {
 
 export class VehiclesLayer implements GeoPart {
   readonly object = new THREE.Group();
+  readonly source = 'vehicle';
+  /** the vehicle the camera follows: a model at any zoom, and not dropped just because a report misses it */
+  private followed: VehState | null = null;
+  /** a link named a vehicle that was not reported yet */
+  private waiting: (() => void)[] = [];
   private states = new Map<string, VehState>();
   private lastStep = 0;
   private lastOn = false;
@@ -404,14 +413,7 @@ export class VehiclesLayer implements GeoPart {
     const used = new Set<string>();
     for (const f of features) {
       const p = (f.properties ?? {}) as Record<string, unknown>;
-      const base =
-        p.src === 'transitous'
-          ? `t|${p.id}`
-          : p.src === 'amtrak'
-            ? `a|${p.name}`
-            : p.src === 'fi'
-              ? `fi|${p.num}`
-              : `g|${p.feed}|${p.name}|${p.mode}`;
+      const base = matchGroup(p);
       let key = base;
       if (used.has(key)) {
         for (let k = 1; ; k++) {
@@ -472,7 +474,7 @@ export class VehiclesLayer implements GeoPart {
     // an empty update (feed hiccup) so nothing flashes off and back on
     const staleMs = features.length ? 0 : 15000;
     for (const [k, s] of this.states) {
-      if (!s.matched && now - s.seen > staleMs) {
+      if (!s.matched && now - s.seen > (s === this.followed ? FOLLOWED_STALE_MS : staleMs)) {
         if (s.obj) {
           s.obj.parent?.remove(s.obj);
           s.obj = undefined;
@@ -482,7 +484,59 @@ export class VehiclesLayer implements GeoPart {
         this.states.delete(k);
       } else s.matched = false;
     }
+    for (const fn of this.waiting.splice(0)) fn();
     this.map.triggerRepaint();
+  }
+
+  /** What the camera follows for this vehicle; waits for the next reports if it is not known yet. */
+  resolve(slug: string): GeoTarget | null | Promise<GeoTarget | null> {
+    const known = this.states.get(slug);
+    if (known) return this.target(known);
+    return new Promise((done) => {
+      const timer = window.setTimeout(() => done(null), REPORT_WAIT_MS);
+      this.waiting.push(() => {
+        clearTimeout(timer);
+        const s = this.states.get(slug);
+        done(s ? this.target(s) : null);
+      });
+    });
+  }
+
+  private target(s: VehState): GeoTarget {
+    return {
+      source: this.source,
+      slug: s.key,
+      label: String(s.props.name ?? s.key),
+      position: (now) => {
+        // the stage draws it at this very time: the camera must not lag one step behind
+        this.step(now);
+        return this.states.get(s.key) === s ? [s.dLon, s.dLat, 0] : null;
+      },
+      entered: () => (this.followed = s),
+      released: () => (this.followed = null),
+    };
+  }
+
+  /** The key of the vehicle that a clicked feature shows: the nearest of its group. */
+  keyAt(p: Record<string, unknown>, lon: number, lat: number): string | null {
+    const group = matchGroup(p);
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const s of this.states.values()) {
+      if (s.group !== group) continue;
+      const d = Math.hypot(s.dLon - lon, s.dLat - lat);
+      if (d < bestD) {
+        bestD = d;
+        best = s.key;
+      }
+    }
+    return best;
+  }
+
+  /** What the panel shows about a vehicle, if it is still reported. */
+  info(key: string) {
+    const s = this.states.get(key);
+    return s ? { props: s.props, lon: s.dLon, lat: s.dLat, track: s.bearing >= 0 ? s.bearing : s.dRot, at: s.at } : null;
   }
 
   /** New report on a matched vehicle: derive the bearing from the movement if there is none. */
@@ -542,31 +596,15 @@ export class VehiclesLayer implements GeoPart {
     return n <= (this.lastOn ? VEH_MAX_OFF : VEH_MAX_ON);
   }
 
-  update(frame: GeoFrame, now: number) {
-    const on = this.active();
-    if (on !== this.lastOn) {
-      this.lastOn = on;
-      queueMicrotask(() => this.hooks.modeChanged(on));
-    }
-    if (!on) {
-      for (const s of this.states.values()) {
-        if (s.obj) s.obj.visible = false;
-        this.syncLabel(s, false);
-      }
-      return false;
-    }
-    const map = this.map;
+  /** The displayed state at this time: dead reckoning from the last report, eased towards it. */
+  private step(now: number) {
+    if (now === this.lastStep) return;
     const dt = this.lastStep ? Math.min(0.25, (now - this.lastStep) / 1000) : 0;
     this.lastStep = now;
     const k = 1 - Math.exp(-dt / 1.0);
     const kRot = 1 - Math.exp(-dt / 0.7);
-    const b = map.getBounds();
-    const padLon = (b.getEast() - b.getWest()) * 0.3;
-    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
     const wall = Date.now();
-    const labels = map.getZoom() >= LABEL_ZOOM;
     for (const s of this.states.values()) {
-      const p = s.props;
       // dead reckoning from the last report (speed + heading); without speed just ease
       const elapsed = Math.min(MAX_EXTRAPOLATE_S, Math.max(0, (wall - s.at) / 1000));
       // the speed runs on with the reported value for a minute at most
@@ -587,11 +625,36 @@ export class VehiclesLayer implements GeoPart {
         s.dLat += (tLat - s.dLat) * k;
         s.dRot += shortestDelta(s.dRot, tRot) * kRot;
       }
+    }
+  }
+
+  update(frame: GeoFrame, now: number) {
+    const on = this.active();
+    if (on !== this.lastOn) {
+      this.lastOn = on;
+      queueMicrotask(() => this.hooks.modeChanged(on));
+    }
+    const only = on ? null : this.followed;
+    const hide = (s: VehState) => {
+      if (s.obj) s.obj.visible = false;
+      this.syncLabel(s, false);
+    };
+    if (!on && !only) {
+      for (const s of this.states.values()) hide(s);
+      return false;
+    }
+    this.step(now);
+    const map = this.map;
+    const b = map.getBounds();
+    const padLon = (b.getEast() - b.getWest()) * 0.3;
+    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
+    const labels = map.getZoom() >= LABEL_ZOOM;
+    for (const s of this.states.values()) {
+      const p = s.props;
       // on the globe the horizon decides what is in view
       const inView = frame.globe || (s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat);
-      if (!inView || frame.occluded(s.dLon, s.dLat)) {
-        if (s.obj) s.obj.visible = false;
-        this.syncLabel(s, false);
+      if ((only && s !== only) || !inView || frame.occluded(s.dLon, s.dLat)) {
+        hide(s);
         continue;
       }
       const hex = String(p.color ?? '').trim();
@@ -616,7 +679,7 @@ export class VehiclesLayer implements GeoPart {
       if (pos) {
         s.sx = pos[0];
         s.sy = pos[1];
-        this.syncLabel(s, labels && frame.isNear(s.dLon, s.dLat));
+        this.syncLabel(s, (labels && frame.isNear(s.dLon, s.dLat)) || s === this.followed);
       } else {
         s.sx = s.sy = -1e4;
         this.syncLabel(s, false);
@@ -648,6 +711,14 @@ export class VehiclesLayer implements GeoPart {
 }
 
 // ---------------------------------------------------------------------------
+
+/** The vehicles a report can belong to: several GPS vehicles can share a group, trip ids and train numbers are unique. */
+function matchGroup(p: Record<string, unknown>): string {
+  if (p.src === 'transitous') return `t|${p.id}`;
+  if (p.src === 'amtrak') return `a|${p.name}`;
+  if (p.src === 'fi') return `fi|${p.num}`;
+  return `g|${p.feed}|${p.name}|${p.mode}`;
+}
 
 /** Reported speed in m/s (0 when unknown): `speed` is km/h in every feed. */
 function reportSpeed(p: Record<string, unknown>): number {
