@@ -15,6 +15,9 @@ export interface SondePanelHooks {
   select(serial: string | null): void;
   fit(serial: string): void;
   map(): MlMap | null;
+  /** the camera follows this one and turns around it */
+  follow(id: string): void;
+  unfollow(): void;
 }
 
 const COLOR = '#ff8fab';
@@ -25,11 +28,9 @@ export class SondePanel {
   private serial: string | null = null;
   private following = false;
   private refresh: number | undefined;
-  private followTimer: number | undefined;
   private open_ = new Set<string>();
   /** tile whose graph is shown (alt, speed, track, vs) */
   private metric: string | null = null;
-  private dragHooked = false;
   /** called when the panel opens, so the flight panel can step aside */
   onOpen?: () => void;
 
@@ -100,23 +101,18 @@ export class SondePanel {
     if (i && map) map.easeTo({ center: [i.lon, i.lat], zoom: Math.max(map.getZoom(), 12), duration: 700 });
   }
 
+  /** The camera follows this one (null: something else or nothing): the button goes along. */
+  focusChanged(following: string | null) {
+    if (!this.following || following === this.serial) return;
+    this.following = false;
+    this.root.querySelector('[data-act="follow"]')?.classList.toggle('on', false);
+  }
+
   private setFollow(on: boolean) {
+    const was = this.following;
     this.following = on;
-    clearInterval(this.followTimer);
-    const map = this.h.map();
-    if (map && !this.dragHooked) {
-      this.dragHooked = true;
-      // moving the map by hand ends following
-      map.on('dragstart', () => this.following && this.setFollow(false));
-    }
-    if (on && map && this.serial) {
-      const tick = () => {
-        const i = this.serial ? this.h.info(this.serial) : null;
-        if (i) map.jumpTo({ center: [i.lon, i.lat] });
-      };
-      tick();
-      this.followTimer = window.setInterval(tick, 200);
-    }
+    if (on && this.serial) this.h.follow(this.serial!);
+    else if (was) this.h.unfollow();
     this.root.querySelector('[data-act="follow"]')?.classList.toggle('on', on);
   }
 

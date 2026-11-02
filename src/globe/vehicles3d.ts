@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
-import { GLOBE_FLAT_ZOOM } from './style';
+import type { GeoFrame } from './geo3d/frame';
+import type { GeoPart } from './geo3d/stage';
 
 // 3D public transport vehicles: trains, S-Bahn, subway, trams, buses, coaches (and the odd GPS
-// ferry). Low-poly models in a three.js layer inside MapLibre's GL context, painted in the
-// livery colour of their mode (the same colour the 2D dots use). Used from VEH_ZOOM on the flat
-// map; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
+// ferry). Low-poly models, a part of the 3D stage, painted in the livery colour of their mode (the
+// same colour the 2D dots use). Used from VEH_ZOOM on; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
 // towards every new report; speeds with bearing are dead-reckoned in between.
 
 /** from this zoom on the 3D models may replace the 2D dots (zoom 9 = the same zoom as on ships/planes) */
@@ -361,6 +361,7 @@ const geometry = (cat: VehCat, livery: number): THREE.BufferGeometry =>
 function makeModel(cat: VehCat, livery: number): THREE.Mesh {
   const o = new THREE.Mesh(geometry(cat, livery), modelMat);
   o.matrixAutoUpdate = false;
+  o.frustumCulled = false;
   return o;
 }
 
@@ -371,27 +372,21 @@ export interface VehiclesLayerHooks {
   modeChanged(on: boolean): void;
 }
 
-export class VehiclesLayer implements CustomLayerInterface {
-  readonly id = 'vehicles-3d';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer!: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
-  private proj = new THREE.Matrix4();
+export class VehiclesLayer implements GeoPart {
+  readonly object = new THREE.Group();
   private states = new Map<string, VehState>();
   private lastStep = 0;
   private lastOn = false;
   /** names: plain elements moved every frame with the same matrix as the models */
-  private labelBox?: HTMLDivElement;
+  private labelBox = document.createElement('div');
   private labels = new Map<string, HTMLDivElement>();
 
-  constructor(private hooks: VehiclesLayerHooks) {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(0.4, -0.6, 1);
-    this.scene.add(sun);
+  constructor(
+    private map: MlMap,
+    private hooks: VehiclesLayerHooks,
+  ) {
+    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    map.getCanvasContainer().appendChild(this.labelBox);
   }
 
   /** Latest positions of all vehicles. Each update replaces the full set; unmatched vehicles fade out. */
@@ -487,7 +482,7 @@ export class VehiclesLayer implements CustomLayerInterface {
         this.states.delete(k);
       } else s.matched = false;
     }
-    this.map?.triggerRepaint();
+    this.map.triggerRepaint();
   }
 
   /** New report on a matched vehicle: derive the bearing from the movement if there is none. */
@@ -506,18 +501,8 @@ export class VehiclesLayer implements CustomLayerInterface {
     s.matched = true;
   }
 
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-    this.labelBox = document.createElement('div');
-    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
-    map.getCanvasContainer().appendChild(this.labelBox);
-  }
-
-  onRemove() {
-    this.renderer?.dispose();
-    this.labelBox?.remove();
+  dispose() {
+    this.labelBox.remove();
     this.labels.clear();
     this.states.clear();
   }
@@ -543,7 +528,7 @@ export class VehiclesLayer implements CustomLayerInterface {
   }
 
   private active() {
-    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM) return false;
+    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM) return false;
     // the models lag when there are too many at once (a whole city at once): only take over
     // while the view is small enough, with hysteresis so switching does not flicker
     const b = this.map.getBounds();
@@ -557,7 +542,7 @@ export class VehiclesLayer implements CustomLayerInterface {
     return n <= (this.lastOn ? VEH_MAX_OFF : VEH_MAX_ON);
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
+  update(frame: GeoFrame, now: number) {
     const on = this.active();
     if (on !== this.lastOn) {
       this.lastOn = on;
@@ -568,28 +553,18 @@ export class VehiclesLayer implements CustomLayerInterface {
         if (s.obj) s.obj.visible = false;
         this.syncLabel(s, false);
       }
-      return;
+      return false;
     }
     const map = this.map;
-    const now = performance.now();
     const dt = this.lastStep ? Math.min(0.25, (now - this.lastStep) / 1000) : 0;
     this.lastStep = now;
     const k = 1 - Math.exp(-dt / 1.0);
     const kRot = 1 - Math.exp(-dt / 0.7);
-    // everything is placed relative to the map centre (Float32 jitter, see planes3d.ts)
-    const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
-    const center = map.getCenter();
-    const mpp = (40075016 * Math.cos(rad(center.lat))) / (512 * 2 ** map.getZoom());
     const b = map.getBounds();
     const padLon = (b.getEast() - b.getWest()) * 0.3;
     const padLat = (b.getNorth() - b.getSouth()) * 0.3;
     const wall = Date.now();
-    const canvas = map.getCanvas();
-    const v = new THREE.Vector4();
     const labels = map.getZoom() >= LABEL_ZOOM;
-    const m = new THREE.Matrix4();
-    const rot = new THREE.Matrix4();
     for (const s of this.states.values()) {
       const p = s.props;
       // dead reckoning from the last report (speed + heading); without speed just ease
@@ -612,8 +587,9 @@ export class VehiclesLayer implements CustomLayerInterface {
         s.dLat += (tLat - s.dLat) * k;
         s.dRot += shortestDelta(s.dRot, tRot) * kRot;
       }
-      const inView = s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat;
-      if (!inView) {
+      // on the globe the horizon decides what is in view
+      const inView = frame.globe || (s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat);
+      if (!inView || frame.occluded(s.dLon, s.dLat)) {
         if (s.obj) s.obj.visible = false;
         this.syncLabel(s, false);
         continue;
@@ -627,41 +603,33 @@ export class VehiclesLayer implements CustomLayerInterface {
         if (s.obj) s.obj.parent?.remove(s.obj);
         s.obj = makeModel(cat, livery);
         s.objKey = key;
-        this.scene.add(s.obj);
+        this.object.add(s.obj);
       }
-      const mc = MercatorCoordinate.fromLngLat([s.dLon, s.dLat], 0);
+      const mpp = frame.metresPerPixel(s.dLon, s.dLat);
       const boost = Math.max(1, (MIN_PX * mpp) / SPECS[cat].len);
-      const sc = mc.meterInMercatorCoordinateUnits() * boost;
-      // y is flipped between mercator space (south = +y) and the model (north = +y)
-      m.makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(sc, -sc, sc));
-      rot.makeRotationZ(-rad(s.dRot));
-      m.multiply(rot);
-      s.obj.matrix.copy(m);
+      frame.place(s.obj.matrix, s.dLon, s.dLat, 0, s.dRot, boost);
       s.obj.visible = true;
       // screen position for the name and for picking (the models cannot be picked by MapLibre)
-      v.set(mc.x - centre.x, mc.y - centre.y, mc.z, 1).applyMatrix4(this.proj);
+      const pos = frame.toScreen(s.dLon, s.dLat);
       const modelPx = Math.max(SPECS[cat].len / mpp, MIN_PX);
       s.rpx = modelPx / 2;
-      if (v.w > 0) {
-        s.sx = (v.x / v.w * 0.5 + 0.5) * canvas.clientWidth;
-        s.sy = (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight;
-        this.syncLabel(s, labels);
+      if (pos) {
+        s.sx = pos[0];
+        s.sy = pos[1];
+        this.syncLabel(s, labels && frame.isNear(s.dLon, s.dLat));
       } else {
         s.sx = s.sy = -1e4;
         this.syncLabel(s, false);
       }
     }
-    this.camera.projectionMatrix.copy(this.proj);
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
-    if (this.states.size && !document.hidden) map.triggerRepaint();
+    return this.states.size > 0;
   }
 
   private syncLabel(s: VehState, on: boolean) {
     const box = this.labelBox;
     const name = String(s.props.name ?? '');
     let el = this.labels.get(s.key);
-    if (!on || !box || !name) {
+    if (!on || !name) {
       if (el) el.style.display = 'none';
       return;
     }

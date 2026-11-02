@@ -13,6 +13,9 @@ import './flightpanel.css';
 export interface ShipPanelHooks {
   info(mmsi: number): ShipInfo | null;
   map(): MlMap | null;
+  /** the camera follows this one and turns around it */
+  follow(id: number): void;
+  unfollow(): void;
 }
 
 export class ShipPanel {
@@ -23,14 +26,12 @@ export class ShipPanel {
   private mmsi: number | null = null;
   private following = false;
   private refresh: number | undefined;
-  private followTimer: number | undefined;
   private open_ = new Set<string>();
   private photo: ShipPhoto | null = null;
   /** category of the currently shown photo, so one fetch serves every ship of that type */
   private photoCat: ShipCat | null = null;
   /** tile whose graph is shown (speed, track) */
   private metric: string | null = null;
-  private dragHooked = false;
   /** called when the panel opens, so the flight panel can step aside */
   onOpen?: () => void;
 
@@ -106,23 +107,18 @@ export class ShipPanel {
     if (i && map) map.easeTo({ center: [i.lon, i.lat], zoom: Math.max(map.getZoom(), 13), duration: 700 });
   }
 
+  /** The camera follows this one (null: something else or nothing): the button goes along. */
+  focusChanged(following: number | null) {
+    if (!this.following || following === this.mmsi) return;
+    this.following = false;
+    this.root.querySelector('[data-act="follow"]')?.classList.toggle('on', false);
+  }
+
   private setFollow(on: boolean) {
+    const was = this.following;
     this.following = on;
-    clearInterval(this.followTimer);
-    const map = this.h.map();
-    if (map && !this.dragHooked) {
-      this.dragHooked = true;
-      // moving the map by hand ends following
-      map.on('dragstart', () => this.following && this.setFollow(false));
-    }
-    if (on && map) {
-      const tick = () => {
-        const i = this.mmsi != null ? this.h.info(this.mmsi) : null;
-        if (i) map.jumpTo({ center: [i.lon, i.lat] });
-      };
-      tick();
-      this.followTimer = window.setInterval(tick, 200);
-    }
+    if (on && this.mmsi != null) this.h.follow(this.mmsi!);
+    else if (was) this.h.unfollow();
     this.root.querySelector('[data-act="follow"]')?.classList.toggle('on', on);
   }
 

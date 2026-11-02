@@ -201,7 +201,7 @@ export function createVehicles3d(ctx: ExtraCtx) {
   const st = getState(ctx);
   // low-poly 3D trains, subways, trams, buses … from zoom 9 on the flat map and only while
   // few enough of them are in view (otherwise they lag); the 2D dots step aside
-  st.vehicles3d = new VehiclesLayer({
+  st.vehicles3d = new VehiclesLayer(ctx.map, {
     enabled: () => ctx.isOn('trains') || ctx.isOn('transit'),
     modeChanged: (on) => {
       for (const id of ['trains', 'transit-veh']) {
@@ -212,7 +212,7 @@ export function createVehicles3d(ctx: ExtraCtx) {
       for (const id of ['trains-label', 'transit-label']) if (ctx.map.getLayer(id)) ctx.map.setPaintProperty(id, 'text-opacity', on ? 0 : 1);
     },
   });
-  ctx.map.addLayer(st.vehicles3d, 'marker');
+  ctx.stage.add(st.vehicles3d);
 }
 
 export function applyVehicles(ctx: ExtraCtx) {

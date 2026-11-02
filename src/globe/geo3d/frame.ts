@@ -15,6 +15,8 @@ const CIRCUMFERENCE_M = 2 * Math.PI * EARTH_RADIUS_M;
 const FAR_RADII = 8;
 const NEAR_SHARE = 0.01;
 const MAX_MERCATOR_LAT = 85.051129;
+/** near enough for a name: up to this far from the camera, compared with the distance to the map centre */
+const NEAR_SHARE_OF_CENTRE = 1.5;
 
 const rad = (d: number) => (d * Math.PI) / 180;
 
@@ -212,6 +214,11 @@ export class GeoFrame {
   /** Metres covered by one CSS pixel at the map centre. */
   get centreMetresPerPixel(): number {
     return this.metresPerPixel(this.lng, this.lat);
+  }
+
+  /** Near the camera? With a flat view the whole horizon is in sight: only what is near gets a name. */
+  isNear(lon: number, lat: number, altM = 0): boolean {
+    return this.metresPerPixel(lon, lat, altM) <= this.centreMetresPerPixel * NEAR_SHARE_OF_CENTRE;
   }
 
   /** Is the globe in the way between the camera and this point? */

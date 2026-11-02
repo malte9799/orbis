@@ -7,7 +7,7 @@ Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
 ## Stand
 
 Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
-PR. Phase 1 bis 3 sind gebaut, Phase 3 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
+PR. Phase 1 bis 4 sind gebaut, Phase 4 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
 `views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
 
 | Datei | Inhalt |
@@ -30,7 +30,7 @@ Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Ab
 | ✓ 1 | `GeoStage` und `GeoFocus` fest in `views/globe.ts`, Kamerabefehle und Klick im Fokus | Karte ohne 3D-Objekt unverändert | gebaut |
 | ✓ 2 | Geldflüsse als echte Bögen | Bögen in beiden Projektionen, Klicks gehen | gebaut |
 | ✓ 3 | Flugzeuge migriert (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernt; ausgewähltes Flugzeug auf dem Globus, „Folgen“ über `GeoFocus` | Spur und Route auf dem Globus, flache Karte unverändert | gebaut |
-| 4 | Schiffe, Fahrzeuge, `camview3d` migrieren, `GLOBE_FLAT_ZOOM` entfernen | keine Mercator-Rechnung mehr in Layern | 1–2 |
+| ✓ 4 | Schiffe, Fahrzeuge, `camview3d` migriert, `GLOBE_FLAT_ZOOM` entfernt, Folgen für Schiffe und Sonden über `GeoFocus` | keine Mercator-Rechnung mehr in Layern (`planetmap.ts` ausgenommen) | gebaut |
 | 5 | Satelliten: `GeoPoints`, `GeoOrbit`, ISS-Modell | Starlink flüssig, Orbit beim Anklicken | 2–3 |
 | 6 | Weltweite Flugzeuge mit Instancing und Detailstufen (`air.ts:64` befüllt heute nur die 2D-Quelle), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 2 mit vollem Weltdatensatz | 2 |
 
@@ -44,15 +44,14 @@ ausgewählt. Trifft er nichts, endet nur der Fokus, ohne Wetter-Tooltip.
 
 **Andere Kamerabefehle im Fokus (gebaut):** Zoom-Knöpfe, Neigungsregler und Kompass steuern den Fokus. Verschiebt
 etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. „Folgen“ im Flug-Panel läuft über den Fokus
-(`follow=plane/<hex>`). Offen: Cockpit-Ansicht (`flightpanel.ts`) und Navigation (`routing/locator.ts`) führen die
-Kamera noch selbst, Schiffe und Sonden in Phase 4. Am Ende gibt es nur noch einen Kamera-Führer.
+(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`) und Sonden (`follow=plane/sonde:<id>`) ebenso. Offen: Cockpit-Ansicht
+(`flightpanel.ts`) und Navigation (`routing/locator.ts`) führen die Kamera noch selbst. Am Ende gibt es nur noch einen Kamera-Führer.
 
 **Gelände:** Flugzeuge rechnen mit der Geländehöhe (`queryTerrainElevation`), das gilt auch für den Fokus. Noch offen
 ist der Lag bei eingeschaltetem 3D-Gelände:
 Gelände wird in jedem Frame neu gezeichnet, und bewegte Objekte erzwingen Dauer-Neuzeichnen. Es ruckelt auch ohne
 `?geo3d` etwas, Gelände kostet also schon selbst; mit `?geo3d` ist es stärker. Vor Phase 3 mit und ohne Stage
-messen (Kamera stehend und bewegt). Die Stage drosselt bei stehender Kamera auf 15 fps. `ships3d` und `vehicles3d` drosseln noch nicht und bekommen das in
-Phase 4.
+messen (Kamera stehend und bewegt). Die Stage drosselt bei stehender Kamera auf 15 fps. Das gilt jetzt für alle 3D-Objekte.
 
 **`moveend` im Fokus (gebaut):** Bei bewegtem Ziel endet in jedem Frame eine Kamerabewegung. `views/globe.ts` und
 `overlay.ts` filtern das über `geo3dFocus`. Der Wind bleibt deshalb ausgeblendet, sobald die Kamera im Fokus

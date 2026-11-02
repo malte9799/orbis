@@ -520,8 +520,6 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 // ---------------------------------------------------------------------------
 
-/** a label is shown up to this far from the camera, compared with the distance to the map centre */
-const LABEL_NEAR = 1.5;
 const TRAIL_COLOR = '#ff6a2b';
 const FORECAST_COLOR = '#b8bfcc';
 /** all trails faint and fading out, the one of the selected aircraft complete and at full strength */
@@ -822,12 +820,11 @@ export class PlanesLayer implements GeoPart {
     // distance above the model: grows with the zoom (the models get bigger)
     const lift = 17 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 24;
     const seen = new Set<string>();
-    // with a flat view the whole horizon is in sight: only what is near gets a name, and always the selected one
-    const farMpp = frame ? frame.centreMetresPerPixel * LABEL_NEAR : 0;
     for (const p of drawn) {
       const alt = this.flatNow ? 1 : p.dAlt;
       const pos = frame?.toScreen(p.dLon, p.dLat, alt);
-      if (!pos || (p.hex !== this.selected && frame!.metresPerPixel(p.dLon, p.dLat, alt) > farMpp)) continue;
+      // always the selected one
+      if (!pos || (p.hex !== this.selected && !frame!.isNear(p.dLon, p.dLat, alt))) continue;
       let el = this.labels.get(p.hex);
       if (!el) {
         el = document.createElement('div');

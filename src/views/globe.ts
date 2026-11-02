@@ -1463,19 +1463,26 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         },
         (lat, lon) => store.setLastPlace({ name: '', lat, lon }),
       );
+      const followIn = (source: string, slug: string) => {
+        void Promise.resolve(geoStage?.resolve(source, slug, {})).then((t) => t && geoFocus?.start(t));
+      };
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
         select: (hex) => extras?.selectFlight(hex),
         fit: (hex) => extras?.fitFlight(hex),
         map: () => map,
-        follow: (hex) => {
-          void Promise.resolve(geoStage?.resolve('plane', hex, {})).then((t) => t && geoFocus?.start(t));
-        },
+        follow: (hex) => followIn('plane', hex),
         unfollow: () => geoFocus?.stop(),
       });
-      geoFocus?.listen((t) => flightPanel?.focusChanged(t?.source === 'plane' ? t.slug : null));
-      shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
-      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map, follow: (mmsi) => followIn('ship', String(mmsi)), unfollow: () => geoFocus?.stop() });
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map, follow: (serial) => followIn('plane', `sonde:${serial}`), unfollow: () => geoFocus?.stop() });
+      // the buttons in the panels go along when the camera lets go
+      geoFocus?.listen((t) => {
+        const plane = t?.source === 'plane' ? t.slug : null;
+        flightPanel?.focusChanged(plane);
+        sondePanel?.focusChanged(plane?.startsWith('sonde:') ? plane.slice('sonde:'.length) : null);
+        shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
+      });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
       infoPanel.onOpen = () => {
@@ -1489,7 +1496,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         detailPanel?.close();
       };
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
-      camPanel = new CamPanel(el, { map: () => map });
+      camPanel = new CamPanel(el, { map: () => map, stage: () => geoStage });
       detailPanel = new DetailPanel(el, { map: () => map });
       camPanel.onOpen = () => {
         flightPanel?.close();
