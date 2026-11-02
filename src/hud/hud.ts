@@ -347,6 +347,8 @@ export function createHud(host: HudHost): Hud {
     const open = [
       anchor('https://api.demonstrations.org/v1/docs', 'demonstrations.org', 'Versammlungen D/AT/CH · CC BY-SA 4.0'),
       anchor('https://dataverse.harvard.edu/dataverse/crowdcountingconsortium', 'Crowd Counting Consortium', 'Harvard/UConn · US-Proteste · CC0 1.0'),
+      anchor('https://ukraine.bellingcat.com/', 'Bellingcat – Civilian Harm in Ukraine', 'verortete Vorfälle · Beleg-Links'),
+      anchor('https://www.ifw-kiel.de/topics/war-against-ukraine/ukraine-support-tracker/', 'Kiel Ukraine Support Tracker', 'Hilfe nach Geberland · IfW Kiel'),
     ].join('');
     return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div><h5>Offene Datensätze der Karte</h5><div class="qlist qweb">${open}</div></div>`;
   }

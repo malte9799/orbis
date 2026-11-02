@@ -19,8 +19,8 @@ export const WARNINGS: Record<string, WarnDef> = {
     id: 'zeugen',
     title: 'Inhaltswarnung',
     text:
-      'Diese Karte zeigt <b>Kriegsdokumentation aus Gaza und dem Westjordanland</b> – Material mit Gewalt, Toten und Verletzten, gesammelt für <b>Dokumentation und juristische Aufarbeitung</b>. Auf der Karte selbst tauchen nur Positionen und Text auf; verlinktes Belegmaterial kann verstörende Aufnahmen enthalten. Diskretion empfohlen.',
-    credit: 'Datenherkunft: archivegenocide.com · whofundedgenocide.com',
+      'Diese Karte zeigt <b>Kriegsdokumentation aus Gaza, dem Westjordanland und der Ukraine</b> – Material mit Gewalt, Toten und Verletzten, gesammelt für <b>Dokumentation und juristische Aufarbeitung</b>. Auf der Karte selbst tauchen nur Positionen und Text auf; verlinktes Belegmaterial kann verstörende Aufnahmen enthalten. Diskretion empfohlen.',
+    credit: 'Datenherkunft: archivegenocide.com · whofundedgenocide.com · Bellingcat · Kiel Institute',
     ok: 'Ich verstehe – Karte öffnen',
     leave: 'Verlassen',
   },

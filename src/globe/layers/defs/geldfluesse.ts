@@ -40,9 +40,9 @@ const SYMBOL: Record<string, string> = { CAD: 'C$', AUD: 'A$', GBP: '£', USD: '
 const MONEY = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
 
 /** points along the great circle between two places (degrees), so the arc follows the globe */
-function greatCircle(a: Country, b: Country, bulge: number, steps = 64): [number, number][] {
+export function greatCircle(a: { lat: number; lon: number }, b: { lat: number; lon: number }, bulge: number, steps = 64): [number, number][] {
   const r = Math.PI / 180;
-  const v = (c: Country) => [Math.cos(c.lat * r) * Math.cos(c.lon * r), Math.cos(c.lat * r) * Math.sin(c.lon * r), Math.sin(c.lat * r)];
+  const v = (c: { lat: number; lon: number }) => [Math.cos(c.lat * r) * Math.cos(c.lon * r), Math.cos(c.lat * r) * Math.sin(c.lon * r), Math.sin(c.lat * r)];
   const p = v(a);
   const q = v(b);
   const d = Math.acos(Math.min(1, Math.max(-1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2])));
