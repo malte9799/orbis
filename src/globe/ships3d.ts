@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
 import { shipCat, type Ship, type ShipCat } from '../api/transport';
-import { GLOBE_FLAT_ZOOM } from './style';
+import type { GeoFrame } from './geo3d/frame';
+import type { GeoPart, GeoTarget } from './geo3d/stage';
 
-// 3D ships: low-poly models in a three.js layer inside MapLibre's GL context. Used from
-// SHIP_ZOOM on the flat map (the 2D icon layer steps aside then). Positions are reported every
+// 3D ships: low-poly models, a part of the 3D stage. Used from SHIP_ZOOM on (the 2D icon layer steps
+// aside then), and at any zoom for the ship the camera follows. Positions are reported every
 // few seconds to minutes, so each ship is dead-reckoned from its speed and course and eased
 // towards every new report.
 
@@ -16,6 +17,8 @@ const MAX_EXTRAPOLATE_S = 240;
 const EXPIRE_MS = 20 * 60000;
 /** the smallest length of a model on screen (px) so ships stay visible when zoomed out */
 const MIN_PX = 20;
+/** how long a link to a ship waits for reports that contain it (ms) */
+const REPORT_WAIT_MS = 20000;
 /** the white ping circle around a ship whose position just arrived */
 const PULSE_MS = 1300;
 /** names are shown from this zoom on */
@@ -204,6 +207,7 @@ function makeModel(cat: ShipCat): THREE.Object3D {
   }
   const o = t.clone(); // geometries and materials are shared
   o.matrixAutoUpdate = false;
+  o.traverse((c) => (c.frustumCulled = false));
   return o;
 }
 
@@ -214,28 +218,27 @@ export interface ShipsLayerHooks {
   modeChanged(on: boolean): void;
 }
 
-export class ShipsLayer implements CustomLayerInterface {
-  readonly id = 'ships-3d';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer!: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
-  private proj = new THREE.Matrix4();
+export class ShipsLayer implements GeoPart {
+  readonly object = new THREE.Group();
+  readonly source = 'ship';
   private ships = new Map<number, ShipState>();
   private lastStep = 0;
   private lastOn = false;
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** names: plain elements moved every frame with the same matrix as the models */
-  private labelBox?: HTMLDivElement;
+  private labelBox = document.createElement('div');
   private labels = new Map<number, HTMLDivElement>();
+  /** the ship the camera follows: a model at any zoom */
+  private followed: number | null = null;
+  /** a link named a ship that was not reported yet */
+  private waiting: (() => void)[] = [];
 
-  constructor(private hooks: ShipsLayerHooks) {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(0.4, -0.6, 1);
-    this.scene.add(sun);
+  constructor(
+    private map: MlMap,
+    private hooks: ShipsLayerHooks,
+  ) {
+    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    map.getCanvasContainer().appendChild(this.labelBox);
   }
 
   /** Latest reports of all ships (the whole set; missing ones are dropped after a while). */
@@ -262,11 +265,42 @@ export class ShipsLayer implements CustomLayerInterface {
         this.ships.delete(k);
       }
     }
-    this.map?.triggerRepaint();
+    for (const fn of this.waiting.splice(0)) fn();
+    this.map.triggerRepaint();
+  }
+
+  /** What the camera follows for this ship; waits for the next reports if it is not known yet. */
+  resolve(slug: string): GeoTarget | null | Promise<GeoTarget | null> {
+    const mmsi = Number(slug);
+    if (!Number.isFinite(mmsi)) return null;
+    if (this.ships.has(mmsi)) return this.target(mmsi);
+    return new Promise((done) => {
+      const timer = window.setTimeout(() => done(null), REPORT_WAIT_MS);
+      this.waiting.push(() => {
+        clearTimeout(timer);
+        done(this.ships.has(mmsi) ? this.target(mmsi) : null);
+      });
+    });
+  }
+
+  private target(mmsi: number): GeoTarget {
+    return {
+      source: this.source,
+      slug: String(mmsi),
+      label: this.ships.get(mmsi)?.ship.name || String(mmsi),
+      position: (now) => {
+        // the stage draws it at this very time: the camera must not lag one step behind
+        this.step(now);
+        const s = this.ships.get(mmsi);
+        return s ? [s.dLon, s.dLat, 0] : null;
+      },
+      entered: () => (this.followed = mmsi),
+      released: () => (this.followed = null),
+    };
   }
 
   private drop(s: ShipState) {
-    if (s.obj) this.scene.remove(s.obj);
+    if (s.obj) this.object.remove(s.obj);
     this.removePulse(s);
     this.labels.get(s.ship.mmsi)?.remove();
     this.labels.delete(s.ship.mmsi);
@@ -279,19 +313,9 @@ export class ShipsLayer implements CustomLayerInterface {
     s.pulse = undefined;
   }
 
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-    this.labelBox = document.createElement('div');
-    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
-    map.getCanvasContainer().appendChild(this.labelBox);
-  }
-
-  onRemove() {
-    this.renderer?.dispose();
+  dispose() {
     this.pulseGeo.dispose();
-    this.labelBox?.remove();
+    this.labelBox.remove();
     this.labels.clear();
     this.ships.clear();
   }
@@ -332,7 +356,7 @@ export class ShipsLayer implements CustomLayerInterface {
     const box = this.labelBox;
     const name = s.ship.name ?? '';
     let el = this.labels.get(s.ship.mmsi);
-    if (!on || !box || !name) {
+    if (!on || !name) {
       if (el) el.style.display = 'none';
       return;
     }
@@ -350,7 +374,7 @@ export class ShipsLayer implements CustomLayerInterface {
   }
 
   /** A white, see-through sphere that grows and fades around a ship whose position just arrived. */
-  private syncPulse(s: ShipState, now: number, modelPx: number, mpp: number, crowdK: number, centre: MercatorCoordinate) {
+  private syncPulse(frame: GeoFrame, s: ShipState, now: number, modelPx: number, mpp: number, crowdK: number) {
     const t = s.pulseAt ? (now - s.pulseAt) / PULSE_MS : 1;
     if (t >= 1) {
       this.removePulse(s);
@@ -361,58 +385,28 @@ export class ShipsLayer implements CustomLayerInterface {
       s.pulse.matrixAutoUpdate = false;
       s.pulse.frustumCulled = false;
       s.pulse.renderOrder = 3;
-      this.scene.add(s.pulse);
+      this.object.add(s.pulse);
     }
     (s.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
     const maxPx = Math.max(12, Math.min(56, modelPx) * crowdK);
     const px = maxPx * (0.25 + 0.75 * (1 - (1 - t) ** 2));
-    const mc = MercatorCoordinate.fromLngLat([s.dLon, s.dLat], 1);
-    const sc = mc.meterInMercatorCoordinateUnits() * px * mpp;
-    s.pulse.matrix.makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(sc, sc, sc));
+    frame.place(s.pulse.matrix, s.dLon, s.dLat, 1, 0, px * mpp);
     s.pulse.visible = true;
   }
 
   private active() {
-    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM && !(this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM);
+    return this.hooks.enabled() && this.map.getZoom() >= SHIP_ZOOM;
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
-    const on = this.active();
-    if (on !== this.lastOn) {
-      this.lastOn = on;
-      queueMicrotask(() => this.hooks.modeChanged(on));
-    }
-    if (!on) {
-      for (const s of this.ships.values()) {
-        if (s.obj) s.obj.visible = false;
-        if (s.pulse) s.pulse.visible = false;
-        this.syncLabel(s, false);
-      }
-      return;
-    }
-    const map = this.map;
-    const now = performance.now();
+  /** The displayed state at this time: dead reckoning from the last report, eased towards it. */
+  private step(now: number) {
+    if (now === this.lastStep) return;
     const dt = this.lastStep ? Math.min(0.25, (now - this.lastStep) / 1000) : 0;
     this.lastStep = now;
     const k = 1 - Math.exp(-dt / 1.0);
-    // everything is placed relative to the map centre (Float32 jitter, see planes3d.ts)
-    const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
-    const center = map.getCenter();
-    const mpp = (40075016 * Math.cos(rad(center.lat))) / (512 * 2 ** map.getZoom());
-    const b = map.getBounds();
-    const padLon = (b.getEast() - b.getWest()) * 0.3;
-    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
     const wall = Date.now();
-    const canvas = map.getCanvas();
-    const v = new THREE.Vector4();
-    const labels = map.getZoom() >= LABEL_ZOOM;
-    const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.ships.size))));
-    const m = new THREE.Matrix4();
-    const rot = new THREE.Matrix4();
     for (const s of this.ships.values()) {
       const sh = s.ship;
-      // dead reckoning from the last report
       const elapsed = Math.min(MAX_EXTRAPOLATE_S, Math.max(0, (wall - sh.at) / 1000));
       const dist = sh.sog > 0.5 ? sh.sog * KNOT * elapsed : 0;
       const cosLat = Math.max(0.2, Math.cos(rad(sh.lat)));
@@ -428,46 +422,66 @@ export class ShipsLayer implements CustomLayerInterface {
         s.dLat += (tLat - s.dLat) * k;
         s.dRot += shortestDelta(s.dRot, tRot) * k;
       }
-      const inView = s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat;
-      if (!inView) {
-        if (s.obj) s.obj.visible = false;
-        if (s.pulse) s.pulse.visible = false;
-        this.syncLabel(s, false);
+    }
+  }
+
+  update(frame: GeoFrame, now: number) {
+    const on = this.active();
+    if (on !== this.lastOn) {
+      this.lastOn = on;
+      queueMicrotask(() => this.hooks.modeChanged(on));
+    }
+    const only = on ? null : this.followed;
+    this.object.visible = on || only !== null;
+    const hide = (s: ShipState) => {
+      if (s.obj) s.obj.visible = false;
+      if (s.pulse) s.pulse.visible = false;
+      this.syncLabel(s, false);
+    };
+    if (!on && only === null) {
+      for (const s of this.ships.values()) hide(s);
+      return false;
+    }
+    this.step(now);
+    const map = this.map;
+    const b = map.getBounds();
+    const padLon = (b.getEast() - b.getWest()) * 0.3;
+    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
+    const labels = map.getZoom() >= LABEL_ZOOM;
+    const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.ships.size))));
+    for (const s of this.ships.values()) {
+      const sh = s.ship;
+      // on the globe the horizon decides what is in view
+      const inView = frame.globe || (s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat);
+      if ((only !== null && sh.mmsi !== only) || !inView || frame.occluded(s.dLon, s.dLat)) {
+        hide(s);
         continue;
       }
       const cat = shipCat(sh.type);
       if (!s.obj || s.cat !== cat) {
-        if (s.obj) this.scene.remove(s.obj);
+        if (s.obj) this.object.remove(s.obj);
         s.obj = makeModel(cat);
         s.cat = cat;
-        this.scene.add(s.obj);
+        this.object.add(s.obj);
       }
-      const mc = MercatorCoordinate.fromLngLat([s.dLon, s.dLat], 0);
+      const mpp = frame.metresPerPixel(s.dLon, s.dLat);
       const boost = Math.max(1, (MIN_PX * mpp) / SPECS[cat].len);
-      const sc = mc.meterInMercatorCoordinateUnits() * boost;
-      // y is flipped between mercator space (south = +y) and the model (north = +y)
-      m.makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(sc, -sc, sc));
-      rot.makeRotationZ(-rad(s.dRot));
-      m.multiply(rot);
-      s.obj.matrix.copy(m);
+      frame.place(s.obj.matrix, s.dLon, s.dLat, 0, s.dRot, boost);
       s.obj.visible = true;
       // screen position for the name and for picking (the models cannot be picked by MapLibre)
-      v.set(mc.x - centre.x, mc.y - centre.y, mc.z, 1).applyMatrix4(this.proj);
+      const pos = frame.toScreen(s.dLon, s.dLat);
       const modelPx = Math.max(SPECS[cat].len / mpp, MIN_PX);
       s.rpx = modelPx / 2;
-      if (v.w > 0) {
-        s.sx = (v.x / v.w * 0.5 + 0.5) * canvas.clientWidth;
-        s.sy = (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight;
-        this.syncLabel(s, labels);
+      if (pos) {
+        s.sx = pos[0];
+        s.sy = pos[1];
+        this.syncLabel(s, (labels && frame.isNear(s.dLon, s.dLat)) || sh.mmsi === this.followed);
       } else {
         s.sx = s.sy = -1e4;
         this.syncLabel(s, false);
       }
-      this.syncPulse(s, now, s.rpx, mpp, crowdK, centre);
+      this.syncPulse(frame, s, now, s.rpx, mpp, crowdK);
     }
-    this.camera.projectionMatrix.copy(this.proj);
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
-    if (this.ships.size && !document.hidden) map.triggerRepaint();
+    return this.ships.size > 0;
   }
 }

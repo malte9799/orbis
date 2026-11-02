@@ -81,8 +81,6 @@ export interface HudHost {
   /** camera tilt in degrees (0 = top-down); animated for the 2D/3D button, immediate while the slider is dragged */
   setPitch(deg: number, animate: boolean): void;
   families(): WxFamily[];
-  /** the stack opened or closed (the map keeps its centre in the free area) */
-  layout(): void;
   /** the persistent element holding legend + timeline (moved into the phone sheet) */
   dock(): HTMLElement;
   /** the place weather in the phone sheet was closed (remove the map marker) */
@@ -867,7 +865,6 @@ export function createHud(host: HudHost): Hud {
   }
 
   let lastShift = '';
-  let lastEdit = false;
   let hadPlace = false;
   function render() {
     layout = calcLayout();
@@ -902,10 +899,6 @@ export function createHud(host: HudHost): Hud {
     if (s !== lastShift) {
       lastShift = s;
       (gv ?? root).style.setProperty('--hud-shift', s);
-    }
-    if (lastEdit !== ui.edit) {
-      lastEdit = ui.edit;
-      host.layout();
     }
   }
 
@@ -1323,14 +1316,9 @@ export function createHud(host: HudHost): Hud {
     }
   }
 
-  function relayout() {
-    render();
-    host.layout();
-  }
-  mqLand.addEventListener('change', relayout);
-  mqPort.addEventListener('change', relayout);
+  mqLand.addEventListener('change', render);
+  mqPort.addEventListener('change', render);
   window.addEventListener('resize', () => {
-    host.layout();
     if (!sheet.dragging() && !sheet.el()?.style.height) syncSheetH();
   });
   render();
@@ -1342,7 +1330,7 @@ export function createHud(host: HudHost): Hud {
     stackWidth: () => 0, // the editing stack overlays the map: keep the map centred when it opens
     importShared,
     layout: () => layout,
-    relayout,
+    relayout: render,
     showPlace(node) {
       placeNode = node;
       ui.edit = false;
