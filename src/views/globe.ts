@@ -7,6 +7,7 @@ import {
   type MapGeoJSONFeature,
   type RasterTileSource,
 } from 'maplibre-gl';
+import { cameraHeld } from '../mapctl';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import {
   kindColor,
@@ -316,7 +317,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       ev.ensure();
     }
     applyLayerOptions(k);
-    applyPadding(true);
     refreshHud();
   }
 
@@ -422,14 +422,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       hudTimer = 0;
       hud?.refreshLive();
     }, 120);
-  }
-
-  /** Keep the globe centred in the free area next to the open Karte stack on wide screens. */
-  function applyPadding(animate = false) {
-    if (!map) return;
-    const left = hud?.stackWidth() ?? 0;
-    if (animate) map.easeTo({ padding: { left, top: 0, right: 0, bottom: 0 }, duration: 300 });
-    else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
   /** locate button: GPS position with heading (off → follow → follow with heading → off) */
@@ -1441,8 +1433,10 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     routeCtl.querySelector('button')!.addEventListener('click', () => routing?.open());
     map.addControl({ onAdd: () => routeCtl, onRemove: () => routeCtl.remove() }, 'bottom-right');
 
+    let geo3dClick: ((x: number, y: number) => boolean) | null = null;
     map.on('load', () => {
       ready = true;
+      if (import.meta.env.DEV && new URLSearchParams(location.search).has('geo3d')) void import('../globe/geo3d/debug').then((m) => (geo3dClick = m.startGeo3dDebug(map!)));
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
@@ -1457,8 +1451,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           layersHidden: setRouteClean,
           navUi(on) {
             el.classList.toggle('nav-active', on);
-            if (on) map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
-            else applyPadding();
+            map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
           },
           mode: locMode,
         },
@@ -1520,7 +1513,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
-      applyPadding();
       applyBase();
       applyNight();
       ev.apply();
@@ -1601,7 +1593,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     map.on('pitch', syncTerrainPitch);
     // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
     const levelOut = () => {
-      if (!map) return;
+      if (!map || cameraHeld.has(map)) return;
       const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
       if (map.getPitch() > limit) map.setPitch(limit);
     };
@@ -1622,7 +1614,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     });
     map.on('mouseout', hideReadout);
     map.on('movestart', hideReadout);
-    map.on('moveend', () => {
+    map.on('moveend', (e) => {
+      // the camera following a moving 3D object ends a move every frame; a real end comes when the focus stops
+      if ((e as { geo3dFocus?: boolean }).geo3dFocus) return;
       refreshDetail();
       extras?.onMoveEnd();
       const c = map!.getCenter();
@@ -1637,6 +1631,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (longPressAt && performance.now() - longPressAt < 700) return;
       // the route planner owns the click while it picks a point / chooses an alternative / is open
       if (routing?.click(e)) return;
+      if (geo3dClick?.(e.point.x, e.point.y)) return;
       if (hud?.placeOpen()) {
         // a second tap on the map closes the place sheet
         hud.clearPlace();
@@ -1781,7 +1776,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     route: () => routing?.open(),
     setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
     resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
-    layout: () => applyPadding(true),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });
