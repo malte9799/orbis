@@ -329,6 +329,26 @@
 .hud .dlg .act { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
 .hud .dlg .act .ebtn { height: 36px; padding: 0 16px; font-size: 13.5px; }
 
+/* ---------- content warning (Zeugen-Karte) ---------- */
+.hud .dlg.warnd { border-color: #7a3128; }
+.hud .warnd .wn-row { display: flex; align-items: center; gap: 10px; }
+.hud .warnd .wn-badge { flex: 0 0 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #ffcf4d; background: rgba(255,207,77,.12); }
+.hud .warnd .wn-badge svg { width: 28px; height: 28px; }
+.hud .warnd .wn-t { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }
+.hud .warnd .wn-t b { color: var(--text); font-weight: 600; }
+.hud .warnd .wn-credit { font-size: 11.5px; color: var(--muted); }
+.hud .warnd .ebtn.warnp { background: #b3392e; border-color: #b3392e; color: #fff; }
+.hud .warnd .ebtn.warnp:hover { background: #c8452f; }
+
+/* ---------- Quellen-Unterliste im Lagegeber (menu) of the Zeugen-Karte ---------- */
+.hud .wxm .qsub { display: grid; gap: 6px; width: 100%; }
+.hud .wxm .qsub h5 { margin: 2px 4px 0; font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.hud .wxm .qlist { display: grid; gap: 2px; }
+.hud .wxm .qlist a { display: flex; flex-direction: column; gap: 1px; padding: 5px 8px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 13px; }
+.hud .wxm .qlist a small { color: var(--muted); font-size: 11.5px; }
+.hud .wxm .qlist a:hover { background: var(--card-2); }
+.hud .wxm .qload { padding: 4px 8px; font-size: 12.5px; }
+
 /* ---------- content that follows the Karte ---------- */
 .hud .evcard { position: absolute; right: var(--hud-r); top: 60px; width: min(300px, calc(100% - var(--hud-l) - var(--hud-r))); z-index: 5; padding: 10px; display: grid; gap: 2px; }
 .hud .evcard .h { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px 6px; }

@@ -28,7 +28,12 @@ export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaul
 export const INFRA_LAYER_IDS = new Set(INFRA_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
 export const infraCatOf = (layer: string) => INFRA_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 /** the menu type of a Karten menu id ('' = none) */
-export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra', Set<string>> = { wx: new Set(), traffic: TRAFFIC_LAYER_IDS, infra: INFRA_LAYER_IDS };
+export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra' | 'zeugen', Set<string>> = {
+  wx: new Set(),
+  traffic: TRAFFIC_LAYER_IDS,
+  infra: INFRA_LAYER_IDS,
+  zeugen: new Set(['demos', 'usprotests', 'moneyflow']),
+};
 
 /** families whose forecast model provides isobars as an option */
 export const ISOBAR_OPTION_MAINS = ['wind', 'pressure'];

@@ -54,7 +54,9 @@ export interface Karte {
    * and 'infra' switch the categories of their menu. What the menu picks is remembered but never
    * counts as a change.
    */
-  menu?: 'wx' | 'traffic' | 'infra';
+  menu?: 'wx' | 'traffic' | 'infra' | 'zeugen';
+  /** Key of a content warning (hud/warnings.ts) that go() must confirm – standard Karten only */
+  warn?: 'zeugen';
   /** traffic menu: id of the chosen category ('' = none) */
   tmode?: string;
   layers: KLayer[];
@@ -79,6 +81,12 @@ export const STANDARD: Karte[] = [
     id: 'infra', name: 'Infrastruktur', icon: 'power', color: '#00bfa5', std: true, menu: 'infra',
     base: 'dark', labels: true, night: 'auto', main: null,
     tmode: 'energie', layers: [],
+  },
+  {
+    id: 'zeugen', name: 'Zeitzeugen', icon: 'cam', color: '#c0392b', std: true, menu: 'zeugen', warn: 'zeugen',
+    base: 'dark', labels: true, night: 'auto', main: null,
+    layers: [{ id: 'warfootage' }],
+    view: { center: [34.47, 31.5], zoom: 10.6, name: 'Gaza' },
   },
 ];
 
@@ -173,7 +181,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
     layers,
   };
   if (k.main && typeof r.mainVar === 'string') k.mainVar = r.mainVar;
-  if (r.menu === 'wx' || r.menu === 'traffic') k.menu = r.menu;
+  if (r.menu === 'wx' || r.menu === 'traffic' || r.menu === 'infra' || r.menu === 'zeugen') k.menu = r.menu;
   if (typeof r.tmode === 'string') k.tmode = r.tmode.slice(0, 20);
   if (r.std === true) k.std = true;
   if (r.wind === false) k.wind = false;

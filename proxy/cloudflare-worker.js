@@ -34,6 +34,9 @@ const HOSTS = {
   'verkehr.autobahn.de': 600,
   'www3.septa.org': 30,
   'warnung.bund.de': 120,
+  // archive documentation (static JSON datasets, rebuilt at most daily)
+  'archivegenocide.com': 21600,
+  'whofundedgenocide.com': 21600,
   // ocean layers
   'www.ndbc.noaa.gov': 300,
   'api.tidesandcurrents.noaa.gov': 120,
