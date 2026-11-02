@@ -14,16 +14,36 @@ const BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
 const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
 const TILE = 2; // tiles per degree
 
+let built: Promise<string[]> | null = null;
+
+/**
+ * Regions the snapshot has been built for so far (meta.json), so the others are not requested
+ * (each would be a 404). All of them if meta.json is unreachable.
+ */
+export function builtRegions(): Promise<string[]> {
+  built ??= fetchJson<{ regions?: Record<string, unknown> }>(`${BASE}meta.json`, undefined, 15000)
+    .then((m) => {
+      const have = REGIONS.filter((r) => m.regions?.[r]);
+      return have.length ? have : REGIONS;
+    })
+    .catch(() => {
+      built = null; // try again next time
+      return REGIONS;
+    });
+  return built;
+}
+
 const indexes = new Map<TileSet, Promise<Map<string, Set<string>>>>();
 const tiles = new Map<string, Promise<unknown[][]>>();
 
 function loadIndex(set: TileSet) {
   let p = indexes.get(set);
   if (!p) {
-    p = Promise.allSettled(REGIONS.map((r) => fetchJson<string[]>(`${BASE}${set}-${r}-tiles.json`, undefined, 30000))).then((res) => {
+    p = builtRegions().then(async (regions) => {
+      const res = await Promise.allSettled(regions.map((r) => fetchJson<string[]>(`${BASE}${set}-${r}-tiles.json`, undefined, 30000)));
       const index = new Map<string, Set<string>>();
       res.forEach((r, i) => {
-        if (r.status === 'fulfilled') index.set(REGIONS[i], new Set(r.value));
+        if (r.status === 'fulfilled') index.set(regions[i], new Set(r.value));
       });
       if (!index.size) indexes.delete(set); // try again next time
       return index;

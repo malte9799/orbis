@@ -2,6 +2,7 @@ import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { DATA_BASE } from '../../../api/data';
+import { builtRegions } from '../../../api/osmtiles';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml, fetchJson } from '../../../util';
@@ -18,7 +19,6 @@ const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'a
 //   cctv-<region>-tiles.json     the 0.5° tiles that exist
 //   cctv-<region>/<ix>_<iy>.json cameras of one tile (record layout: see `record` in the script)
 const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
-const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
 const TILE = 2; // tiles per degree
 type Rec = [number, number, number, string, string, string, number, string, number];
 
@@ -37,7 +37,8 @@ async function loadHeat(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (st.heat !== 'idle') return;
   st.heat = 'loading';
-  const parts = await Promise.allSettled(REGIONS.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
+  const regions = await builtRegions();
+  const parts = await Promise.allSettled(regions.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
   const cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
   if (!cells.length) {
     st.heat = 'idle';
@@ -52,10 +53,11 @@ async function loadHeat(ctx: ExtraCtx) {
 }
 
 function loadIndex(st: St) {
-  st.index ??= Promise.allSettled(REGIONS.map((r) => fetchJson<string[]>(`${HEAT_BASE}cctv-${r}-tiles.json`, undefined, 30000))).then((res) => {
+  st.index ??= builtRegions().then(async (regions) => {
+    const res = await Promise.allSettled(regions.map((r) => fetchJson<string[]>(`${HEAT_BASE}cctv-${r}-tiles.json`, undefined, 30000)));
     const index = new Map<string, Set<string>>();
     res.forEach((p, i) => {
-      if (p.status === 'fulfilled') index.set(REGIONS[i], new Set(p.value));
+      if (p.status === 'fulfilled') index.set(regions[i], new Set(p.value));
     });
     if (!index.size) st.index = null; // try again next time
     return index;
