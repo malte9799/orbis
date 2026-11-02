@@ -6,5 +6,9 @@ export default defineMenuCat({
   label: 'Genozid Archiv',
   icon: 'warn',
   defaults: ['warfootage'],
-  rows: [],
+  rows: [
+    { label: 'Zeugen-Archiv', layers: ['warfootage'] },
+    { label: 'Geldflüsse (PAC)', layers: ['moneyflow'] },
+    { label: 'Geldflüsse (Länderbögen)', layers: ['geldfluesse'] },
+  ],
 });

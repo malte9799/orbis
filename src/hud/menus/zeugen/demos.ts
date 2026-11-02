@@ -8,6 +8,6 @@ export default defineMenuCat({
   defaults: ['demos'],
   rows: [
     { label: 'Versammlungen D/AT/CH', layers: ['demos'] },
-    { label: 'US-Proteste', layers: ['usprotests'] },
+    { label: 'Crowd Counting Consortium (CCC)', layers: ['usprotests'] },
   ],
 });
