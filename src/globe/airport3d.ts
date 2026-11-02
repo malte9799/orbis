@@ -5,6 +5,8 @@ import { isSuperseded } from '../api/overpass';
 import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
+import type { Vec3 } from './geo3d/frame';
+import { cockpitView } from './geo3d/focus';
 import type { GeoStage, GeoTarget } from './geo3d/stage';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
 
@@ -103,18 +105,26 @@ export class Airport3D {
       icons: () => this.iconsOn,
       tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
-      target: (hex) => this.followTarget(hex),
+      target: (hex, cockpit) => this.followTarget(hex, cockpit),
       crowd: () => this.crowd(),
     });
   }
 
   /** What the camera follows for an aircraft; the map has to know it first. */
-  private followTarget(hex: string): GeoTarget | null | Promise<GeoTarget | null> {
+  private followTarget(hex: string, cockpit = false): GeoTarget | null | Promise<GeoTarget | null> {
     if (!this.planesOn) return null;
     const planes = this.tracker.planes;
-    if (!planes.has(hex)) return this.hooks.load(hex).then(() => (planes.has(hex) ? this.followTarget(hex) : null));
+    if (!planes.has(hex)) return this.hooks.load(hex).then(() => (planes.has(hex) ? this.followTarget(hex, cockpit) : null));
     /** followed by a link: nothing selected it, so it goes when the camera lets go */
     let selectedHere = false;
+    const place = (p: PlaneState): Vec3 => {
+      const elev = this.map.getTerrain() ? (this.map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
+      return [p.dLon, p.dLat, (p.ground ? 0 : p.dAlt) + elev];
+    };
+    const cockpitOf = (p: PlaneState) => {
+      const [lon, lat, alt] = place(p);
+      return cockpitView(lon, lat, alt, p.dTrack);
+    };
     return {
       source: this.layer.source,
       slug: hex,
@@ -124,9 +134,15 @@ export class Airport3D {
         this.tracker.step(now);
         const p = planes.get(hex);
         if (!p) return null;
-        const elev = this.map.getTerrain() ? (this.map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
-        return [p.dLon, p.dLat, (p.ground ? 0 : p.dAlt) + elev];
+        return cockpit ? cockpitOf(p).position : place(p);
       },
+      ...(cockpit && {
+        params: () => ({ view: 'cockpit' }),
+        view: () => {
+          const p = planes.get(hex);
+          return p ? cockpitOf(p).view : null;
+        },
+      }),
       entered: () => {
         if (this.layer.selected === hex) return;
         selectedHere = true;

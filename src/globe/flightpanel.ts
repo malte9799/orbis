@@ -1,4 +1,3 @@
-import type { Map as MlMap } from 'maplibre-gl';
 import type { FlightInfo } from './extras';
 import { compass, escapeHtml, fmt } from '../util';
 import { climbTxt, climbUnit, climbVal, distTxt, heightBoth, heightTxt, heightUnit, heightVal, speedTxt, speedUnit, speedVal } from '../units';
@@ -16,21 +15,12 @@ export interface FlightPanelHooks {
   /** highlight the trail of this aircraft (null: none) */
   select(hex: string | null): void;
   fit(hex: string): void;
-  map(): MlMap | null;
-  /** the camera follows this aircraft and turns around it */
-  follow(hex: string): void;
+  /** the camera follows this aircraft and turns around it, or (`cockpit`) sits on it and looks ahead */
+  follow(hex: string, cockpit: boolean): void;
   unfollow(): void;
 }
 
 type Follow = 'off' | 'follow' | 'cockpit';
-
-const M_PER_DEG = 111320;
-const rad = (d: number) => (d * Math.PI) / 180;
-
-/** A point `metres` away from lon/lat in the direction of a compass bearing. */
-function shift(lon: number, lat: number, bearing: number, metres: number): [number, number] {
-  return [lon + (metres * Math.sin(rad(bearing))) / (M_PER_DEG * Math.max(0.05, Math.cos(rad(lat)))), lat + (metres * Math.cos(rad(bearing))) / M_PER_DEG];
-}
 
 export class FlightPanel {
   private root = document.createElement('aside');
@@ -40,11 +30,9 @@ export class FlightPanel {
   private hex: string | null = null;
   private follow: Follow = 'off';
   private refresh: number | undefined;
-  private followTimer: number | undefined;
   private open_ = new Set<string>(['aircraft', 'specs']);
   /** tile whose graph is shown (alt, speed, track, vs) */
   private metric: string | null = null;
-  private dragHooked = false;
   private photo: AircraftPhoto | null = null;
   private photoKey: string | null = null;
 
@@ -128,42 +116,16 @@ export class FlightPanel {
 
   /** The camera followed `following` until now or from now on (null: nothing). */
   focusChanged(following: string | null) {
-    if (this.follow !== 'follow' || following === this.hex) return;
+    if (this.follow === 'off' || following === this.hex) return;
     this.follow = 'off';
     this.syncFollowButtons();
   }
 
   private setFollow(mode: Follow) {
-    if (this.follow === 'follow' && mode !== 'follow') {
-      this.follow = mode;
-      this.h.unfollow();
-    }
+    const was = this.follow;
     this.follow = mode;
-    clearInterval(this.followTimer);
-    const map = this.h.map();
-    if (map && !this.dragHooked) {
-      this.dragHooked = true;
-      // moving the map by hand ends following
-      map.on('dragstart', () => this.follow !== 'off' && this.setFollow('off'));
-    }
-    if (mode === 'follow' && this.hex) this.h.follow(this.hex);
-    if (mode === 'cockpit' && map && this.hex) {
-      const tick = () => {
-        const i = this.hex ? this.h.info(this.hex) : null;
-        if (!i) return;
-        const alt = i.ground ? 0 : i.altM;
-        // the camera sits at the aircraft (on its altitude) and looks along its course: with the pitch
-        // the camera is `dist` away from the map centre, `dist · cos(pitch)` high and `dist · sin(pitch)`
-        // behind it – so the height fixes the zoom and the centre lies ahead of the aircraft
-        const pitch = Math.min(map.getMaxPitch(), 75);
-        const dist = (Math.max(alt, 20) + 8) / Math.cos(rad(pitch));
-        const h = map.getCanvas().clientHeight;
-        const zoom = Math.log2((40075016 * Math.cos(rad(i.lat))) / (512 * (dist / (1.5 * h))));
-        map.jumpTo({ center: shift(i.lon, i.lat, i.track, dist * Math.sin(rad(pitch))), bearing: i.track, pitch, zoom: Math.min(map.getMaxZoom(), Math.max(0, zoom)) });
-      };
-      tick();
-      this.followTimer = window.setInterval(tick, 200);
-    }
+    if (mode === 'off' && was !== 'off') this.h.unfollow();
+    if (mode !== 'off' && this.hex) this.h.follow(this.hex, mode === 'cockpit');
     this.syncFollowButtons();
   }
 

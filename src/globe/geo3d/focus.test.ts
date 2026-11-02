@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { distanceZoomFor, focusCentre, mapZoomFor, maxDistanceZoom, placeAhead, sightToObject } from './focus';
+import { cockpitView, distanceZoomFor, distanceZoomOf, focusCentre, mapZoomFor, maxDistanceZoom, placeAhead, sightToObject } from './focus';
 import { frame, H, TO_CENTRE, W } from './testcamera';
 import { toUnit, type Vec3 } from './frame';
 
@@ -95,6 +95,24 @@ describe('zoom keeps the distance to the object', () => {
 
   it('on the flat map the elevation does it: they are the same', () => {
     expect(mapZoomFor(13, 11000, 60, 0, TO_CENTRE)).toBeCloseTo(13, 6);
+  });
+});
+
+describe('cockpit view', () => {
+  it('looks from just above the aircraft along its course', () => {
+    const { position, view } = cockpitView(13, 52, 10000, 90);
+    const a = (view.pitch * Math.PI) / 180;
+    expect(position[0]).toBeGreaterThan(13);
+    expect(position[1]).toBeCloseTo(52, 2);
+    expect(position[2] + view.distanceM * Math.cos(a)).toBeCloseTo(10008);
+    expect(view.bearing).toBe(90);
+  });
+
+  it('is within what the globe allows', () => {
+    for (const alt of [0, 300, 10000, 40000]) {
+      const { position, view } = cockpitView(0, 0, alt, 0);
+      expect(distanceZoomOf(view.distanceM, TO_CENTRE)).toBeLessThanOrEqual(maxDistanceZoom(position[2], TO_CENTRE));
+    }
   });
 });
 

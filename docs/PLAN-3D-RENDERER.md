@@ -7,7 +7,7 @@ Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
 ## Stand
 
 Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
-PR. Alle Phasen sind gebaut, Phase 6 im Browser aber noch nicht geprüft. Stage und Fokus laufen fest in
+PR. Alle Phasen sind gebaut und im Browser geprüft, die Cockpit-Ansicht auf dem Fokus noch nicht. Stage und Fokus laufen fest in
 `views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
 
 | Datei | Inhalt |
@@ -47,14 +47,15 @@ ausgewählt. Trifft er nichts, endet nur der Fokus, ohne Wetter-Tooltip.
 
 **Andere Kamerabefehle im Fokus (gebaut):** Zoom-Knöpfe, Neigungsregler und Kompass steuern den Fokus. Verschiebt
 etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. „Folgen“ im Flug-Panel läuft über den Fokus
-(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`), Sonden (`follow=plane/sonde:<id>`), Züge und Busse (`follow=vehicle/<key>`, mit eigener Seitenleiste) ebenso. Offen: Cockpit-Ansicht
-(`flightpanel.ts`) und Navigation (`routing/locator.ts`) führen die Kamera noch selbst. Am Ende gibt es nur noch einen Kamera-Führer.
+(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`), Sonden (`follow=plane/sonde:<id>`), Züge und Busse (`follow=vehicle/<key>`, mit eigener Seitenleiste) ebenso. Die Cockpit-Ansicht
+läuft auch über den Fokus (`follow=plane/<hex>&follow.view=cockpit`): Die Quelle gibt über `GeoTarget.view` Richtung, Neigung und Abstand vor. Ziehen beendet sie.
+
+**Navigation bleibt eigenständig (`routing/locator.ts`):** Sie passt nicht in den Fokus. Ziehen beendet dort das Folgen statt um das Objekt zu drehen, die normalen Gesten bleiben an, der Zoom hängt am Tempo, und der Pfeil sitzt per Padding unter der Bildmitte. Beide schließen sich aus: Startet der Fokus, geht das GPS auf „nur anzeigen“ (`track`); bewegt die GPS-Kamera die Karte, lässt der Fokus los.
 
 **Gelände:** Flugzeuge rechnen mit der Geländehöhe (`queryTerrainElevation`), das gilt auch für den Fokus. Noch offen
 ist der Lag bei eingeschaltetem 3D-Gelände:
-Gelände wird in jedem Frame neu gezeichnet, und bewegte Objekte erzwingen Dauer-Neuzeichnen. Es ruckelt auch ohne
-`?geo3d` etwas, Gelände kostet also schon selbst; mit `?geo3d` ist es stärker. Vor Phase 3 mit und ohne Stage
-messen (Kamera stehend und bewegt). Die Stage drosselt bei stehender Kamera auf 15 fps. Das gilt jetzt für alle 3D-Objekte.
+Gelände wird in jedem Frame neu gezeichnet, und bewegte Objekte erzwingen Dauer-Neuzeichnen. Es ruckelte schon vor der
+Stage etwas, Gelände kostet also selbst. Gemessen wurde das nie. Die Stage drosselt bei stehender Kamera auf 15 fps, das gilt für alle 3D-Objekte.
 
 **`moveend` im Fokus (gebaut):** Bei bewegtem Ziel endet in jedem Frame eine Kamerabewegung. `views/globe.ts` und
 `overlay.ts` filtern das über `geo3dFocus`. Der Wind bleibt deshalb ausgeblendet, sobald die Kamera im Fokus

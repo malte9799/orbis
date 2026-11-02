@@ -69,5 +69,5 @@ class MeineObjekte implements GeoPart {
 - **Platzieren:** `frame.place`, `frame.toScreen`, `frame.occluded`, `frame.metresPerPixel`, `frame.isNear`. Nie selbst in Mercator rechnen.
 - **Bausteine:** `GeoLine` (Linien, Bögen mit `arcPoints`), `GeoWall` (Vorhang zum Boden), `GeoPoints` (tausende Punkte), `GeoInstances` (tausende Modelle).
 - **Klick:** `targets()` startet beim Klick den Fokus; `featureAt()` führt zum `click` der Ebene (`clickLayers` enthält dann den Namen, auch ohne echten Map-Layer).
-- **Folgen:** `GeoTarget` mit `position(now)`. `resolve(slug, params)` findet ein Objekt aus der Adresse, `params()` liefert Zusatzwerte (`follow.t=…`). Die Zeit ist die von `update`: So bleibt das Objekt beim Folgen exakt in der Bildmitte.
+- **Folgen:** `GeoTarget` mit `position(now)`. `resolve(slug, params)` findet ein Objekt aus der Adresse, `params()` liefert Zusatzwerte (`follow.t=…`), `view(now)` legt die Kamera fest statt des Nutzers (Cockpit). Die Zeit ist die von `update`: So bleibt das Objekt beim Folgen exakt in der Bildmitte.
 

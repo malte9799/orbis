@@ -10,6 +10,13 @@ import { GeoFrame, type Vec3 } from './frame';
 // gets a framebuffer with a depth buffer of its own and is laid over the map afterwards; the globe
 // itself hides things by a ray test (GeoFrame.occluded, the fragment shader of GeoLine).
 
+/** Where the camera looks from towards a target. */
+export interface GeoView {
+  bearing: number;
+  pitch: number;
+  distanceM: number;
+}
+
 /** Something the camera can be focused on. */
 export interface GeoTarget {
   /** the source it comes from and its name there: the address of the view is source/slug */
@@ -20,6 +27,8 @@ export interface GeoTarget {
   position(now: number): Vec3 | null;
   /** further values of the source for the address (follow.<name>), e.g. a point in time */
   params?(): Record<string, string>;
+  /** set: the source decides where the camera looks from at this time, not the user */
+  view?(now: number): GeoView | null;
   /** the camera starts / stops following it */
   entered?(): void;
   released?(): void;

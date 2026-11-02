@@ -1,7 +1,7 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import { cameraHeld, cameraRelease } from '../../mapctl';
 import { EARTH_RADIUS_M, type Vec3 } from './frame';
-import type { GeoStage, GeoTarget } from './stage';
+import type { GeoStage, GeoTarget, GeoView } from './stage';
 
 // Keeps the camera on an object: dragging turns around it, the wheel zooms towards it, and it stays in
 // the middle of the screen while it moves.
@@ -95,6 +95,27 @@ export function distanceZoomFor(mapZoom: number, altM: number, pitch: number, t:
 export function maxDistanceZoom(altM: number, toCentre: number): number {
   const gap = Math.min(MIN_GAP_RADII, (altM / EARTH_RADIUS_M) * MIN_GAP_SHARE);
   return gap > 0 ? Math.log2(distanceAtZoom0(toCentre) / gap) : Infinity;
+}
+
+/** The zoom of a distance to the object in metres. */
+export function distanceZoomOf(metres: number, toCentre: number): number {
+  return Math.log2(distanceAtZoom0(toCentre) / (metres / EARTH_RADIUS_M));
+}
+
+/** the cockpit looks down this far, and at a point this share of its height ahead: closer the globe does not let it */
+const COCKPIT_PITCH = 75;
+const COCKPIT_AHEAD = 0.28;
+/** the camera sits this far above the aircraft and never lower than this above the ground (m) */
+const COCKPIT_ABOVE_M = 8;
+const COCKPIT_MIN_ALT_M = 20;
+
+/** The point a camera sitting at an aircraft looks at, and the view that puts the camera there. */
+export function cockpitView(lon: number, lat: number, altM: number, track: number): { position: Vec3; view: GeoView } {
+  const camera = Math.max(altM, COCKPIT_MIN_ALT_M) + COCKPIT_ABOVE_M;
+  const distanceM = camera * COCKPIT_AHEAD;
+  const a = rad(COCKPIT_PITCH);
+  const [x, y] = placeAhead(lon, lat, track, (distanceM * Math.sin(a)) / EARTH_RADIUS_M);
+  return { position: [x, y, camera - distanceM * Math.cos(a)], view: { bearing: track, pitch: COCKPIT_PITCH, distanceM } };
 }
 
 const latScale = (lat: number) => Math.log2(Math.cos(rad(Math.max(-MAX_CENTRE_LAT, Math.min(MAX_CENTRE_LAT, lat)))));
@@ -303,10 +324,16 @@ export class GeoFocus {
     const toCentre = frame?.pxDistance ?? this.map.getCanvas().clientHeight * 1.5;
     const raw = Math.min(1, (time - this.startedAt) / FLY_IN_MS);
     const k = raw * raw * (3 - 2 * raw);
-    const aim = focusCentre(p, this.bearing, this.pitch, t);
-    const centre = k < 1 ? slerp(this.from, aim, k) : aim;
+    const view = target.view?.(time);
+    if (view) {
+      this.aimBearing = view.bearing;
+      this.aimPitch = view.pitch;
+      this.wanted = distanceZoomOf(view.distanceM, toCentre);
+    }
     const map = this.map;
     this.aimCamera(dt);
+    const aim = focusCentre(p, this.bearing, this.pitch, t);
+    const centre = k < 1 ? slerp(this.from, aim, k) : aim;
     // a wheel turned on at the limit must not have to be turned all the way back
     const scale = latScale(centre[1]);
     const lowest = distanceZoomFor(map.getMinZoom() + 0.05 - scale, p[2], this.pitch, t, toCentre);
@@ -388,6 +415,8 @@ export class GeoFocus {
 
   private onUp = (e: PointerEvent) => {
     this.pointers.delete(e.pointerId);
+    // the source holds the view: dragging ends it, once the click that ends the drag has been used up
+    if (this.dragged && this.target?.view) setTimeout(() => this.stop());
   };
 
   private onContext = (e: Event) => e.preventDefault();

@@ -680,7 +680,7 @@ export interface PlanesLayerHooks {
   /** called about 4× a second with the planes that are drawn */
   frame(planes: PlaneState[]): void;
   /** what the camera follows for this aircraft */
-  target(hex: string): GeoTarget | null | Promise<GeoTarget | null>;
+  target(hex: string, cockpit: boolean): GeoTarget | null | Promise<GeoTarget | null>;
   /** far out on the globe: all aircraft as simple models at once, only the selected one in full */
   crowd(): boolean;
 }
@@ -730,8 +730,8 @@ export class PlanesLayer implements GeoPart {
     map.getCanvasContainer().appendChild(this.labelBox);
   }
 
-  resolve(slug: string) {
-    return this.hooks.target(slug);
+  resolve(slug: string, params: Record<string, string>) {
+    return this.hooks.target(slug, params.view === 'cockpit');
   }
 
   dispose() {

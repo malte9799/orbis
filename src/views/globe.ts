@@ -1474,15 +1474,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         },
         (lat, lon) => store.setLastPlace({ name: '', lat, lon }),
       );
-      const followIn = (source: string, slug: string) => {
-        void Promise.resolve(geoStage?.resolve(source, slug, {})).then((t) => (t ? geoFocus?.start(t) : geoFocus?.stop()));
+      const followIn = (source: string, slug: string, params: Record<string, string> = {}) => {
+        void Promise.resolve(geoStage?.resolve(source, slug, params)).then((t) => (t ? geoFocus?.start(t) : geoFocus?.stop()));
       };
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
         select: (hex) => extras?.selectFlight(hex),
         fit: (hex) => extras?.fitFlight(hex),
-        map: () => map,
-        follow: (hex) => followIn('plane', hex),
+        follow: (hex, cockpit) => followIn('plane', hex, cockpit ? { view: 'cockpit' } : {}),
         unfollow: () => geoFocus?.stop(),
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map, follow: (mmsi) => followIn('ship', String(mmsi)), unfollow: () => geoFocus?.stop() });
@@ -1491,6 +1490,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       satPanel = new SatPanel(el, { sat: (id) => extras?.satellite(id) ?? null, select: (id) => extras?.selectSatellite(id), map: () => map, follow: (id) => followIn('sat', id), unfollow: () => geoFocus?.stop() });
       // the buttons in the panels go along when the camera lets go
       geoFocus?.listen((t) => {
+        // the GPS camera would move the map and end the focus at once: here the focus wins, it lets go when the user asks for the GPS camera
+        if (t && routing?.locator.mode !== 'off') routing?.locator.set('track');
         const plane = t?.source === 'plane' ? t.slug : null;
         flightPanel?.focusChanged(plane);
         sondePanel?.focusChanged(plane?.startsWith('sonde:') ? plane.slice('sonde:'.length) : null);
