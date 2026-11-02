@@ -474,7 +474,7 @@ class SurfaceModels implements CustomLayerInterface {
 
   /** Smallest zoom at which the models are drawn. */
   get minZoom() {
-    return this.globe ? 11 : 7;
+    return this.globe ? 12 : 7;
   }
 
   /** Build / fetch the models of the current items (once per item). */

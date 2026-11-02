@@ -150,8 +150,8 @@ export class Airport3D {
   mode(): PlaneMode {
     if (!this.planesOn) return 'off';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
-    // a flat icon means nothing on a ball: there it is the model
-    if (this.stage.frame?.globe) return '3d';
+    // far out the selected aircraft is a model: a flat icon means nothing on a ball
+    if (this.onlySelected() && this.stage.frame?.globe) return '3d';
     return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
   }
 

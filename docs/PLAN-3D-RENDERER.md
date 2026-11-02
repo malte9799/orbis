@@ -35,8 +35,9 @@ Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Ab
 | ✓ 5 | Satelliten: `GeoPoints`, Orbit, ISS-Modell, Seitenleiste, Folgen (`follow=sat/<norad>`) | Starlink flüssig, Orbit beim Anklicken | gebaut |
 | 6 | Weltweite Flugzeuge mit Instancing und Detailstufen (`air.ts:64` befüllt heute nur die 2D-Quelle), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 2 mit vollem Weltdatensatz | 2 |
 
-Nach Phase 4 entscheiden: Patch `patches/maplibre-gl@6.14.0.patch` entfernen (Übergang wieder bei Zoom
-11–12)? Der neue Renderer braucht ihn nicht mehr. `SurfaceModels` in `planetmap.ts` kann später folgen.
+Der MapLibre-Patch (Übergang schon bei Zoom 6–7) ist entfernt, die Karte flacht wieder bei Zoom 11–12 ab. Niedrige und hohe Orbits
+erreichen den Übergang damit nie, ihr Zoom-Limit greift vorher. Ganz abschaffen lässt sich die flache Karte nicht: Für Kacheln und Modelle
+reicht die Genauigkeit der Kugel-Rechnung bei hohem Zoom nicht. `SurfaceModels` in `planetmap.ts` kann später folgen.
 
 ## Anforderungen aus den Tests
 
@@ -76,6 +77,6 @@ Erst möglich, wenn es als PR auf GitHub läuft:
 ## Grenzen des Fokus
 
 - GEO-Objekte: Die Kamera kommt nicht näher als etwa 640 km.
-- Niedrige Orbits in hohen Breiten: Der Zoom kann in der Überblendung stoppen.
+- Niedrige Orbits: Der Zoom stoppt bei etwa Zoom 7, bevor die Kamera am Objekt vorbei wäre.
 - Sehr nah am Pol kann MapLibre die Kartenmitte begrenzen, das Objekt rutscht dann aus der Mitte.
 - Die Adresse enthält das Objekt, nicht Zoom, Neigung und Richtung.

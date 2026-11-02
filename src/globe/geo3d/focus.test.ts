@@ -58,6 +58,15 @@ describe('the object stays in the middle of the screen', () => {
   it('nearly during the blend', () => {
     for (const t of [0.25, 0.5, 0.75]) expect(miss([13.4, 52.5, 11000], 7, t, 60, 30)).toBeLessThan(1);
   });
+
+  it('nearly during the blend at the zoom where the map really flattens', () => {
+    for (const t of [0.25, 0.5, 0.75]) expect(miss([13.4, 52.5, 11000], 11.5, t, 60, 30)).toBeLessThan(1);
+  });
+
+  it('stays clear of a low orbit before the map flattens', () => {
+    // the zoom of the map is this plus log2(cos lat): at most this at the equator
+    expect(maxFocusZoom(550000, 60, TO_CENTRE)).toBeLessThan(11);
+  });
 });
 
 describe('zoom limit', () => {
