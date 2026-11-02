@@ -5,7 +5,7 @@
 
 function dataBase(): string {
   // Lokale Overrides für Tests: VITE_DATA_BASE zeigt dann auf einen Ordner mit Snapshot-Dateien.
-  if (import.meta.env.VITE_DATA_BASE) return String(import.meta.env.VITE_DATA_BASE);
+  if (import.meta.env?.VITE_DATA_BASE) return String(import.meta.env?.VITE_DATA_BASE);
   // Node (the data Action) has no location – snapshots are read only in the browser.
   if (typeof location === 'undefined') return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
   // On GitHub Pages (owner.github.io/repo) use that repository, otherwise the main one.
