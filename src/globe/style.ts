@@ -125,6 +125,11 @@ export function buildStyle(nasaDate: string, firesDate: string, projection: 'glo
     glyphs: OFM_GLYPHS,
     sky: {
       'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 5, 1, 7, 0],
+      // MapLibre's defaults (0.8 for both) wash the terrain out white near the horizon, which at a
+      // steep tilt and high zoom fills most of the view and looks like fog. Turn that ground fog off.
+      'sky-horizon-blend': 0,
+      'fog-ground-blend': 0,
+      'horizon-fog-blend': 0,
     },
     sources: {
       satellite: {
