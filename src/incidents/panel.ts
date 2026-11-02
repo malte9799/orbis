@@ -1,7 +1,8 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import { sampleAt } from './track';
 import { assetUrl, loadTrack } from './index';
-import type { IncidentDef, Sample, TrackPoint } from './types';
+import type { IncidentDef, IncidentMedia, Sample, TrackPoint } from './types';
+import { embedOf } from './embed';
 import { IncidentLayer, ftToM, pitchOf, type IncidentMark } from './layer3d';
 import { escapeHtml, safeUrl, toast } from '../util';
 import { glyphSvg } from '../globe/icons';
@@ -87,6 +88,7 @@ export class IncidentPanel {
       else if (act === 'close') this.close();
       else if (act === 'jump') this.seek(Number(el.dataset.t));
       else if (act === 'cue') this.seekCue(Number(el.dataset.i));
+      else if (act === 'embed') this.toggleEmbed(Number(el.dataset.i), el);
     };
     this.body.addEventListener('click', click);
     this.bar.addEventListener('click', click);
@@ -163,11 +165,20 @@ export class IncidentPanel {
   /** Ereignismarken in der Höhe der Spur zur Zeit des Ereignisses (mit eigenem Ort, z. B. der Einschlag: am Boden dort) */
   private markList(): IncidentMark[] {
     const color = { radio: 0xab47bc, impact: 0xef5350, weather: 0x42a5f5, flight: 0xffffff, info: 0xffffff } as const;
-    return this.def!.events.map((e) => {
+    const ev = this.def!.events.map((e) => {
       const s = sampleAt(this.pts, e.t);
       const at = e.at ?? s;
       return { lon: at.lon, lat: at.lat, altM: e.at ? 0 : ftToM(s.alt ?? 0), color: color[e.kind] };
     });
+    // Videos mit Zeit und/oder Ort (von Hand gesetzt): mit Ort am Boden, sonst auf der Spur zur Zeit der Aufnahme
+    const vid = this.def!.media
+      .filter((m) => m.at || m.t != null)
+      .map((m) => {
+        const s = sampleAt(this.pts, m.t ?? this.pts[this.pts.length - 1][0]);
+        const at = m.at ?? s;
+        return { lon: at.lon, lat: at.lat, altM: m.at ? 0 : ftToM(s.alt ?? 0), color: 0x26c6da };
+      });
+    return [...ev, ...vid];
   }
 
   /** Dock: die Radar-/Vorhersage-Zeitleiste weicht, solange die Rekonstruktion läuft */
@@ -387,9 +398,21 @@ export class IncidentPanel {
       const u = safeUrl(l.url);
       return u ? `<a href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.label)} ↗</a>` : escapeHtml(l.label);
     };
+    const mediaRow = (m: IncidentMedia, i: number) => {
+      const can = !!m.file || !!embedOf(m.url);
+      return `<li class="ic-media"><div class="ic-mh"><b>${escapeHtml(m.title)}</b><span>${escapeHtml(m.platform)}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</span></div>
+        <div class="ic-mb">
+          ${can ? `<button type="button" data-act="embed" data-i="${i}">▶ Hier abspielen</button>` : '<span class="ic-nolink">nur als Link</span>'}
+          ${m.t != null ? `<button type="button" data-act="jump" data-t="${m.t}">Zur Stelle</button>` : ''}
+          ${link({ label: 'Original', url: m.url })}
+        </div><div class="ic-embed" data-i="${i}" hidden></div></li>`;
+    };
+    const groups = [...new Set(d.media.map((m) => m.group ?? ''))];
     const media = d.media.length
-      ? `<ul class="ic-notes">${d.media.map((m) => `<li>${link({ label: `${m.title} (${m.platform})`, url: m.url })}${m.credit ? ` · ${escapeHtml(m.credit)}` : ''}</li>`).join('')}</ul>`
-      : '<div class="fp-note">Noch keine Videos eingetragen. Fremdmaterial wird nur verlinkt, nicht gespeichert.</div>';
+      ? groups
+          .map((g) => `${g ? `<div class="ic-mg">${escapeHtml(g)}</div>` : ''}<ul class="ic-medias">${d.media.map((m, i) => ((m.group ?? '') === g ? mediaRow(m, i) : '')).join('')}</ul>`)
+          .join('') + `<div class="fp-note">Die Videos gehören den Urhebern (Quelle: „Original“). ${d.media.some((m) => !m.file && embedOf(m.url)) ? 'Eingebettete Player laden beim Abspielen vom jeweiligen Anbieter und können Cookies setzen.' : ''}</div>`
+      : '<div class="fp-note">Noch keine Videos eingetragen.</div>';
     const a = d.audio;
     const cues = a?.cues?.length
       ? `<ol class="ic-cues">${a.cues.map((c, i) => `<li><button type="button" data-act="cue" data-i="${i}"><time>${Math.floor(c.s / 60)}:${pad2(Math.floor(c.s % 60))}</time><span>${escapeHtml(c.text)}</span></button></li>`).join('')}</ol>`
@@ -426,6 +449,10 @@ export class IncidentPanel {
       .filter((e) => e.t >= w.from && e.t <= w.to)
       .map((e) => `<i class="${e.kind}" style="left:${pos(e.t)}%" title="${escapeHtml(e.label)}"></i>`)
       .join('');
+    const mticks = d.media
+      .filter((m) => m.t != null && m.t >= w.from && m.t <= w.to)
+      .map((m) => `<i class="video" style="left:${pos(m.t!)}%" title="${escapeHtml(`${m.title} (${m.platform})`)}"></i>`)
+      .join('');
     const labels = d.events
       .filter((e) => e.kind === 'impact' && e.t >= w.from && e.t <= w.to)
       .map((e) => `<span style="left:${pos(e.t)}%">Einschlag</span>`)
@@ -438,7 +465,7 @@ export class IncidentPanel {
       <div class="tl-head"></div>
       <div class="tl-track">
         <input type="range" class="tl-range" min="${w.from}" max="${w.to}" step="0.5" value="${this.t}" aria-label="Zeit">
-        <div class="tl-days">${ticks}${labels}</div>
+        <div class="tl-days">${ticks}${mticks}${labels}</div>
       </div>
       <span class="tl-time"></span>
       <div class="ti-ctl">
@@ -483,6 +510,32 @@ export class IncidentPanel {
     }
     if (seeked || Math.abs(a.currentTime - pos) > 0.5) a.currentTime = pos;
     void a.play().catch(() => {});
+  }
+
+  /** Video des Hosters eingebettet zeigen bzw. wieder einklappen (lädt erst beim Klick, vorher kein Kontakt zum Anbieter) */
+  private toggleEmbed(i: number, btn: HTMLElement) {
+    const m = this.def?.media[i];
+    const box = this.body.querySelector<HTMLElement>(`.ic-embed[data-i="${i}"]`);
+    const e = m ? embedOf(m.url) : null;
+    if (!m || !box || (!e && !m.file)) return;
+    if (!box.hidden) {
+      box.hidden = true;
+      box.innerHTML = '';
+      btn.textContent = '▶ Hier abspielen';
+      return;
+    }
+    // ein Video zur Zeit: die anderen und den Funk-Ton anhalten
+    for (const o of this.body.querySelectorAll<HTMLElement>('.ic-embed:not([hidden])')) {
+      o.hidden = true;
+      o.innerHTML = '';
+    }
+    for (const b of this.body.querySelectorAll<HTMLElement>('[data-act=embed]')) b.textContent = '▶ Hier abspielen';
+    this.setPlaying(false);
+    box.innerHTML = m.file
+      ? `<video controls autoplay playsinline preload="metadata" src="${escapeHtml(assetUrl(m.file))}" title="${escapeHtml(`${m.title} (${m.platform})`)}"></video>`
+      : `<iframe src="${escapeHtml(e!.src)}" style="height:${e!.height}px" title="${escapeHtml(`${m.title} (${m.platform})`)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+    box.hidden = false;
+    btn.textContent = '✕ Schließen';
   }
 
   /** Klick auf eine Zeile des Transkripts: zur Stelle springen (Spur und Clip) */

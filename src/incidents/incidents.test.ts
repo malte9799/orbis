@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { indexAt, sampleAt } from './track';
+import { embedOf } from './embed';
 import type { TrackPoint } from './types';
 
 const pts: TrackPoint[] = [
@@ -57,5 +58,20 @@ describe('Flugspur', () => {
   it('klemmt außerhalb der Spur', () => {
     expect(sampleAt(pts, 0).lat).toBe(10);
     expect(sampleAt(pts, 999).t).toBe(120);
+  });
+});
+
+describe('Einbettung', () => {
+  it('erkennt die Hoster', () => {
+    expect(embedOf('https://www.facebook.com/reel/1643065457610833')?.src).toContain('plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Freel%2F1643065457610833');
+    expect(embedOf('https://www.reddit.com/r/aviation/comments/1xlcp7p/dashcam_footage/?utm=x')?.src).toBe('https://embed.reddit.com/r/aviation/comments/1xlcp7p/dashcam_footage/?embed=true&theme=dark&showmedia=true');
+    expect(embedOf('https://youtu.be/abc123')?.src).toContain('youtube-nocookie.com/embed/abc123');
+    expect(embedOf('https://x.com/AirNavRadar/status/2117026892192579691')?.src).toContain('id=2117026892192579691');
+  });
+  it('lässt Unbekanntes und Kaputtes als nicht einbettbar', () => {
+    expect(embedOf('https://www.instagram.com/reels/DfNekoeguTB/')).toBeNull();
+    expect(embedOf('https://example.com/video')).toBeNull();
+    expect(embedOf('kein link')).toBeNull();
+    expect(embedOf('https://www.reddit.com/r/aviation/')).toBeNull();
   });
 });

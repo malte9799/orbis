@@ -18,13 +18,20 @@ export interface IncidentEvent {
   src?: IncidentLink;
 }
 
-/** Fremdmaterial (Videos, Beiträge): nur verlinkt, nichts davon liegt im Projekt */
+/** Fremdmaterial (Videos, Beiträge): nur eingebettet bzw. verlinkt, nichts davon liegt im Projekt */
 export interface IncidentMedia {
   title: string;
-  /** woher: "X", "YouTube" … */
+  /** woher: "X", "Instagram" … */
   platform: string;
   url: string;
+  /** Videodatei im Projekt (Pfad unter public/): wird direkt im Panel abgespielt; hat Vorrang vor der Einbettung des Hosters */
+  file?: string;
+  /** Überschrift in der Liste ("Einschlag", "Danach" …) */
+  group?: string;
+  /** kurzer Zusatz (z. B. "lang, fern") */
+  note?: string;
   credit?: string;
+  /** Zeit (Unix-s, UTC) und Ort der Aufnahme: setzt Marke auf Zeitleiste und Karte; beides optional */
   t?: number;
   at?: { lat: number; lon: number };
 }
