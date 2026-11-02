@@ -4,8 +4,11 @@ import { assetUrl, loadTrack } from './index';
 import type { IncidentDef, IncidentMedia, Sample, TrackPoint } from './types';
 import { embedOf } from './embed';
 import { IncidentScene, ftToM, pitchOf, type IncidentMark } from './layer3d';
-import type { GeoStage } from '../globe/geo3d/stage';
+import type { GeoFocus } from '../globe/geo3d/focus';
+import type { GeoStage, GeoTarget } from '../globe/geo3d/stage';
 import { escapeHtml, safeUrl, toast } from '../util';
+import { OPTIONS_EVENT } from '../store';
+import { altTxt, climbFtTxt, kntTxt, localize } from './units';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
 import '../globe/flightpanel.css';
@@ -18,6 +21,8 @@ export interface IncidentPanelHooks {
   map(): MlMap | null;
   /** schließt die anderen rechten Panels */
   closeOthers(): void;
+  /** der Kamera-Fokus der Karte (src/globe/geo3d/focus.ts): „Folgen“ läuft darüber */
+  focus(): GeoFocus | null;
   /** die 3D-Bühne der Karte (src/globe/geo3d), auf der die Rekonstruktion gezeichnet wird */
   stage(): GeoStage | null;
   /** unterer Dock der Karte (Legende/Zeitleiste): die Wiedergabeleiste kommt hierhin */
@@ -33,7 +38,6 @@ const clock = (t: number, offsetH = 0) => {
   const d = new Date((t + offsetH * 3600) * 1000);
   return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}`;
 };
-const ftTxt = (v: number | null) => (v == null ? '–' : `${Math.round(v).toLocaleString('de-DE')} ft`);
 
 export class IncidentPanel {
   private root = document.createElement('aside');
@@ -54,9 +58,12 @@ export class IncidentPanel {
   private win: 'all' | 'end' = 'end';
   private speed = 5;
   private playing = false;
-  private follow = true;
+  /** die Kamera folgt dem Flugzeug (Zustand des Fokus) */
+  private following = false;
+  /** Wiedergabezeit als Funktion der Uhr: ab `at` (ms, performance.now) läuft sie von `t` aus mit `speed` weiter */
+  private base = { t: 0, at: 0 };
+  private target: GeoTarget | null = null;
   private raf = 0;
-  private last = 0;
   private lastUi = 0;
   private open_ = new Set<string>(['events', 'funk']);
 
@@ -87,8 +94,7 @@ export class IncidentPanel {
       const act = el.dataset.act;
       if (act === 'play') this.setPlaying(!this.playing);
       else if (act === 'win') this.setWindow(el.dataset.v === 'all' ? 'all' : 'end');
-      else if (act === 'follow') this.setFollow(!this.follow);
-      else if (act === 'tilt') this.tilt();
+      else if (act === 'follow') this.setFollow(!this.following);
       else if (act === 'mute') this.setMuted(!this.muted);
       else if (act === 'close') this.close();
       else if (act === 'jump') this.seek(Number(el.dataset.t));
@@ -100,6 +106,12 @@ export class IncidentPanel {
     this.bar.addEventListener('input', (e) => {
       const el = e.target as HTMLInputElement;
       if (el.classList.contains('tl-range')) this.seek(Number(el.value), true);
+    });
+    // Einheiten in den Einstellungen geändert: Texte und Werte neu setzen
+    window.addEventListener(OPTIONS_EVENT, () => {
+      if (!this.def || !this.layer) return;
+      this.render();
+      this.apply(true);
     });
     this.bar.addEventListener('change', (e) => {
       const el = e.target as HTMLSelectElement;
@@ -132,10 +144,12 @@ export class IncidentPanel {
     this.win = 'end';
     this.t = def.focus.from;
     this.speed = 5;
-    this.follow = true;
+    this.rebase();
     const stage = this.h.stage();
     if (!stage) return;
     this.layer = new IncidentScene(map);
+    this.target = this.makeTarget(def);
+    this.layer.target = this.target;
     stage.add(this.layer);
     this.lastIdx = -2;
     this.layer.setFullTrack(this.pts.map((p, i) => [p[2], p[1], ftToM(p[3] ?? sampleAt(this.pts, this.pts[i][0]).alt ?? 0)]));
@@ -148,9 +162,13 @@ export class IncidentPanel {
     this.bar.hidden = false;
     this.dockOn(true);
     this.render();
-    const s = sampleAt(this.pts, this.t);
-    map.easeTo({ center: [s.lon, s.lat], zoom: 9.5, pitch: Math.max(map.getPitch(), 60), duration: 1200 });
     this.apply(true);
+    // die Kamera folgt über den Fokus der Karte; gekippt starten
+    const focus = this.h.focus();
+    if (focus) {
+      focus.start(this.target);
+      focus.setPitch(60, true);
+    }
   }
 
   close() {
@@ -162,6 +180,10 @@ export class IncidentPanel {
     this.root.hidden = true;
     this.bar.hidden = true;
     this.dockOn(false);
+    const focus = this.h.focus();
+    if (focus?.target === this.target && this.target) focus.stop();
+    this.target = null;
+    this.following = false;
     if (this.layer) this.h.stage()?.remove(this.layer);
     this.layer = null;
   }
@@ -196,7 +218,18 @@ export class IncidentPanel {
     this.h.dockChanged();
   }
 
+  private rebase(now = performance.now()) {
+    this.base = { t: this.t, at: now };
+  }
+
+  /** Wiedergabezeit zu einem Zeitpunkt der Uhr (ms): beim Abspielen aus dem Anker, sonst die stehende Zeit */
+  private timeAt(now: number): number {
+    if (!this.playing || !this.def) return this.t;
+    return Math.min(this.win_.to, this.base.t + ((now - this.base.at) / 1000) * this.speed);
+  }
+
   private setSpeed(v: number) {
+    this.rebase();
     this.speed = v;
     const sel = this.bar.querySelector<HTMLSelectElement>('.ic-speed');
     if (sel) sel.value = String(v);
@@ -210,23 +243,19 @@ export class IncidentPanel {
   }
 
   private setPlaying(on: boolean) {
-    this.playing = on;
     cancelAnimationFrame(this.raf);
-    this.last = 0;
-    if (on) {
-      if (this.t >= this.win_.to - 0.5) this.t = this.win_.from;
-      this.raf = requestAnimationFrame((n) => this.frame(n));
-    }
+    if (on && this.t >= this.win_.to - 0.5) this.t = this.win_.from;
+    this.playing = on;
+    this.rebase();
+    if (on) this.raf = requestAnimationFrame(() => this.frame());
     this.syncAudio();
     this.syncPlayBtn();
   }
 
-  private frame(now: number) {
+  private frame() {
     if (!this.playing || !this.def) return;
-    const dt = this.last ? Math.min(0.25, (now - this.last) / 1000) : 0;
-    this.last = now;
     const before = this.t;
-    this.t += dt * this.speed;
+    this.t = this.timeAt(performance.now());
     // Beginn des Funk-Clips erreicht: ab hier 1× (der Ton läuft nur in Echtzeit mit)
     const start = this.def.audio?.startUnix;
     if (start != null && before < start && this.t >= start && this.speed !== 1) {
@@ -240,12 +269,13 @@ export class IncidentPanel {
       return;
     }
     this.apply();
-    this.raf = requestAnimationFrame((n) => this.frame(n));
+    this.raf = requestAnimationFrame(() => this.frame());
   }
 
   private seek(t: number, fromSlider = false) {
     if (!this.def) return;
     this.t = Math.min(this.win_.to, Math.max(this.win_.from, t));
+    this.rebase();
     this.apply(!fromSlider);
     this.syncAudio(true);
   }
@@ -253,24 +283,40 @@ export class IncidentPanel {
   private setWindow(w: 'all' | 'end') {
     this.win = w;
     this.t = Math.min(this.win_.to, Math.max(this.win_.from, this.t));
+    this.rebase();
     this.render();
     this.apply(true);
   }
 
-  private setFollow(on: boolean) {
-    this.follow = on;
+  /** Der Kamera-Fokus hat gewechselt (auch durch Ziehen, andere Objekte, Navigation): Knopf folgt */
+  focusChanged(on: boolean) {
+    this.following = on;
     this.bar.querySelector('[data-act=follow]')?.classList.toggle('on', on);
   }
 
-  private tilt() {
-    const map = this.h.map();
-    if (map) map.easeTo({ pitch: map.getPitch() > 20 ? 0 : 65, duration: 600 });
+  private setFollow(on: boolean) {
+    const focus = this.h.focus();
+    if (!focus || !this.target) return;
+    if (on) focus.start(this.target);
+    else if (focus.target === this.target) focus.stop();
+  }
+
+  /** Fokus-Ziel: das Flugzeug zur Wiedergabezeit; der Fokus fragt es in jedem Frame ab */
+  private makeTarget(def: IncidentDef): GeoTarget {
+    return {
+      source: 'incident',
+      slug: def.id,
+      label: def.aircraft.callsign,
+      position: (now) => {
+        const s = sampleAt(this.pts, this.timeAt(now));
+        return [s.lon, s.lat, ftToM(s.alt ?? 0)];
+      },
+    };
   }
 
   /** Zustand zur Zeit this.t auf Karte, 3D-Ebene und im Panel */
   private apply(ui = false) {
-    const map = this.h.map();
-    if (!map || !this.def) return;
+    if (!this.def) return;
     const s = sampleAt(this.pts, this.t);
     const end = this.pts[this.pts.length - 1][0];
     // nach dem letzten Punkt bleibt das Flugzeug an dessen Position und sinkt weiter (Höhe fortgeschrieben) bis zum Boden
@@ -285,17 +331,6 @@ export class IncidentPanel {
       scene.setTrail(this.trailTo(s));
     }
     scene.setPose(gone ? null : { lon: s.lon, lat: s.lat, altM: ftToM(alt), track: s.trk, pitch: this.pitchAt(s) });
-    // jumpTo/panBy würden eine laufende Kamerafahrt (Öffnen, „Ansicht kippen“) abbrechen: währenddessen nicht nachführen
-    if (this.follow && !gone && !map.isMoving()) {
-      // das Modell schwebt in der Höhe: bei gekippter Karte liegt der Bodenpunkt (Schatten) woanders auf dem Bild,
-      // also die Kamera um den Bildschirmabstand zum Modell verschieben, nicht auf den Bodenpunkt zentrieren
-      const off = scene.offsetToCentre();
-      const canvas = map.getCanvas();
-      // unplausible Werte (Modell weit außerhalb des Bildes) nie als Verschiebung nehmen: dann auf den Bodenpunkt zentrieren
-      if (off && Math.hypot(off[0], off[1]) < Math.max(canvas.clientWidth, canvas.clientHeight)) {
-        if (Math.hypot(off[0], off[1]) > 0.5) map.panBy(off, { duration: 0 });
-      } else map.jumpTo({ center: [s.lon, s.lat] });
-    }
     const now = performance.now();
     if (ui || now - this.lastUi > 90) {
       this.lastUi = now;
@@ -331,7 +366,7 @@ export class IncidentPanel {
   private readout(s: Sample) {
     const q = <T extends HTMLElement>(sel: string) => this.body.querySelector<T>(sel);
     const bq = <T extends HTMLElement>(sel: string) => this.bar.querySelector<T>(sel);
-    const readoutTxt = [s.alt == null ? null : ftTxt(s.alt) + (s.altHeld ? ' *' : ''), `${Math.round(s.gs)} kn`, s.vs == null ? null : `${Math.round(s.vs).toLocaleString('de-DE')} ft/min`].filter(Boolean).join(' · ');
+    const readoutTxt = [s.alt == null ? null : altTxt(s.alt, true) + (s.altHeld ? ' *' : ''), kntTxt(s.gs), s.vs == null ? null : climbFtTxt(s.vs, true)].filter(Boolean).join(' · ');
     const head = bq('.tl-head');
     if (head) head.innerHTML = `<b>${clock(this.t)} UTC</b><span>${clock(this.t, -5)} Florida · ${readoutTxt}</span>`;
     const tl = bq('.tl-time');
@@ -344,11 +379,11 @@ export class IncidentPanel {
     }
     const set = (k: string, v: string) => {
       const el = q(`[data-metric="${k}"] b`);
-      if (el) el.textContent = v;
+      if (el) el.innerHTML = v;
     };
-    set('alt', s.alt == null ? '–' : ftTxt(s.alt) + (s.altHeld ? ' *' : ''));
-    set('gs', `${Math.round(s.gs)} kn`);
-    set('vs', s.vs == null ? '–' : `${Math.round(s.vs).toLocaleString('de-DE')} ft/min`);
+    set('alt', s.alt == null ? '–' : altTxt(s.alt, true) + (s.altHeld ? ' *' : ''));
+    set('gs', kntTxt(s.gs));
+    set('vs', s.vs == null ? '–' : climbFtTxt(s.vs, true));
     set('trk', `${Math.round(s.trk)}°`);
     const cur = this.body.querySelector<SVGElement>('.ic-chart .cursor');
     const dot = this.body.querySelector<SVGElement>('.ic-chart .dot');
@@ -440,14 +475,14 @@ export class IncidentPanel {
     this.body.innerHTML = `
       ${this.chart()}
       <div class="sp-tiles" style="margin-top:8px">
-        ${tile('Höhe', '–', { metric: 'alt' })}${tile('Tempo (über Grund)', '–', { metric: 'gs' })}
-        ${tile('Steigen/Sinken', '–', { metric: 'vs' })}${tile('Kurs', '–', { metric: 'trk' })}
+        ${tile('Höhe', '–', { metric: 'alt' })}${tile('Steigen/Sinken', '–', { metric: 'vs' })}
+        ${tile('Tempo (über Grund)', '–', { metric: 'gs' })}${tile('Kurs', '–', { metric: 'trk' })}
       </div>
-      ${detail('events', 'Ereignisse', `<ul class="ic-events">${ev.map((e) => `<li><button type="button" data-act="jump" data-t="${e.t}" class="${e.kind}"><b>${escapeHtml(e.label)}</b><time>${clock(e.t)}</time>${e.text ? `<span>${escapeHtml(e.text)}</span>` : ''}</button></li>`).join('')}</ul>`)}
+      ${detail('events', 'Ereignisse', `<ul class="ic-events">${ev.map((e) => `<li><button type="button" data-act="jump" data-t="${e.t}" class="${e.kind}"><b>${localize(escapeHtml(e.label), true)}</b><time>${clock(e.t)}</time>${e.text ? `<span>${localize(escapeHtml(e.text), true)}</span>` : ''}</button></li>`).join('')}</ul>`)}
       ${detail('funk', 'Funkverkehr', audio)}
       ${detail('media', 'Videos & Berichte', media)}
-      ${detail('info', 'Zum Ereignis', `<div class="fp-note">${escapeHtml(d.summary)}<br>${escapeHtml(d.aircraft.type)} ${escapeHtml(d.aircraft.reg)} · ${escapeHtml(d.aircraft.from)} → ${escapeHtml(d.aircraft.to)}</div>`)}
-      ${detail('notes', 'Hinweise zu den Daten', `<ul class="ic-notes">${d.dataNotes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul><div class="fp-note">* Höhe fortgeschrieben (letzte bekannte Sinkrate), keine Messung</div>`)}
+      ${detail('info', 'Zum Ereignis', `<div class="fp-note">${localize(escapeHtml(d.summary), true)}<br>${escapeHtml(d.aircraft.type)} ${escapeHtml(d.aircraft.reg)} · ${escapeHtml(d.aircraft.from)} → ${escapeHtml(d.aircraft.to)}</div>`)}
+      ${detail('notes', 'Hinweise zu den Daten', `<ul class="ic-notes">${d.dataNotes.map((n) => `<li>${localize(escapeHtml(n), true)}</li>`).join('')}</ul><div class="fp-note">* Höhe fortgeschrieben (letzte bekannte Sinkrate), keine Messung</div>`)}
       ${detail('src', 'Quellen', `<ul class="ic-notes">${d.sources.map((s) => `<li>${link(s)}</li>`).join('')}</ul>`)}`;
     this.renderBar();
     this.readout(sampleAt(this.pts, this.t));
@@ -461,7 +496,7 @@ export class IncidentPanel {
     const pos = (t: number) => ((t - w.from) / Math.max(1, w.to - w.from)) * 100;
     const ticks = d.events
       .filter((e) => e.t >= w.from && e.t <= w.to)
-      .map((e) => `<i class="${e.kind}" style="left:${pos(e.t)}%" title="${escapeHtml(e.label)}"></i>`)
+      .map((e) => `<i class="${e.kind}" style="left:${pos(e.t)}%" title="${escapeHtml(localize(e.label))}"></i>`)
       .join('');
     const mticks = d.media
       .filter((m) => m.t != null && m.t >= w.from && m.t <= w.to)
@@ -487,8 +522,7 @@ export class IncidentPanel {
         <button type="button" class="ti-chip ${this.win === 'end' ? 'on' : ''}" data-act="win" data-v="end" data-tip="Nur die letzten Minuten">Endphase</button>
         <button type="button" class="ti-chip ${this.win === 'all' ? 'on' : ''}" data-act="win" data-v="all" data-tip="Von Austin bis zum Einschlag">Ganzer Flug</button>
         ${d.audio?.startUnix != null ? btn('mute', 'Ton an/aus', '', 'ti-mute') : ''}
-        ${btn('follow', 'Kamera folgt dem Flugzeug', svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'), this.follow ? 'on' : '')}
-        ${btn('tilt', 'Karte kippen / aufrichten', svg('<path d="M3 17l9-12 9 12z"/>'))}
+        ${btn('follow', 'Kamera folgt dem Flugzeug', svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'), this.following ? 'on' : '')}
         ${btn('close', 'Rekonstruktion schließen', svg('<path d="M6 6l12 12M18 6L6 18"/>'))}
       </div>`;
     this.syncPlayBtn();

@@ -1507,6 +1507,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
         vehiclePanel?.focusChanged(t?.source === 'vehicle' ? t.slug : null);
         satPanel?.focusChanged(t?.source === 'sat' ? t.slug : null);
+        incidentPanel?.focusChanged(t?.source === 'incident');
       });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
@@ -1527,6 +1528,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       incidentPanel = new IncidentPanel(el, {
         map: () => map,
         stage: () => geoStage,
+        focus: () => geoFocus,
         dock: dockEl,
         dockChanged: () => hud?.syncSheet(),
         closeOthers: () => {

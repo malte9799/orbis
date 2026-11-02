@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Map as MlMap } from 'maplibre-gl';
 import type { GeoFrame, Vec3 } from '../globe/geo3d/frame';
 import { GeoLine } from '../globe/geo3d/line';
-import type { GeoPart } from '../globe/geo3d/stage';
+import type { GeoPart, GeoTarget } from '../globe/geo3d/stage';
 import { GeoWall } from '../globe/geo3d/wall';
 import { airliner } from '../globe/planes3d';
 
@@ -67,6 +67,10 @@ const FLATTEN = new THREE.Matrix4().makeScale(1, 1, 0.001);
 
 export class IncidentScene implements GeoPart {
   readonly object = new THREE.Group();
+  /** so heißt die Quelle in der Adresse (follow=incident/<id>) */
+  readonly source = 'incident';
+  /** das Flugzeug als Ziel des Kamera-Fokus (Klick darauf folgt ihm) */
+  target: GeoTarget | null = null;
   private plane = new THREE.Mesh(airliner(0.5), new THREE.MeshLambertMaterial({ color: 0xff5a4a, side: THREE.DoubleSide }));
   private shadow = new THREE.Mesh(airliner(0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
   private markGeo = new THREE.SphereGeometry(1, 14, 10);
@@ -79,9 +83,6 @@ export class IncidentScene implements GeoPart {
   private drop: GeoLine | null = null;
   private pose: IncidentPose | null = null;
   private trailLen = 0;
-  /** Bildschirmposition (CSS px) des Modells im zuletzt gezeichneten Bild, null ohne Modell */
-  private screenPos: [number, number] | null = null;
-
   constructor(private map: MlMap) {
     for (const m of [this.plane, this.shadow]) m.matrixAutoUpdate = false;
     this.object.add(this.shadow, this.plane, this.wall.object);
@@ -167,11 +168,8 @@ export class IncidentScene implements GeoPart {
     this.map.triggerRepaint();
   }
 
-  /** Verschiebung in px, die das Modell in die Kartenmitte bringt (null: noch nicht gezeichnet) */
-  offsetToCentre(): [number, number] | null {
-    if (!this.screenPos) return null;
-    const c = this.map.project(this.map.getCenter());
-    return [this.screenPos[0] - c.x, this.screenPos[1] - c.y];
+  targets(): GeoTarget[] {
+    return this.target && this.pose ? [this.target] : [];
   }
 
   private lift(lon: number, lat: number) {
@@ -180,7 +178,6 @@ export class IncidentScene implements GeoPart {
 
   update(frame: GeoFrame, now: number) {
     const p = this.pose;
-    this.screenPos = null;
     const lift = p ? this.lift(p.lon, p.lat) : 0;
     this.plane.visible = this.shadow.visible = !!p && !frame.occluded(p.lon, p.lat, p.altM + lift);
     if (p) {
@@ -188,7 +185,6 @@ export class IncidentScene implements GeoPart {
       const scale = Math.max(1, (MIN_PX * mpp) / MODEL_LENGTH_M);
       frame.place(this.plane.matrix, p.lon, p.lat, p.altM + lift, p.track, scale).multiply(new THREE.Matrix4().makeRotationX(rad(p.pitch)));
       frame.place(this.shadow.matrix, p.lon, p.lat, lift + 0.5, p.track, scale).multiply(FLATTEN);
-      this.screenPos = frame.toScreen(p.lon, p.lat, p.altM + lift);
     }
     for (const r of this.runs) r.line.update(frame, now, lift);
     if (this.drop) {

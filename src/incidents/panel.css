@@ -197,8 +197,7 @@
   font-size: 0.68rem;
 }
 /* schmale Ansichten: nur das Wichtigste neben dem Regler */
-.globe-view:not([data-layout='desktop']) .ti-chip,
-.globe-view:not([data-layout='desktop']) .ti-b[data-act='tilt'] {
+.globe-view:not([data-layout='desktop']) .ti-chip {
   display: none;
 }
 
@@ -327,4 +326,17 @@
 }
 .ic-nolink {
   color: var(--text-2);
+}
+
+/* Fuß in Klammern neben der gewählten Einheit: klein */
+.ic-ft {
+  font-size: 0.78em;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* in den Messwert-Kacheln steht die Fuß-Angabe in einer eigenen Zeile */
+.sp-tile b .ic-ft {
+  display: block;
+  margin-top: 1px;
 }
