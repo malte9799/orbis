@@ -42,7 +42,8 @@ export type ExtraGlyph =
   | 'money'
   | 'placard'
   | 'crowd'
-  | 'vote';
+  | 'vote'
+  | 'cross';
 export type GlyphId = EventKind | ExtraGlyph;
 
 /** Filled silhouettes (pointing north) for aircraft & objects – used as recolourable SDF icons. */
@@ -161,6 +162,8 @@ const GLYPHS: Record<GlyphId, Part[]> = {
     { mode: 'fill', d: 'M9.3 4.6a2.4 2.4 0 1 1 0 4.8a2.4 2.4 0 0 1 0-4.8zM16.6 6.4a1.9 1.9 0 1 1 0 3.8a1.9 1.9 0 0 1 0-3.8z' },
     { mode: 'stroke', width: 2, d: 'M4 20.2c0-3 2.4-5 5.3-5s5.3 2 5.3 5M13.6 19.4c.5-2.2 2-3.6 4-3.6 1.9 0 3.4 1.3 4 3.4' },
   ],
+  // Gesundheitseinrichtungen: Kreuz
+  cross: [{ mode: 'fill', d: 'M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z' }],
   vote: [
     { mode: 'fill', d: 'M4 12.5h16v7.5H4z' },
     { mode: 'stroke', width: 2, d: 'M10 12.5V10h4v2.5 M9.3 2.8h6.1V8.4l-1.7 1.3H9.9L9.3 7.9z M10.6 6l1.4 1.3 2.2-2.3' },
