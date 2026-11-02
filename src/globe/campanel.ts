@@ -5,13 +5,13 @@ import { attachHls } from './hls';
 import { CamViewLayer } from './camview3d';
 import { CARDINAL } from './layers/shared/cams';
 import { category, tile } from './sidepanel';
-import { camdirWritable, cloudKey, hasRemoteDir, poseOf, previewDir, removeCamDir, saveCamDir, type CamPose } from '../api/camdircloud';
+import { camdirWritable, cloudKey, hasRemoteDir, previewDir, removeCamDir, saveCamDir } from '../api/camdircloud';
 import './flightpanel.css';
 
 // Right-hand panel of the selected webcam (like the flight and ship panel): live picture, viewing
 // direction and source. The 3D board with the picture stands on the map as long as the panel is open.
 // Editing happens on the map itself: the camera is dragged to its place, a grip at the end of the view cone turns
-// the viewing direction, the panel holds the exact values (direction, height, tilt, roll, field of view).
+// the viewing direction, the panel holds the exact direction value.
 
 export interface CamPanelHooks {
   map(): MlMap | null;
@@ -26,14 +26,11 @@ export interface CamSelection {
 
 const COLOR = '#00bfa5';
 
-// typical camera pose, used until the direction editor has worked one out
-const DEFAULT_POSE: CamPose = { down: 12, alt: 6, roll: 0, fov: 36 };
 const M_LAT = 110574; // metres per degree of latitude
 const GRIP_PX = 70; // distance of the direction grip from the camera on screen
-const DEFAULT_REACH = 90;
 
 interface Field {
-  id: 'dir' | 'alt' | 'down' | 'roll' | 'fov';
+  id: 'dir';
   label: string;
   unit: string;
   min: number;
@@ -43,12 +40,7 @@ interface Field {
 }
 const FIELDS: Field[] = [
   { id: 'dir', label: 'Richtung', unit: '°', min: 0, max: 360, step: 0.5, dec: 1 },
-  { id: 'alt', label: 'Höhe über Boden', unit: ' m', min: 0.5, max: 80, step: 0.5, dec: 1 },
-  { id: 'down', label: 'Neigung nach unten', unit: '°', min: -10, max: 60, step: 0.5, dec: 1 },
-  { id: 'roll', label: 'Rollen', unit: '°', min: -20, max: 20, step: 0.5, dec: 1 },
-  { id: 'fov', label: 'Sichtfeld (vertikal)', unit: '°', min: 15, max: 90, step: 1, dec: 0 },
 ];
-const REACH: Field = { id: 'dir', label: 'Reichweite', unit: ' m', min: 30, max: 3000, step: 10, dec: 0 };
 const row = (f: Field, key: string) =>
   `<label class="ce-row" data-f="${key}"><span>${f.label}</span><input type="range" min="${f.min}" max="${f.max}" step="${f.step}"><input type="number" min="${f.min}" max="${f.max}" step="${f.step}" aria-label="${f.label}"><i>${f.unit}</i></label>`;
 
@@ -61,15 +53,12 @@ interface Edit {
   lng: number;
   lat: number;
   dir: number;
-  v: { alt: number; down: number; roll: number; fov: number };
-  poseSet: boolean;
   saved: boolean;
   pin: Marker;
   grip: Marker;
   raf: number;
 }
 const norm = (d: number) => (Math.round((((d % 360) + 360) % 360) * 10) / 10) % 360;
-const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
 
 export class CamPanel {
   private root = document.createElement('aside');
@@ -78,8 +67,6 @@ export class CamPanel {
   private view = new CamViewLayer();
   private open_ = new Set<string>();
   private ed: Edit | null = null;
-  /** how far the picture reaches over the ground before it continues as a fading wall (metres) */
-  private reach = DEFAULT_REACH;
   private media: { video?: HTMLVideoElement; image?: string } = {};
   /** called when the panel opens, so the other panels can step aside */
   onOpen?: () => void;
@@ -147,7 +134,6 @@ export class CamPanel {
     const map = this.h.map();
     if (!s || !map || this.ed) return;
     const p = s.p;
-    const stored = poseOf(p);
     const d = this.dir();
     const key = this.key();
     const pin = document.createElement('div');
@@ -164,8 +150,6 @@ export class CamPanel {
       lng: s.lng,
       lat: s.lat,
       dir: d >= 0 ? norm(d) : 0,
-      v: { ...(stored ?? DEFAULT_POSE) },
-      poseSet: !!stored,
       saved: hasRemoteDir(key),
       pin: new Marker({ element: pin, draggable: true }).setLngLat([s.lng, s.lat]).addTo(map),
       grip: new Marker({ element: grip, draggable: true }).setLngLat([s.lng, s.lat]).addTo(map),
@@ -205,10 +189,6 @@ export class CamPanel {
     ed.grip.setLngLat([ed.lng + (Math.sin(a) * m) / kx, ed.lat + (Math.cos(a) * m) / M_LAT]);
   }
 
-  private editPose(ed: Edit): CamPose {
-    return { down: ed.v.down, alt: ed.v.alt, roll: ed.v.roll, fov: ed.v.fov };
-  }
-
   /** position of the camera if it was moved away from where it was found */
   private movedPos(ed: Edit): [number, number] | undefined {
     const m = Math.hypot((ed.lng - ed.olng) * 111320 * Math.cos((ed.lat * Math.PI) / 180), (ed.lat - ed.olat) * M_LAT);
@@ -223,18 +203,19 @@ export class CamPanel {
     this.syncEdit();
     // the layer data follows at most once per frame
     cancelAnimationFrame(ed.raf);
-    ed.raf = requestAnimationFrame(() => previewDir(ed.key, ed.dir, ed.poseSet ? this.editPose(ed) : undefined, this.movedPos(ed)));
-    this.view.update({ lon: ed.lng, lat: ed.lat, dir: ed.dir, pose: this.editPose(ed), reach: this.reach, ...this.media, anchor: this.root });
+    // any pose stored in the cloud stays untouched (the 3D ground projection is off for now)
+    ed.raf = requestAnimationFrame(() => previewDir(ed.key, ed.dir, undefined, this.movedPos(ed)));
+    this.view.update({ lon: ed.lng, lat: ed.lat, dir: ed.dir, ...this.media, anchor: this.root });
   }
 
   private syncEdit() {
     const ed = this.ed;
     if (!ed) return;
-    const vals: Record<string, number> = { dir: ed.dir, alt: ed.v.alt, down: ed.v.down, roll: ed.v.roll, fov: ed.v.fov, reach: this.reach };
+    const vals: Record<string, number> = { dir: ed.dir };
     for (const [id, val] of Object.entries(vals)) {
       const r = this.body.querySelector(`[data-f="${id}"]`);
       if (!r) continue;
-      const f = id === 'reach' ? REACH : FIELDS.find((x) => x.id === id)!;
+      const f = FIELDS.find((x) => x.id === id)!;
       const [range, num] = r.querySelectorAll('input');
       range.value = String(val);
       if (document.activeElement !== num) num.value = val.toFixed(f.dec);
@@ -253,39 +234,17 @@ export class CamPanel {
     if (id === 'dir') {
       ed.dir = norm(val);
       this.placeGrip();
-    } else {
-      const f = FIELDS.find((x) => x.id === id)!;
-      ed.v[id] = Math.round(clamp(val, f.min, f.max) * 100) / 100;
-      ed.poseSet = true;
     }
     this.changed();
   }
 
-  private setReach(val: number) {
-    if (!Number.isFinite(val)) return;
-    this.reach = clamp(val, REACH.min, REACH.max);
-    if (this.ed) this.changed();
-    else {
-      const body = this.body.querySelector('[data-f="reach"]');
-      if (body) {
-        const [range, num] = body.querySelectorAll('input');
-        range.value = String(this.reach);
-        if (document.activeElement !== num) num.value = String(Math.round(this.reach));
-      }
-      const s = this.sel;
-      const d = this.dir();
-      if (s && d >= 0) this.view.update({ lon: s.lng, lat: s.lat, dir: d, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
-    }
-  }
-
-  /** wires the sliders / number fields (edit values and the reach) */
+  /** wires the sliders / number fields (the direction) */
   private bindRows() {
     this.body.querySelectorAll<HTMLElement>('.ce-row').forEach((r) => {
       const id = r.dataset.f!;
       const [range, num] = r.querySelectorAll('input');
-      const set = (x: number) => (id === 'reach' ? this.setReach(x) : this.setField(id as Field['id'], x));
-      range.addEventListener('input', () => set(Number(range.value)));
-      num.addEventListener('change', () => set(Number(num.value)));
+      range.addEventListener('input', () => this.setField(id as Field['id'], Number(range.value)));
+      num.addEventListener('change', () => this.setField(id as Field['id'], Number(num.value)));
     });
   }
 
@@ -298,7 +257,6 @@ export class CamPanel {
       <div class="sp-note">Die Kamera (großer Punkt) auf der Karte verschieben, den weißen Griff ziehen, um die Blickrichtung zu drehen. Die genauen Werte stehen hier.</div>
       <div class="ce-pos"></div>
       ${FIELDS.map((f) => row(f, f.id)).join('')}
-      ${row(REACH, 'reach')}
       <div class="ce-btns"><button type="button" data-e="save" class="primary">Speichern</button><button type="button" data-e="cancel">Abbrechen</button><button type="button" data-e="reset" ${ed.saved ? '' : 'hidden'}>Zurücksetzen</button></div>
       <div class="ce-msg" role="status"></div>
     </div>`);
@@ -341,11 +299,10 @@ export class CamPanel {
     const ed = this.ed;
     const s = this.sel;
     if (!ed || !s) return;
-    const pose = ed.poseSet ? this.editPose(ed) : undefined;
     const pos = this.movedPos(ed);
     this.busy(true, 'Wird gesendet …');
     try {
-      await saveCamDir(ed.key, ed.dir, pose, pos);
+      await saveCamDir(ed.key, ed.dir, undefined, pos);
     } catch (err) {
       this.busy(false, `Fehlgeschlagen: ${err instanceof Error ? err.message : err}`);
       return;
@@ -354,7 +311,8 @@ export class CamPanel {
     this.endEdit();
     s.lng = pos?.[0] ?? ed.olng;
     s.lat = pos?.[1] ?? ed.olat;
-    const flat = { pdown: pose?.down, palt: pose?.alt, proll: pose?.roll, pfov: pose?.fov };
+    // the stored pose (if any) is not shown anywhere right now, but stays in the cloud
+    const flat = { pdown: undefined, palt: undefined, proll: undefined, pfov: undefined };
     s.p = { ...s.p, dir: ed.dir, dirset: true, ...flat, ...(pos ? { ckey: ed.key, olon: ed.olng, olat: ed.olat } : { ckey: undefined, olon: undefined, olat: undefined }) };
     this.render();
   }
@@ -376,12 +334,6 @@ export class CamPanel {
     s.lat = ed.olat;
     s.p = { ...s.p, dir: undefined, dirset: undefined, pdown: undefined, palt: undefined, proll: undefined, pfov: undefined, ckey: undefined, olon: undefined, olat: undefined };
     this.render();
-  }
-
-  /** pose for the 3D view: the stored one, a typical one for a direction set by hand, none for an estimated direction */
-  private pose(): CamPose | undefined {
-    const p = this.sel?.p;
-    return poseOf(p) ?? (p?.dirset ? DEFAULT_POSE : undefined);
   }
 
   private dir(): number {
@@ -424,14 +376,12 @@ export class CamPanel {
         ? `<video class="pop-cam" crossorigin="anonymous" src="${escapeHtml(video)}" ${src ? `poster="${escapeHtml(src)}"` : ''} autoplay muted loop playsinline controls></video>`
         : still;
     const tiles = `<div class="sp-tiles">${tile('Blickrichtung', dir >= 0 ? `${est ? 'ca. ' : ''}${Math.round(dir)}° ${CARDINAL[Math.round(dir / 45) % 8]}` : 'unbekannt')}${tile('Bild', hls || video ? 'Livestream' : 'Standbild')}</div>`;
-    const note = dir >= 0 ? `<div class="sp-note">${this.pose() ? 'Das Bild liegt als 3D-Ansicht auf der Straße: Boden und Horizont sitzen dort, wo die Kamera sie sieht' + (poseOf(p) ? '.' : ' (typische Werte – „Auf Karte bearbeiten“ passt sie an).') : `Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte${est ? ' – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße)' : ''}.`}</div>` : '<div class="sp-note">Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.</div>';
+    const note = dir >= 0 ? `<div class="sp-note">Das Bild steht als 3D-Tafel in Blickrichtung auf der Karte${est ? ' – die Richtung ist ein Näherungswert (Fahrtrichtung der Straße)' : ''}.</div>` : '<div class="sp-note">Zu dieser Kamera ist keine Blickrichtung bekannt, daher gibt es keine 3D-Tafel.</div>';
     const date = typeof p.updated === 'string' && p.updated ? [['Aktualisiert', `${escapeHtml(fmt.dateTime(p.updated))} (${escapeHtml(fmt.relative(p.updated))})`] as [string, string]] : [];
     const cats = category('cam', 'Kamera', [['Standort', `${fmt.num(s.lat, 4)}, ${fmt.num(s.lng, 4)}`], ...date], this.open_);
     const source = `<details data-key="source" ${this.open_.has('source') ? 'open' : ''}><summary>Datenquelle</summary><div class="fp-note">${escapeHtml(String(p.source ?? ''))}${link ? ` · <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Webcam öffnen ↗</a>` : ''}</div></details>`;
-    const reach = dir >= 0 && this.pose() ? `<div class="ce">${row(REACH, 'reach')}</div>` : '';
-    this.body.innerHTML = `<div class="cam-media">${media}</div>${tiles}${note}${reach}${cats}${source}`;
+    this.body.innerHTML = `<div class="cam-media">${media}</div>${tiles}${note}${cats}${source}`;
     this.bindRows();
-    this.setReach(this.reach);
     (this.root.querySelector('[data-act="tilt"]') as HTMLElement).hidden = dir < 0;
     // own worker + token in the settings: the direction can be corrected
     const edit = this.root.querySelector<HTMLElement>('[data-act="edit"]')!;
@@ -442,7 +392,7 @@ export class CamPanel {
     if (el && hls) attachHls(el, hls, () => (el.outerHTML = still));
     const map = this.h.map();
     this.media = { video: el ?? undefined, image: img ?? undefined };
-    if (map && dir >= 0) this.view.show(map, { lon: s.lng, lat: s.lat, dir, pose: this.pose(), reach: this.reach, ...this.media, anchor: this.root });
+    if (map && dir >= 0) this.view.show(map, { lon: s.lng, lat: s.lat, dir, ...this.media, anchor: this.root });
     else this.view.hide();
   }
 }
