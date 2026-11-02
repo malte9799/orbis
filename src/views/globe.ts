@@ -1642,11 +1642,17 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const now = performance.now();
       if (now - lastFlightPick < 40) return;
       lastFlightPick = now;
-      const over = !!extras?.pickFlight(e.point.x, e.point.y);
+      const picked = extras?.pickFlight(e.point.x, e.point.y) ?? null;
+      const over = !!picked;
       if (over) map!.getCanvas().style.cursor = 'pointer';
       else if (flightHover) map!.getCanvas().style.cursor = '';
       flightHover = over;
+      // the name only shows under the mouse, on the 2D icons too
+      const icons = picked ? [] : ['aircraft', 'aircraft-vehicle'].filter((l) => map!.getLayer(l));
+      const icon = icons.length ? map!.queryRenderedFeatures(e.point, { layers: icons })[0] : undefined;
+      extras?.hoverFlight(picked ?? (icon ? String(icon.properties.hex) : null));
     });
+    map.on('mouseout', () => extras?.hoverFlight(null));
     map.on('mouseout', hideReadout);
     map.on('movestart', hideReadout);
     map.on('moveend', (e) => {

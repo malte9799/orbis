@@ -304,6 +304,11 @@ export class ExtraLayers {
   }
 
   /** Aircraft under a screen point: the model, its trail or the wall below the trail. */
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  hoverFlight(hex: string | null) {
+    airApi.hoverFlight(this.ctx, hex);
+  }
+
   pickFlight(x: number, y: number): string | null {
     return airApi.pickFlight(this.ctx, x, y);
   }

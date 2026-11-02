@@ -636,6 +636,11 @@ export class Airport3D {
     return p ? { lon: p.dLon, lat: p.dLat, altM: p.dAlt, track: p.dTrack, trail: p.trail, hist: p.hist } : null;
   }
 
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  hover(hex: string | null) {
+    this.layer.setHovered(hex);
+  }
+
   /** The aircraft under a screen point (model, trail or wall), if any. */
   pick(x: number, y: number): string | null {
     return this.layer.pick(x, y);

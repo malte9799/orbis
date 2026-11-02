@@ -547,8 +547,6 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 // ---------------------------------------------------------------------------
 
-/** names reach further than those of ships and vehicles: there are far fewer aircraft on the ground plane */
-const LABEL_NEAR = 3;
 const TRAIL_COLOR = '#ff6a2b';
 const FORECAST_COLOR = '#b8bfcc';
 /** all trails faint and fading out, the one of the selected aircraft complete and at full strength */
@@ -702,9 +700,10 @@ export class PlanesLayer implements GeoPart {
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
   private forecast: GeoLine[] = [];
-  /** callsign labels: plain elements moved every frame with the same matrix as the models (no lag when zooming) */
+  /** the name of the hovered aircraft: a plain element moved every frame with the models (no lag when zooming) */
   private labelBox = document.createElement('div');
-  private labels = new Map<string, HTMLDivElement>();
+  private label = document.createElement('div');
+  private hovered: string | null = null;
   private far: GeoInstances | null = null;
   private lastCrowd = 0;
   private crowdCamera = '';
@@ -724,6 +723,10 @@ export class PlanesLayer implements GeoPart {
     private hooks: PlanesLayerHooks,
   ) {
     this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    this.label.style.cssText =
+      'display:none;position:absolute;left:0;top:0;white-space:pre;text-align:center;font:700 12px/1.2 system-ui,sans-serif;color:#fff;' +
+      'text-shadow:0 0 3px rgba(10,12,16,.95),0 0 3px rgba(10,12,16,.95),0 0 2px rgba(10,12,16,.95);will-change:transform';
+    this.labelBox.append(this.label);
     map.getCanvasContainer().appendChild(this.labelBox);
   }
 
@@ -738,7 +741,6 @@ export class PlanesLayer implements GeoPart {
     for (const m of Object.values(this.mats)) m.dispose();
     for (const line of this.forecast) line.dispose();
     this.labelBox.remove();
-    this.labels.clear();
     clearTimeout(this.repaintTimer);
     this.far?.dispose();
   }
@@ -748,7 +750,9 @@ export class PlanesLayer implements GeoPart {
     const mode = this.hooks.mode();
     this.object.visible = mode !== 'off';
     if (mode === 'off') {
-      this.syncLabels([]);
+      // far out without models the 2D icon can be hovered all the same
+      if (this.hovered) this.tracker.step(now);
+      this.syncLabel();
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
         this.hooks.frame([]);
@@ -849,7 +853,7 @@ export class PlanesLayer implements GeoPart {
         if (p.pulse) p.pulse.visible = false;
       } else this.syncPulse(frame, p, now, mpp, elev, flat);
     }
-    this.syncLabels(drawn);
+    this.syncLabel();
     this.syncForecast(frame, flat);
     if (now - this.lastFrameHook > 250) {
       this.lastFrameHook = now;
@@ -908,42 +912,33 @@ export class PlanesLayer implements GeoPart {
     return far;
   }
 
-  /** Callsign above every drawn model; moved here every frame so it never trails behind while zooming. */
-  private syncLabels(drawn: PlaneState[]) {
-    const box = this.labelBox;
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  setHovered(hex: string | null) {
+    if (hex === this.hovered) return;
+    this.hovered = hex;
+    this.map.triggerRepaint();
+  }
+
+  /** Callsign above the hovered aircraft; moved here every frame so it never trails behind while zooming. */
+  private syncLabel() {
     const frame = this.frameNow;
+    const p = this.hovered ? this.tracker.planes.get(this.hovered) : undefined;
+    const pos = p && frame?.toScreen(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt);
+    if (!p || !pos) {
+      this.label.style.display = 'none';
+      return;
+    }
     const zoom = this.map.getZoom();
     // distance above the model: grows with the zoom (the models get bigger)
     const lift = 17 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 24;
-    const seen = new Set<string>();
-    for (const p of drawn) {
-      const alt = this.flatNow ? 1 : p.dAlt;
-      const pos = frame?.toScreen(p.dLon, p.dLat, alt);
-      // always the selected one
-      if (!pos || (p.hex !== this.selected && !frame!.isNear(p.dLon, p.dLat, alt, LABEL_NEAR))) continue;
-      let el = this.labels.get(p.hex);
-      if (!el) {
-        el = document.createElement('div');
-        el.style.cssText =
-          'position:absolute;left:0;top:0;white-space:pre;text-align:center;font:700 12px/1.2 system-ui,sans-serif;color:#fff;' +
-          'text-shadow:0 0 3px rgba(10,12,16,.95),0 0 3px rgba(10,12,16,.95),0 0 2px rgba(10,12,16,.95);will-change:transform';
-        box.append(el);
-        this.labels.set(p.hex, el);
-      }
-      const callsign = String(p.props.callsign ?? '');
-      const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
-      // vehicles: always show callsign as label (their ID is all they have)
-      const isVehicle = p.model === 'car' || p.model === 'tug';
-      const text = isVehicle ? callsign : (icao ? `${callsign}\n${icao}` : callsign);
-      if (el.textContent !== text) el.textContent = text;
-      el.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
-      seen.add(p.hex);
-    }
-    for (const [hex, el] of this.labels) {
-      if (seen.has(hex)) continue;
-      el.remove();
-      this.labels.delete(hex);
-    }
+    const callsign = String(p.props.callsign ?? '');
+    const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
+    // vehicles: always show callsign as label (their ID is all they have)
+    const isVehicle = p.model === 'car' || p.model === 'tug';
+    const text = isVehicle ? callsign : (icao ? `${callsign}\n${icao}` : callsign);
+    if (this.label.textContent !== text) this.label.textContent = text;
+    this.label.style.display = '';
+    this.label.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
   }
 
   /**

@@ -179,6 +179,10 @@ export function pickFlight(ctx: ExtraCtx, x: number, y: number): string | null {
   return st.airport3d?.pick(x, y) ?? null;
 }
 
+export function hoverFlight(ctx: ExtraCtx, hex: string | null) {
+  getState(ctx).airport3d?.hover(hex);
+}
+
 export function selectFlight(ctx: ExtraCtx, hex: string | null) {
   const st = getState(ctx);
   st.airport3d?.select(hex);
@@ -259,4 +263,4 @@ export function createAirport(ctx: ExtraCtx) {
   st.airport3d.init();
 }
 
-export const airApi = { flightInfo, pickFlight, selectFlight, fitFlight, sondeInfo, selectSonde, fitSonde };
+export const airApi = { flightInfo, pickFlight, hoverFlight, selectFlight, fitFlight, sondeInfo, selectSonde, fitSonde };
