@@ -5,8 +5,12 @@ import {
   type GeoJSONSource,
   type ImageSource,
   type MapGeoJSONFeature,
+  type MapMouseEvent,
   type RasterTileSource,
 } from 'maplibre-gl';
+import { GeoFocus } from '../globe/geo3d/focus';
+import { GeoStage } from '../globe/geo3d/stage';
+import { bindFollowUrl } from '../globe/geo3d/url';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import {
   kindColor,
@@ -46,6 +50,8 @@ import { wahlenRegions } from '../api/wahlen';
 import { SondePanel } from '../globe/sondepanel';
 import { InfoPanel } from '../globe/infopanel';
 import { ShipPanel } from '../globe/shippanel';
+import { VehiclePanel } from '../globe/vehiclepanel';
+import { SatPanel } from '../globe/satpanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
 import { DetailPanel } from '../globe/detailpanel';
@@ -211,11 +217,15 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
   // ----- event feeds (fires, storms, quakes …): see src/globe/events ----------
   let extras: ExtraLayers | null = null;
+  let geoStage: GeoStage | null = null;
+  let geoFocus: GeoFocus | null = null;
   let flightPanel: FlightPanel | null = null;
   let wahlenPanel: WahlPanel | null = null;
   let sondePanel: SondePanel | null = null;
   let infoPanel: InfoPanel | null = null;
   let shipPanel: ShipPanel | null = null;
+  let vehiclePanel: VehiclePanel | null = null;
+  let satPanel: SatPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
   let camPanel: CamPanel | null = null;
   let detailPanel: DetailPanel | null = null;
@@ -310,13 +320,16 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     if (prev.night !== state.night) applyNight();
     if (prev.overlay !== state.overlay) void applyOverlay();
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
-    if (extrasChanged) extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+    if (extrasChanged) {
+      extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+      // without aircraft there is nothing left to show or follow in its panel
+      if (!extras?.isOn('aircraft') && !extras?.isOn('airport3d')) flightPanel?.close();
+    }
     if (groupsChanged) {
       ev.apply();
       ev.ensure();
     }
     applyLayerOptions(k);
-    applyPadding(true);
     refreshHud();
   }
 
@@ -422,14 +435,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       hudTimer = 0;
       hud?.refreshLive();
     }, 120);
-  }
-
-  /** Keep the globe centred in the free area next to the open Karte stack on wide screens. */
-  function applyPadding(animate = false) {
-    if (!map) return;
-    const left = hud?.stackWidth() ?? 0;
-    if (animate) map.easeTo({ padding: { left, top: 0, right: 0, bottom: 0 }, duration: 300 });
-    else map.setPadding({ left, top: 0, right: 0, bottom: 0 });
   }
 
   /** locate button: GPS position with heading (off → follow → follow with heading → off) */
@@ -1290,6 +1295,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     camPanel?.close();
     flightPanel?.close();
     shipPanel?.close();
+    vehiclePanel?.close();
+    satPanel?.close();
     wahlenPanel?.close();
     let d: LaunchDetail;
     try {
@@ -1443,11 +1450,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
 
     map.on('load', () => {
       ready = true;
+      geoStage = new GeoStage(map!);
+      geoFocus = new GeoFocus(map!, geoStage);
+      bindFollowUrl(geoFocus, geoStage);
       registerEventIcons(map!);
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
+      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
       extras.init();
       routing = createRouting(
         map!,
@@ -1457,27 +1467,45 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           layersHidden: setRouteClean,
           navUi(on) {
             el.classList.toggle('nav-active', on);
-            if (on) map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
-            else applyPadding();
+            map!.setPadding({ left: 0, top: 0, right: 0, bottom: 0 });
           },
           mode: locMode,
         },
         (lat, lon) => store.setLastPlace({ name: '', lat, lon }),
       );
+      const followIn = (source: string, slug: string, params: Record<string, string> = {}) => {
+        void Promise.resolve(geoStage?.resolve(source, slug, params)).then((t) => (t ? geoFocus?.start(t) : geoFocus?.stop()));
+      };
       flightPanel = new FlightPanel(el, {
         info: (hex) => extras?.flightInfo(hex) ?? null,
         select: (hex) => extras?.selectFlight(hex),
         fit: (hex) => extras?.fitFlight(hex),
-        map: () => map,
+        follow: (hex, cockpit) => followIn('plane', hex, cockpit ? { view: 'cockpit' } : {}),
+        unfollow: () => geoFocus?.stop(),
       });
-      shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
-      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map, follow: (mmsi) => followIn('ship', String(mmsi)), unfollow: () => geoFocus?.stop() });
+      sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map, follow: (serial) => followIn('plane', `sonde:${serial}`), unfollow: () => geoFocus?.stop() });
+      vehiclePanel = new VehiclePanel(el, { info: (key) => extras?.vehicleInfo(key) ?? null, map: () => map, follow: (key) => followIn('vehicle', key), unfollow: () => geoFocus?.stop() });
+      satPanel = new SatPanel(el, { sat: (id) => extras?.satellite(id) ?? null, select: (id) => extras?.selectSatellite(id), map: () => map, follow: (id) => followIn('sat', id), unfollow: () => geoFocus?.stop() });
+      // the buttons in the panels go along when the camera lets go
+      geoFocus?.listen((t) => {
+        // the GPS camera would move the map and end the focus at once: here the focus wins, it lets go when the user asks for the GPS camera
+        if (t && routing?.locator.mode !== 'off') routing?.locator.set('track');
+        const plane = t?.source === 'plane' ? t.slug : null;
+        flightPanel?.focusChanged(plane);
+        sondePanel?.focusChanged(plane?.startsWith('sonde:') ? plane.slice('sonde:'.length) : null);
+        shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
+        vehiclePanel?.focusChanged(t?.source === 'vehicle' ? t.slug : null);
+        satPanel?.focusChanged(t?.source === 'sat' ? t.slug : null);
+      });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
       infoPanel.onOpen = () => {
         popup?.remove();
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1485,11 +1513,13 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         detailPanel?.close();
       };
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
-      camPanel = new CamPanel(el, { map: () => map });
+      camPanel = new CamPanel(el, { map: () => map, stage: () => geoStage });
       detailPanel = new DetailPanel(el, { map: () => map });
       camPanel.onOpen = () => {
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         detailPanel?.close();
@@ -1497,6 +1527,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       detailPanel.onOpen = () => {
         flightPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
         camPanel?.close();
@@ -1520,7 +1552,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
       if (hud) applyLayerOptions(hud.current());
-      applyPadding();
       applyBase();
       applyNight();
       ev.apply();
@@ -1608,14 +1639,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const now = performance.now();
       if (now - lastFlightPick < 40) return;
       lastFlightPick = now;
-      const over = !!extras?.pickFlight(e.point.x, e.point.y);
+      const picked = extras?.pickFlight(e.point.x, e.point.y) ?? null;
+      const over = !!picked;
       if (over) map!.getCanvas().style.cursor = 'pointer';
       else if (flightHover) map!.getCanvas().style.cursor = '';
       flightHover = over;
+      // the name only shows under the mouse, on the 2D icons too
+      const icons = picked ? [] : ['aircraft', 'aircraft-vehicle'].filter((l) => map!.getLayer(l));
+      const icon = icons.length ? map!.queryRenderedFeatures(e.point, { layers: icons })[0] : undefined;
+      extras?.hoverFlight(picked ?? (icon ? String(icon.properties.hex) : null));
     });
+    map.on('mouseout', () => extras?.hoverFlight(null));
     map.on('mouseout', hideReadout);
     map.on('movestart', hideReadout);
-    map.on('moveend', () => {
+    map.on('moveend', (e) => {
+      // the camera following a moving 3D object ends a move every frame; a real end comes when the focus stops
+      if ((e as { geo3dFocus?: boolean }).geo3dFocus) return;
       refreshDetail();
       extras?.onMoveEnd();
       const c = map!.getCenter();
@@ -1630,6 +1669,22 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (longPressAt && performance.now() - longPressAt < 700) return;
       // the route planner owns the click while it picks a point / chooses an alternative / is open
       if (routing?.click(e)) return;
+      const focus = geoFocus;
+      if (!focus?.target) {
+        if (!focus?.click(e.point.x, e.point.y)) mapClick(e, false);
+        return;
+      }
+      if (focus.click(e.point.x, e.point.y)) return;
+      // following: another object takes over without letting go of the camera in between, nothing ends it
+      followNext = null;
+      focus.holdWhile(() => mapClick(e, true));
+      if (followNext) (followNext as () => void)();
+      else focus.stop();
+    });
+    /** the panel of the object just clicked: starts following it */
+    let followNext: (() => void) | null = null;
+    /** `wasFollowing`: this click ends or passes on the focus, so it brings up no weather */
+    const mapClick = (e: MapMouseEvent, wasFollowing: boolean) => {
       if (hud?.placeOpen()) {
         // a second tap on the map closes the place sheet
         hud.clearPlace();
@@ -1653,6 +1708,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       const picked = hit || shipHit ? null : extras?.pickFlight(e.point.x, e.point.y);
       if (picked) {
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         launchPanel?.close();
         camPanel?.close();
         detailPanel?.close();
@@ -1660,18 +1717,21 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         if (picked.startsWith('sonde:')) {
           flightPanel?.close();
           sondePanel?.open(picked.slice('sonde:'.length));
+          followNext = () => sondePanel?.followThis();
         } else {
           sondePanel?.close();
           flightPanel?.open(picked);
+          followNext = () => flightPanel?.followThis();
         }
         return;
       }
-      extras?.clearSelection();
       infoPanel?.close();
-      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
+      const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null) ?? extras?.pickStage(e.point.x, e.point.y, e.lngLat);
       if (extraResult?.type === 'wahlen') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
@@ -1682,24 +1742,57 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       } else if (extraResult?.type === 'flight') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         launchPanel?.close();
         sondePanel?.close();
         wahlenPanel?.close();
         flightPanel?.open(extraResult.hex);
+        followNext = () => flightPanel?.followThis();
       } else if (extraResult?.type === 'sonde') {
         camPanel?.close();
         shipPanel?.close();
+        vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         sondePanel?.open(extraResult.serial);
+        followNext = () => sondePanel?.followThis();
+      } else if (extraResult?.type === 'sat') {
+        camPanel?.close();
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        detailPanel?.close();
+        wahlenPanel?.close();
+        vehiclePanel?.close();
+        popup?.remove();
+        satPanel?.open(extraResult.id);
+        followNext = () => satPanel?.followThis();
+      } else if (extraResult?.type === 'vehicle') {
+        camPanel?.close();
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        detailPanel?.close();
+        wahlenPanel?.close();
+        satPanel?.close();
+        popup?.remove();
+        vehiclePanel?.open(extraResult.key);
+        followNext = () => vehiclePanel?.followThis();
       } else if (extraResult?.type === 'ship') {
+        vehiclePanel?.close();
+        satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         shipPanel?.open(extraResult.mmsi);
+        followNext = () => shipPanel?.followThis();
       } else if (extraResult?.type === 'cam') {
         popup?.remove();
         wahlenPanel?.close();
@@ -1726,14 +1819,14 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
           <div class="pop-foot">Quelle: NWS (USA)</div></div>`);
       } else if (hit && !EXTRA_CLICK_LAYERS.includes(hit.layer.id)) {
         openPopup(hit.geometry.type === 'Point' ? { lng: (hit.geometry as Point).coordinates[0], lat: (hit.geometry as Point).coordinates[1] } : e.lngLat, eventPopupHtml(hit));
-      } else if (isWeatherKarte(curKarte)) {
+      } else if (!wasFollowing && isWeatherKarte(curKarte)) {
         if (store.getOptions().clickWx) {
           const { lng, lat } = e.lngLat;
           const byte = state.overlay === 'radar' ? radarGl?.sample(lng, lat) : null;
           weatherPopup(lng, lat, byte == null ? null : rainRate(byte));
         }
       }
-    });
+    };
     for (const l of interactive) {
       map.on('mouseenter', l, () => (map!.getCanvas().style.cursor = 'pointer'));
       map.on('mouseleave', l, () => (map!.getCanvas().style.cursor = ''));
@@ -1769,12 +1862,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       focusPlace(p.lat, p.lon, 7, true);
     },
     openSettings,
-    zoomBy: (d) => map?.zoomTo(map.getZoom() + d, { duration: 250 }),
+    zoomBy: (d) => geoFocus?.zoomBy(d) || map?.zoomTo(map.getZoom() + d, { duration: 250 }),
     locate: () => locateMe(),
     route: () => routing?.open(),
-    setPitch: (deg, animate) => (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
-    resetNorth: () => map?.easeTo({ bearing: 0, duration: 400 }),
-    layout: () => applyPadding(true),
+    setPitch: (deg, animate) => geoFocus?.setPitch(deg, animate) || (animate ? map?.easeTo({ pitch: deg, duration: 350 }) : map?.setPitch(deg)),
+    resetNorth: () => geoFocus?.setBearing(0) || map?.easeTo({ bearing: 0, duration: 400 }),
     dock: () => dockEl,
     placeClosed: () => setData('marker', []),
   });

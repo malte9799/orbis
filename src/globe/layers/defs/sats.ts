@@ -1,6 +1,7 @@
 import { defineExtra } from '../types';
 import { FONT_REGULAR } from '../../vector';
-import { satClick, startSatellites } from '../shared/sats';
+import { satClick, startSatellites, updateSatPositions } from '../shared/sats';
+import { SAT_FEATURE_LAYER } from '../../satellites3d';
 
 export default defineExtra({
   id: 'sats',
@@ -78,12 +79,15 @@ export default defineExtra({
     );
   },
   apply(ctx) {
-    if (!ctx.isOn('sats') && !ctx.isOn('starlink')) ctx.clear('sat-pos');
+    if (ctx.isOn('sats') || ctx.isOn('starlink')) return;
+    ctx.clear('sat-pos');
+    // switched off: no dots left on the globe either
+    if (ctx.hasState('sats')) updateSatPositions(ctx);
   },
   enable(ctx) {
     startSatellites(ctx);
   },
   click: satClick,
   layers: ['sats-icon', 'sats-label', 'sat-track'],
-  clickLayers: ['sats-icon'],
+  clickLayers: ['sats-icon', SAT_FEATURE_LAYER],
 });

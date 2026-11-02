@@ -39,7 +39,7 @@ export function mergeShips(ctx: ExtraCtx) {
 export function createShips3d(ctx: ExtraCtx) {
   const st = getState(ctx);
   // low-poly 3D ships from zoom 11 on the flat map; the 2D icons (still clickable) fade out then
-  st.ships3d = new ShipsLayer({
+  st.ships3d = new ShipsLayer(ctx.map, {
     enabled: () => ctx.isOn('ships'),
     modeChanged: (on) => {
       if (!ctx.map.getLayer('ships')) return;
@@ -48,7 +48,7 @@ export function createShips3d(ctx: ExtraCtx) {
       ctx.map.setPaintProperty('ships', 'text-opacity', on ? 0 : 1);
     },
   });
-  ctx.map.addLayer(st.ships3d, 'marker');
+  ctx.stage.add(st.ships3d);
 }
 
 export function applyAis(ctx: ExtraCtx) {

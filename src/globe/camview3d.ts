@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
+import type { GeoFrame } from './geo3d/frame';
+import type { GeoPart, GeoStage } from './geo3d/stage';
 import { textureSafe } from './hls';
 import { rayPoint } from './layers/shared/camfit';
 import type { CamPose } from '../api/camdircloud';
@@ -39,22 +41,16 @@ export interface CamView {
   anchor: HTMLElement;
 }
 
-export class CamViewLayer implements CustomLayerInterface {
-  readonly id = 'cam-view-3d';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer?: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
-  private group = new THREE.Group();
+export class CamViewLayer implements GeoPart {
+  readonly object = new THREE.Group();
+  private map?: MlMap;
+  private onStage = false;
   private board: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private frame: THREE.LineSegments;
   private view: CamView | null = null;
   private texture: THREE.Texture | null = null;
   private aspect = 16 / 9;
   private watch = 0;
-  private proj = new THREE.Matrix4();
 
   constructor() {
     // built for distance 1 in front of the camera (+y), scaled per frame; a unit plane in x/z facing
@@ -63,10 +59,10 @@ export class CamViewLayer implements CustomLayerInterface {
     geo.rotateX(Math.PI / 2);
     this.board = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x0b1a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
     this.frame = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COLOR, transparent: true, opacity: 0.9 }));
-    this.group.add(this.board, this.frame);
-    this.group.matrixAutoUpdate = false;
-    this.group.visible = false;
-    this.scene.add(this.group);
+    this.object.add(this.board, this.frame);
+    this.object.matrixAutoUpdate = false;
+    this.object.visible = false;
+    this.board.frustumCulled = this.frame.frustumCulled = false;
     this.layout();
   }
 
@@ -153,20 +149,23 @@ export class CamViewLayer implements CustomLayerInterface {
   }
 
   /** same view again with changed values (direction, pose, position, reach) – keeps the picture's texture */
-  update(view: CamView) {
+  setView(view: CamView) {
     if (!this.view) return;
     this.view = view;
     this.layout();
     this.map?.triggerRepaint();
   }
 
-  show(map: MlMap, view: CamView) {
+  show(stage: GeoStage, map: MlMap, view: CamView) {
     this.map = map;
-    if (!map.getLayer(this.id)) map.addLayer(this);
+    if (!this.onStage) {
+      this.onStage = true;
+      stage.add(this);
+    }
     this.view = view;
     this.layout();
     this.setTexture(view.video ?? null, view.image);
-    this.group.visible = true;
+    this.object.visible = true;
     clearInterval(this.watch);
     this.watch = window.setInterval(() => this.check(), 1000);
     map.triggerRepaint();
@@ -175,7 +174,7 @@ export class CamViewLayer implements CustomLayerInterface {
   hide() {
     clearInterval(this.watch);
     this.view = null;
-    this.group.visible = false;
+    this.object.visible = false;
     this.setTexture(null);
     this.map?.triggerRepaint();
   }
@@ -238,42 +237,24 @@ export class CamViewLayer implements CustomLayerInterface {
     }
   }
 
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-  }
-
-  onRemove() {
+  dispose() {
     clearInterval(this.watch);
     this.texture?.dispose();
     this.board.geometry.dispose();
     this.board.material.dispose();
     this.frame.geometry.dispose();
     (this.frame.material as THREE.Material).dispose();
-    this.renderer?.dispose();
-    this.renderer = undefined;
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
+  update(frame: GeoFrame) {
     const v = this.view;
-    if (!v || !this.renderer) return;
     const map = this.map;
-    // positions relative to the map centre (Float32 precision, see planes3d.ts)
-    const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
+    if (!v || !map) return false;
     const elev = map.getTerrain() ? (map.queryTerrainElevation([v.lon, v.lat]) ?? 0) : 0;
-    const mc = MercatorCoordinate.fromLngLat([v.lon, v.lat], elev + (v.pose ? v.pose.alt : MOUNT_M));
-    const s = mc.meterInMercatorCoordinateUnits() * DIST_M;
-    // y is flipped between mercator space (south = +y) and the local frame (north = +y)
-    this.group.matrix
-      .makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z)
-      .scale(new THREE.Vector3(s, -s, s))
-      .multiply(new THREE.Matrix4().makeRotationZ((-v.dir * Math.PI) / 180));
-    this.camera.projectionMatrix.copy(this.proj);
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
+    const alt = elev + (v.pose ? v.pose.alt : MOUNT_M);
+    this.object.visible = !frame.occluded(v.lon, v.lat, alt);
+    frame.place(this.object.matrix, v.lon, v.lat, alt, v.dir, DIST_M);
     // a video texture needs a new frame drawn continuously
-    if (v.video && this.board.material.map === this.texture && !v.video.paused && !document.hidden) map.triggerRepaint();
+    return !!v.video && this.board.material.map === this.texture && !v.video.paused;
   }
 }

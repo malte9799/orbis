@@ -1,7 +1,6 @@
 import { defineExtra } from '../types';
 import { applyAir, getState, loadAircraftNow } from '../shared/air';
 import { ExpressionSpecification } from 'maplibre-gl';
-import { FONT_BOLD } from '../../vector';
 
 const ALT_COLOR: ExpressionSpecification = [
   'case',
@@ -37,21 +36,12 @@ export default defineExtra({
           'icon-rotate': ['case', ['==', ['get', 'kind'], 'balloon'], 0, ['get', 'track']],
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 8, ['get', 'callsign']],
-          'text-font': FONT_BOLD,
-          'text-size': 10,
-          'text-offset': [0, 1.3],
-          'text-anchor': 'top',
-          'text-optional': true,
         },
         paint: {
           'icon-color': ['case', ['!=', ['get', 'emergency'], ''], '#ff2d55', ALT_COLOR],
-          // military aircraft: olive outline and label
+          // military aircraft: olive outline
           'icon-halo-color': ['case', ['==', ['get', 'mil'], true], '#9ccc65', 'rgba(0,0,0,0.75)'],
           'icon-halo-width': ['case', ['==', ['get', 'mil'], true], 1.6, 1],
-          'text-color': ['case', ['==', ['get', 'mil'], true], '#c5e1a5', '#ffffff'],
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.2,
         },
       },
       'marker',
@@ -79,7 +69,7 @@ export default defineExtra({
       },
       'marker',
     );
-    // vehicles on the airfield (ADS-B category C1/C2): small car icon + callsign, clickable
+    // vehicles on the airfield (ADS-B category C1/C2): small car icon, clickable
     add(
       {
         id: 'aircraft-vehicle',
@@ -95,21 +85,11 @@ export default defineExtra({
           'icon-rotation-alignment': 'map',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'text-field': ['step', ['zoom'], '', 13, ['get', 'callsign']],
-          'text-font': FONT_BOLD,
-          'text-size': 9,
-          'text-offset': [0, 1.2],
-          'text-anchor': 'top',
-          'text-optional': true,
-          'text-allow-overlap': false,
         },
         paint: {
           'icon-color': '#ffd23f',
           'icon-halo-color': 'rgba(0,0,0,0.7)',
           'icon-halo-width': 1,
-          'text-color': '#ffd23f',
-          'text-halo-color': 'rgba(0,0,0,0.8)',
-          'text-halo-width': 1.2,
         },
       },
       'marker',

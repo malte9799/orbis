@@ -103,6 +103,27 @@ export function satelliteFeatures(sats: Sat[], date = new Date()): FeatureCollec
   return { type: 'FeatureCollection', features };
 }
 
+/**
+ * One orbit as a closed ring in space as it stands at `date`: every point with the Earth's rotation
+ * of that moment. [lon, lat, altitude m] with continuous longitudes.
+ */
+export function orbitPath(s: Sat, date = new Date(), steps = 180): [number, number, number][] {
+  const periodMs = ((2 * Math.PI) / s.satrec.no) * 60000; // no = mean motion in rad/min
+  const gmst = gstime(date);
+  const pts: [number, number, number][] = [];
+  let last: number | null = null;
+  for (let i = 0; i <= steps; i++) {
+    const pv = propagate(s.satrec, new Date(date.getTime() + (periodMs * i) / steps));
+    if (!pv || typeof pv.position !== 'object') continue;
+    const geo = eciToGeodetic(pv.position, gmst);
+    let lon = degreesLong(geo.longitude);
+    if (last !== null) lon += 360 * Math.round((last - lon) / 360);
+    last = lon;
+    pts.push([lon, degreesLat(geo.latitude), geo.height * 1000]);
+  }
+  return pts;
+}
+
 /** Ground track from one orbit back to one orbit ahead, split at the antimeridian. */
 export function groundTrack(s: Sat, date = new Date()): FeatureCollection<LineString> {
   const periodMin = (2 * Math.PI) / s.satrec.no; // no = mean motion in rad/min

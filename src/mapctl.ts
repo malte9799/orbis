@@ -1,4 +1,4 @@
-import type { Map as MlMap } from 'maplibre-gl';
+import type { EaseToOptions, Map as MlMap } from 'maplibre-gl';
 
 /** Camera control column shared by the Earth and planet maps: zoom +/−, 2D/3D with tilt slider, compass. */
 
@@ -163,6 +163,11 @@ export const tiltLimit = (zoom: number): number => {
   return 30 + 55 * t * t * (3 - 2 * t); // smoothstep
 };
 
+/** Maps whose camera someone else steers for now (focus on a 3D object): no tilt limit, no north-up, no own rotation. */
+export const cameraHeld = new WeakSet<MlMap>();
+/** Hands a held camera back: it eases to what the limits allow, together with these further values. */
+export const cameraRelease = new WeakMap<MlMap, (also: EaseToOptions) => void>();
+
 export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
   const tilt = ctl.el.querySelector<HTMLElement>('.hud-tilt')!;
   const sync = () => tilt.classList.toggle('off', map.getZoom() < TILT_MIN_ZOOM);
@@ -185,6 +190,7 @@ export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
   const camera = (map as unknown as { _camera: { applyTransformChange(change: (tr: { setMaxPitch(p: number): void; setPitch(p: number): void }) => void): void } })._camera;
   let baseMax = tiltLimit(map.getZoom());
   const applyLimit = () => {
+    if (cameraHeld.has(map)) return;
     baseMax = tiltLimit(map.getZoom());
     const room = drag || down || easing || ctl.dragging() ? TILT_ROOM : 0;
     const want = Math.min(MAX_ENGINE_PITCH, baseMax + room);
@@ -227,6 +233,7 @@ export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
   };
   const useOwn = () => map.getZoom() < NORTH_MAX_ZOOM;
   const syncRotate = () => {
+    if (cameraHeld.has(map)) return;
     if (useOwn()) map.dragRotate.disable();
     else map.dragRotate.enable();
     // the two-finger tilt would bypass the stretch: off while zoomed out
@@ -236,7 +243,7 @@ export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
   map.getCanvasContainer().addEventListener(
     'mousedown',
     (e) => {
-      if (!useOwn() || !(e.button === 2 || (e.button === 0 && (e.ctrlKey || e.metaKey)))) return;
+      if (cameraHeld.has(map) || !useOwn() || !(e.button === 2 || (e.button === 0 && (e.ctrlKey || e.metaKey)))) return;
       e.preventDefault();
       drag = { x: e.clientX, y: e.clientY, rawB: map.getBearing(), pitch: map.getZoom() < TILT_MIN_ZOOM ? 0 : map.getPitch() };
       applyLimit();
@@ -265,16 +272,20 @@ export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
 
   // The rebound waits for the pointer to be released (a drag fires move events of its own along the way).
   const rebound = () => {
-    if (down || ctl.dragging()) return;
+    if (cameraHeld.has(map) || down || ctl.dragging()) return;
+    easeBack();
+  };
+  const easeBack = (also: EaseToOptions = {}) => {
     const z = map.getZoom();
+    // the limit stood still while the camera was held
+    baseMax = tiltLimit(z);
     const pitchNow = map.getPitch();
     const flat = z < TILT_MIN_ZOOM ? pitchNow > 0.5 : pitchNow > baseMax + 0.5;
     const turned = z < NORTH_MAX_ZOOM && Math.abs(map.getBearing()) > 0.5;
-    if (flat || turned) {
-      settle();
-      map.easeTo({ ...(flat ? { pitch: z < TILT_MIN_ZOOM ? 0 : baseMax } : {}), ...(turned ? { bearing: 0 } : {}), duration: 450 });
-    }
+    if (flat || turned) settle();
+    if (flat || turned || Object.keys(also).length) map.easeTo({ ...also, ...(flat ? { pitch: z < TILT_MIN_ZOOM ? 0 : baseMax } : {}), ...(turned ? { bearing: 0 } : {}), duration: 450 });
   };
+  cameraRelease.set(map, easeBack);
   map.getCanvasContainer().addEventListener('pointerdown', () => {
     down = true;
     applyLimit();
@@ -299,6 +310,7 @@ export function bindTiltLimit(map: MlMap, ctl: MapCtl) {
   // zoomed out while rotated/tilted (wheel, buttons): ease back once the camera stops
   map.on('moveend', () => {
     easing = false;
+    syncRotate();
     applyLimit();
     rebound();
   });

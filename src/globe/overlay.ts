@@ -705,7 +705,9 @@ export class WindParticles {
     this.moving = true;
     this.clear();
   };
-  private readonly onMoveEnd = () => {
+  private readonly onMoveEnd = (e: object) => {
+    // the camera following a moving 3D object ends a move every frame; a real end comes when the focus stops
+    if ((e as { geo3dFocus?: boolean }).geo3dFocus) return;
     this.moving = false;
     this.reseedAll();
   };

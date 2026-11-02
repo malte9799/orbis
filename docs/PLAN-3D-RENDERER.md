@@ -1,0 +1,84 @@
+# Plan: geo3d als Standard-Renderer für alles 3D
+
+Modelle, Linien, Bögen, Satelliten und Orbits werden nach Länge, Breite und Höhe platziert, bei jedem
+Zoom und in jeder Projektion. Der Renderer kennt keine Zoom-Grenze mehr, Layer legen nur `minZoom` und
+Detailstufen fest. Die eigenen 3D-Layer verschwinden. Stand: 2026-11-02.
+
+## Stand
+
+Der Spike ist vom Nutzer im Browser abgenommen, die Testszene ist danach wieder entfernt worden; getestet wird im
+PR. Alle Phasen sind gebaut und im Browser geprüft, die Cockpit-Ansicht auf dem Fokus noch nicht. Stage und Fokus laufen fest in
+`views/globe.ts`; die Stage kommt erst mit ihrem ersten Objekt auf die Karte. Code: `src/globe/geo3d/`.
+
+| Datei | Inhalt |
+|---|---|
+| `frame.ts` | `GeoFrame`: Platzieren, Bildschirmposition, Verdeckung durch den Globus, Überblendung |
+| `stage.ts` | `GeoStage`: ein Custom Layer und ein Renderer pro Karte, eigener Framebuffer auf dem Globus, Picking, Cursor; `GeoPart`, `GeoTarget` |
+| `line.ts` | `GeoLine`: Linie mit fester Pixelbreite, Strichelung und Ausblenden, auf Kugel und Karte |
+| `wall.ts` | `GeoWall`: Vorhang von einer Linie zum Boden |
+| `arc.ts` | `arcPoints`: Bogen entlang des Großkreises |
+| `instances.ts` | `GeoInstances`: tausende Modelle, verdeckt von einer unsichtbaren Erde im Tiefenpuffer |
+| `points.ts` | `GeoPoints`: tausende Punkte, die sich zwischen zwei Positionssätzen selbst bewegen |
+| `focus.ts` | `GeoFocus`: Kamera folgt einem Objekt, Drehen und Zoomen um das Objekt |
+| `url.ts` | Fokus in der Adresse: `#/karte?follow=sat/iss&follow.t=…`; Slug und Zusatzwerte gibt die Quelle an |
+
+Warum eigener Framebuffer: MapLibres Tiefenpuffer enthält auf dem Globus den Abstand zur Horizontebene
+(`globeComputeClippingZ`), keine echte Tiefe. Labels danach lesen ihn weiterhin, also bleibt er unberührt.
+
+## Phasen
+
+| # | Inhalt | Fertig, wenn | Tage |
+|---|---|---|---|
+| ✓ 1 | `GeoStage` und `GeoFocus` fest in `views/globe.ts`, Kamerabefehle und Klick im Fokus | Karte ohne 3D-Objekt unverändert | gebaut |
+| ✓ 2 | Geldflüsse als echte Bögen | Bögen in beiden Projektionen, Klicks gehen | gebaut |
+| ✓ 3 | Flugzeuge migriert (`planes3d.ts`, `airport3d.ts`), `globeShown()` entfernt; ausgewähltes Flugzeug auf dem Globus, „Folgen“ über `GeoFocus` | Spur und Route auf dem Globus, flache Karte unverändert | gebaut |
+| ✓ 4 | Schiffe, Fahrzeuge, `camview3d` migriert, `GLOBE_FLAT_ZOOM` entfernt, Folgen für Schiffe und Sonden über `GeoFocus` | keine Mercator-Rechnung mehr in Layern (`planetmap.ts` ausgenommen) | gebaut |
+| ✓ 5 | Satelliten: `GeoPoints`, Orbit, ISS-Modell, Seitenleiste, Folgen (`follow=sat/<norad>`) | Starlink flüssig, Orbit beim Anklicken | gebaut |
+| ✓ 6 | Weltweite Flugzeuge als `GeoInstances` ab Zoom 3 (darunter 2D-Icons), Doku in `NEUER-LAYER.md` | flüssig bei Zoom 3 mit vollem Weltdatensatz | gebaut |
+
+Der MapLibre-Patch (Übergang schon bei Zoom 6–7) ist entfernt, die Karte flacht wieder bei Zoom 11–12 ab. Niedrige und hohe Orbits
+erreichen den Übergang damit nie, ihr Zoom-Limit greift vorher. Ganz abschaffen lässt sich die flache Karte nicht: Für Kacheln und Modelle
+reicht die Genauigkeit der Kugel-Rechnung bei hohem Zoom nicht. `SurfaceModels` in `planetmap.ts` kann später folgen.
+
+## Anforderungen aus den Tests
+
+**Klick auf bestehende Objekte im Fokus (gebaut):** Ein Klick reicht: Der Fokus endet und das Objekt wird
+ausgewählt. Trifft er nichts, endet nur der Fokus, ohne Wetter-Tooltip.
+
+**Andere Kamerabefehle im Fokus (gebaut):** Zoom-Knöpfe, Neigungsregler und Kompass steuern den Fokus. Verschiebt
+etwas anderes die Kartenmitte (Ortssuche, Panels), lässt der Fokus los. „Folgen“ im Flug-Panel läuft über den Fokus
+(`follow=plane/<hex>`). Schiffe (`follow=ship/<mmsi>`), Sonden (`follow=plane/sonde:<id>`), Züge und Busse (`follow=vehicle/<key>`, mit eigener Seitenleiste) ebenso. Die Cockpit-Ansicht
+läuft auch über den Fokus (`follow=plane/<hex>&follow.view=cockpit`): Die Quelle gibt über `GeoTarget.view` Richtung, Neigung und Abstand vor. Ziehen beendet sie.
+
+**Navigation bleibt eigenständig (`routing/locator.ts`):** Sie passt nicht in den Fokus. Ziehen beendet dort das Folgen statt um das Objekt zu drehen, die normalen Gesten bleiben an, der Zoom hängt am Tempo, und der Pfeil sitzt per Padding unter der Bildmitte. Beide schließen sich aus: Startet der Fokus, geht das GPS auf „nur anzeigen“ (`track`); bewegt die GPS-Kamera die Karte, lässt der Fokus los.
+
+**Gelände:** Flugzeuge rechnen mit der Geländehöhe (`queryTerrainElevation`), das gilt auch für den Fokus. Noch offen
+ist der Lag bei eingeschaltetem 3D-Gelände:
+Gelände wird in jedem Frame neu gezeichnet, und bewegte Objekte erzwingen Dauer-Neuzeichnen. Es ruckelte schon vor der
+Stage etwas, Gelände kostet also selbst. Gemessen wurde das nie. Die Stage drosselt bei stehender Kamera auf 15 fps, das gilt für alle 3D-Objekte.
+
+**`moveend` im Fokus (gebaut):** Bei bewegtem Ziel endet in jedem Frame eine Kamerabewegung. `views/globe.ts` und
+`overlay.ts` filtern das über `geo3dFocus`. Der Wind bleibt deshalb ausgeblendet, sobald die Kamera im Fokus
+bewegt wird, bis der Fokus endet.
+
+**Keine Mitte-Verschiebung:** Panels verschieben die Kartenmitte nicht, sie liegen über der Karte. Der Fokus setzt
+sein Objekt also in die echte Bildmitte, auch wenn ein Panel offen ist. Nur beim Auswählen zielen einzelne
+Panels die Kamera einmalig neben sich (`campanel.ts`, `airport3d.ts`, `detailpanel.ts`).
+
+**2D-Karte:** Eine manuelle Umschaltung zwischen 2D und 3D gibt es nicht (entfernt in `c7cfe317`). Flach wird die
+Karte nur durch den Zoom. `GeoFrame` muss deshalb Globus, Überblendung und flach können, einen Stilwechsel nicht.
+
+## Noch zu testen
+
+Erst möglich, wenn es als PR auf GitHub läuft:
+
+- **Safari und iPhone:** Größtes offenes Risiko. Der Framebuffer nutzt 16-Bit-Farben mit 4× MSAA, ohne Fallback.
+- **Touch:** Drehen, Pinch, Wegtippen; danach normales Verschieben und Zwei-Finger-Neigung.
+- **Speicher und fps auf schwachen Geräten:** Bei 2880×1800 rechnerisch rund 300 MB Grafikspeicher. Erste Stellschraube: 4× MSAA.
+
+## Grenzen des Fokus
+
+- GEO-Objekte: Die Kamera kommt nicht näher als etwa 640 km.
+- Niedrige Orbits: Die Kamera kommt nicht näher als etwa 30 % der Flughöhe, aus jeder Richtung. Beim Neigen bleibt der Abstand zum Objekt gleich, nur die Zoomzahl der Karte sinkt.
+- Sehr nah am Pol kann MapLibre die Kartenmitte begrenzen, das Objekt rutscht dann aus der Mitte.
+- Die Adresse enthält das Objekt, nicht Zoom, Neigung und Richtung.
