@@ -38,7 +38,9 @@ export type ClickResult =
   /** a webcam was clicked: the camera panel shows it */
   | { type: 'cam'; p: Record<string, unknown>; lng: number; lat: number }
   /** a radiosonde was clicked: the sonde panel shows it */
-  | { type: 'sonde'; serial: string; lng: number; lat: number };
+  | { type: 'sonde'; serial: string; lng: number; lat: number }
+  /** a wahlen region was clicked: the wahlen panel shows it */
+  | { type: 'wahlen'; region: string; lng: number; lat: number };
 
 /** What the ship panel shows about one vessel. */
 export interface ShipInfo {
