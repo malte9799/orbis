@@ -59,6 +59,8 @@ export interface ExtraCtx {
   readonly ready: boolean;
   /** opens the launch panel (set by the page that hosts the map) */
   readonly openLaunch?: (l: Launch, lng: number, lat: number) => void;
+  /** opens the reconstruction panel of an incident (set by the page that hosts the map) */
+  readonly openIncident?: (id: string) => void;
   /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
   loadOnce(id: ExtraId, maxAge: number, fn: () => Promise<{ count?: number; note?: string } | void>): void;
 }

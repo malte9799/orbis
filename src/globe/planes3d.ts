@@ -214,7 +214,7 @@ function wingPanel(rootX: number, tipX: number, rootLeadY: number, rootChord: nu
   return [right, left];
 }
 
-function airliner(k: number): THREE.BufferGeometry {
+export function airliner(k: number): THREE.BufferGeometry {
   const L = 37.6 * k;
   const r = 1.95 * k;
   const zc = 3.3 * k;
