@@ -19,7 +19,7 @@ import type { Fix, GpsStatus } from './gps';
 export interface RoutingHost {
   /** px the Karten stack covers on the left (desktop) – the route is fitted next to it */
   leftInset(): number;
-  /** the map view is shown in navigation: hide the Karten HUD and let go of its padding */
+  /** the map view is shown in navigation: hide the Karten HUD */
   navUi(on: boolean): void;
   /** the planner / navigation is open: hide every layer of the Karte (only the base map stays) */
   layersHidden(on: boolean): void;

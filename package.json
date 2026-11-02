@@ -32,9 +32,6 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ],
-    "patchedDependencies": {
-      "maplibre-gl@6.14.0": "patches/maplibre-gl@6.14.0.patch"
-    }
+    ]
   }
 }

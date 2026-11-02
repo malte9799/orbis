@@ -779,7 +779,8 @@ export const CAM_FEEDS: CamFeed[] = [
     bbox: [-170, 18, -64, 72],
     key: 'nps',
     async load() {
-      const key = store.getKeys().nps!;
+      const key = store.getKeys().nps;
+      if (!key) throw new Error('NPS: key missing');
       // NPS accepts the key as the X-Api-Key header (its recommended method) or a query param
       const j = await fetchJson<{ data: { id: string; title: string; url?: string; latitude?: number | string; longitude?: number | string; images?: { url: string }[]; isStreaming?: boolean; status?: string; relatedParks?: { fullName?: string }[] }[] }>(
         viaProxy(`https://developer.nps.gov/api/v1/webcams?limit=600&api_key=${encodeURIComponent(key)}`),

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
 import type { Feature, Point } from 'geojson';
-import { GLOBE_FLAT_ZOOM } from './style';
+import type { GeoFrame } from './geo3d/frame';
+import type { GeoPart, GeoTarget } from './geo3d/stage';
 
 // 3D public transport vehicles: trains, S-Bahn, subway, trams, buses, coaches (and the odd GPS
-// ferry). Low-poly models in a three.js layer inside MapLibre's GL context, painted in the
-// livery colour of their mode (the same colour the 2D dots use). Used from VEH_ZOOM on the flat
-// map; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
+// ferry). Low-poly models, a part of the 3D stage, painted in the livery colour of their mode (the
+// same colour the 2D dots use). Used from VEH_ZOOM on; the 2D dot layers step aside then. Positions arrive every few seconds and are eased
 // towards every new report; speeds with bearing are dead-reckoned in between.
 
 /** from this zoom on the 3D models may replace the 2D dots (zoom 9 = the same zoom as on ships/planes) */
@@ -16,6 +16,10 @@ const VEH_ZOOM = 9;
 const VEH_MAX_ON = 120;
 /** the 2D dots take back over above this many vehicles in view (hysteresis against flickering) */
 const VEH_MAX_OFF = 200;
+/** how long a link to a vehicle waits for reports that contain it (ms) */
+const REPORT_WAIT_MS = 20000;
+/** the followed vehicle stays this long after the last report that named it (ms) */
+const FOLLOWED_STALE_MS = 60000;
 /** names are shown from this zoom on */
 const LABEL_ZOOM = 8;
 /** the smallest length of a model on screen (px) so vehicles stay visible when zoomed out */
@@ -361,6 +365,7 @@ const geometry = (cat: VehCat, livery: number): THREE.BufferGeometry =>
 function makeModel(cat: VehCat, livery: number): THREE.Mesh {
   const o = new THREE.Mesh(geometry(cat, livery), modelMat);
   o.matrixAutoUpdate = false;
+  o.frustumCulled = false;
   return o;
 }
 
@@ -371,27 +376,26 @@ export interface VehiclesLayerHooks {
   modeChanged(on: boolean): void;
 }
 
-export class VehiclesLayer implements CustomLayerInterface {
-  readonly id = 'vehicles-3d';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer!: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
-  private proj = new THREE.Matrix4();
+export class VehiclesLayer implements GeoPart {
+  readonly object = new THREE.Group();
+  readonly source = 'vehicle';
+  /** the vehicle the camera follows: a model at any zoom, and not dropped just because a report misses it */
+  private followed: VehState | null = null;
+  /** a link named a vehicle that was not reported yet */
+  private waiting: (() => void)[] = [];
   private states = new Map<string, VehState>();
   private lastStep = 0;
   private lastOn = false;
   /** names: plain elements moved every frame with the same matrix as the models */
-  private labelBox?: HTMLDivElement;
+  private labelBox = document.createElement('div');
   private labels = new Map<string, HTMLDivElement>();
 
-  constructor(private hooks: VehiclesLayerHooks) {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(0.4, -0.6, 1);
-    this.scene.add(sun);
+  constructor(
+    private map: MlMap,
+    private hooks: VehiclesLayerHooks,
+  ) {
+    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    map.getCanvasContainer().appendChild(this.labelBox);
   }
 
   /** Latest positions of all vehicles. Each update replaces the full set; unmatched vehicles fade out. */
@@ -409,14 +413,7 @@ export class VehiclesLayer implements CustomLayerInterface {
     const used = new Set<string>();
     for (const f of features) {
       const p = (f.properties ?? {}) as Record<string, unknown>;
-      const base =
-        p.src === 'transitous'
-          ? `t|${p.id}`
-          : p.src === 'amtrak'
-            ? `a|${p.name}`
-            : p.src === 'fi'
-              ? `fi|${p.num}`
-              : `g|${p.feed}|${p.name}|${p.mode}`;
+      const base = matchGroup(p);
       let key = base;
       if (used.has(key)) {
         for (let k = 1; ; k++) {
@@ -477,7 +474,7 @@ export class VehiclesLayer implements CustomLayerInterface {
     // an empty update (feed hiccup) so nothing flashes off and back on
     const staleMs = features.length ? 0 : 15000;
     for (const [k, s] of this.states) {
-      if (!s.matched && now - s.seen > staleMs) {
+      if (!s.matched && now - s.seen > (s === this.followed ? FOLLOWED_STALE_MS : staleMs)) {
         if (s.obj) {
           s.obj.parent?.remove(s.obj);
           s.obj = undefined;
@@ -487,7 +484,59 @@ export class VehiclesLayer implements CustomLayerInterface {
         this.states.delete(k);
       } else s.matched = false;
     }
-    this.map?.triggerRepaint();
+    for (const fn of this.waiting.splice(0)) fn();
+    this.map.triggerRepaint();
+  }
+
+  /** What the camera follows for this vehicle; waits for the next reports if it is not known yet. */
+  resolve(slug: string): GeoTarget | null | Promise<GeoTarget | null> {
+    const known = this.states.get(slug);
+    if (known) return this.target(known);
+    return new Promise((done) => {
+      const timer = window.setTimeout(() => done(null), REPORT_WAIT_MS);
+      this.waiting.push(() => {
+        clearTimeout(timer);
+        const s = this.states.get(slug);
+        done(s ? this.target(s) : null);
+      });
+    });
+  }
+
+  private target(s: VehState): GeoTarget {
+    return {
+      source: this.source,
+      slug: s.key,
+      label: String(s.props.name ?? s.key),
+      position: (now) => {
+        // the stage draws it at this very time: the camera must not lag one step behind
+        this.step(now);
+        return this.states.get(s.key) === s ? [s.dLon, s.dLat, 0] : null;
+      },
+      entered: () => (this.followed = s),
+      released: () => (this.followed = null),
+    };
+  }
+
+  /** The key of the vehicle that a clicked feature shows: the nearest of its group. */
+  keyAt(p: Record<string, unknown>, lon: number, lat: number): string | null {
+    const group = matchGroup(p);
+    let best: string | null = null;
+    let bestD = Infinity;
+    for (const s of this.states.values()) {
+      if (s.group !== group) continue;
+      const d = Math.hypot(s.dLon - lon, s.dLat - lat);
+      if (d < bestD) {
+        bestD = d;
+        best = s.key;
+      }
+    }
+    return best;
+  }
+
+  /** What the panel shows about a vehicle, if it is still reported. */
+  info(key: string) {
+    const s = this.states.get(key);
+    return s ? { props: s.props, lon: s.dLon, lat: s.dLat, track: s.bearing >= 0 ? s.bearing : s.dRot, at: s.at } : null;
   }
 
   /** New report on a matched vehicle: derive the bearing from the movement if there is none. */
@@ -506,18 +555,8 @@ export class VehiclesLayer implements CustomLayerInterface {
     s.matched = true;
   }
 
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-    this.labelBox = document.createElement('div');
-    this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
-    map.getCanvasContainer().appendChild(this.labelBox);
-  }
-
-  onRemove() {
-    this.renderer?.dispose();
-    this.labelBox?.remove();
+  dispose() {
+    this.labelBox.remove();
     this.labels.clear();
     this.states.clear();
   }
@@ -543,7 +582,7 @@ export class VehiclesLayer implements CustomLayerInterface {
   }
 
   private active() {
-    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM || this.map.getProjection()?.type === 'globe' && this.map.getZoom() < GLOBE_FLAT_ZOOM) return false;
+    if (!this.hooks.enabled() || this.map.getZoom() < VEH_ZOOM) return false;
     // the models lag when there are too many at once (a whole city at once): only take over
     // while the view is small enough, with hysteresis so switching does not flicker
     const b = this.map.getBounds();
@@ -557,41 +596,15 @@ export class VehiclesLayer implements CustomLayerInterface {
     return n <= (this.lastOn ? VEH_MAX_OFF : VEH_MAX_ON);
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
-    const on = this.active();
-    if (on !== this.lastOn) {
-      this.lastOn = on;
-      queueMicrotask(() => this.hooks.modeChanged(on));
-    }
-    if (!on) {
-      for (const s of this.states.values()) {
-        if (s.obj) s.obj.visible = false;
-        this.syncLabel(s, false);
-      }
-      return;
-    }
-    const map = this.map;
-    const now = performance.now();
+  /** The displayed state at this time: dead reckoning from the last report, eased towards it. */
+  private step(now: number) {
+    if (now === this.lastStep) return;
     const dt = this.lastStep ? Math.min(0.25, (now - this.lastStep) / 1000) : 0;
     this.lastStep = now;
     const k = 1 - Math.exp(-dt / 1.0);
     const kRot = 1 - Math.exp(-dt / 0.7);
-    // everything is placed relative to the map centre (Float32 jitter, see planes3d.ts)
-    const centre = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(centre.x, centre.y, 0));
-    const center = map.getCenter();
-    const mpp = (40075016 * Math.cos(rad(center.lat))) / (512 * 2 ** map.getZoom());
-    const b = map.getBounds();
-    const padLon = (b.getEast() - b.getWest()) * 0.3;
-    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
     const wall = Date.now();
-    const canvas = map.getCanvas();
-    const v = new THREE.Vector4();
-    const labels = map.getZoom() >= LABEL_ZOOM;
-    const m = new THREE.Matrix4();
-    const rot = new THREE.Matrix4();
     for (const s of this.states.values()) {
-      const p = s.props;
       // dead reckoning from the last report (speed + heading); without speed just ease
       const elapsed = Math.min(MAX_EXTRAPOLATE_S, Math.max(0, (wall - s.at) / 1000));
       // the speed runs on with the reported value for a minute at most
@@ -612,10 +625,37 @@ export class VehiclesLayer implements CustomLayerInterface {
         s.dLat += (tLat - s.dLat) * k;
         s.dRot += shortestDelta(s.dRot, tRot) * kRot;
       }
-      const inView = s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat;
-      if (!inView) {
-        if (s.obj) s.obj.visible = false;
-        this.syncLabel(s, false);
+    }
+  }
+
+  update(frame: GeoFrame, now: number) {
+    const on = this.active();
+    if (on !== this.lastOn) {
+      this.lastOn = on;
+      queueMicrotask(() => this.hooks.modeChanged(on));
+    }
+    const only = on ? null : this.followed;
+    this.object.visible = on || !!only;
+    const hide = (s: VehState) => {
+      if (s.obj) s.obj.visible = false;
+      this.syncLabel(s, false);
+    };
+    if (!on && !only) {
+      for (const s of this.states.values()) hide(s);
+      return false;
+    }
+    this.step(now);
+    const map = this.map;
+    const b = map.getBounds();
+    const padLon = (b.getEast() - b.getWest()) * 0.3;
+    const padLat = (b.getNorth() - b.getSouth()) * 0.3;
+    const labels = map.getZoom() >= LABEL_ZOOM;
+    for (const s of this.states.values()) {
+      const p = s.props;
+      // on the globe the horizon decides what is in view
+      const inView = frame.globe || (s.dLon > b.getWest() - padLon && s.dLon < b.getEast() + padLon && s.dLat > b.getSouth() - padLat && s.dLat < b.getNorth() + padLat);
+      if ((only && s !== only) || !inView || frame.occluded(s.dLon, s.dLat)) {
+        hide(s);
         continue;
       }
       const hex = String(p.color ?? '').trim();
@@ -627,41 +667,33 @@ export class VehiclesLayer implements CustomLayerInterface {
         if (s.obj) s.obj.parent?.remove(s.obj);
         s.obj = makeModel(cat, livery);
         s.objKey = key;
-        this.scene.add(s.obj);
+        this.object.add(s.obj);
       }
-      const mc = MercatorCoordinate.fromLngLat([s.dLon, s.dLat], 0);
+      const mpp = frame.metresPerPixel(s.dLon, s.dLat);
       const boost = Math.max(1, (MIN_PX * mpp) / SPECS[cat].len);
-      const sc = mc.meterInMercatorCoordinateUnits() * boost;
-      // y is flipped between mercator space (south = +y) and the model (north = +y)
-      m.makeTranslation(mc.x - centre.x, mc.y - centre.y, mc.z).scale(new THREE.Vector3(sc, -sc, sc));
-      rot.makeRotationZ(-rad(s.dRot));
-      m.multiply(rot);
-      s.obj.matrix.copy(m);
+      frame.place(s.obj.matrix, s.dLon, s.dLat, 0, s.dRot, boost);
       s.obj.visible = true;
       // screen position for the name and for picking (the models cannot be picked by MapLibre)
-      v.set(mc.x - centre.x, mc.y - centre.y, mc.z, 1).applyMatrix4(this.proj);
+      const pos = frame.toScreen(s.dLon, s.dLat);
       const modelPx = Math.max(SPECS[cat].len / mpp, MIN_PX);
       s.rpx = modelPx / 2;
-      if (v.w > 0) {
-        s.sx = (v.x / v.w * 0.5 + 0.5) * canvas.clientWidth;
-        s.sy = (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight;
-        this.syncLabel(s, labels);
+      if (pos) {
+        s.sx = pos[0];
+        s.sy = pos[1];
+        this.syncLabel(s, (labels && frame.isNear(s.dLon, s.dLat)) || s === this.followed);
       } else {
         s.sx = s.sy = -1e4;
         this.syncLabel(s, false);
       }
     }
-    this.camera.projectionMatrix.copy(this.proj);
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
-    if (this.states.size && !document.hidden) map.triggerRepaint();
+    return this.states.size > 0;
   }
 
   private syncLabel(s: VehState, on: boolean) {
     const box = this.labelBox;
     const name = String(s.props.name ?? '');
     let el = this.labels.get(s.key);
-    if (!on || !box || !name) {
+    if (!on || !name) {
       if (el) el.style.display = 'none';
       return;
     }
@@ -680,6 +712,14 @@ export class VehiclesLayer implements CustomLayerInterface {
 }
 
 // ---------------------------------------------------------------------------
+
+/** The vehicles a report can belong to: several GPS vehicles can share a group, trip ids and train numbers are unique. */
+function matchGroup(p: Record<string, unknown>): string {
+  if (p.src === 'transitous') return `t|${p.id}`;
+  if (p.src === 'amtrak') return `a|${p.name}`;
+  if (p.src === 'fi') return `fi|${p.num}`;
+  return `g|${p.feed}|${p.name}|${p.mode}`;
+}
 
 /** Reported speed in m/s (0 when unknown): `speed` is km/h in every feed. */
 function reportSpeed(p: Record<string, unknown>): number {

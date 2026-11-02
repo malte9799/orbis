@@ -1,5 +1,6 @@
 import { defineExtra } from '../types';
 import { satClick, startSatellites } from '../shared/sats';
+import { SAT_FEATURE_LAYER } from '../../satellites3d';
 
 export default defineExtra({
   id: 'starlink',
@@ -16,5 +17,5 @@ export default defineExtra({
   },
   click: satClick,
   layers: ['sats-dot', 'sat-track'],
-  clickLayers: ['sats-dot'],
+  clickLayers: ['sats-dot', SAT_FEATURE_LAYER],
 });

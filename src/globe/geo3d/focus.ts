@@ -1,0 +1,427 @@
+import type { Map as MlMap } from 'maplibre-gl';
+import { cameraHeld, cameraRelease } from '../../mapctl';
+import { EARTH_RADIUS_M, type Vec3 } from './frame';
+import type { GeoStage, GeoTarget, GeoView } from './stage';
+
+// Keeps the camera on an object: dragging turns around it, the wheel zooms towards it, and it stays in
+// the middle of the screen while it moves.
+//
+// MapLibre only turns around a point on the ground, so the map centre is put where the line of sight
+// through the object meets the ground. The flat camera can do better (it has a centre elevation), the
+// globe camera ignores that. During the blend both are mixed like the map itself.
+//
+// The map's own handlers are off meanwhile: they would be cancelled by every camera update of a
+// moving object, and left drag would pan. All of the camera state lives here. Nothing turns rotation and
+// tilt back while following; when it ends the camera eases straight back to what the map allows there.
+
+const rad = (d: number) => (d * Math.PI) / 180;
+const deg = (r: number) => (r * 180) / Math.PI;
+
+/** focus can look flatter than the map normally allows, nearly along the ground */
+const FOCUS_MAX_PITCH = 85;
+const FLY_IN_MS = 900;
+const WHEEL_ZOOM_PER_PIXEL = 0.002;
+/** time constant of the zoom smoothing (s) */
+const ZOOM_SMOOTH_S = 0.08;
+const BEARING_PER_PIXEL = 0.8;
+const PITCH_PER_PIXEL = 0.5;
+/** further than this the pointer did not click */
+const DRAG_PX = 4;
+/** time constant of a turn asked for by a button (s), and when it has arrived (degrees) */
+const AIM_SMOOTH_S = 0.12;
+const AIM_DONE_DEG = 0.05;
+/** the map centre moved further than this without us (degrees) */
+const OTHER_CAMERA_DEG = 1e-6;
+/** the camera stays this far from the object on the globe: at most (radii), and in share of its height */
+const MIN_GAP_RADII = 0.1;
+const MIN_GAP_SHARE = 0.3;
+const MAX_CENTRE_LAT = 85;
+
+const HANDLERS = ['scrollZoom', 'boxZoom', 'dragRotate', 'dragPan', 'keyboard', 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'] as const;
+
+/**
+ * The place from which, looking along `bearing` (degrees from north, as measured there), lon / lat lies
+ * `angle` radians straight behind. A compass direction changes along a great circle, so simply going
+ * that way from lon / lat would miss it.
+ */
+export function placeAhead(lon: number, lat: number, bearing: number, angle: number): [number, number] {
+  const sinP = Math.sin(rad(lat));
+  // sin(lat) = sin(x) cos(angle) - cos(x) sin(angle) cos(bearing), solved for the latitude x
+  const a = Math.cos(angle);
+  const b = -Math.sin(angle) * Math.cos(rad(bearing));
+  // close to the pole there is no such place: as near as it gets
+  const x = Math.asin(Math.max(-1, Math.min(1, sinP / Math.hypot(a, b)))) - Math.atan2(b, a);
+  const dLon = Math.atan2(-Math.sin(rad(bearing)) * Math.sin(angle) * Math.cos(x), Math.cos(angle) - Math.sin(x) * sinP);
+  return [lon - deg(dLon), deg(x)];
+}
+
+/** Way from the ground point to the object along the line of sight, in earth radii. */
+export function sightToObject(altM: number, pitch: number): number {
+  const r = 1 + altM / EARTH_RADIUS_M;
+  const c = Math.cos(rad(pitch));
+  return -c + Math.sqrt(c * c + r * r - 1);
+}
+
+/** Map centre that puts the object in the middle of the screen; `t`: how much of a globe the map is. */
+export function focusCentre(p: Vec3, bearing: number, pitch: number, t: number): [number, number] {
+  const s = sightToObject(p[2], pitch);
+  const a = rad(pitch);
+  // the object is seen from the camera's side of the centre, so the centre is further ahead
+  const angle = Math.atan2(s * Math.sin(a), 1 + s * Math.cos(a));
+  return placeAhead(p[0], p[1], bearing, angle * t);
+}
+
+// The camera's distance to the object is what counts for the user: it stays when tilting. MapLibre only has the
+// distance to the map centre (its zoom), which lies further away behind the object the flatter the view. So
+// the zoom kept here is that of the distance to the object, and the map's zoom follows from it. Both are
+// independent of latitude: the zoom of the map is this plus log2(cos lat). `t`: how much of a globe the map is.
+
+/** Camera distance in earth radii at zoom 0. */
+const distanceAtZoom0 = (toCentre: number) => (toCentre * 2 * Math.PI) / 512;
+
+/** The map's zoom for a zoom of the distance to the object. */
+export function mapZoomFor(distanceZoom: number, altM: number, pitch: number, t: number, toCentre: number): number {
+  const k = distanceAtZoom0(toCentre);
+  return Math.log2(k / (k / 2 ** distanceZoom + sightToObject(altM, pitch) * t));
+}
+
+/** The zoom of the distance to the object for a map's zoom. */
+export function distanceZoomFor(mapZoom: number, altM: number, pitch: number, t: number, toCentre: number): number {
+  const k = distanceAtZoom0(toCentre);
+  return Math.log2(k / Math.max(1e-9, k / 2 ** mapZoom - sightToObject(altM, pitch) * t));
+}
+
+/** The nearest the camera may get on the globe, as a zoom of the distance; the same from every side. */
+export function maxDistanceZoom(altM: number, toCentre: number): number {
+  const gap = Math.min(MIN_GAP_RADII, (altM / EARTH_RADIUS_M) * MIN_GAP_SHARE);
+  return gap > 0 ? Math.log2(distanceAtZoom0(toCentre) / gap) : Infinity;
+}
+
+/** The zoom of a distance to the object in metres. */
+export function distanceZoomOf(metres: number, toCentre: number): number {
+  return Math.log2(distanceAtZoom0(toCentre) / (metres / EARTH_RADIUS_M));
+}
+
+/** the cockpit looks down this far, and at a point this share of its height ahead: closer the globe does not let it */
+const COCKPIT_PITCH = 75;
+const COCKPIT_AHEAD = 0.28;
+/** the camera sits this far above the aircraft and never lower than this above the ground (m) */
+const COCKPIT_ABOVE_M = 8;
+const COCKPIT_MIN_ALT_M = 20;
+
+/** The point a camera sitting at an aircraft looks at, and the view that puts the camera there. */
+export function cockpitView(lon: number, lat: number, altM: number, track: number): { position: Vec3; view: GeoView } {
+  const camera = Math.max(altM, COCKPIT_MIN_ALT_M) + COCKPIT_ABOVE_M;
+  const distanceM = camera * COCKPIT_AHEAD;
+  const a = rad(COCKPIT_PITCH);
+  const [x, y] = placeAhead(lon, lat, track, (distanceM * Math.sin(a)) / EARTH_RADIUS_M);
+  return { position: [x, y, camera - distanceM * Math.cos(a)], view: { bearing: track, pitch: COCKPIT_PITCH, distanceM } };
+}
+
+const latScale = (lat: number) => Math.log2(Math.cos(rad(Math.max(-MAX_CENTRE_LAT, Math.min(MAX_CENTRE_LAT, lat)))));
+
+/** Between two places along the great circle. */
+function slerp(a: [number, number], b: [number, number], k: number): [number, number] {
+  const v = (p: [number, number]) => [Math.cos(rad(p[1])) * Math.cos(rad(p[0])), Math.cos(rad(p[1])) * Math.sin(rad(p[0])), Math.sin(rad(p[1]))];
+  const [p, q] = [v(a), v(b)];
+  const d = Math.acos(Math.min(1, Math.max(-1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2])));
+  if (d < 1e-9) return b;
+  const [k1, k2] = [Math.sin((1 - k) * d) / Math.sin(d), Math.sin(k * d) / Math.sin(d)];
+  const [x, y, z] = [k1 * p[0] + k2 * q[0], k1 * p[1] + k2 * q[1], k1 * p[2] + k2 * q[2]];
+  return [deg(Math.atan2(y, x)), deg(Math.atan2(z, Math.hypot(x, y)))];
+}
+
+export class GeoFocus {
+  target: GeoTarget | null = null;
+  private listeners: ((target: GeoTarget | null) => void)[] = [];
+  private raf = 0;
+  private startedAt = 0;
+  private lastTick = 0;
+  private from: [number, number] = [0, 0];
+  /** the camera's height at the start: on to another object it starts from the height of the last one */
+  private fromElevation = 0;
+  private bearing = 0;
+  private pitch = 0;
+  /** zoom of the distance to the object: wanted and shown */
+  private wanted = 0;
+  private zoom = 0;
+  private restore: { handlers: string[]; clamped: boolean; touchAction: string } | null = null;
+  private pointers = new Map<number, { x: number; y: number }>();
+  private last = '';
+  /** the pointer travelled since it went down: what follows is the end of a drag, not a click */
+  private dragged = false;
+  private travel = 0;
+  private holding = false;
+  /** where the buttons want the camera; a drag takes over */
+  private aimBearing: number | null = null;
+  private aimPitch: number | null = null;
+  /** the centre set last: a different one means someone else moves the camera */
+  private lastCentre: [number, number] = [0, 0];
+
+  constructor(
+    private map: MlMap,
+    private stage: GeoStage,
+  ) {}
+
+  /** `fn` hears about every change of the followed object. */
+  listen(fn: (target: GeoTarget | null) => void) {
+    this.listeners.push(fn);
+  }
+
+  private changed() {
+    for (const fn of this.listeners) fn(this.target);
+  }
+
+  /**
+   * A click on the map (CSS px): focuses what it hits. True: the click is used up. False: it is free for
+   * whatever else is at that point; whoever handles it decides if the focus ends (see holdWhile).
+   */
+  click(x: number, y: number): boolean {
+    if (this.dragged) {
+      this.dragged = false;
+      return true;
+    }
+    // the followed object itself: stays followed
+    if (this.target && this.stage.hits(this.target, x, y)) return true;
+    const target = this.stage.pick(x, y);
+    if (!target) return false;
+    this.start(target);
+    return true;
+  }
+
+  /** The zoom buttons, while following. False: not following, the map does it itself. */
+  zoomBy(delta: number): boolean {
+    if (!this.target) return false;
+    this.wanted += delta;
+    return true;
+  }
+
+  /** The tilt control, while following. */
+  setPitch(deg: number, animate: boolean): boolean {
+    if (!this.target) return false;
+    if (animate) this.aimPitch = deg;
+    else {
+      this.aimPitch = null;
+      this.pitch = deg;
+    }
+    return true;
+  }
+
+  /** The compass, while following. */
+  setBearing(deg: number): boolean {
+    if (!this.target) return false;
+    this.aimBearing = deg;
+    return true;
+  }
+
+  start(target: GeoTarget) {
+    const map = this.map;
+    map.stop();
+    this.target?.released?.();
+    this.target = target;
+    target.entered?.();
+    this.changed();
+    const c = map.getCenter();
+    this.from = [c.lng, c.lat];
+    this.fromElevation = map.getCenterElevation();
+    this.lastCentre = [c.lng, c.lat];
+    this.aimBearing = this.aimPitch = null;
+    this.bearing = map.getBearing();
+    this.pitch = map.getPitch();
+    const frame = this.stage.frame;
+    const alt = target.position(performance.now())?.[2] ?? 0;
+    this.zoom = this.wanted = distanceZoomFor(map.getZoom() - latScale(c.lat), alt, this.pitch, frame?.t ?? 1, frame?.pxDistance ?? map.getCanvas().clientHeight * 1.5);
+    this.startedAt = performance.now();
+    if (this.restore) return; // on to another object: everything is set up already
+    const handlers = HANDLERS.filter((h) => map[h].isEnabled());
+    for (const h of handlers) map[h].disable();
+    const box = map.getCanvasContainer();
+    this.restore = { handlers, clamped: map.getCenterClampedToGround(), touchAction: box.style.touchAction };
+    // north-up and the tilt limit of the zoomed-out map would turn the camera back
+    cameraHeld.add(map);
+    map.setMaxPitch(FOCUS_MAX_PITCH);
+    map.setCenterClampedToGround(false);
+    box.style.touchAction = 'none';
+    // capture: the app has wheel listeners of its own on the map
+    box.addEventListener('wheel', this.onWheel, { capture: true, passive: false });
+    box.addEventListener('pointerdown', this.onDown);
+    box.addEventListener('pointermove', this.onMove);
+    box.addEventListener('pointerup', this.onUp);
+    box.addEventListener('pointercancel', this.onUp);
+    box.addEventListener('contextmenu', this.onContext);
+    window.addEventListener('keydown', this.onKey);
+    map.on('move', this.onCameraMove);
+    this.lastTick = performance.now();
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  /** Asks to stop while `fn` runs are ignored: the next object may take over without the camera going back in between. */
+  holdWhile(fn: () => void) {
+    this.holding = true;
+    try {
+      fn();
+    } finally {
+      this.holding = false;
+    }
+  }
+
+  /** `handedOver`: someone else flies the camera already, so it must not be touched. */
+  stop(handedOver = false) {
+    if (!this.target || this.holding) return;
+    this.target.released?.();
+    this.target = null;
+    this.changed();
+    this.last = '';
+    this.dragged = false;
+    cancelAnimationFrame(this.raf);
+    this.stage.clock = null;
+    this.stage.nearPoint = null;
+    this.pointers.clear();
+    const map = this.map;
+    const box = map.getCanvasContainer();
+    box.removeEventListener('wheel', this.onWheel, { capture: true });
+    box.removeEventListener('pointerdown', this.onDown);
+    box.removeEventListener('pointermove', this.onMove);
+    box.removeEventListener('pointerup', this.onUp);
+    box.removeEventListener('pointercancel', this.onUp);
+    box.removeEventListener('contextmenu', this.onContext);
+    window.removeEventListener('keydown', this.onKey);
+    map.off('move', this.onCameraMove);
+    const r = this.restore!;
+    this.restore = null;
+    for (const h of r.handlers) map[h as (typeof HANDLERS)[number]].enable();
+    box.style.touchAction = r.touchAction;
+    cameraHeld.delete(map);
+    map.setCenterClampedToGround(r.clamped);
+    if (handedOver) {
+      // written through the camera (as in mapctl.ts): a camera call would end the flight that just began
+      (map as unknown as { _camera: { applyTransformChange(change: (tr: { setElevation(e: number): void }) => void): void } })._camera.applyTransformChange((tr) => tr.setElevation(0));
+      return;
+    }
+    // back down to the ground as well, the map does not know anything else
+    const back = { elevation: 0 };
+    const release = cameraRelease.get(map);
+    if (release) release(back);
+    else map.easeTo({ ...back, duration: 450 });
+  }
+
+  private tick = (now: number) => {
+    const target = this.target;
+    if (!target) return;
+    this.raf = requestAnimationFrame(this.tick);
+    const time = performance.now();
+    const p = target.position(time);
+    if (!p) {
+      this.stop();
+      return;
+    }
+    this.stage.clock = time;
+    this.stage.nearPoint = p;
+    const dt = Math.min(0.1, Math.max(0, (now - this.lastTick) / 1000));
+    this.lastTick = now;
+    const frame = this.stage.frame;
+    const t = frame?.t ?? 1;
+    const toCentre = frame?.pxDistance ?? this.map.getCanvas().clientHeight * 1.5;
+    const raw = Math.min(1, (time - this.startedAt) / FLY_IN_MS);
+    const k = raw * raw * (3 - 2 * raw);
+    const view = target.view?.(time);
+    if (view) {
+      this.aimBearing = view.bearing;
+      this.aimPitch = view.pitch;
+      this.wanted = distanceZoomOf(view.distanceM, toCentre);
+    }
+    const map = this.map;
+    this.aimCamera(dt);
+    const aim = focusCentre(p, this.bearing, this.pitch, t);
+    const centre = k < 1 ? slerp(this.from, aim, k) : aim;
+    // a wheel turned on at the limit must not have to be turned all the way back
+    const scale = latScale(centre[1]);
+    const lowest = distanceZoomFor(map.getMinZoom() + 0.05 - scale, p[2], this.pitch, t, toCentre);
+    let highest = distanceZoomFor(map.getMaxZoom() - scale, p[2], this.pitch, t, toCentre);
+    // nearer on the globe would put the camera behind the object; the flat map has no such limit
+    if (t > 0) highest = Math.min(highest, maxDistanceZoom(p[2], toCentre));
+    this.wanted = Math.max(lowest, Math.min(highest, this.wanted));
+    this.zoom += (this.wanted - this.zoom) * (1 - Math.exp(-dt / ZOOM_SMOOTH_S));
+    const zoom = mapZoomFor(this.zoom, p[2], this.pitch, t, toCentre) + scale;
+    const elevation = this.fromElevation + (p[2] - this.fromElevation) * k;
+    const state = `${centre[0]}|${centre[1]}|${zoom}|${this.bearing}|${this.pitch}|${elevation}`;
+    if (state === this.last) return;
+    this.last = state;
+    // a camera update of ours, for whoever listens to the move events
+    map.jumpTo({ center: centre, zoom, bearing: this.bearing, pitch: this.pitch, elevation }, { geo3dFocus: true });
+    const c = map.getCenter();
+    this.lastCentre = [c.lng, c.lat];
+  };
+
+  /** Eases towards what the buttons asked for. */
+  private aimCamera(dt: number) {
+    const k = 1 - Math.exp(-dt / AIM_SMOOTH_S);
+    if (this.aimBearing !== null) {
+      const delta = ((this.aimBearing - this.bearing + 540) % 360) - 180;
+      this.bearing += Math.abs(delta) < AIM_DONE_DEG ? delta : delta * k;
+      if (Math.abs(delta) < AIM_DONE_DEG) this.aimBearing = null;
+    }
+    if (this.aimPitch !== null) {
+      const delta = this.aimPitch - this.pitch;
+      this.pitch += Math.abs(delta) < AIM_DONE_DEG ? delta : delta * k;
+      if (Math.abs(delta) < AIM_DONE_DEG) this.aimPitch = null;
+    }
+  }
+
+  /** A flight or a jump from elsewhere (search, a panel): that wins, the focus lets go. A resize keeps the centre. */
+  private onCameraMove = (e: object) => {
+    if ((e as { geo3dFocus?: boolean }).geo3dFocus) return;
+    const c = this.map.getCenter();
+    const dLng = ((c.lng - this.lastCentre[0] + 540) % 360) - 180;
+    if (Math.abs(dLng) > OTHER_CAMERA_DEG || Math.abs(c.lat - this.lastCentre[1]) > OTHER_CAMERA_DEG) this.stop(true);
+  };
+
+  private onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // lines (mouse wheels in some browsers) are about 40 pixels
+    const delta = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+    this.wanted -= delta * WHEEL_ZOOM_PER_PIXEL;
+  };
+
+  private onDown = (e: PointerEvent) => {
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.travel = 0;
+    this.dragged = false;
+    this.aimBearing = this.aimPitch = null;
+    this.map.getCanvasContainer().setPointerCapture?.(e.pointerId);
+  };
+
+  private onMove = (e: PointerEvent) => {
+    const prev = this.pointers.get(e.pointerId);
+    if (!prev) return;
+    this.travel += Math.hypot(e.clientX - prev.x, e.clientY - prev.y);
+    if (this.travel > DRAG_PX) this.dragged = true;
+    const others = [...this.pointers.entries()].filter(([id]) => id !== e.pointerId);
+    if (others.length === 1) {
+      // two fingers: spread to zoom, turn to turn
+      const other = others[0][1];
+      const before = Math.hypot(prev.x - other.x, prev.y - other.y);
+      const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+      if (before > 0 && after > 0) this.wanted += Math.log2(after / before);
+      const angle = (x: number, y: number) => deg(Math.atan2(y - other.y, x - other.x));
+      this.bearing -= ((angle(e.clientX, e.clientY) - angle(prev.x, prev.y) + 540) % 360) - 180;
+    } else if (others.length === 0) {
+      this.bearing += (e.clientX - prev.x) * BEARING_PER_PIXEL;
+      this.pitch = Math.max(0, Math.min(FOCUS_MAX_PITCH, this.pitch - (e.clientY - prev.y) * PITCH_PER_PIXEL));
+    }
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  };
+
+  private onUp = (e: PointerEvent) => {
+    this.pointers.delete(e.pointerId);
+    // the source holds the view: dragging ends it, once the click that ends the drag has been used up
+    if (this.dragged && this.target?.view) setTimeout(() => this.stop());
+  };
+
+  private onContext = (e: Event) => e.preventDefault();
+
+  private onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') this.stop();
+  };
+}

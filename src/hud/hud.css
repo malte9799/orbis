@@ -249,21 +249,25 @@
 .hud[data-layout='landscape'] .foot .ebtn.ghost { width: 44px; height: 44px; padding: 0; justify-content: center; }
 
 /* ---------- add layer ---------- */
-.hud .addpop { position: absolute; left: calc(var(--hud-l) + 358px); top: calc(60px); width: 340px; max-height: min(560px, calc(100% - 76px)); z-index: 7; overflow: hidden; display: flex; flex-direction: column; }
+.hud .addpop { position: absolute; left: calc(var(--hud-l) + 358px); top: calc(60px); width: min(560px, calc(100% - var(--hud-l) - 358px - var(--hud-r))); max-height: min(560px, calc(100% - 76px)); z-index: 7; overflow: hidden; display: flex; flex-direction: column; }
 .hud .srch { margin: 12px; height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 11px; background: rgba(255,255,255,.08); border: 1px solid var(--accent); flex: none; }
 .hud .srch svg { width: 16px; height: 16px; color: var(--muted); }
 .hud .srch input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: 14px Inter, system-ui, sans-serif; }
 .hud .addlst { overflow: auto; padding: 0 8px 12px; }
-.hud .addlst h4 { margin: 8px 6px 4px; font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.hud .addlst h4 svg { width: 13px; height: 13px; color: #ffd166; }
-.hud .ar { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 7px 6px; border-radius: 10px; cursor: pointer; }
-.hud .ar:hover, .hud .ar:focus-visible { background: var(--card); }
-.hud .ar .glyph { width: 28px; height: 28px; border-radius: 8px; }
-.hud .ar .glyph svg { width: 14px; height: 14px; }
-.hud .ar b { font-size: 13.5px; font-weight: 500; }
-.hud .ar small { display: block; font-size: 11.5px; color: var(--muted); }
-.hud .ar .plus { width: 26px; height: 26px; border-radius: 8px; background: var(--card-2); display: grid; place-items: center; color: var(--text); }
-.hud .ar .plus svg { width: 14px; height: 14px; }
+.hud .addlst h4 { position: sticky; top: 0; z-index: 1; margin: 0 -8px; padding: 10px 14px 6px; font: 600 10.5px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 6px; background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.hud .acat { padding-bottom: 4px; }
+.hud .addlst h4 svg { width: 13px; height: 13px; flex: none; }
+.hud .acat:has(.sug) h4 svg { color: #ffd166; }
+.hud .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.hud .ar { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 10px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); cursor: pointer; }
+.hud .ar:hover, .hud .ar:focus-visible { background: var(--card-2); border-color: var(--border-2); }
+.hud .ar .glyph { width: 32px; height: 32px; border-radius: 9px; margin-bottom: 6px; }
+.hud .ar .glyph svg { width: 16px; height: 16px; }
+.hud .ar b { font-size: 13px; font-weight: 500; line-height: 1.25; }
+.hud .ar small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
+.hud .ar .tagr { font: 600 9.5px ui-monospace, Menlo, monospace; letter-spacing: .06em; color: var(--muted); }
+.hud .ar .plus { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 8px; background: var(--card-2); display: grid; place-items: center; color: var(--text); }
+.hud .ar .plus svg { width: 13px; height: 13px; }
 .hud .ar.sug .plus { background: var(--accent); color: #fff; }
 .hud .addlst .empty { padding: 20px 10px; text-align: center; color: var(--muted); font-size: 13px; }
 
@@ -442,10 +446,11 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .hud-sheet .sh-body .gc.new { min-height: 96px; }
 .hud-sheet .sh-body .srch { margin: 0; flex: none; height: 44px; font-size: 16px; }
 .hud-sheet .sh-body .srch input { font-size: 16px; }
-.hud-sheet .sh-body .addlst { padding: 0; }
-.hud-sheet .sh-body .ar .plus { width: 36px; height: 36px; border-radius: 11px; }
-.hud-sheet .sh-body .ar .plus svg { width: 17px; height: 17px; }
-.hud-sheet .sh-body .ar { padding: 9px 6px; }
+.hud-sheet .sh-body .addlst { padding: 0; overflow: visible; }
+.hud-sheet .sh-body .addlst h4 { margin: 0 -14px; }
+.hud-sheet .sh-body .agrid { grid-template-columns: 1fr 1fr; }
+.hud-sheet .sh-body .ar .plus { width: 32px; height: 32px; border-radius: 10px; }
+.hud-sheet .sh-body .ar .plus svg { width: 16px; height: 16px; }
 .hud-sheet.is-dialog .sh-body { padding: 0 0 14px; display: block; }
 .hud-sheet .dlg { position: static; transform: none; width: auto; max-height: none; overflow: visible; background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .hud-sheet .dlg .pv { height: 84px; margin: 0 14px; border-radius: 14px; }
@@ -572,7 +577,7 @@ body.hud-cover .orbis-nav { z-index: 0; }
   .hud .colgrid button { width: 36px; height: 36px; }
   .hud .ebtn.ghost, .hud .dbar .ebtn { min-height: 44px; }
   .hud .dlg .act .ebtn { height: 44px; }
-  .hud .ar .plus { width: 44px; height: 44px; }
+  .hud .ar .plus { width: 36px; height: 36px; top: 6px; right: 6px; }
   .maplibregl-ctrl-group button { width: 44px !important; height: 44px !important; }
   .globe-view[data-layout='desktop'] .proj-ctl button { width: 44px !important; height: 44px !important; }
 }

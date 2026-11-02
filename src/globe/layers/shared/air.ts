@@ -64,7 +64,10 @@ export function fetchAircraft(ctx: ExtraCtx): Promise<void> {
     return loadGlobalAircraft()
       .then((fc) => {
         if (seq !== st.aircraftSeq || !ctx.isOn('aircraft')) return;
-        ctx.setData('aircraft', fc);
+        st.lastAircraft = fc;
+        // the whole world, nothing else can be missing from it
+        st.airport3d?.feed(fc, { lat: 0, lon: 0, nm: 1e6 });
+        refreshAircraftIcons(ctx);
         ctx.set('aircraft', { loading: false, count: fc.features.length, note: 'Weltübersicht (OpenSky, alle 2 min; zuvor herangezoomte Gebiete aktueller) – reinzoomen für Live-Details' });
       })
       .catch(() => {
@@ -176,6 +179,10 @@ export function pickFlight(ctx: ExtraCtx, x: number, y: number): string | null {
   return st.airport3d?.pick(x, y) ?? null;
 }
 
+export function hoverFlight(ctx: ExtraCtx, hex: string | null) {
+  getState(ctx).airport3d?.hover(hex);
+}
+
 export function selectFlight(ctx: ExtraCtx, hex: string | null) {
   const st = getState(ctx);
   st.airport3d?.select(hex);
@@ -230,6 +237,16 @@ export function applyAir(ctx: ExtraCtx) {
   const st = getState(ctx);
   // 3D layout of the airports, 3D aircraft with trails, and whether the 2D aircraft icons are shown
   st.airport3d?.configure({ layout: ctx.isOn('airport3d'), planes: wantsAircraft(ctx), icons: ctx.isOn('aircraft') });
+  // nothing uses the aircraft any more: the data goes, and switching back on loads at once
+  if (!wantsAircraft(ctx) && st.lastAircraft) {
+    st.lastAircraft = null;
+    st.aircraftAt = 0;
+    st.heliFeatures = [];
+    st.rotorShown = false;
+    ctx.setData('aircraft', empty());
+    ctx.setData('aircraft-rotor', empty());
+    ctx.set('aircraft', { loading: false, count: undefined, note: undefined });
+  }
   refreshAircraftIcons(ctx);
   // the radiosondes fly along with the aircraft: feed their positions into the 3D tracker (again
   // after each toggle and whenever the last feed lies back; the feed itself is fresh every 60 s)
@@ -252,8 +269,8 @@ export function applyAir(ctx: ExtraCtx) {
 /** the 3D airport layer (also carries the 3D aircraft and radiosondes) */
 export function createAirport(ctx: ExtraCtx) {
   const st = getState(ctx);
-  st.airport3d = new Airport3D(ctx.map, 'marker', { info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx), iconsTick: () => refreshLiveIcons(ctx) });
+  st.airport3d = new Airport3D(ctx.map, ctx.stage, 'marker', { load: (hex) => loadAircraftByHex(hex).then((fc) => st.airport3d?.feed(fc)), info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx), iconsTick: () => refreshLiveIcons(ctx) });
   st.airport3d.init();
 }
 
-export const airApi = { flightInfo, pickFlight, selectFlight, fitFlight, sondeInfo, selectSonde, fitSonde };
+export const airApi = { flightInfo, pickFlight, hoverFlight, selectFlight, fitFlight, sondeInfo, selectSonde, fitSonde };

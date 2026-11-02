@@ -1,5 +1,11 @@
+import * as THREE from 'three';
 import type { FeatureCollection } from 'geojson';
-import { defineExtra } from '../types';
+import type { Map as MlMap } from 'maplibre-gl';
+import { arcPoints } from '../../geo3d/arc';
+import type { GeoFrame } from '../../geo3d/frame';
+import { GeoLine } from '../../geo3d/line';
+import type { GeoFeature, GeoPart } from '../../geo3d/stage';
+import { defineExtra, type ExtraCtx } from '../types';
 import type { InfoPanelData } from '../../infopanel';
 import { FONT_REGULAR } from '../../vector';
 import { fetchJson } from '../../../util';
@@ -30,56 +36,92 @@ interface Data {
 
 const COLOR = '#ef5350';
 // colours and bulge of the arc classes (the board's own line classes); the bulge keeps arcs between the same two countries apart
-const CLASS: Record<Cls, { color: string; bulge: number; label: string; dash?: number[] }> = {
-  money: { color: '#ffd54f', bulge: 0, label: 'Geld, laut Register geflossen' },
-  ordered: { color: '#ffb74d', bulge: 2.5, label: 'Bestellt oder beauftragt', dash: [3, 2] },
-  ceiling: { color: '#ba8f45', bulge: -2.5, label: 'Genehmigte Obergrenze (Maximum)', dash: [0.6, 2] },
-  structure: { color: '#90a4ae', bulge: 5, label: 'Nationale Sektion, kein Geld', dash: [0.6, 2] },
+const CLASS: Record<Cls, { color: string; bulge: number; lift: number; label: string; dash?: [number, number] }> = {
+  money: { color: '#ffd54f', bulge: 0, lift: 0.12, label: 'Geld, laut Register geflossen' },
+  ordered: { color: '#ffb74d', bulge: 2.5, lift: 0.16, label: 'Bestellt oder beauftragt', dash: [3, 2] },
+  ceiling: { color: '#ba8f45', bulge: -2.5, lift: 0.2, label: 'Genehmigte Obergrenze (Maximum)', dash: [0.6, 2] },
+  structure: { color: '#90a4ae', bulge: 5, lift: 0.24, label: 'Nationale Sektion, kein Geld', dash: [0.6, 2] },
 };
+const BASE_OPACITY = 0.9;
+/** the bows have no map layer; this name leads a click to the handler of this layer */
+const ARC_LAYER = 'geldfluesse-arc';
+/** how close to a bow (CSS px) a click still hits it */
+const PICK_PX = 6;
 const SYMBOL: Record<string, string> = { CAD: 'C$', AUD: 'A$', GBP: '£', USD: '$', ILS: '₪' };
 const MONEY = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
 
-/** points along the great circle between two places (degrees), so the arc follows the globe */
-export function greatCircle(a: { lat: number; lon: number }, b: { lat: number; lon: number }, bulge: number, steps = 64): [number, number][] {
-  const r = Math.PI / 180;
-  const v = (c: { lat: number; lon: number }) => [Math.cos(c.lat * r) * Math.cos(c.lon * r), Math.cos(c.lat * r) * Math.sin(c.lon * r), Math.sin(c.lat * r)];
-  const p = v(a);
-  const q = v(b);
-  const d = Math.acos(Math.min(1, Math.max(-1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2])));
-  const out: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const k1 = Math.sin((1 - t) * d) / Math.sin(d);
-    const k2 = Math.sin(t * d) / Math.sin(d);
-    const x = k1 * p[0] + k2 * q[0];
-    const y = k1 * p[1] + k2 * q[1];
-    const z = k1 * p[2] + k2 * q[2];
-    // sideways shift (degrees), largest in the middle
-    const w = Math.sin(Math.PI * t) * bulge;
-    const lon = Math.atan2(y, x) / r;
-    const lat = Math.atan2(z, Math.hypot(x, y)) / r;
-    out.push([lon + w * Math.sign(b.lat - a.lat || 1), lat + w * Math.sign(a.lon - b.lon || 1)]);
+/** The bows: 3D on the globe, lying on the ground on the flat map. */
+class FlowArcs implements GeoPart {
+  readonly object = new THREE.Group();
+  private arcs: { line: GeoLine; properties: Record<string, unknown> }[] = [];
+  private factor = 1;
+
+  constructor(private map: MlMap) {}
+
+  build(d: Data) {
+    const by = new Map(d.countries.map((c) => [c.name, c]));
+    for (const a of d.arcs) {
+      const f = by.get(a.from);
+      const t = by.get(a.to);
+      if (!f || !t) continue;
+      const c = CLASS[a.cls];
+      const line = new GeoLine(arcPoints([f.lon, f.lat], [t.lon, t.lat], { lift: c.lift, bulge: c.bulge }), { color: c.color, width: 2, opacity: BASE_OPACITY * this.factor, dash: c.dash, groundOnFlat: true });
+      this.object.add(line.object);
+      this.arcs.push({
+        line,
+        properties: { kind: 'arc', cls: a.cls, name: `${a.from} → ${a.to}`, amounts: JSON.stringify(a.amounts ?? []), lines: a.lines, label: a.label, text: a.text, board: a.board, sources: JSON.stringify(a.sources) },
+      });
+    }
+    this.map.triggerRepaint();
   }
-  return out;
+
+  update(frame: GeoFrame) {
+    // the width of the old map layer: 1.8 px at zoom 1 up to 4 px at zoom 8
+    const width = 1.8 + (Math.max(1, Math.min(8, this.map.getZoom())) - 1) * (2.2 / 7);
+    for (const { line } of this.arcs) {
+      line.setWidth(width);
+      line.update(frame);
+    }
+  }
+
+  setOpacity(f: number) {
+    this.factor = f;
+    for (const { line } of this.arcs) line.setOpacity(BASE_OPACITY * f);
+    this.map.triggerRepaint();
+  }
+
+  featureAt(frame: GeoFrame, x: number, y: number): GeoFeature | null {
+    let best: Record<string, unknown> | null = null;
+    let bestD = PICK_PX;
+    for (const { line, properties } of this.arcs) {
+      const d = line.distanceTo(frame, x, y);
+      if (d < bestD) {
+        bestD = d;
+        best = properties;
+      }
+    }
+    return best && { layerId: ARC_LAYER, properties: best };
+  }
+
+  dispose() {
+    for (const { line } of this.arcs) line.dispose();
+  }
 }
 
+const arcs = (ctx: ExtraCtx) =>
+  ctx.state<FlowArcs>('geldfluesse', () => {
+    const part = new FlowArcs(ctx.map);
+    part.object.visible = false;
+    ctx.stage.add(part);
+    return part;
+  });
+
 function toGeoJson(d: Data): FeatureCollection {
-  const by = new Map(d.countries.map((c) => [c.name, c]));
   const features: FeatureCollection['features'] = d.countries.map((c) => ({
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [c.lon, c.lat] },
     properties: { kind: 'country', name: c.name, notes: c.notes.join('\n') },
   }));
-  for (const a of d.arcs) {
-    const f = by.get(a.from);
-    const t = by.get(a.to);
-    if (!f || !t) continue;
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'LineString', coordinates: greatCircle(f, t, CLASS[a.cls].bulge) },
-      properties: { kind: 'arc', cls: a.cls, name: `${a.from} → ${a.to}`, amounts: JSON.stringify(a.amounts ?? []), lines: a.lines, label: a.label, text: a.text, board: a.board, sources: JSON.stringify(a.sources) },
-    });
-  }
   return { type: 'FeatureCollection', features };
 }
 
@@ -95,19 +137,6 @@ export default defineExtra({
   color: COLOR,
   sources: { geldfluesse: 'Geldflüsse: <a href="https://whofundedgenocide.com/map/">Who Funded Genocide – The Entire Network</a>, Research mit Wallface (CC BY 4.0)' },
   addLayers({ add, hidden }) {
-    for (const [cls, c] of Object.entries(CLASS)) {
-      add(
-        {
-          id: `geldfluesse-${cls}`,
-          type: 'line',
-          source: 'geldfluesse',
-          filter: ['all', ['==', ['get', 'kind'], 'arc'], ['==', ['get', 'cls'], cls]],
-          layout: { ...hidden, 'line-cap': c.dash ? 'butt' : 'round' },
-          paint: { 'line-color': c.color, 'line-width': ['interpolate', ['linear'], ['zoom'], 1, 1.8, 8, 4], 'line-opacity': 0.9, ...(c.dash ? { 'line-dasharray': c.dash } : {}) },
-        },
-        'marker',
-      );
-    }
     add(
       {
         id: 'geldfluesse-pt',
@@ -131,10 +160,19 @@ export default defineExtra({
       'marker',
     );
   },
+  setOpacity(ctx, f) {
+    arcs(ctx).setOpacity(f);
+  },
+  apply(ctx) {
+    // the first apply comes before anyone switched it on: no stage for a layer that stays off
+    if (ctx.isOn('geldfluesse')) arcs(ctx).object.visible = true;
+    else if (ctx.hasState('geldfluesse')) arcs(ctx).object.visible = false;
+  },
   enable(ctx) {
     ctx.loadOnce('geldfluesse', Infinity, async () => {
       const d = await fetchJson<Data>(`${import.meta.env.BASE_URL}data/geldfluesse.json`);
       ctx.setData('geldfluesse', toGeoJson(d));
+      arcs(ctx).build(d);
       return { count: d.arcs.length, note: 'Durchgezogen: Geld · gestrichelt: bestellt · gepunktet: Obergrenze / kein Geld · Währungen werden nie addiert' };
     });
   },
@@ -174,6 +212,6 @@ export default defineExtra({
     }
     return { type: 'panel', data, lng: at.lng, lat: at.lat };
   },
-  layers: [...Object.keys(CLASS).map((c) => `geldfluesse-${c}`), 'geldfluesse-pt', 'geldfluesse-label'],
-  clickLayers: [...Object.keys(CLASS).map((c) => `geldfluesse-${c}`), 'geldfluesse-pt'],
+  layers: ['geldfluesse-pt', 'geldfluesse-label'],
+  clickLayers: [ARC_LAYER, 'geldfluesse-pt'],
 });

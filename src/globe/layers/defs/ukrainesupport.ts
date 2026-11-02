@@ -6,7 +6,6 @@ import { FONT_REGULAR } from '../../vector';
 import { tile, category } from '../../sidepanel';
 import type { DetailContent } from '../../detailpanel';
 import type { GlyphId } from '../../icons';
-import { greatCircle } from './geldfluesse';
 import { ukraineSupport, UKRAINE_SUPPORT_SITE, type UkraineDonor, type UkraineSupportData } from '../../../api/ukraine';
 
 // Hilfe für die Ukraine nach Geberland (Kiel Ukraine Support Tracker, Institut für Weltwirtschaft):
@@ -21,6 +20,26 @@ const bn = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFra
 const eur = (v: number) => `${bn.format(v)} Mrd. €`;
 
 let cache: UkraineSupportData | null = null;
+
+/** Punkte entlang des Großkreises zwischen zwei Orten (Grad), damit der Bogen der Kugel folgt */
+function greatCircle(a: { lat: number; lon: number }, b: { lat: number; lon: number }, steps = 64): [number, number][] {
+  const r = Math.PI / 180;
+  const v = (c: { lat: number; lon: number }) => [Math.cos(c.lat * r) * Math.cos(c.lon * r), Math.cos(c.lat * r) * Math.sin(c.lon * r), Math.sin(c.lat * r)];
+  const p = v(a);
+  const q = v(b);
+  const d = Math.acos(Math.min(1, Math.max(-1, p[0] * q[0] + p[1] * q[1] + p[2] * q[2])));
+  const out: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const k1 = Math.sin((1 - t) * d) / Math.sin(d);
+    const k2 = Math.sin(t * d) / Math.sin(d);
+    const x = k1 * p[0] + k2 * q[0];
+    const y = k1 * p[1] + k2 * q[1];
+    const z = k1 * p[2] + k2 * q[2];
+    out.push([Math.atan2(y, x) / r, Math.atan2(z, Math.hypot(x, y)) / r]);
+  }
+  return out;
+}
 
 function detail(c: UkraineDonor, d: UkraineSupportData): DetailContent {
   const share = (v: number) => (c.tot ? `${Math.round((v / c.tot) * 100)} %` : '–');
@@ -120,7 +139,7 @@ export default defineExtra({
         feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [c.lon, c.lat] }, properties: { kind: 'donor', i, n: c.n } });
         feats.push({
           type: 'Feature',
-          geometry: { type: 'LineString', coordinates: greatCircle(c, KYIV, 0) },
+          geometry: { type: 'LineString', coordinates: greatCircle(c, KYIV) },
           // Breite 0–10 nach Wurzel des Gesamtbetrags, damit kleine Geber sichtbar bleiben
           properties: { kind: 'arc', i, n: c.n, w: Math.sqrt(c.tot / max) * 10 },
         });

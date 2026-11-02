@@ -1,8 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MercatorCoordinate, type CustomLayerInterface, type Map as MlMap } from 'maplibre-gl';
+import type { Map as MlMap } from 'maplibre-gl';
+import type { GeoFrame, Vec3 } from './geo3d/frame';
+import { GeoInstances } from './geo3d/instances';
+import { GeoLine } from './geo3d/line';
+import type { GeoPart, GeoTarget } from './geo3d/stage';
+import { GeoWall } from './geo3d/wall';
 
-// 3D aircraft: a three.js layer inside MapLibre's GL context. Positions are
+// 3D aircraft: a part of the 3D stage. Positions are
 // reported every ~10 s, so every aircraft keeps a small state that is dead-reckoned from its
 // ground speed and heading and eased towards each new report (no visible jumps). Around each
 // aircraft: its trail at the real altitude, a faint wall from the trail down to the ground,
@@ -68,6 +73,15 @@ const WALL_MAX_M = 1500;
 const EXTRAPOLATE = 1;
 const M_PER_DEG = 111320;
 const YELLOW = 0xf2c94c;
+/** far out, aircraft are this much smaller than near ones (there are thousands of them) */
+const CROWD_SCALE = 0.4;
+/** how often the far aircraft are worked out anew (ms): they hardly move on the screen */
+const CROWD_IDLE_MS = 1000;
+const CROWD_MOVING_MS = 100;
+/** an aircraft this far outside of the screen (CSS px) is left out */
+const CROWD_MARGIN_PX = 60;
+/** how close to a far aircraft (CSS px) a click still hits it */
+const CROWD_PICK_PX = 12;
 const RED = 0xff2d55;
 
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -183,7 +197,7 @@ const trailAlt = (r: { ground: boolean; altM: number }) => (r.ground ? 0.3 : r.a
 
 /** Take everything of an aircraft out of the scene and free what it owns (models share geometry). */
 function disposePlane(p: PlaneState) {
-  for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) o?.parent?.remove(o);
+  for (const o of [p.obj, p.shadow, p.drop, p.rig?.line.object, p.rig?.wall.object, p.pulse]) o?.parent?.remove(o);
   if (p.obj) disposeMaterials(p.obj);
   (p.pulse?.material as THREE.Material | undefined)?.dispose();
   p.rig?.dispose();
@@ -252,6 +266,23 @@ function airliner(k: number): THREE.BufferGeometry {
     return n;
   });
   return mergeGeometries(flat)!;
+}
+
+/** The same aircraft with very few triangles, for thousands of them far out. */
+function farAirliner(k: number): THREE.BufferGeometry {
+  const L = 37.6 * k;
+  const r = 1.95 * k;
+  const parts: THREE.BufferGeometry[] = [
+    new THREE.CylinderGeometry(r, r * 0.4, L, 5).translate(0, 0, 3.3 * k),
+    ...wingPanel(r * 0.7, 17.9 * k, 3.2 * k, 6.5 * k, 1.6 * k, 7.5 * k, 0.5 * k, 2.2 * k),
+    ...wingPanel(r * 0.5, 6.2 * k, -L * 0.34, 4.2 * k, 1.3 * k, 3.4 * k, 0.35 * k, 3.6 * k),
+    new THREE.BoxGeometry(0.5 * k, 7 * k, 6.4 * k).translate(0, -L * 0.4, 7 * k),
+  ];
+  return mergeGeometries(parts.map((g) => {
+    const n = g.index ? g.toNonIndexed() : g;
+    n.deleteAttribute('uv');
+    return n;
+  }))!;
 }
 
 /** Parts of the helicopter: body, windscreen, main rotor blades, tail rotor blades (x right, y nose, z up). */
@@ -516,105 +547,19 @@ function makeModel(model: PlaneModel, emergency: boolean): THREE.Object3D {
 
 // ---------------------------------------------------------------------------
 
-
-// Thick lines of constant pixel width. Each segment is a quad (4 vertices) that carries both of
-// its end points; the vertex shader projects them and pushes the corners sideways in screen space.
-const LINE_VERTEX = `
-attribute vec3 aStart;
-attribute vec3 aEnd;
-attribute vec2 aCorner;
-attribute vec2 aT; // report time of start / end (end < 0: the moving head = now)
-uniform vec2 uRes;
-uniform float uWidth;
-uniform float uNow;
-uniform float uFade; // 0: no fading
-varying float vFade;
-varying float vD;
-void main() {
-  vD = mix(aT.x, aT.y, aCorner.x); // distance along a dashed line (forecast)
-  float te = aT.y < 0.0 ? uNow : aT.y;
-  vFade = uFade > 0.0 ? clamp(1.0 - (uNow - mix(aT.x, te, aCorner.x)) / uFade, 0.0, 1.0) : 1.0;
-  vec4 cs = projectionMatrix * modelViewMatrix * vec4(aStart, 1.0);
-  vec4 ce = projectionMatrix * modelViewMatrix * vec4(aEnd, 1.0);
-  if (cs.w <= 0.0 || ce.w <= 0.0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-    return;
-  }
-  vec2 d = (ce.xy / ce.w - cs.xy / cs.w) * uRes;
-  float len = length(d);
-  vec2 dir = len > 0.0001 ? d / len : vec2(1.0, 0.0);
-  vec2 nrm = vec2(-dir.y, dir.x);
-  vec4 c = mix(cs, ce, aCorner.x);
-  c.xy += nrm * aCorner.y * uWidth / uRes * c.w;
-  gl_Position = c;
-}`;
-const LINE_FRAGMENT = `
-uniform float uOpacity;
-uniform vec3 uColor;
-uniform float uDash; // dash period in metres, 0: solid
-varying float vFade;
-varying float vD;
-void main() {
-  if (uDash > 0.0 && mod(vD, uDash) > uDash * 0.55) discard;
-  gl_FragColor = vec4(uColor, uOpacity * vFade);
-}`;
-const WALL_VERTEX = `
-attribute float aT;
-uniform float uNow;
-uniform float uFade;
-varying float vFade;
-varying float vD;
-void main() {
-  vD = 0.0;
-  float t = aT < 0.0 ? uNow : aT;
-  vFade = uFade > 0.0 ? clamp(1.0 - (uNow - t) / uFade, 0.0, 1.0) : 1.0;
-  vFade *= 1.0 - smoothstep(${WALL_FULL_M.toFixed(1)}, ${WALL_MAX_M.toFixed(1)}, position.z);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-}`;
+const TRAIL_COLOR = '#ff6a2b';
+const FORECAST_COLOR = '#b8bfcc';
+/** all trails faint and fading out, the one of the selected aircraft complete and at full strength */
+const TRAIL_STYLE = { width: 2, opacity: 0.55, fade: TRAIL_FADE_MS, wall: 0.06 };
+const TRAIL_STYLE_SELECTED = { width: 3, opacity: 1, fade: 0, wall: 0.15 };
 
 interface Mats {
-  line: THREE.ShaderMaterial;
-  lineSel: THREE.ShaderMaterial;
-  wall: THREE.ShaderMaterial;
-  wallSel: THREE.ShaderMaterial;
-  /** grey dashed line to the airports of the route */
-  forecast: THREE.ShaderMaterial;
-  /** current time (performance.now ms), shared by the trail shaders */
-  now: { value: number };
   shadow: THREE.MeshBasicMaterial;
   drop: THREE.LineBasicMaterial;
 }
 
 function makeMats(): Mats {
-  const dpr = window.devicePixelRatio || 1;
-  const now = { value: 0 };
-  const line = (width: number, opacity: number, fade: number, colour = new THREE.Vector3(1, 0.416, 0.169)) =>
-    new THREE.ShaderMaterial({
-      vertexShader: LINE_VERTEX,
-      fragmentShader: LINE_FRAGMENT,
-      uniforms: { uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: width * dpr }, uOpacity: { value: opacity }, uNow: now, uFade: { value: fade }, uColor: { value: colour }, uDash: { value: 0 } },
-      transparent: true,
-      // the trail rigs are mirrored (y flipped), which flips the triangle winding; the forecast line is not
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-  const wall = (opacity: number, fade: number) =>
-    new THREE.ShaderMaterial({
-      vertexShader: WALL_VERTEX,
-      fragmentShader: LINE_FRAGMENT,
-      uniforms: { uOpacity: { value: opacity }, uNow: now, uFade: { value: fade }, uColor: { value: new THREE.Vector3(1, 0.416, 0.169) }, uDash: { value: 0 } },
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
   return {
-    now,
-    // all trails faint and fading out, the one of the selected aircraft complete and at full strength
-    line: line(2, 0.55, TRAIL_FADE_MS),
-    lineSel: line(3, 1, 0),
-    wall: wall(0.06, TRAIL_FADE_MS),
-    wallSel: wall(0.15, 0),
-    forecast: line(2.5, 0.85, 0, new THREE.Vector3(0.72, 0.75, 0.8)),
     shadow: new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, side: THREE.DoubleSide, depthWrite: false }),
     drop: new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false }),
   };
@@ -624,107 +569,58 @@ function makeMats(): Mats {
 const dropGeometry = () => new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, 1], 3));
 
 /**
- * Trail of one aircraft in local metres around its first point (x east, y north, z up): a fat
- * line plus a wall down to the ground. The last vertex follows the aircraft and is moved in place
- * every frame; the rest is rebuilt only when a new position was reported.
+ * Trail of one aircraft: a fat line plus a wall down to the ground. The last point follows the
+ * aircraft and is moved in place every frame; the rest is rebuilt only when a new position was reported.
  */
 class TrailRig {
-  line = new THREE.Mesh(new THREE.BufferGeometry());
-  wall = new THREE.Mesh(new THREE.BufferGeometry());
-  lon0 = 0;
-  lat0 = 0;
+  line = new GeoLine([], { color: TRAIL_COLOR, width: TRAIL_STYLE.width, opacity: TRAIL_STYLE.opacity, fadeMs: TRAIL_STYLE.fade });
+  wall = new GeoWall({ color: TRAIL_COLOR, fullM: WALL_FULL_M, goneM: WALL_MAX_M });
   private count = -1;
   private flatBuilt = false;
-  private points = 0;
-  private aEnd: THREE.BufferAttribute | null = null;
-  private wallPos: Float32Array = new Float32Array(0);
+  /** longitude of the last point, the head stays next to it across the antimeridian */
+  private lastLon = 0;
 
-  constructor() {
-    for (const o of [this.line, this.wall]) {
-      o.matrixAutoUpdate = false;
-      o.frustumCulled = false;
-    }
-    this.wall.renderOrder = 1;
-    this.line.renderOrder = 2;
-  }
-
-  private local(lon: number, lat: number, alt: number): [number, number, number] {
-    return [(lon - this.lon0) * Math.cos(rad(this.lat0)) * M_PER_DEG, (lat - this.lat0) * M_PER_DEG, alt];
+  private near(lon: number) {
+    return lon + 360 * Math.round((this.lastLon - lon) / 360);
   }
 
   private build(trail: [number, number, number, number][], flat: boolean) {
-    this.lon0 = trail[0][0];
-    this.lat0 = trail[0][1];
-    const pts = trail.map((t) => this.local(t[0], t[1], flat ? 0.3 : t[2]));
+    this.lastLon = trail[0][0];
+    const pts = trail.map((t): Vec3 => {
+      this.lastLon = this.near(t[0]);
+      return [this.lastLon, t[1], flat ? 0.3 : t[2]];
+    });
     pts.push(pts[pts.length - 1]); // the head, moved every frame
-    this.points = pts.length;
-    const segs = pts.length - 1;
-    // line: one quad per segment, corners (along, side) = (0,-1) (0,1) (1,-1) (1,1)
-    const start = new Float32Array(segs * 12);
-    const end = new Float32Array(segs * 12);
-    const corner = new Float32Array(segs * 8);
-    const times = new Float32Array(segs * 8);
-    const index = new Uint32Array(segs * 6);
-    for (let i = 0; i < segs; i++) {
-      for (let v = 0; v < 4; v++) {
-        start.set(pts[i], (i * 4 + v) * 3);
-        end.set(pts[i + 1], (i * 4 + v) * 3);
-        corner.set([v >> 1, v & 1 ? 1 : -1], (i * 4 + v) * 2);
-        times.set([trail[i][3], i + 1 < trail.length ? trail[i + 1][3] : -1], (i * 4 + v) * 2);
-      }
-      index.set([0, 1, 2, 2, 1, 3].map((k) => i * 4 + k), i * 6);
-    }
-    this.line.geometry.dispose();
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(start, 3));
-    g.setAttribute('aStart', new THREE.BufferAttribute(start, 3));
-    this.aEnd = new THREE.BufferAttribute(end, 3);
-    g.setAttribute('aEnd', this.aEnd);
-    g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
-    g.setAttribute('aT', new THREE.BufferAttribute(times, 2));
-    g.setIndex(new THREE.BufferAttribute(index, 1));
-    this.line.geometry = g;
-    // wall: two triangles per segment, from the trail down to z = 0
-    const w = new Float32Array(segs * 18);
-    const wt = new Float32Array(segs * 6);
-    for (let i = 0; i < segs; i++) {
-      const [ax, ay, az] = pts[i];
-      const [bx, by, bz] = pts[i + 1];
-      w.set([ax, ay, az, bx, by, bz, ax, ay, 0, bx, by, bz, bx, by, 0, ax, ay, 0], i * 18);
-      const ta = trail[i][3];
-      const tb = i + 1 < trail.length ? trail[i + 1][3] : -1;
-      wt.set([ta, tb, ta, tb, tb, ta], i * 6);
-    }
-    this.wallPos = w;
-    this.wall.geometry.dispose();
-    this.wall.geometry = new THREE.BufferGeometry()
-      .setAttribute('position', new THREE.BufferAttribute(w, 3))
-      .setAttribute('aT', new THREE.BufferAttribute(wt, 1));
+    const times = [...trail.map((t) => t[3]), -1];
+    this.line.setPoints(pts, times);
+    this.wall.setPoints(pts, times);
     this.count = trail.length;
     this.flatBuilt = flat;
   }
 
   /** Bring the geometry to the aircraft's trail and current (displayed) position. */
-  sync(p: PlaneState, flat: boolean) {
+  sync(p: PlaneState, flat: boolean, selected: boolean, frame: GeoFrame, now: number, lift: number) {
     if (p.trail.length !== this.count || flat !== this.flatBuilt) this.build(p.trail, flat);
-    const [x, y, z] = this.local(p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt);
-    // the last quad's four vertices end at the head
-    const end = this.aEnd!;
-    const first = (this.points - 2) * 4;
-    for (let v = 0; v < 4; v++) end.setXYZ(first + v, x, y, z);
-    end.needsUpdate = true;
-    const w = this.wallPos;
-    const wb = (this.points - 2) * 18;
-    // head vertices of the last wall quad: B top (1st triangle 2nd, 2nd triangle 1st), B bottom
-    for (const v of [1, 3]) w.set([x, y, z], wb + v * 3);
-    w.set([x, y, 0], wb + 12);
-    (this.wall.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    this.wall.visible = !flat && !p.ground && p.dAlt > 3;
+    const head: Vec3 = [this.near(p.dLon), p.dLat, flat || p.ground ? 0.3 : p.dAlt];
+    this.line.setHead(head);
+    this.wall.setHead(head);
+    const style = selected ? TRAIL_STYLE_SELECTED : TRAIL_STYLE;
+    this.line.setWidth(style.width);
+    this.line.setOpacity(style.opacity);
+    this.line.setFade(style.fade);
+    this.wall.setStyle(style.wall, style.fade);
+    this.line.update(frame, now, lift);
+    this.wall.update(frame, now, lift);
+    this.wall.object.visible = !flat && !p.ground && p.dAlt > 3;
+  }
+
+  hide() {
+    this.line.object.visible = this.wall.object.visible = false;
   }
 
   dispose() {
-    this.line.geometry.dispose();
-    this.wall.geometry.dispose();
+    this.line.dispose();
+    this.wall.dispose();
   }
 }
 
@@ -732,22 +628,24 @@ class TrailRig {
 
 interface ForecastLeg {
   /** [lon, lat, altitude m] */
-  from: [number, number, number];
-  to: [number, number, number];
+  from: Vec3;
+  to: Vec3;
   /** dashes are anchored at the airport end so they stay put while the aircraft moves */
   anchor: 'from' | 'to';
 }
 
 const FC_SEGS = 48; // straight pieces per leg
-const FC_LEGS = 2;
+const FC_WIDTH = 2.5;
+/** one dash period = 14 screen px, in line widths */
+const FC_DASH: [number, number] = [(14 * 0.55) / FC_WIDTH, (14 * 0.45) / FC_WIDTH];
 
 /** Great circle between two points, `n` pieces, with altitude ramped linearly; lon unwrapped around `refLon`. */
-function greatCircle(a: [number, number, number], b: [number, number, number], n: number, refLon: number) {
+function greatCircle(a: Vec3, b: Vec3, n: number, refLon: number): Vec3[] {
   const [lo1, la1] = [rad(a[0]), rad(a[1])];
   const [lo2, la2] = [rad(b[0]), rad(b[1])];
   const h = Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2;
   const delta = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
-  const pts: [number, number, number][] = [];
+  const pts: Vec3[] = [];
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     let lon: number;
@@ -767,82 +665,11 @@ function greatCircle(a: [number, number, number], b: [number, number, number], n
     lon += 360 * Math.round((refLon - lon) / 360);
     pts.push([lon, lat, a[2] + (b[2] - a[2]) * t]);
   }
-  return { pts, metres: delta * 6371008.8 };
-}
-
-/**
- * Grey dashed lines of the selected aircraft: from the departure airport to where its trail
- * begins (no data there) and from its position to the destination airport. Positions are in
- * Mercator units relative to the aircraft, so far-away airports keep their precision.
- */
-class ForecastRig {
-  line: THREE.Mesh;
-  private start = new Float32Array(FC_LEGS * FC_SEGS * 12);
-  private end = new Float32Array(FC_LEGS * FC_SEGS * 12);
-  private times = new Float32Array(FC_LEGS * FC_SEGS * 8);
-  private aStart: THREE.BufferAttribute;
-  private aEnd: THREE.BufferAttribute;
-  private aT: THREE.BufferAttribute;
-
-  constructor(material: THREE.Material) {
-    const total = FC_LEGS * FC_SEGS;
-    const corner = new Float32Array(total * 8);
-    const index = new Uint32Array(total * 6);
-    for (let i = 0; i < total; i++) {
-      for (let v = 0; v < 4; v++) corner.set([v >> 1, v & 1 ? 1 : -1], (i * 4 + v) * 2);
-      index.set([0, 1, 2, 2, 1, 3].map((k) => i * 4 + k), i * 6);
-    }
-    const g = new THREE.BufferGeometry();
-    const dyn = (a: Float32Array, n: number) => new THREE.BufferAttribute(a, n).setUsage(THREE.DynamicDrawUsage);
-    this.aStart = dyn(this.start, 3);
-    this.aEnd = dyn(this.end, 3);
-    this.aT = dyn(this.times, 2);
-    g.setAttribute('position', this.aStart);
-    g.setAttribute('aStart', this.aStart);
-    g.setAttribute('aEnd', this.aEnd);
-    g.setAttribute('aT', this.aT);
-    g.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
-    g.setIndex(new THREE.BufferAttribute(index, 1));
-    g.setDrawRange(0, 0);
-    this.line = new THREE.Mesh(g, material);
-    this.line.matrixAutoUpdate = false;
-    this.line.frustumCulled = false;
-    this.line.renderOrder = 2;
-  }
-
-  /** `origin`: the aircraft [lon, lat]; `mpu`: Mercator units per metre there. Returns the Mercator origin. */
-  update(origin: [number, number], legs: ForecastLeg[], mpu: number): MercatorCoordinate {
-    const o = MercatorCoordinate.fromLngLat(origin, 0);
-    let seg = 0;
-    for (const leg of legs) {
-      const { pts, metres: total } = greatCircle(leg.from, leg.to, FC_SEGS, origin[0]);
-      const m = pts.map(([lon, lat, alt]) => {
-        const c = MercatorCoordinate.fromLngLat([lon, lat], 0);
-        return [c.x - o.x, c.y - o.y, alt * mpu];
-      });
-      for (let k = 0; k < FC_SEGS; k++, seg++) {
-        const d0 = leg.anchor === 'from' ? (total * k) / FC_SEGS : (total * (FC_SEGS - k)) / FC_SEGS;
-        const d1 = leg.anchor === 'from' ? (total * (k + 1)) / FC_SEGS : (total * (FC_SEGS - k - 1)) / FC_SEGS;
-        for (let v = 0; v < 4; v++) {
-          this.start.set(m[k], (seg * 4 + v) * 3);
-          this.end.set(m[k + 1], (seg * 4 + v) * 3);
-          this.times.set([d0, d1], (seg * 4 + v) * 2);
-        }
-      }
-    }
-    for (const a of [this.aStart, this.aEnd, this.aT]) a.needsUpdate = true;
-    this.line.geometry.setDrawRange(0, seg * 6);
-    this.line.visible = seg > 0;
-    return o;
-  }
-
-  dispose() {
-    this.line.geometry.dispose();
-  }
+  return pts;
 }
 
 export interface PlanesLayerHooks {
-  /** 'off': nothing drawn; 'flat': map not tilted (flat trails, models only without 2D icons); '3d': tilted */
+  /** 'off': nothing drawn; 'flat': map not tilted (flat trails, models only without 2D icons); '3d': tilted, or on the globe */
   mode(): 'off' | 'flat' | '3d';
   /** far out only this aircraft (the selected one) is drawn, with its trail and route; null: all */
   only(): string | null;
@@ -852,23 +679,19 @@ export interface PlanesLayerHooks {
   tick(): void;
   /** called about 4× a second with the planes that are drawn */
   frame(planes: PlaneState[]): void;
+  /** what the camera follows for this aircraft */
+  target(hex: string, cockpit: boolean): GeoTarget | null | Promise<GeoTarget | null>;
+  /** far out on the globe: all aircraft as simple models at once, only the selected one in full */
+  crowd(): boolean;
 }
 
-export class PlanesLayer implements CustomLayerInterface {
-  readonly id = 'ap3d-planes';
-  readonly type = 'custom' as const;
-  readonly renderingMode = '3d' as const;
-  private map!: MlMap;
-  private renderer!: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.Camera();
+export class PlanesLayer implements GeoPart {
+  readonly object = new THREE.Group();
+  readonly source = 'plane';
+  private frameNow: GeoFrame | null = null;
   private lastFrameHook = 0;
   private lastTick = 0;
-  private mats!: Mats;
-  private proj = new THREE.Matrix4();
-  /** Mercator position of the map centre: everything is placed relative to it (see render) */
-  private cx = 0;
-  private cy = 0;
+  private mats = makeMats();
   private flatNow = false;
   private drop = dropGeometry();
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
@@ -876,126 +699,128 @@ export class PlanesLayer implements CustomLayerInterface {
   selected: string | null = null;
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
-  private forecast?: ForecastRig;
-  /** callsign labels: plain elements moved every frame with the same matrix as the models (no lag when zooming) */
-  private labelBox?: HTMLDivElement;
-  private labels = new Map<string, HTMLDivElement>();
+  private forecast: GeoLine[] = [];
+  /** the name of the hovered aircraft: a plain element moved every frame with the models (no lag when zooming) */
+  private labelBox = document.createElement('div');
+  private label = document.createElement('div');
+  private hovered: string | null = null;
+  private far: GeoInstances | null = null;
+  private lastCrowd = 0;
+  private crowdCamera = '';
+  /** where the far aircraft are on the screen, for clicks and the cursor */
+  private crowdHits: { hex: string; x: number; y: number }[] = [];
+  private repaintTimer = 0;
 
   /** Route of an aircraft (null: none): a grey dashed line is drawn while it is the selected one. */
   setRoute(hex: string, route: { origin: [number, number]; destination: [number, number] } | null) {
     this.route = route ? { hex, ...route } : null;
-    this.map?.triggerRepaint();
+    this.map.triggerRepaint();
   }
 
   constructor(
+    private map: MlMap,
     readonly tracker: PlaneTracker,
     private hooks: PlanesLayerHooks,
   ) {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(0.4, -0.6, 1);
-    this.scene.add(sun);
-  }
-
-  onAdd(map: MlMap, gl: WebGL2RenderingContext) {
-    this.map = map;
-    this.renderer = new THREE.WebGLRenderer({ canvas: map.getCanvas(), context: gl, antialias: true });
-    this.renderer.autoClear = false;
-    this.mats = makeMats();
-    this.labelBox = document.createElement('div');
     this.labelBox.style.cssText = 'position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1';
+    this.label.style.cssText =
+      'display:none;position:absolute;left:0;top:0;white-space:pre;text-align:center;font:700 12px/1.2 system-ui,sans-serif;color:#fff;' +
+      'text-shadow:0 0 3px rgba(10,12,16,.95),0 0 3px rgba(10,12,16,.95),0 0 2px rgba(10,12,16,.95);will-change:transform';
+    this.labelBox.append(this.label);
     map.getCanvasContainer().appendChild(this.labelBox);
   }
 
-  onRemove() {
-    this.tracker.clear();
-    this.renderer?.dispose();
-    this.drop.dispose();
-    this.pulseGeo.dispose();
-    for (const m of Object.values(this.mats ?? {})) if ('dispose' in m) m.dispose();
-    this.forecast?.dispose();
-    this.labelBox?.remove();
-    this.labels.clear();
+  resolve(slug: string, params: Record<string, string>) {
+    return this.hooks.target(slug, params.view === 'cockpit');
   }
 
-  render(_gl: WebGL2RenderingContext, args: { defaultProjectionData: { mainMatrix: ArrayLike<number> } }) {
+  dispose() {
+    this.tracker.clear();
+    this.drop.dispose();
+    this.pulseGeo.dispose();
+    for (const m of Object.values(this.mats)) m.dispose();
+    for (const line of this.forecast) line.dispose();
+    this.labelBox.remove();
+    clearTimeout(this.repaintTimer);
+    this.far?.dispose();
+  }
+
+  update(frame: GeoFrame, now: number) {
+    this.frameNow = frame;
     const mode = this.hooks.mode();
+    this.object.visible = mode !== 'off';
     if (mode === 'off') {
-      this.syncLabels([]);
+      this.crowdHits = [];
+      // far out without models the 2D icon can be hovered all the same
+      if (this.hovered) this.tracker.step(now);
+      this.syncLabel();
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
         this.hooks.frame([]);
       }
-      return;
+      return false;
     }
     const flat = mode === 'flat';
     this.flatNow = flat;
-    // Float32 on the GPU cannot place metre-sized detail at world coordinates (~0.5, one metre is
-    // ~1e-8): the models jitter when zoomed in. So every object is positioned relative to the map
-    // centre and the projection gets the centre's offset folded in (computed in double precision).
-    const centre = MercatorCoordinate.fromLngLat(this.map.getCenter(), 0);
-    this.cx = centre.x;
-    this.cy = centre.y;
-    this.proj.fromArray(args.defaultProjectionData.mainMatrix as number[]).multiply(new THREE.Matrix4().makeTranslation(this.cx, this.cy, 0));
     const models = !flat || !this.hooks.icons();
     const only = this.hooks.only();
-    const now = performance.now();
     this.tracker.step(now);
+    const crowd = this.hooks.crowd();
+    if (crowd) this.updateCrowd(frame, now);
+    else if (this.far) {
+      this.far.object.visible = false;
+      this.crowdHits = [];
+    }
     const drawn: PlaneState[] = [];
     const map = this.map;
-    const center = map.getCenter();
-    // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
-    const mpp = (40075016 * Math.cos(rad(center.lat))) / (512 * 2 ** map.getZoom());
-    const boost = Math.max(1, 0.65 * mpp);
     const terrain = map.getTerrain();
-    // only what is (nearly) in view is built and drawn
     if (flat && !models && now - this.lastTick > 100) {
       this.lastTick = now;
       this.hooks.tick();
     }
+    // only what is (nearly) in view is built and drawn; on the globe the horizon decides
     const b = map.getBounds();
     const padLon = (b.getEast() - b.getWest()) * 0.5;
     const padLat = (b.getNorth() - b.getSouth()) * 0.5;
-    const m = new THREE.Matrix4();
-    const rot = new THREE.Matrix4();
+    const hideAll = (p: PlaneState) => {
+      for (const o of [p.obj, p.shadow, p.drop, p.pulse]) if (o) o.visible = false;
+      p.rig?.hide();
+    };
     for (const p of this.tracker.planes.values()) {
+      if (crowd && p.hex !== this.selected) continue;
       if (only && p.hex !== only) {
-        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
+        hideAll(p);
         continue;
       }
-      const inView = p.dLon > b.getWest() - padLon && p.dLon < b.getEast() + padLon && p.dLat > b.getSouth() - padLat && p.dLat < b.getNorth() + padLat;
-      if (!inView) {
-        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
-        continue;
-      }
+      const inView = frame.globe || (p.dLon > b.getWest() - padLon && p.dLon < b.getEast() + padLon && p.dLat > b.getSouth() - padLat && p.dLat < b.getNorth() + padLat);
       // ground vehicles are drawn by their 2D icon on the flat map (never both)
-      if (flat && (p.model === 'car' || p.model === 'tug')) {
-        for (const o of [p.obj, p.shadow, p.drop, p.rig?.line, p.rig?.wall, p.pulse]) if (o) o.visible = false;
+      if (!inView || (flat && (p.model === 'car' || p.model === 'tug'))) {
+        hideAll(p);
         continue;
       }
       const elev = terrain ? (map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
       const air = !flat && !p.ground && p.dAlt > 3;
-      if (models) {
+      const alt = (flat ? (p.ground ? 0.2 : 1) : p.dAlt + (p.ground ? 0.2 : 0)) + elev;
+      // behind the Earth: its trail may still reach around the horizon
+      const hidden = frame.occluded(p.dLon, p.dLat, alt);
+      // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
+      const mpp = frame.metresPerPixel(p.dLon, p.dLat, alt);
+      if (models && !hidden) {
         if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
           if (p.obj) {
-            this.scene.remove(p.obj);
+            this.object.remove(p.obj);
             disposeMaterials(p.obj);
           }
           p.obj = makeModel(p.model, p.emergency);
           p.obj.matrixAutoUpdate = false;
+          p.obj.traverse((o) => (o.frustumCulled = false));
           p.objModel = p.model;
           p.objEmergency = p.emergency;
-          this.scene.add(p.obj);
+          this.object.add(p.obj);
         }
-        const alt = flat ? (p.ground ? 0.2 : 1) : p.dAlt + (p.ground ? 0.2 : 0);
-        const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], alt + elev);
-        const s = mc.meterInMercatorCoordinateUnits() * boost;
-        // y is flipped between mercator space (south = +y) and the model (north = +y)
-        m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
-        if (p.model === 'sonde') rot.identity(); // the balloon hangs upright, no nose direction
-        else rot.makeRotationZ(-rad(p.dTrack));
-        m.multiply(rot);
-        p.obj.matrix.copy(m);
+        const heading = p.model === 'sonde' ? 0 : p.dTrack; // the balloon hangs upright, no nose direction
+        const boost = Math.max(1, 0.65 * mpp);
+        frame.place(p.obj.matrix, p.dLon, p.dLat, alt, heading, boost);
         p.obj.visible = true;
         if (p.model === 'heli') {
           // the blades turn (a little different per helicopter so a fleet does not run in step)
@@ -1018,90 +843,123 @@ export class PlanesLayer implements CustomLayerInterface {
             (beacon.material as THREE.MeshBasicMaterial).opacity = flash;
           }
         }
-        this.syncShadow(p, air, elev, s, rot, m);
-        this.syncDrop(p, air, elev);
+        this.syncShadow(frame, p, air, elev, heading, boost);
+        this.syncDrop(frame, p, air, elev);
         drawn.push(p);
       } else {
         for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
-      this.syncTrail(p, elev, flat);
-      this.syncPulse(p, now, mpp, elev, flat);
+      this.syncTrail(frame, p, elev, flat, now);
+      if (hidden) {
+        if (p.pulse) p.pulse.visible = false;
+      } else this.syncPulse(frame, p, now, mpp, elev, flat);
     }
-    this.mats.now.value = now;
-    this.syncLabels(drawn);
-    this.syncForecast(mpp, flat);
-    for (const mat of [this.mats.line, this.mats.lineSel]) mat.uniforms.uRes.value.set(map.getCanvas().width, map.getCanvas().height);
-    this.camera.projectionMatrix.copy(this.proj);
-    this.renderer.resetState();
-    this.renderer.render(this.scene, this.camera);
+    this.syncLabel();
+    this.syncForecast(frame, flat);
     if (now - this.lastFrameHook > 250) {
       this.lastFrameHook = now;
       this.hooks.frame(drawn);
     }
-    if (this.tracker.planes.size && !document.hidden) map.triggerRepaint();
+    if (crowd && !this.selected) {
+      // far out an aircraft crosses a pixel in seconds: no need to draw the whole map every frame
+      if (!this.repaintTimer) {
+        this.repaintTimer = window.setTimeout(() => {
+          this.repaintTimer = 0;
+          map.triggerRepaint();
+        }, CROWD_IDLE_MS);
+      }
+      return false;
+    }
+    return this.tracker.planes.size > 0;
   }
 
-  /** Screen position (CSS px) of a point with the last drawn matrix, null behind the camera. */
-  private screenOf(lon: number, lat: number, alt: number, v = new THREE.Vector4()): [number, number] | null {
-    const canvas = this.map.getCanvas();
-    const mc = MercatorCoordinate.fromLngLat([lon, lat], alt);
-    v.set(mc.x - this.cx, mc.y - this.cy, mc.z, 1).applyMatrix4(this.proj);
-    if (v.w <= 0) return null;
-    return [(v.x / v.w * 0.5 + 0.5) * canvas.clientWidth, (1 - (v.y / v.w * 0.5 + 0.5)) * canvas.clientHeight];
+  /** All aircraft but the selected one as simple models. */
+  private updateCrowd(frame: GeoFrame, now: number) {
+    this.far ??= this.newCrowd();
+    const far = this.far;
+    far.object.visible = true;
+    const map = this.map;
+    const c = map.getCenter();
+    const camera = `${c.lng}|${c.lat}|${map.getZoom()}|${map.getBearing()}|${map.getPitch()}`;
+    const moving = camera !== this.crowdCamera;
+    this.crowdCamera = camera;
+    far.update(frame);
+    if (now - this.lastCrowd < (moving ? CROWD_MOVING_MS : CROWD_IDLE_MS)) return;
+    this.lastCrowd = now;
+    far.start(frame, this.tracker.planes.size);
+    const hits: { hex: string; x: number; y: number }[] = [];
+    const m = new THREE.Matrix4();
+    for (const p of this.tracker.planes.values()) {
+      if (p.hex === this.selected) continue;
+      for (const o of [p.obj, p.shadow, p.drop, p.pulse]) if (o) o.visible = false;
+      p.rig?.hide();
+      if (p.model === 'car' || p.model === 'tug' || p.model === 'sonde') continue;
+      const alt = p.ground ? 0.2 : p.dAlt;
+      const pos = frame.toScreen(p.dLon, p.dLat, alt);
+      if (!pos || pos[0] < -CROWD_MARGIN_PX || pos[1] < -CROWD_MARGIN_PX || pos[0] > frame.width + CROWD_MARGIN_PX || pos[1] > frame.height + CROWD_MARGIN_PX) continue;
+      hits.push({ hex: p.hex, x: pos[0], y: pos[1] });
+      const boost = Math.max(1, 0.65 * CROWD_SCALE * frame.metresPerPixel(p.dLon, p.dLat, alt));
+      frame.place(m, p.dLon, p.dLat, alt, p.dTrack, boost);
+      far.add(p.model, m, p.emergency ? RED : YELLOW);
+    }
+    far.finish();
+    far.update(frame);
+    this.crowdHits = hits;
   }
 
-  /** Callsign above every drawn model; moved here every frame so it never trails behind while zooming. */
-  private syncLabels(drawn: PlaneState[]) {
-    const box = this.labelBox;
-    if (!box) return;
+  /** The aircraft are gone for good: their buffers go too. */
+  dropCrowd() {
+    this.crowdHits = [];
+    this.hovered = null;
+    if (!this.far) return;
+    this.object.remove(this.far.object);
+    this.far.dispose();
+    this.far = null;
+  }
+
+  private newCrowd() {
+    const far = new GeoInstances({ narrow: farAirliner(1), wide: farAirliner(1.68), heli: farAirliner(0.45) });
+    this.object.add(far.object);
+    return far;
+  }
+
+  /** The aircraft under the mouse (null: none): only it shows its name. */
+  setHovered(hex: string | null) {
+    if (hex === this.hovered) return;
+    this.hovered = hex;
+    this.map.triggerRepaint();
+  }
+
+  /** Callsign above the hovered aircraft; moved here every frame so it never trails behind while zooming. */
+  private syncLabel() {
+    const frame = this.frameNow;
+    const p = this.hovered ? this.tracker.planes.get(this.hovered) : undefined;
+    const pos = p && frame?.toScreen(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt);
+    if (!p || !pos) {
+      this.label.style.display = 'none';
+      return;
+    }
     const zoom = this.map.getZoom();
     // distance above the model: grows with the zoom (the models get bigger)
     const lift = 17 + Math.min(1, Math.max(0, (zoom - 15) / 3.5)) * 24;
-    const seen = new Set<string>();
-    const v = new THREE.Vector4();
-    for (const p of drawn) {
-      const pos = this.screenOf(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt, v);
-      if (!pos) continue;
-      let el = this.labels.get(p.hex);
-      if (!el) {
-        el = document.createElement('div');
-        el.style.cssText =
-          'position:absolute;left:0;top:0;white-space:pre;text-align:center;font:700 12px/1.2 system-ui,sans-serif;color:#fff;' +
-          'text-shadow:0 0 3px rgba(10,12,16,.95),0 0 3px rgba(10,12,16,.95),0 0 2px rgba(10,12,16,.95);will-change:transform';
-        box.append(el);
-        this.labels.set(p.hex, el);
-      }
-      const callsign = String(p.props.callsign ?? '');
-      const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
-      // vehicles: always show callsign as label (their ID is all they have)
-      const isVehicle = p.model === 'car' || p.model === 'tug';
-      const text = isVehicle ? callsign : (icao ? `${callsign}\n${icao}` : callsign);
-      if (el.textContent !== text) el.textContent = text;
-      el.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
-      seen.add(p.hex);
-    }
-    for (const [hex, el] of this.labels) {
-      if (seen.has(hex)) continue;
-      el.remove();
-      this.labels.delete(hex);
-    }
+    const callsign = String(p.props.callsign ?? '');
+    const icao = zoom >= 16 ? String(p.props.icao ?? '') : '';
+    // vehicles: always show callsign as label (their ID is all they have)
+    const isVehicle = p.model === 'car' || p.model === 'tug';
+    const text = isVehicle ? callsign : (icao ? `${callsign}\n${icao}` : callsign);
+    if (this.label.textContent !== text) this.label.textContent = text;
+    this.label.style.display = '';
+    this.label.style.transform = `translate(${pos[0].toFixed(1)}px,${(pos[1] - lift).toFixed(1)}px) translate(-50%,-100%)`;
   }
 
   /**
    * The aircraft at a screen point (CSS px): its model, its trail line or the wall below the line.
-   * The models cannot be picked by MapLibre, so the shapes are projected with the last drawn matrix.
+   * The models cannot be picked by MapLibre, so the shapes are projected with the last drawn frame.
    */
   pick(x: number, y: number): string | null {
-    const canvas = this.map.getCanvas();
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const v = new THREE.Vector4();
-    const screen = (lon: number, lat: number, alt: number): [number, number] | null => {
-      const mc = MercatorCoordinate.fromLngLat([lon, lat], alt);
-      v.set(mc.x - this.cx, mc.y - this.cy, mc.z, 1).applyMatrix4(this.proj);
-      if (v.w <= 0) return null;
-      return [(v.x / v.w * 0.5 + 0.5) * w, (1 - (v.y / v.w * 0.5 + 0.5)) * h];
-    };
+    const frame = this.frameNow;
+    if (!frame || !this.object.visible) return null;
+    const screen = (lon: number, lat: number, alt: number) => frame.toScreen(lon, lat, alt);
     const segDist = (a: [number, number], b: [number, number]) => {
       const dx = b[0] - a[0];
       const dy = b[1] - a[1];
@@ -1124,8 +982,12 @@ export class PlanesLayer implements CustomLayerInterface {
         best = hex;
       }
     };
+    for (const h of this.crowdHits) {
+      const d = Math.hypot(x - h.x, y - h.y);
+      if (d <= CROWD_PICK_PX) consider(h.hex, d);
+    }
     for (const p of this.tracker.planes.values()) {
-      if (!p.rig?.line.visible) continue;
+      if (!p.rig?.line.object.visible) continue;
       const flat = this.flatNow;
       const air = !flat && !p.ground && p.dAlt > 3;
       if (p.obj?.visible) {
@@ -1152,7 +1014,7 @@ export class PlanesLayer implements CustomLayerInterface {
   }
 
   /** Flattened black copy of the model on the ground, straight below the aircraft. */
-  private syncShadow(p: PlaneState, air: boolean, elev: number, scale: number, rot: THREE.Matrix4, m: THREE.Matrix4) {
+  private syncShadow(frame: GeoFrame, p: PlaneState, air: boolean, elev: number, heading: number, scale: number) {
     if (!p.shadow || p.shadowModel !== p.model) {
       p.shadow?.parent?.remove(p.shadow);
       const g = geos();
@@ -1162,18 +1024,15 @@ export class PlanesLayer implements CustomLayerInterface {
       p.shadow.renderOrder = 1;
       p.shadow.frustumCulled = false;
       p.shadowModel = p.model;
-      this.scene.add(p.shadow);
+      this.object.add(p.shadow);
     }
     p.shadow.visible = air;
     if (!air) return;
-    const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], elev + 0.1);
-    m.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(scale, -scale, scale * 0.002));
-    m.multiply(rot);
-    p.shadow.matrix.copy(m);
+    frame.place(p.shadow.matrix, p.dLon, p.dLat, elev + 0.1, heading, scale).multiply(FLATTEN);
   }
 
   /** A white, see-through sphere that grows and fades around an aircraft whose position just arrived. */
-  private syncPulse(p: PlaneState, now: number, mpp: number, elev: number, flat: boolean) {
+  private syncPulse(frame: GeoFrame, p: PlaneState, now: number, mpp: number, elev: number, flat: boolean) {
     const t = p.pulseAt ? (now - p.pulseAt) / PULSE_MS : 1;
     if (t >= 1) {
       if (p.pulse) {
@@ -1188,7 +1047,7 @@ export class PlanesLayer implements CustomLayerInterface {
       p.pulse.matrixAutoUpdate = false;
       p.pulse.frustumCulled = false;
       p.pulse.renderOrder = 3;
-      this.scene.add(p.pulse);
+      this.object.add(p.pulse);
     }
     (p.pulse.material as THREE.MeshBasicMaterial).opacity = 0.45 * (1 - t) ** 1.5;
     // Radius in screen pixels, tied to the drawn size of the aircraft (about 60 m long, at least ~39 px
@@ -1198,68 +1057,67 @@ export class PlanesLayer implements CustomLayerInterface {
     const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
     const maxPx = Math.max(12, Math.min(56, 0.5 * planePx) * crowdK);
     const px = maxPx * (0.25 + 0.75 * (1 - (1 - t) ** 2));
-    const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], (flat || p.ground ? 1 : p.dAlt) + elev);
-    const s = mc.meterInMercatorCoordinateUnits() * px * mpp;
-    p.pulse.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, s, s));
+    frame.place(p.pulse.matrix, p.dLon, p.dLat, (flat || p.ground ? 1 : p.dAlt) + elev, 0, px * mpp);
     p.pulse.visible = true;
   }
 
   /** Thin, faint line from the aircraft straight down to the ground. */
-  private syncDrop(p: PlaneState, air: boolean, elev: number) {
+  private syncDrop(frame: GeoFrame, p: PlaneState, air: boolean, elev: number) {
     if (!p.drop) {
       p.drop = new THREE.Line(this.drop, this.mats.drop);
       p.drop.matrixAutoUpdate = false;
       p.drop.frustumCulled = false;
       p.drop.renderOrder = 2;
-      this.scene.add(p.drop);
+      this.object.add(p.drop);
     }
     p.drop.visible = air;
     if (!air) return;
-    const mc = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], elev);
-    const s = mc.meterInMercatorCoordinateUnits();
-    p.drop.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s * p.dAlt));
+    frame.place(p.drop.matrix, p.dLon, p.dLat, elev).multiply(STRETCH.makeScale(1, 1, p.dAlt));
   }
 
   /** Grey dashed line from the departure airport to the start of the trail and on to the destination. */
-  private syncForecast(mpp: number, flat: boolean) {
+  private syncForecast(frame: GeoFrame, flat: boolean) {
     const p = this.selected ? this.tracker.planes.get(this.selected) : undefined;
     const r = this.route;
-    if (!p || !r || r.hex !== p.hex) {
-      if (this.forecast) this.forecast.line.visible = false;
-      return;
-    }
-    if (!this.forecast) {
-      this.forecast = new ForecastRig(this.mats.forecast);
-      this.scene.add(this.forecast.line);
-    }
-    const alt = (a: number) => (flat || p.ground ? 0.3 : a);
     const legs: ForecastLeg[] = [];
-    const first = p.trail[0];
-    // the departure airport is only drawn to the trail when the data begins far away from it
-    if (metres(r.origin[0], r.origin[1], first[0], first[1]) > 15000) legs.push({ from: [r.origin[0], r.origin[1], 0.3], to: [first[0], first[1], alt(first[2])], anchor: 'from' });
-    if (metres(p.dLon, p.dLat, r.destination[0], r.destination[1]) > 3000) legs.push({ from: [p.dLon, p.dLat, alt(p.dAlt)], to: [r.destination[0], r.destination[1], 0.3], anchor: 'to' });
-    const mpu = MercatorCoordinate.fromLngLat([p.dLon, p.dLat], 0).meterInMercatorCoordinateUnits();
-    const o = this.forecast.update([p.dLon, p.dLat], legs, mpu);
-    this.forecast.line.matrix.makeTranslation(o.x - this.cx, o.y - this.cy, 0);
-    const cw = this.map.getCanvas();
-    this.mats.forecast.uniforms.uRes.value.set(cw.width, cw.height);
-    this.mats.forecast.uniforms.uDash.value = 14 * mpp; // one dash period = 14 screen px
+    if (p && r && r.hex === p.hex) {
+      const alt = (a: number) => (flat || p.ground ? 0.3 : a);
+      const first = p.trail[0];
+      // the departure airport is only drawn to the trail when the data begins far away from it
+      if (metres(r.origin[0], r.origin[1], first[0], first[1]) > 15000) legs.push({ from: [r.origin[0], r.origin[1], 0.3], to: [first[0], first[1], alt(first[2])], anchor: 'from' });
+      if (metres(p.dLon, p.dLat, r.destination[0], r.destination[1]) > 3000) legs.push({ from: [p.dLon, p.dLat, alt(p.dAlt)], to: [r.destination[0], r.destination[1], 0.3], anchor: 'to' });
+    }
+    for (let i = 0; i < Math.max(legs.length, this.forecast.length); i++) {
+      this.forecast[i] ??= this.newForecastLine();
+      const line = this.forecast[i];
+      const leg = legs[i];
+      if (!leg || !p) {
+        line.object.visible = false;
+        continue;
+      }
+      const pts = greatCircle(leg.from, leg.to, FC_SEGS, p.dLon);
+      // always from the airport on: that is where the dashes begin; exact at the aircraft
+      if (leg.anchor === 'to') pts.reverse();
+      line.setPoints(pts, undefined, [p.dLon, p.dLat, pts[0][2]]);
+      line.update(frame);
+    }
   }
 
-  private syncTrail(p: PlaneState, elev: number, flat: boolean) {
+  private newForecastLine() {
+    const line = new GeoLine([], { color: FORECAST_COLOR, width: FC_WIDTH, opacity: 0.85, dash: FC_DASH });
+    this.object.add(line.object);
+    return line;
+  }
+
+  private syncTrail(frame: GeoFrame, p: PlaneState, elev: number, flat: boolean, now: number) {
     if (!p.rig) {
       p.rig = new TrailRig();
-      this.scene.add(p.rig.line, p.rig.wall);
+      this.object.add(p.rig.line.object, p.rig.wall.object);
     }
-    const rig = p.rig;
-    rig.sync(p, flat);
-    const sel = this.selected === p.hex;
-    rig.line.material = sel ? this.mats.lineSel : this.mats.line;
-    rig.wall.material = sel ? this.mats.wallSel : this.mats.wall;
-    rig.line.visible = true;
-    const mc = MercatorCoordinate.fromLngLat([rig.lon0, rig.lat0], elev);
-    const s = mc.meterInMercatorCoordinateUnits();
-    rig.line.matrix.makeTranslation(mc.x - this.cx, mc.y - this.cy, mc.z).scale(new THREE.Vector3(s, -s, s));
-    rig.wall.matrix.copy(rig.line.matrix);
+    p.rig.sync(p, flat, this.selected === p.hex, frame, now, elev);
   }
 }
+
+/** the shadow is the model, squashed flat */
+const FLATTEN = new THREE.Matrix4().makeScale(1, 1, 0.002);
+const STRETCH = new THREE.Matrix4();

@@ -1,10 +1,12 @@
-import { groundTrack, loadSatellites, loadSatGroup, satelliteFeatures, satPopupInfo, type Sat } from '../../../api/tracking';
-import { cardHtml } from '../../popup';
+import type { FeatureCollection } from 'geojson';
+import { groundTrack, loadSatellites, loadSatGroup, satelliteFeatures, type Sat } from '../../../api/tracking';
 import type { ClickResult } from '../../extras';
+import { SatellitesLayer } from '../../satellites3d';
 import type { ClickCtx, ExtraCtx } from '../types';
 
-type St = { base: Sat[]; starlink: Sat[]; baseLoading: Promise<void> | null; starlinkLoading: Promise<void> | null };
-export const getState = (ctx: ExtraCtx) => ctx.state<St>('sats', () => ({ base: [], starlink: [], baseLoading: null, starlinkLoading: null }));
+type St = { base: Sat[]; starlink: Sat[]; baseLoading: Promise<void> | null; starlinkLoading: Promise<void> | null; part: SatellitesLayer | null };
+const emptyFc = (): FeatureCollection => ({ type: 'FeatureCollection', features: [] });
+export const getState = (ctx: ExtraCtx) => ctx.state<St>('sats', () => ({ base: [], starlink: [], baseLoading: null, starlinkLoading: null, part: null }));
 
 export function startSatellites(ctx: ExtraCtx) {
   const st = getState(ctx);
@@ -47,19 +49,35 @@ export function startSatellites(ctx: ExtraCtx) {
 export function updateSatPositions(ctx: ExtraCtx) {
   const st = getState(ctx);
   const list = [...(ctx.isOn('sats') ? st.base : []), ...(ctx.isOn('starlink') ? st.starlink : [])];
-  ctx.setData('sats', satelliteFeatures(list));
+  const part = satellites(ctx);
+  part.setSats(list);
+  // on the globe the dots are drawn at their real height; the flat map keeps the 2D icons
+  ctx.setData('sats', part.drawsDots(ctx.stage.frame) ? emptyFc() : satelliteFeatures(list));
 }
 
-export function satClick({ ctx, p, pt }: ClickCtx): ClickResult | null {
+/** The satellites on the 3D stage, created the first time they are needed. */
+function satellites(ctx: ExtraCtx) {
   const st = getState(ctx);
-  const sat = [...st.base, ...st.starlink].find((s) => s.id === p.id);
-  if (!sat) return null;
-  const info = satPopupInfo(sat);
-  ctx.setData('sat-track', groundTrack(sat));
-  return {
-    type: 'html',
-    html: cardHtml({ glyph: 'satellite', color: '#b388ff', title: info.title, subtitle: info.subtitle, description: info.details, source: 'CelesTrak', url: info.url }),
-    lng: pt[0],
-    lat: pt[1],
-  };
+  if (!st.part) {
+    st.part = new SatellitesLayer(ctx.map, { modeChanged: () => updateSatPositions(ctx) });
+    ctx.stage.add(st.part);
+  }
+  return st.part;
 }
+
+export function satClick({ p, pt }: ClickCtx): ClickResult | null {
+  return { type: 'sat', id: String(p.id), lng: pt[0], lat: pt[1] };
+}
+
+export const satsApi = {
+  sat(ctx: ExtraCtx, id: string): Sat | null {
+    const st = getState(ctx);
+    return [...st.base, ...st.starlink].find((s) => s.id === id) ?? null;
+  },
+  /** Orbit and ground track of this satellite (null: none). */
+  select(ctx: ExtraCtx, id: string | null) {
+    const sat = id ? satsApi.sat(ctx, id) : null;
+    ctx.setData('sat-track', sat ? groundTrack(sat) : emptyFc());
+    if (getState(ctx).part) satellites(ctx).select(sat ? sat.id : null);
+  },
+};
