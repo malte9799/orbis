@@ -348,6 +348,13 @@ politische Ereignisse – mit Inhalts-Warnung beim ersten Öffnen.
 | [Crowd Counting Consortium](https://dataverse.harvard.edu/dataverse/crowdcountingconsortium) (Harvard/UConn) 🟢📦 | `usprotests` – US-Protestevents mit Geocodierung, Datum, Größe, Themen; Task `ccc-us` wöchentlich → `data`-Branch | [DOI 10.7910/DVN/RI9JFU](https://doi.org/10.7910/DVN/RI9JFU) · **CC0 1.0** |
 | [Bellingcat – Civilian Harm in Ukraine](https://ukraine.bellingcat.com/) 🟢📦 | `ukraineharm` – verortete Vorfälle ziviler Schäden seit 24.02.2022 (Beleg-Links zu Originalposts, keine Medien); Task `ukraine-harm` täglich → `data`-Branch | Rohdaten der TimeMap (JSON), **Lizenz nicht angegeben** – Attribution und Link |
 | [Kiel Ukraine Support Tracker](https://www.ifw-kiel.de/topics/war-against-ukraine/ukraine-support-tracker/) (Institut für Weltwirtschaft) 🟢📦 | `ukrainesupport` – zugewiesene Hilfe je Geberland (Mrd. €, finanziell/humanitär/militärisch), Blatt „Country Summary (€)“ der XLSX; Task `ukraine-support` wöchentlich | XLSX-Download, **Lizenz nicht angegeben** – Attribution und Link |
+| [Tech for Palestine](https://data.techforpalestine.org/) 🟢 | `gazazahlen` – Tageszahlen Gaza/Westjordanland (Gesundheitsministerium, UN-OCHA), Infrastruktur-Schäden, Namensliste (Zusammenfassung); direkt aus dem Browser (CORS `*`) | **Public Domain** |
+| [IPC – Integrated Food Security Phase Classification](https://www.ipcinfo.org/) via HDX 🟢📦 | `gazahunger` – Ernährungslage je Governorate (Phasen 1–5, Verlauf); Task `ipc-gaza` täglich | **CC0** |
+| [IDMC – Internal Displacement Updates](https://www.internal-displacement.org/) via HDX 🟢📦 | `gazavertreibung` – Vertreibungsereignisse Gaza/Westjordanland; Task `gaza-hdx` | **CC BY-IGO** |
+| [Healthsites.io / OpenStreetMap](https://healthsites.io/) via HDX 🟢📦 | `gazagesundheit` – kartierte Gesundheitseinrichtungen (Umrisse als Punkt); Task `gaza-hdx` | **ODbL** |
+| [Insecurity Insight](https://insecurityinsight.org/) via HDX 🟢📦 | `ukrainelage` – Vorfälle mit Explosivwaffen je Oblast (Koordinaten im Datensatz gelöscht, nur Region); Task `ukraine-oblast` | **CC BY-SA** |
+| [Ukrainian Air Raid Sirens Dataset](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset) (Vadimkin) 🟢📦 | `ukrainelage` – Alarmstunden je Oblast und Monat (nur Oblast-Zeilen); Task `ukraine-oblast` | **MIT** |
+| [WHO Surveillance System for Attacks on Health Care](https://extranet.who.int/ssa/Index.aspx) via HDX 🟢📦 | `ukrainezahlen` – Angriffe aufs Gesundheitswesen je Monat (ohne Ort); Task `ukraine-oblast` | **CC BY** |
 
 **Lizenzen der neuen Quellen:** demonstrations.org **CC BY-SA 4.0** (Attribution wie im
 [Layer](../src/globe/layers/defs/demos.ts) verlinkt, enthaltene Weitergabe unter gleichen

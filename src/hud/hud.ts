@@ -349,6 +349,11 @@ export function createHud(host: HudHost): Hud {
       anchor('https://dataverse.harvard.edu/dataverse/crowdcountingconsortium', 'Crowd Counting Consortium', 'Harvard/UConn · US-Proteste · CC0 1.0'),
       anchor('https://ukraine.bellingcat.com/', 'Bellingcat – Civilian Harm in Ukraine', 'verortete Vorfälle · Beleg-Links'),
       anchor('https://www.ifw-kiel.de/topics/war-against-ukraine/ukraine-support-tracker/', 'Kiel Ukraine Support Tracker', 'Hilfe nach Geberland · IfW Kiel'),
+      anchor('https://data.techforpalestine.org/', 'Tech for Palestine', 'Gaza/Westjordanland · Zahlen · Public Domain'),
+      anchor('https://www.ipcinfo.org/', 'IPC Hunger', 'Gaza · Ernährungslage · CC0'),
+      anchor('https://www.internal-displacement.org/', 'IDMC', 'Vertreibung · CC BY-IGO'),
+      anchor('https://insecurityinsight.org/', 'Insecurity Insight', 'Ukraine · Vorfälle nach Oblast · CC BY-SA'),
+      anchor('https://extranet.who.int/ssa/Index.aspx', 'WHO SSA', 'Angriffe aufs Gesundheitswesen · CC BY'),
     ].join('');
     return `<div class="qsub"><h5>Sammlungen der Archive</h5><div class="qlist">${src}</div><h5>Websites & Datenbanken</h5><div class="qlist qweb">${web}</div><h5>Offene Datensätze der Karte</h5><div class="qlist qweb">${open}</div></div>`;
   }

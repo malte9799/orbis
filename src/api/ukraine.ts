@@ -80,3 +80,45 @@ export function ukraineSupport(): Promise<UkraineSupportData> {
   memoSupport.catch(() => (memoSupport = null));
   return memoSupport;
 }
+
+// ---------------------------------------------------------------------------
+// Lage nach Oblast: Insecurity Insight (Vorfälle mit Explosivwaffen, nur Region – die Koordinaten sind
+// im Datensatz gelöscht), offizielle Luftalarme (Stunden je Monat) und WHO SSA (Angriffe aufs
+// Gesundheitswesen je Monat, ohne Ort). scripts/fetch-data.ts schreibt `ukraine-oblast.json`.
+
+export interface UkraineRegion {
+  /** Vorfälle gesamt, je Jahr / Sektor / Waffenart */
+  ew: number;
+  year: Record<string, number>;
+  sector: Record<string, number>;
+  weapon: Record<string, number>;
+  /** Getötete: aid, health, educators, students */
+  killed: Record<string, number>;
+  /** Datum des letzten Vorfalls */
+  last: string;
+  /** Luftalarm-Stunden je Monat ('YYYY-MM') */
+  air: Record<string, number>;
+}
+
+export interface UkraineOblastData {
+  built: string;
+  source: string;
+  /** Vorfälle ohne zuordenbare Region */
+  unresolved: number;
+  regions: Record<string, UkraineRegion>;
+  who: Record<string, { attacks: number; killed: number; injured: number }>;
+}
+
+let memoOblast: Promise<UkraineOblastData> | null = null;
+
+export function ukraineOblast(): Promise<UkraineOblastData> {
+  memoOblast ??= (async () => {
+    const { snapshotJson } = await import('./data');
+    return snapshotJson<UkraineOblastData>('ukraine-oblast.json');
+  })();
+  memoOblast.catch(() => (memoOblast = null));
+  return memoOblast;
+}
+
+/** Schlüssel der Regionen im Snapshot: Gebietsname klein, ohne Sonderzeichen; Stadt Kiew gesondert */
+export const oblastKey = (en: string, type = ''): string => (type === 'Municipality' ? 'kyivcity' : en.toLowerCase().replace(/[^a-z]/g, ''));
