@@ -8,7 +8,6 @@ import {
   type MapMouseEvent,
   type RasterTileSource,
 } from 'maplibre-gl';
-import { cameraHeld } from '../mapctl';
 import { GeoFocus } from '../globe/geo3d/focus';
 import { GeoStage } from '../globe/geo3d/stage';
 import { bindFollowUrl } from '../globe/geo3d/url';
@@ -1631,13 +1630,6 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
     };
     map.on('pitch', syncTerrainPitch);
-    // zooming out to the whole Earth levels the tilt gradually: the further out, the less tilt is allowed (the bearing stays)
-    const levelOut = () => {
-      if (!map || cameraHeld.has(map)) return;
-      const limit = 60 * Math.min(1, Math.max(0, (map.getZoom() - 1.5) / 2.5));
-      if (map.getPitch() > limit) map.setPitch(limit);
-    };
-    map.on('zoom', levelOut);
 
     map.on('mousemove', (e) => updateReadout(e.point, e.lngLat));
     // pointer cursor over an aircraft's 3D trail / wall / model (MapLibre does not know those shapes)
