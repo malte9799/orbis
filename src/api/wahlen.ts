@@ -58,6 +58,7 @@ let doc: WahlenDoc | null = null;
 let geo: FeatureCollection | null = null;
 let loadPromise: Promise<boolean> | null = null;
 let marks: WahlenMark[] = [];
+export const wahlenRegions = (): Record<string, string> => doc?.regions ?? {};
 export const wahlenReady = () => !!doc && !!geo;
 
 // ---- Auswahl (Art der Wahlen + Schritt im Zeitstrahl) ----------------------------------------
@@ -123,17 +124,22 @@ export const wahlenAnchorLabel = (): string => {
   return m ? `${m.label} · ${dayLabel(m.d)}` : '';
 };
 
-/** Ergebnis eines Gebiets: beste Wahl vor (oder am) Anker */
 export function wahlenResultAt(region: string): WahlenResult | null {
+  const i = wahlenInfoAt(region);
+  return i ? i.res : null;
+}
+
+/** Ergebnis eines Gebiets **und** die Wahl, aus der es stammt (letzte Wahl vor/am Anker) */
+export function wahlenInfoAt(region: string): { election: string; date: string; kind: 'btw' | 'ltw' } & { res: WahlenResult } | null {
   if (!doc) return null;
   for (let i = wahlenStep(); i >= 0; i--) {
     const m = marks[i];
     if (m.kind === 'btw') {
       const r = doc.btw[m.idx]?.g[region];
-      if (r) return r;
+      if (r) return { election: m.label, date: dayLabel(m.d), kind: 'btw', res: r };
     } else {
       const e = doc.ltw[m.idx];
-      if (e && e.r === region) return { p: e.p, b: e.b };
+      if (e && e.r === region) return { election: m.label, date: dayLabel(m.d), kind: 'ltw', res: { p: e.p, b: e.b } };
     }
   }
   return null;

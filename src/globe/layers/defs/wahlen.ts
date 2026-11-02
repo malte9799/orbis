@@ -1,33 +1,27 @@
 // Ebene „Wahlen": färbt Gebiete nach der Sieger-Partei – Deutschland im Start (Bundestags- und
 // Landtagswahlen seit 1990, gerda-Snapshot). Der Zeitstrahl (Views) zeigt einen Schritt pro
 // Wahltermin; jedes Gebiet zeigt das Ergebnis seiner letzten Wahl vor dem gewählten Termin.
-// Klick zeigt das vollständige Ergebnis (Parteien mit Stimmen, Beteiligung).
+// Klick öffnet das rechte Panel (src/globe/wahlenpanel.ts) mit allen Parteien und Stimmen.
 import type { Feature, FeatureCollection, Geometry } from 'geojson';
 import { defineExtra, type ClickCtx, type ExtraCtx } from '../types';
 import type { ClickResult } from '../../extras';
 import { empty } from '../shared/geo';
-import { cardHtml } from '../../popup';
 import type { GlyphId } from '../../icons';
-import { escapeHtml as esc, fmt } from '../../../util';
 import {
   loadWahlen,
   subscribeWahlen,
   wahlenResultAt,
-  wahlenStep,
   wahlenAnchorLabel,
   partyColor,
-  partyLabel,
   winnerOf,
-  wahlenMarks,
 } from '../../../api/wahlen';
+
 const COLOR = '#a626a4';
 const GLYPH: GlyphId = 'vote';
 const NO_DATA = '#4a5158';
 const SOURCE =
   'Wahlergebnisse: <a href="https://german-elections.com">GERDA – German Election Database</a> (CC BY 4.0); ' +
   'Grenzen: GeoBasis-DE / BKG via <a href="https://github.com/isellsoap/deutschlandGeoJSON">deutschlandGeoJSON</a> (CC BY 4.0)';
-
-const CLICK_META = `<div class="pop-sub">Anteil an den gültigen Stimmen · Klick auf ein anderes Gebiet wechselt das Ergebnis</div>`;
 
 /** Karten-Features mit Siegerfarbe; `k` (ISO-Gebietscode) verbindet Eigenschaften und Daten */
 function features(geo: FeatureCollection<Geometry> | null): Feature<Geometry, { k: string; n: string; c?: string; w?: string }>[] {
@@ -53,33 +47,13 @@ function render(ctx: ExtraCtx, geo: FeatureCollection<Geometry> | null) {
   ctx.set('wahlen', { count: feats.length, note: wahlenAnchorLabel() || undefined });
 }
 
-function popupHtml(n: string, res: NonNullable<ReturnType<typeof wahlenResultAt>>): string {
-  const total = res.p.reduce((s, [, v]) => s + v, 0);
-  const rows = [...res.p]
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, v]) => {
-      const pct = (v / total) * 100;
-      return `<li><i class="pdot" style="background:${partyColor(id)}"></i>${esc(partyLabel(id))}<b>${pct.toFixed(1).replace('.', ',')} %</b><small> · ${fmt.num(Math.round(v))} Stimmen</small></li>`;
-    });
-  const anchor = wahlenMarks().length && wahlenStep() < wahlenMarks().length - 1 ? `<div class="pop-sub">letzte Wahl vor dem gewählten Termin</div>` : '';
-  return cardHtml({
-    glyph: GLYPH,
-    color: COLOR,
-    title: n,
-    subtitle: wahlenAnchorLabel(),
-    source: 'GERDA – German Election Database (CC BY 4.0)',
-    url: 'https://german-elections.com',
-    extra: `<ul class="pop-list wahlen-pop">${res.b != null ? `<li class="wmuted">Beteiligung ${res.b.toFixed(1).replace('.', ',')} %</li>` : ''}${rows.join('')}</ul>${anchor}${CLICK_META}`,
-  });
-}
-
 export default defineExtra({
   id: 'wahlen',
   order: 720,
   section: 'politik',
   cat: 'politik',
   label: 'Wahlergebnisse',
-  hint: 'Historische Wahlergebnisse seit 1990: Gebiete färben sich nach der Partei mit den meisten gültigen Stimmen, der Zeitstrahl springt Wahltermin für Wahltermin. Klick zeigt das vollständige Ergebnis.',
+  hint: 'Historische Wahlergebnisse seit 1990: Gebiete färben sich nach der Partei mit den meisten gültigen Stimmen, der Zeitstrahl springt Wahltermin für Wahltermin. Klick öffnet das Seitenpanel mit allen Parteien und Stimmen.',
   glyph: GLYPH,
   icon: 'vote',
   color: COLOR,
@@ -142,9 +116,8 @@ export default defineExtra({
   },
   click({ p, at }: ClickCtx): ClickResult | null {
     const k = String(p.k ?? '');
-    const res = wahlenResultAt(k);
-    if (!k || !res) return null;
-    return { type: 'html', html: popupHtml(String(p.n ?? k), res), lng: at.lng, lat: at.lat };
+    if (!k || !wahlenResultAt(k)) return null;
+    return { type: 'wahlen', region: k, lng: at.lng, lat: at.lat };
   },
   layers: ['wahlen-fill', 'wahlen-line'],
   clickLayers: ['wahlen-fill'],

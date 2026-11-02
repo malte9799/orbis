@@ -38,6 +38,8 @@ import {
 import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/extras';
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
+import { WahlPanel } from '../globe/wahlenpanel';
+import { wahlenRegions } from '../api/wahlen';
 import { SondePanel } from '../globe/sondepanel';
 import { ShipPanel } from '../globe/shippanel';
 import { CamPanel } from '../globe/campanel';
@@ -198,6 +200,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   // ----- event feeds (fires, storms, quakes …): see src/globe/events ----------
   let extras: ExtraLayers | null = null;
   let flightPanel: FlightPanel | null = null;
+  let wahlenPanel: WahlPanel | null = null;
   let sondePanel: SondePanel | null = null;
   let shipPanel: ShipPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
@@ -1104,6 +1107,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     camPanel?.close();
     flightPanel?.close();
     shipPanel?.close();
+    wahlenPanel?.close();
     let d: LaunchDetail;
     try {
       const list = await getLaunchDetails();
@@ -1285,6 +1289,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       });
       shipPanel = new ShipPanel(el, { info: (mmsi) => extras?.shipInfo(mmsi) ?? null, map: () => map });
       sondePanel = new SondePanel(el, { info: (serial) => extras?.sondeInfo(serial) ?? null, select: (serial) => extras?.selectSonde(serial), fit: (serial) => extras?.fitSonde(serial), map: () => map });
+      wahlenPanel = new WahlPanel(el);
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
       camPanel = new CamPanel(el, { map: () => map });
       camPanel.onOpen = () => {
@@ -1292,16 +1297,19 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         shipPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        wahlenPanel?.close();
       };
       shipPanel.onOpen = () => {
         camPanel?.close();
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        wahlenPanel?.close();
       };
       sondePanel.onOpen = () => {
         camPanel?.close();
         flightPanel?.close();
+        wahlenPanel?.close();
       };
       extras.setEnabled((Object.keys(state.extras) as ExtraId[]).filter((id) => state.extras[id]));
       extras.setTerrain(state.terrain3d && map!.getPitch() > 10);
@@ -1448,6 +1456,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         shipPanel?.close();
         launchPanel?.close();
         camPanel?.close();
+        wahlenPanel?.close();
         if (picked.startsWith('sonde:')) {
           flightPanel?.close();
           sondePanel?.open(picked.slice('sonde:'.length));
@@ -1459,24 +1468,37 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       }
       extras?.clearSelection();
       const extraResult = shipHit ?? vehHit ?? (hit && EXTRA_CLICK_LAYERS.includes(hit.layer.id) ? extras?.click(hit, e.lngLat) : null);
-      if (extraResult?.type === 'flight') {
+      if (extraResult?.type === 'wahlen') {
+        camPanel?.close();
+        shipPanel?.close();
+        flightPanel?.close();
+        sondePanel?.close();
+        launchPanel?.close();
+        popup?.remove();
+        const doc = wahlenRegions()[extraResult.region];
+        wahlenPanel?.open(extraResult.region, doc ?? extraResult.region);
+      } else if (extraResult?.type === 'flight') {
         camPanel?.close();
         shipPanel?.close();
         launchPanel?.close();
         sondePanel?.close();
+        wahlenPanel?.close();
         flightPanel?.open(extraResult.hex);
       } else if (extraResult?.type === 'sonde') {
         camPanel?.close();
         shipPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
+        wahlenPanel?.close();
         sondePanel?.open(extraResult.serial);
       } else if (extraResult?.type === 'ship') {
         flightPanel?.close();
         launchPanel?.close();
+        wahlenPanel?.close();
         shipPanel?.open(extraResult.mmsi);
       } else if (extraResult?.type === 'cam') {
         popup?.remove();
+        wahlenPanel?.close();
         camPanel?.open({ p: extraResult.p, lng: extraResult.lng, lat: extraResult.lat });
       } else if (extraResult?.type === 'weather') {
         if (store.getOptions().clickWx) weatherPopup(extraResult.lng, extraResult.lat);
