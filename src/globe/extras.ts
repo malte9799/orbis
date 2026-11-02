@@ -41,7 +41,9 @@ export type ClickResult =
   /** a radiosonde was clicked: the sonde panel shows it */
   | { type: 'sonde'; serial: string; lng: number; lat: number }
   /** a documentation point was clicked: the detail panel shows everything about it */
-  | { type: 'detail'; d: DetailContent; lng: number; lat: number };
+  | { type: 'detail'; d: DetailContent; lng: number; lat: number }
+  /** a wahlen region was clicked: the wahlen panel shows it */
+  | { type: 'wahlen'; region: string; lng: number; lat: number };
 
 /** What the ship panel shows about one vessel. */
 export interface ShipInfo {

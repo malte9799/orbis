@@ -50,6 +50,8 @@ export interface LegendInfo {
   sub: string;
   gradient: string;
   ticks: { pos: number; label: string }[];
+  /** Parteien-Legende (Farbe + Name) statt Farbskala (Ebene „Wahlen") */
+  swatches?: { color: string; label: string }[];
 }
 export interface LayerInfo {
   sub: string;
