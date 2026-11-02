@@ -32,7 +32,7 @@ const AIM_SMOOTH_S = 0.12;
 const AIM_DONE_DEG = 0.05;
 /** the map centre moved further than this without us (degrees) */
 const OTHER_CAMERA_DEG = 1e-6;
-/** the camera stays this far from the object on the globe: at most (radii), and in share of its way */
+/** the camera stays this far from the object on the globe: at most (radii), and in share of its height */
 const MIN_GAP_RADII = 0.1;
 const MIN_GAP_SHARE = 0.3;
 const MAX_CENTRE_LAT = 85;
@@ -71,11 +71,30 @@ export function focusCentre(p: Vec3, bearing: number, pitch: number, t: number):
   return placeAhead(p[0], p[1], bearing, angle * t);
 }
 
-/** Zoom, independent of latitude (the zoom of the map is this plus log2(cos lat)) at which the camera on the globe is still clear of the object. */
-export function maxFocusZoom(altM: number, pitch: number, toCentre: number): number {
-  const s = sightToObject(altM, pitch);
-  const distance = s + Math.min(MIN_GAP_RADII, s * MIN_GAP_SHARE);
-  return s > 0 ? Math.log2((toCentre * 2 * Math.PI) / (512 * distance)) : Infinity;
+// The camera's distance to the object is what counts for the user: it stays when tilting. MapLibre only has the
+// distance to the map centre (its zoom), which lies further away behind the object the flatter the view. So
+// the zoom kept here is that of the distance to the object, and the map's zoom follows from it. Both are
+// independent of latitude: the zoom of the map is this plus log2(cos lat). `t`: how much of a globe the map is.
+
+/** Camera distance in earth radii at zoom 0. */
+const distanceAtZoom0 = (toCentre: number) => (toCentre * 2 * Math.PI) / 512;
+
+/** The map's zoom for a zoom of the distance to the object. */
+export function mapZoomFor(distanceZoom: number, altM: number, pitch: number, t: number, toCentre: number): number {
+  const k = distanceAtZoom0(toCentre);
+  return Math.log2(k / (k / 2 ** distanceZoom + sightToObject(altM, pitch) * t));
+}
+
+/** The zoom of the distance to the object for a map's zoom. */
+export function distanceZoomFor(mapZoom: number, altM: number, pitch: number, t: number, toCentre: number): number {
+  const k = distanceAtZoom0(toCentre);
+  return Math.log2(k / Math.max(1e-9, k / 2 ** mapZoom - sightToObject(altM, pitch) * t));
+}
+
+/** The nearest the camera may get on the globe, as a zoom of the distance; the same from every side. */
+export function maxDistanceZoom(altM: number, toCentre: number): number {
+  const gap = Math.min(MIN_GAP_RADII, (altM / EARTH_RADIUS_M) * MIN_GAP_SHARE);
+  return gap > 0 ? Math.log2(distanceAtZoom0(toCentre) / gap) : Infinity;
 }
 
 const latScale = (lat: number) => Math.log2(Math.cos(rad(Math.max(-MAX_CENTRE_LAT, Math.min(MAX_CENTRE_LAT, lat)))));
@@ -102,7 +121,7 @@ export class GeoFocus {
   private fromElevation = 0;
   private bearing = 0;
   private pitch = 0;
-  /** zoom independent of latitude: wanted and shown */
+  /** zoom of the distance to the object: wanted and shown */
   private wanted = 0;
   private zoom = 0;
   private restore: { handlers: string[]; clamped: boolean; touchAction: string } | null = null;
@@ -188,7 +207,9 @@ export class GeoFocus {
     this.aimBearing = this.aimPitch = null;
     this.bearing = map.getBearing();
     this.pitch = map.getPitch();
-    this.zoom = this.wanted = map.getZoom() - latScale(c.lat);
+    const frame = this.stage.frame;
+    const alt = target.position(performance.now())?.[2] ?? 0;
+    this.zoom = this.wanted = distanceZoomFor(map.getZoom() - latScale(c.lat), alt, this.pitch, frame?.t ?? 1, frame?.pxDistance ?? map.getCanvas().clientHeight * 1.5);
     this.startedAt = performance.now();
     if (this.restore) return; // on to another object: everything is set up already
     const handlers = HANDLERS.filter((h) => map[h].isEnabled());
@@ -279,19 +300,22 @@ export class GeoFocus {
     this.lastTick = now;
     const frame = this.stage.frame;
     const t = frame?.t ?? 1;
-    // nearer on the globe would put the camera behind the object; the flat map has no such limit
-    if (t > 0) this.wanted = Math.min(this.wanted, maxFocusZoom(p[2], this.pitch, frame?.pxDistance ?? 1));
+    const toCentre = frame?.pxDistance ?? this.map.getCanvas().clientHeight * 1.5;
     const raw = Math.min(1, (time - this.startedAt) / FLY_IN_MS);
     const k = raw * raw * (3 - 2 * raw);
     const aim = focusCentre(p, this.bearing, this.pitch, t);
     const centre = k < 1 ? slerp(this.from, aim, k) : aim;
     const map = this.map;
+    this.aimCamera(dt);
     // a wheel turned on at the limit must not have to be turned all the way back
     const scale = latScale(centre[1]);
-    this.wanted = Math.max(map.getMinZoom() + 0.05 - scale, Math.min(map.getMaxZoom() - scale, this.wanted));
+    const lowest = distanceZoomFor(map.getMinZoom() + 0.05 - scale, p[2], this.pitch, t, toCentre);
+    let highest = distanceZoomFor(map.getMaxZoom() - scale, p[2], this.pitch, t, toCentre);
+    // nearer on the globe would put the camera behind the object; the flat map has no such limit
+    if (t > 0) highest = Math.min(highest, maxDistanceZoom(p[2], toCentre));
+    this.wanted = Math.max(lowest, Math.min(highest, this.wanted));
     this.zoom += (this.wanted - this.zoom) * (1 - Math.exp(-dt / ZOOM_SMOOTH_S));
-    this.aimCamera(dt);
-    const zoom = this.zoom + scale;
+    const zoom = mapZoomFor(this.zoom, p[2], this.pitch, t, toCentre) + scale;
     const elevation = this.fromElevation + (p[2] - this.fromElevation) * k;
     const state = `${centre[0]}|${centre[1]}|${zoom}|${this.bearing}|${this.pitch}|${elevation}`;
     if (state === this.last) return;

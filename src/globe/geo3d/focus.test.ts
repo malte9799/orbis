@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { placeAhead, focusCentre, maxFocusZoom, sightToObject } from './focus';
+import { distanceZoomFor, focusCentre, mapZoomFor, maxDistanceZoom, placeAhead, sightToObject } from './focus';
 import { frame, H, TO_CENTRE, W } from './testcamera';
-import type { Vec3 } from './frame';
+import { toUnit, type Vec3 } from './frame';
 
 const GEO_M = 35786000;
 const ZOOM_OF = (zn: number, lat: number) => zn + Math.log2(Math.cos((lat * Math.PI) / 180));
@@ -62,28 +62,67 @@ describe('the object stays in the middle of the screen', () => {
   it('nearly during the blend at the zoom where the map really flattens', () => {
     for (const t of [0.25, 0.5, 0.75]) expect(miss([13.4, 52.5, 11000], 11.5, t, 60, 30)).toBeLessThan(1);
   });
+});
 
-  it('stays clear of a low orbit before the map flattens', () => {
-    // the zoom of the map is this plus log2(cos lat): at most this at the equator
-    expect(maxFocusZoom(550000, 60, TO_CENTRE)).toBeLessThan(11);
+describe('zoom keeps the distance to the object', () => {
+  /** Camera distance to an object in earth radii, with the map set up by this zoom of the distance. */
+  function distance(p: Vec3, distanceZoom: number, pitch: number) {
+    const zoom = mapZoomFor(distanceZoom, p[2], pitch, 1, TO_CENTRE);
+    const [lng, lat] = focusCentre(p, 0, pitch, 1);
+    const c = frame(ZOOM_OF(zoom, lat), 1, lng, lat, pitch, 0).camera;
+    const o = toUnit(p[0], p[1], p[2]);
+    return Math.hypot(c[0] - o[0], c[1] - o[1], c[2] - o[2]);
+  }
+
+  it('tilting moves the camera around the object, not away from it', () => {
+    const p: Vec3 = [20, 10, 550000];
+    const top = distance(p, 7, 0);
+    for (const pitch of [30, 60, 85]) expect(distance(p, 7, pitch)).toBeCloseTo(top, 5);
+  });
+
+  it('tilting lets the map zoom out behind the object', () => {
+    expect(mapZoomFor(7, 550000, 85, 1, TO_CENTRE)).toBeLessThan(mapZoomFor(7, 550000, 0, 1, TO_CENTRE) - 1);
+  });
+
+  it('the two zooms are each other\'s inverse', () => {
+    const z = mapZoomFor(5, 11000, 60, 0.5, TO_CENTRE);
+    expect(distanceZoomFor(z, 11000, 60, 0.5, TO_CENTRE)).toBeCloseTo(5, 6);
+  });
+
+  it('on the ground they are the same', () => {
+    expect(mapZoomFor(9, 0, 60, 1, TO_CENTRE)).toBeCloseTo(9, 6);
+  });
+
+  it('on the flat map the elevation does it: they are the same', () => {
+    expect(mapZoomFor(13, 11000, 60, 0, TO_CENTRE)).toBeCloseTo(13, 6);
   });
 });
 
 describe('zoom limit', () => {
-  it('a geostationary satellite keeps the camera far out', () => {
-    expect(maxFocusZoom(GEO_M, 0, TO_CENTRE)).toBeLessThan(2);
+  it('is the same distance from every side', () => {
+    const limit = maxDistanceZoom(550000, TO_CENTRE);
+    expect(mapZoomFor(limit, 550000, 85, 1, TO_CENTRE)).toBeLessThan(mapZoomFor(limit, 550000, 0, 1, TO_CENTRE));
+    expect(2 ** -limit).toBeCloseTo(((550000 / 6371008.8) * 0.3) / ((TO_CENTRE * 2 * Math.PI) / 512), 6);
+  });
+
+  it('a geostationary satellite keeps the map far out', () => {
+    expect(mapZoomFor(maxDistanceZoom(GEO_M, TO_CENTRE), GEO_M, 0, 1, TO_CENTRE)).toBeLessThan(2);
+  });
+
+  it('a low orbit stays clear of where the map flattens, from every side', () => {
+    for (const pitch of [0, 60, 85]) expect(mapZoomFor(maxDistanceZoom(550000, TO_CENTRE), 550000, pitch, 1, TO_CENTRE)).toBeLessThan(11);
   });
 
   it('an aircraft only limits zooms beyond the flat map', () => {
-    expect(maxFocusZoom(11000, 0, TO_CENTRE)).toBeGreaterThan(8);
+    expect(mapZoomFor(maxDistanceZoom(11000, TO_CENTRE), 11000, 0, 1, TO_CENTRE)).toBeGreaterThan(8);
   });
 
   it('nothing on the ground', () => {
-    expect(maxFocusZoom(0, 45, TO_CENTRE)).toBe(Infinity);
+    expect(maxDistanceZoom(0, TO_CENTRE)).toBe(Infinity);
   });
 
   it('at the limit the camera is in front of the object', () => {
-    const zoom = maxFocusZoom(GEO_M, 30, TO_CENTRE);
+    const zoom = mapZoomFor(maxDistanceZoom(GEO_M, TO_CENTRE), GEO_M, 30, 1, TO_CENTRE);
     const c = frame(ZOOM_OF(zoom, 0), 1, -40, 0, 30, 0).camera;
     expect(Math.hypot(c[0], c[1], c[2])).toBeGreaterThan(1 + GEO_M / 6371008.8);
   });
