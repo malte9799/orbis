@@ -264,6 +264,19 @@ export class IncidentPanel {
       pin = { el, ref };
       tip.hidden = true;
       place(el, mark.screen);
+      // das Tooltip wächst auf die Größe des ganzen Videos (Hoch- und Querformat), soweit der Bildschirm es zulässt
+      const video = el.querySelector('video');
+      video?.addEventListener('loadedmetadata', () => {
+        if (!video.videoWidth || !video.videoHeight) return;
+        const canvas = map.getCanvas();
+        const maxW = Math.min(480, canvas.clientWidth - 40);
+        // Platz für Titelzeile und Rahmen abziehen
+        const maxH = Math.max(160, Math.min(canvas.clientHeight * 0.72, 640) - 70);
+        const k = Math.min(maxW / video.videoWidth, maxH / video.videoHeight);
+        video.style.width = `${Math.round(video.videoWidth * k)}px`;
+        video.style.height = `${Math.round(video.videoHeight * k)}px`;
+        place(el, this.layer?.screenOf(ref) ?? mark.screen);
+      });
     };
     const onMove = (e: PointerEvent) => {
       if (pin) return;

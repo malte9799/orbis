@@ -385,9 +385,10 @@
   color: var(--text-2);
 }
 
-/* angeheftetes Tooltip: das Video läuft darin */
+/* angeheftetes Tooltip: das Video läuft darin und wächst auf seine ganze Größe (JS setzt Breite und Höhe nach dem Laden) */
 .ic-pin {
-  max-width: 252px;
+  width: max-content;
+  max-width: none;
   padding: 6px;
   pointer-events: auto;
   z-index: 6;
@@ -396,10 +397,14 @@
 .ic-pin iframe {
   display: block;
   width: 240px;
-  max-height: 340px;
+  height: 135px;
   border: 0;
   border-radius: 6px;
   background: #000;
+  object-fit: contain;
+}
+.ic-pin iframe {
+  width: 300px;
 }
 .ic-pin-h {
   display: flex;
