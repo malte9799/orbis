@@ -1,10 +1,12 @@
-// Wahlergebnisse der Ebene „Wahlen": Snapshots in public/data/wahlen (de.json + de-geo.json,
-// gebaut von scripts/wahlen-data.mjs). Historische Wahlen ändern sich nie wieder – die Dateien
+// Wahlergebnisse der Ebene „Wahlen": gebaut vom orbis-data-Sammler (Task `wahlen`, Gruppe `manual`) →
+// ${DATA_BASE}wahlen/de.json + de-geo.json; die eingecheckten Kopien in public/data/wahlen (scripts/wahlen-data.mjs)
+// dienen lokal ohne VITE_DATA_BASE und als Fallback. Historische Wahlen ändern sich nie wieder – die Dateien
 // werden einmal pro Browser geladen (ETag-Cache) und danach gecacht.
 // Zeitstrahl = ein Schritt pro Wahltermin; jedes Gebiet zeigt immer das Ergebnis seiner
 // letzten Wahl vor dem gewählten Termin.
 import type { FeatureCollection } from 'geojson';
 import { fetchJsonEtag } from '../util';
+import { DATA_BASE } from './data';
 
 export type WahlenKind = 'all' | 'btw' | 'ltw';
 
@@ -170,10 +172,13 @@ export function wahlenLegendInfo(): { title: string; sub: string; swatches: [str
 export async function loadWahlen(): Promise<{ doc: WahlenDoc; geo: FeatureCollection } | null> {
   if (!loadPromise)
     loadPromise = (async () => {
-      const [w, g] = await Promise.all([
-        fetchJsonEtag<WahlenDoc>(`${import.meta.env.BASE_URL}data/wahlen/de.json`, 'wahlen'),
-        fetchJsonEtag<FeatureCollection>(`${import.meta.env.BASE_URL}data/wahlen/de-geo.json`, 'wahlen'),
-      ]);
+      const read = (base: string) =>
+        Promise.all([
+          fetchJsonEtag<WahlenDoc>(`${base}de.json`, 'wahlen'),
+          fetchJsonEtag<FeatureCollection>(`${base}de-geo.json`, 'wahlen'),
+        ]);
+      const local = `${import.meta.env.BASE_URL}data/wahlen/`;
+      const [w, g] = await (import.meta.env.VITE_DATA_BASE ? read(`${DATA_BASE}wahlen/`).catch(() => read(local)) : read(local));
       if (!w || !g) throw new Error('Wahldaten unvollständig');
       doc = w;
       geo = g;
