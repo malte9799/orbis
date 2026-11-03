@@ -82,13 +82,15 @@ await task('safecast', 0, async () => {
 });
 
 await task('radiation', 0, async () => {
-  const { fetchBfsRaw, fetchEurdepRaw } = await import('../src/api/earth');
-  const [bfs, eurdep] = await Promise.allSettled([fetchBfsRaw(), fetchEurdepRaw()]);
+  const { fetchBfsRaw, fetchStukStations, fetchHcStations } = await import('../src/api/earth');
+  const [bfs, fi, ca] = await Promise.allSettled([fetchBfsRaw(), fetchStukStations(), fetchHcStations()]);
   if (bfs.status === 'fulfilled') write('bfs-odl.json', bfs.value);
   else console.warn(`  BfS ODL: ${bfs.reason} – keeping previous data`);
-  if (eurdep.status === 'fulfilled') write('eurdep.json', eurdep.value);
-  else console.warn(`  EURDEP: ${eurdep.reason} – keeping previous data`);
-  if (bfs.status === 'rejected' && eurdep.status === 'rejected') throw new Error('BfS and EURDEP failed');
+  if (fi.status === 'fulfilled') write('stuk-fi.json', fi.value);
+  else console.warn(`  STUK (FI): ${fi.reason} – keeping previous data`);
+  if (ca.status === 'fulfilled') write('hc-ca.json', ca.value);
+  else console.warn(`  Health Canada: ${ca.reason} – keeping previous data`);
+  if (bfs.status === 'rejected' && fi.status === 'rejected' && ca.status === 'rejected') throw new Error('BfS, STUK and Health Canada failed');
 });
 
 await task('firms', 0, async () => {

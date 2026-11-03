@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection
+  timeStamp="2026-11-03T19:50:00Z"
+  numberMatched="1"
+  numberReturned="1"
+  xmlns:wfs="http://www.opengis.net/wfs/2.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:om="http://www.opengis.net/om/2.0"
+  xmlns:ompr="http://inspire.ec.europa.eu/schemas/ompr/3.0"
+  xmlns:omso="http://inspire.ec.europa.eu/schemas/omso/3.0"
+  xmlns:gml="http://www.opengis.net/gml/3.2"
+  xmlns:gmd="http://www.isotc211.org/2005/gmd"
+  xmlns:gco="http://www.isotc211.org/2005/gco"
+  xmlns:swe="http://www.opengis.net/swe/2.0"
+  xmlns:gmlcov="http://www.opengis.net/gmlcov/1.0"
+  xmlns:sam="http://www.opengis.net/sampling/2.0"
+  xmlns:sams="http://www.opengis.net/samplingSpatial/2.0"
+  xmlns:target="http://xml.fmi.fi/namespace/om/atmosphericfeatures/1.1"
+  >
+
+  <wfs:member>
+    <omso:GridSeriesObservation gml:id="WFS-fixture">
+
+                 <om:phenomenonTime>
+        <gml:TimePeriod gml:id="time1-1-1">
+          <gml:beginPosition>2026-11-02T19:50:00Z</gml:beginPosition>
+          <gml:endPosition>2026-11-03T19:50:00Z</gml:endPosition>
+        </gml:TimePeriod>
+      </om:phenomenonTime>
+      <om:resultTime>
+        <gml:TimeInstant gml:id="time2-1-1">
+          <gml:timePosition>2026-11-03T19:50:00Z</gml:timePosition>
+        </gml:TimeInstant>
+      </om:resultTime>
+
+     <om:procedure xlink:href="http://xml.fmi.fi/inspire/process/external_radiation"/>
+     
+
+     <om:observedProperty  xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=DR_PT10M_avg,DRS1_PT10M_avg&amp;language=eng"/>
+     	<om:featureOfInterest>
+        <sams:SF_SpatialSamplingFeature gml:id="sampling-feature-1-1-fmisid">
+
+          <sam:sampledFeature>
+		<target:LocationCollection gml:id="sampled-target-1-1">
+		    <target:member>
+		    <target:Location gml:id="obsloc-fmisid-103170-pos">
+		        <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">103170</gml:identifier>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Helsinki Vuosaaren Satama</gml:name>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/geoid">-103170</gml:name>
+			<target:representativePoint xlink:href="#point-103170"/>
+			
+			
+			<target:region codeSpace="http://xml.fmi.fi/namespace/location/region">Helsinki</target:region>
+			
+		    </target:Location></target:member>
+<target:member>
+		    <target:Location gml:id="obsloc-fmisid-103171-pos">
+		        <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">103171</gml:identifier>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Helsinki Suomenlinna</gml:name>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/geoid">-103171</gml:name>
+			<target:representativePoint xlink:href="#point-103171"/>
+			
+			
+			<target:region codeSpace="http://xml.fmi.fi/namespace/location/region">Helsinki</target:region>
+			
+		    </target:Location></target:member>
+<target:member>
+		    <target:Location gml:id="obsloc-fmisid-103172-pos">
+		        <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">103172</gml:identifier>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Espoo</gml:name>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/geoid">-103172</gml:name>
+			<target:representativePoint xlink:href="#point-103172"/>
+			
+			
+			<target:region codeSpace="http://xml.fmi.fi/namespace/location/region">Espoo</target:region>
+			
+		    </target:Location></target:member>
+<target:member>
+		    <target:Location gml:id="obsloc-fmisid-103173-pos">
+		        <gml:identifier codeSpace="http://xml.fmi.fi/namespace/stationcode/fmisid">103173</gml:identifier>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/name">Porkkala</gml:name>
+			<gml:name codeSpace="http://xml.fmi.fi/namespace/locationcode/geoid">-103173</gml:name>
+			<target:representativePoint xlink:href="#point-103173"/>
+			
+			
+			<target:region codeSpace="http://xml.fmi.fi/namespace/location/region">Kirkkonummi</target:region>
+			
+		    </target:Location></target:member>
+</target:LocationCollection>
+ 	   </sam:sampledFeature>
+          <sams:shape>
+<gml:MultiPoint gml:id="mp-1-1-fmisid">
+<gml:pointMember>
+              <gml:Point gml:id="point-103170" srsName="http://www.opengis.net/def/crs/EPSG/0/4258" srsDimension="2">
+                <gml:name>Helsinki Vuosaaren Satama</gml:name>
+                <gml:pos>60.22290 25.17880 </gml:pos>
+            </gml:Point>
+	    </gml:pointMember>
+<gml:pointMember>
+              <gml:Point gml:id="point-103171" srsName="http://www.opengis.net/def/crs/EPSG/0/4258" srsDimension="2">
+                <gml:name>Helsinki Suomenlinna</gml:name>
+                <gml:pos>60.14640 24.99030 </gml:pos>
+            </gml:Point>
+	    </gml:pointMember>
+<gml:pointMember>
+              <gml:Point gml:id="point-103172" srsName="http://www.opengis.net/def/crs/EPSG/0/4258" srsDimension="2">
+                <gml:name>Espoo</gml:name>
+                <gml:pos>60.20780 24.74090 </gml:pos>
+            </gml:Point>
+	    </gml:pointMember>
+<gml:pointMember>
+              <gml:Point gml:id="point-103173" srsName="http://www.opengis.net/def/crs/EPSG/0/4258" srsDimension="2">
+                <gml:name>Porkkala</gml:name>
+                <gml:pos>59.96820 24.41050 </gml:pos>
+            </gml:Point>
+	    </gml:pointMember>
+</gml:MultiPoint>
+</sams:shape>
+<om:result><gmlcov:MultiPointCoverage>
+<gml:domainSet><gmlcov:SimpleMultiPoint><gmlcov:positions>
+                60.22290 25.17880  1793733000
+                60.14640 24.99030  1793733000
+                60.20780 24.74090  1793473800
+                59.96820 24.41050  1793733000
+</gmlcov:positions></gmlcov:SimpleMultiPoint></gml:domainSet>
+<gml:rangeSet><gml:DataBlock><gml:rangeParameters/><gml:doubleOrNilReasonTupleList>
+                0.112 0.008 
+                0.161 0.008 
+                0.107 0.008 
+                NaN 0.010 
+</gml:doubleOrNilReasonTupleList></gml:DataBlock></gml:rangeSet>
+<gmlcov:rangeType><swe:DataRecord>
+<swe:field name="DR_PT10M_avg" xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=DR_PT10M_avg&amp;language=eng"/>
+<swe:field name="DRS1_PT10M_avg" xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=DRS1_PT10M_avg&amp;language=eng"/>
+</swe:DataRecord></gmlcov:rangeType>
+</gmlcov:MultiPointCoverage></om:result>
+</omso:GridSeriesObservation></wfs:member></wfs:FeatureCollection>

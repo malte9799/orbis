@@ -222,6 +222,8 @@ export async function loadTsunami(): Promise<FeatureCollection<Point>> {
 // ---------------------------------------------------------------------------
 // Radioactivity – ambient dose rate in µSv/h:
 // • BfS ODL measuring network (~1,700 probes in Germany, hourly, Datenlizenz DE 2.0)
+// • STUK Finland via FMI open data (~250 stations, 10-min mean, CC BY 4.0)
+// • Health Canada Fixed Point Surveillance Network (~80 stations, Open Government Licence – Canada)
 // • Safecast real-time sensors worldwide (CC0)
 
 /** Colour for an ambient dose rate (µSv/h). */
@@ -230,17 +232,18 @@ export function doseColor(v: number) {
 }
 
 export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; failed: string[] }> {
-  const [bfs, eurdep, safecast] = await Promise.allSettled([loadBfs(), loadEurdep(), loadSafecast()]);
+  const [bfs, fi, ca, safecast] = await Promise.allSettled([loadBfs(), loadStuk(), loadHc(), loadSafecast()]);
   const failed: string[] = [];
   const features: Feature<Point>[] = [];
   if (bfs.status === 'fulfilled') features.push(...bfs.value);
   else failed.push('BfS');
-  // EURDEP contains the German probes too – skip them when the BfS network loaded
-  if (eurdep.status === 'fulfilled') features.push(...eurdep.value.filter((f) => bfs.status !== 'fulfilled' || !String(f.properties?.sid).startsWith('DE')));
-  else failed.push('EURDEP');
+  if (fi.status === 'fulfilled') features.push(...fi.value);
+  else failed.push('STUK (FI)');
+  if (ca.status === 'fulfilled') features.push(...ca.value);
+  else failed.push('Health Canada');
   if (safecast.status === 'fulfilled') features.push(...safecast.value);
   else failed.push('Safecast');
-  if (failed.length === 3) throw (bfs as PromiseRejectedResult).reason;
+  if (failed.length === 4) throw (bfs as PromiseRejectedResult).reason;
   return { fc: { type: 'FeatureCollection', features }, failed };
 }
 
@@ -275,79 +278,105 @@ async function loadBfs(): Promise<Feature<Point>[]> {
     });
 }
 
-/** One WFS page; a GeoServer exception (HTTP 400, XML) is turned into a readable message, e.g. when BfS drops the layer. */
-async function fetchEurdepPage(url: string): Promise<RawFc> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 40000);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      const why = /<ows:ExceptionText>([^<]*)/.exec(body)?.[1]?.trim();
-      throw new Error(`EURDEP HTTP ${res.status}${why ? ` – ${why}` : ''}`);
-    }
-    return (await res.json()) as RawFc;
-  } finally {
-    clearTimeout(timer);
+/** Compact snapshot record of one national-network station: [name, lon, lat, dose rate µSv/h, unix seconds]. */
+export type RadiationStation = [name: string, lon: number, lat: number, usvh: number, time: number];
+
+const STUK_URL = 'https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=GetFeature&storedquery_id=stuk::observations::external-radiation::latest::multipointcoverage';
+const HC_URL = 'https://maps-cartes.services.geo.ca/server_serveur/rest/services/HC/fpsn_en/MapServer/1/query?where=1%3D1&outFields=*&f=geojson&outSR=4326';
+const STALE_MS = 48 * 3600000;
+const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
+const unXml = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+
+/**
+ * Parses the STUK external-radiation multipointcoverage (FMI open data WFS, Finland, ~250 stations): station names
+ * and positions come from the gml:Point members, the 10-min average dose rate (DR_PT10M_avg, µSv/h) from the tuple
+ * list, the observation time from the positions. Regex based on purpose – works in the browser and in Node (no DOMParser).
+ * Stations without a value or older than 48 h are dropped.
+ */
+export function parseStukXml(xml: string, now = Date.now()): RadiationStation[] {
+  const fields = [...xml.matchAll(/<swe:field\s+name="([^"]+)"/g)].map((m) => m[1]);
+  const col = fields.indexOf('DR_PT10M_avg');
+  const tuples = /<gml:doubleOrNilReasonTupleList>([\s\S]*?)<\/gml:doubleOrNilReasonTupleList>/.exec(xml)?.[1];
+  const positions = /<gmlcov:positions>([\s\S]*?)<\/gmlcov:positions>/.exec(xml)?.[1];
+  if (col < 0 || !tuples || !positions) return [];
+  const rows = (t: string) => t.split('\n').map((l) => l.trim().split(/\s+/)).filter((c) => c[0]);
+  const vals = rows(tuples);
+  const pos = rows(positions); // lat lon [alt] unix-seconds
+  const names = [...xml.matchAll(/<gml:Point\s+gml:id="point-[^"]*"[^>]*>\s*<gml:name>([^<]*)<\/gml:name>/g)].map((m) => unXml(m[1].trim()));
+  const out: RadiationStation[] = [];
+  for (let i = 0; i < Math.min(vals.length, pos.length); i++) {
+    const v = Number(vals[i][col]);
+    const lat = Number(pos[i][0]);
+    const lon = Number(pos[i][1]);
+    const t = Number(pos[i][pos[i].length - 1]);
+    if (!Number.isFinite(v) || v <= 0 || !Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(t) || now - t * 1000 > STALE_MS) continue;
+    out.push([names[i] ?? '', r4(lon), r4(lat), v, t]);
   }
+  return out;
+}
+
+/** Live STUK download (Finland, via FMI; CORS enabled). Also used by the orbis-data collector for the stuk-fi.json snapshot. */
+export async function fetchStukStations(): Promise<RadiationStation[]> {
+  const list = parseStukXml(await fetchText(STUK_URL, 30000));
+  if (!list.length) throw new Error('STUK: no stations in response');
+  return list;
 }
 
 /**
- * Live EURDEP download – European Radiological Data Exchange Platform (~3,500 probes in 40+ countries),
- * via BfS. NOTE (2026-11): BfS removed the layer opendata:eurdep_latestValue from its WFS (HTTP 400 "Feature type unknown"),
- * no replacement is published – the loader fails with that message and the layer shows without EURDEP. Also used by scripts/fetch-data.ts for the data-branch snapshot.
+ * Packs the Health Canada Fixed Point Surveillance Network layer (GeoJSON, nSv/h) into snapshot records in µSv/h.
+ * The station name is the layer's location_name without the trailing "_lat_lon". Readings older than 48 h are dropped.
  */
-export async function fetchEurdepRaw(): Promise<Feature<Point, Record<string, unknown>>[]> {
-  // the server caps every page at 1,000 features regardless of `count`; each probe is stored once per
-  // averaging period, so request only the 6 h series (all probes report it) to keep the paging short
-  const base =
-    'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=opendata:eurdep_latestValue&outputFormat=application/json&sortBy=id&count=1000&cql_filter=' +
-    encodeURIComponent('analyzed_range_in_h=6');
-  const best = new Map<string, Feature<Point, Record<string, unknown>>>();
-  for (let start = 0; start < 20000; start += 1000) {
-    const page = await fetchEurdepPage(`${base}&startIndex=${start}`).catch((e) => {
-      if (start === 0) throw e;
-      return { type: 'FeatureCollection' as const, features: [] };
-    });
-    // keep the most recent value per probe, trimmed to the fields we use
-    for (const f of page.features) {
-      const p = f.properties ?? {};
-      const id = String(p.id ?? '');
-      const prev = best.get(id);
-      if (f.geometry && (!prev || String(p.end_measure ?? '') > String(prev.properties.end_measure ?? ''))) {
-        best.set(id, { type: 'Feature', geometry: f.geometry, properties: { id: p.id, name: p.name, value: p.value, unit: p.unit, end_measure: p.end_measure } });
-      }
-    }
-    if (page.features.length < 1000) break;
-  }
-  return [...best.values()];
-}
-
-async function loadEurdep(): Promise<Feature<Point>[]> {
-  const raw = await snapshotJson('eurdep.json', fetchEurdepRaw);
-  const out: Feature<Point>[] = [];
-  for (const f of raw) {
-    const p = f.properties;
-    if (!f.geometry) continue;
-    let v = Number(p.value);
-    const unit = String(p.unit ?? 'µSv/h');
-    if (/nsv/i.test(unit)) v /= 1000;
-    if (!Number.isFinite(v) || v <= 0) continue;
-    out.push(
-      point(f.geometry.coordinates[0], f.geometry.coordinates[1], {
-        sid: p.id,
-        v,
-        color: doseColor(v),
-        label: v.toFixed(2),
-        title: `Messstelle ${String(p.name ?? p.id)}`,
-        subtitle: `${v.toLocaleString('de-DE', { maximumFractionDigits: 3 })} µSv/h · ${String(p.id).slice(0, 2)}`,
-        date: p.end_measure ?? '',
-        url: 'https://remap.jrc.ec.europa.eu/Advanced.aspx',
-        source: 'EURDEP (EU-Kommission, JRC) via BfS',
-      }),
-    );
+export function packHcStations(fc: FeatureCollection<Geometry, Record<string, unknown>>, now = Date.now()): RadiationStation[] {
+  const out: RadiationStation[] = [];
+  for (const f of fc.features ?? []) {
+    const p = f.properties ?? {};
+    const v = Number(p.latest_value_nSvHr) / 1000;
+    const t = Number(p.time);
+    if (f.geometry?.type !== 'Point' || !Number.isFinite(v) || v <= 0 || !Number.isFinite(t) || now - t > STALE_MS) continue;
+    const [lon, lat] = f.geometry.coordinates;
+    out.push([String(p.location_name ?? '').replace(/_-?\d+\.\d+_-?\d+\.\d+$/, ''), r4(lon), r4(lat), Math.round(v * 1e4) / 1e4, Math.round(t / 1000)]);
   }
   return out;
+}
+
+/** Live Health Canada download (CORS enabled). Also used by the orbis-data collector for the hc-ca.json snapshot. */
+export async function fetchHcStations(): Promise<RadiationStation[]> {
+  const list = packHcStations(await fetchJson<RawFc>(HC_URL, undefined, 30000));
+  if (!list.length) throw new Error('Health Canada: no current stations');
+  return list;
+}
+
+function stationFeatures(list: RadiationStation[], o: { what: string; country: string; url: string; source: string }): Feature<Point>[] {
+  return list.map(([name, lon, lat, v, t]) =>
+    point(lon, lat, {
+      v,
+      color: doseColor(v),
+      label: v.toFixed(2),
+      title: `${o.what} ${name}`.trim(),
+      subtitle: `${v.toLocaleString('de-DE', { maximumFractionDigits: 3 })} µSv/h · ${o.country}`,
+      date: new Date(t * 1000).toISOString(),
+      url: o.url,
+      source: o.source,
+    }),
+  );
+}
+
+async function loadStuk() {
+  return stationFeatures(await snapshotJson('stuk-fi.json', fetchStukStations), {
+    what: 'Messstelle',
+    country: 'Finnland · 10-Min-Mittel',
+    url: 'https://www.stuk.fi/en',
+    source: 'Säteilyturvakeskus STUK / Ilmatieteen laitos (FMI), CC BY 4.0',
+  });
+}
+
+async function loadHc() {
+  return stationFeatures(await snapshotJson('hc-ca.json', fetchHcStations), {
+    what: 'Messstelle',
+    country: 'Kanada',
+    url: 'https://maps-cartes.services.geo.ca/server_serveur/rest/services/HC/fpsn_en/MapServer',
+    source: 'Health Canada (Fixed Point Surveillance Network), Open Government Licence – Canada',
+  });
 }
 
 interface SafecastDevice {
