@@ -25,7 +25,7 @@ async function gunzip(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-/** Inverse of encode() in scripts/wx-icon.py: the quantised 16-bit numbers as they are stored. */
+/** Inverse of encode() in scripts/wetter-icon.py: the quantised 16-bit numbers as they are stored. */
 export async function decodeOwxRaw(buf: ArrayBuffer): Promise<RawTile> {
   const bytes = new Uint8Array(buf);
   if (bytes[0] !== 0x4f || bytes[1] !== 0x57 || bytes[2] !== 0x58 || bytes[3] !== 0x31) throw new Error('kein OWX-Format');

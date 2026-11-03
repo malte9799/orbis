@@ -25,7 +25,7 @@ Open-Meteo bleibt für Ortsansicht, Marine, Flood, Luftqualität – und als Fal
 | Regional später (Plan: vorab in der Pipeline nahtlos mit ICON global verblenden, Client sieht nur ein feineres Detailgitter über Europa) | **ICON-EU** (6,5 km, **regular-lat-lon nativ**, 120 h, stündlich bis 78 h) und ICON-D2 (2,2 km, 48 h, regular-lat-lon vorhanden) als optionale Verfeinerung – kein Remapping nötig |
 | Backup-Quelle | NOAA GFS 0,25° (gemeinfrei, AWS `noaa-gfs-bdp-pds`, Byte-Range über `.idx`) nur falls DWD ausfällt – nicht in der ersten Ausbaustufe. ECMWF Open Data (0,25°, CC BY 4.0, 3-Tage-Läufe nur 00/12 UTC) bringt gegenüber ICON keine Auflösung → verworfen |
 | Dekoder | **Python + `eccodes` (pip-Wheel mit Binärbibliothek) + numpy + scipy `cKDTree`**. Begründung: ICON-GRIB2 ist komprimiert gepackt; ein reiner Node/WASM-Dekoder wäre Eigenbau; ecCodes ist die Referenz. Passt zu bestehenden `scripts/*.py`, kein apt nötig |
-| Ablage | eigener Orphan-Branch **`data-wx`** (wie `data-osm`, entkoppelt vom 15-min-Workflow `data.yml`), eigener Workflow `wx.yml` |
+| Ablage | eigener Orphan-Branch **`data-wx`** (wie `data-osm`, entkoppelt vom 15-min-Workflow `data.yml`), eigener Workflow `wetter.yml` |
 | Format | eigenes Binärformat „OWX“: Int16-quantisiert, 2.-Ordnung-Delta entlang x, Zickzack, Byte-Planes, gzip → Client dekodiert mit `DecompressionStream('gzip')` (keine Bibliothek) |
 | Clientmodell | Überblick 0,5° (alle Zeiten, 1 Datei/Variable) + Detail 0,125° in 45°-Kacheln (alle Zeiten, 1 Datei/Variable/Kachel), lazy pro Variable |
 | Zeitauflösung | 3-stündlich, +0…+72 h (25 Schritte) – identisch zur heutigen Zeitleiste, `SUBSTEPS=3` bleibt |
@@ -52,7 +52,7 @@ Stündlich 000–078, dann 3-stündlich bis 180 (00/12) bzw. 120 (06/18 – für
 Download pro Lauf (3-stündlich, 25 Schritte × 10 Variablen, je ~1,7–4,1 MB bz2): **~0,7 GB**, Actions-Runner schafft das parallel (`curl --parallel`/`aria2c`) in wenigen Minuten.
 Veröffentlichung: Läufe sind laut Verzeichnislisting ca. **2 h 40 – 3 h 20** nach Laufzeit vollständig (00-Lauf: 02:39–03:21 UTC). Wir brauchen nur +72 h → etwas früher bereit.
 
-## 4. Verarbeitung (GitHub-Action `wx.yml`)
+## 4. Verarbeitung (GitHub-Action `wetter.yml`)
 
 1. **Zeitplan:** Cron `20 3,9,15,21 * * *` (Lauf + 3 h 20), `workflow_dispatch`. Schritt „Lauf wählen“: neuester Lauf, dessen **letzte benötigte Datei** (`…_072_TOT_PREC`) per HEAD existiert und dessen Run-ID ≠ `latest.json` im Branch; sonst Abbruch ohne Push (Idempotenz). Bis zu 40 min Warteschleife (alle 3 min), danach Fallback auf den vorherigen Lauf (−6 h), danach Exit 0 ohne Änderung.
 2. **Download** in `$RUNNER_TEMP`, `bunzip2`, je Datei ~10–15 MB.
@@ -81,7 +81,7 @@ Veröffentlichung: Läufe sind laut Verzeichnislisting ca. **2 h 40 – 3 h 20**
 
 ## 6. Client-Anbindung
 
-Neue Datei `src/api/wxmodel.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` behält Sampler, Interpolation, `SUBSTEPS`, Transformationen.
+Neue Datei `src/api/wettermodell.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` behält Sampler, Interpolation, `SUBSTEPS`, Transformationen.
 
 1. **`ModelGrid` bleibt Typ**; `data` wird zu lazy befüllten Einträgen. Neu: `grid.ensure(vars: ModelVar[]): Promise<void>`; Open-Meteo-Raster implementiert `ensure` als No-op. Abhängigkeiten pro Feld (Tabelle in `model.ts`): `wind`→u,v · `feels`→T,Td,u,v · `humidity`→T,Td · `precipmix`/`snowfall`→precip,T · `pressure`/Isobaren→pmsl · …
 2. **Ableitungen** (`derive`) laufen für das jeweils geladene Teilset (Taupunkt/RF umkehrbar über Magnus; Wind = √(u²+v²) bzw. Richtung).
@@ -98,8 +98,8 @@ Neue Datei `src/api/wxmodel.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` beh�
 | # | Schritt | Aufwand | Ergebnis |
 |---|---|---|---|
 | 0 | **Spike** (lokal, kein PR): ein Lauf herunterladen, Remapping prüfen (gegen `T_2M` Punktprobe vs. Open-Meteo-ICON), OWX-Größen je Variable/Auflösung messen, Entscheidung Branch vs. R2 | 0,5–1 Tag | Zahlen für Abschnitt 5, Qualität der Nearest/IDW-Remap |
-| 1 | `scripts/wx-icon.py` + `wx.yml` + Format-Spezifikation; **nur Temperatur** (+ `latest.json`), Branch `data-wx` | 1,5 Tage | Daten vorhanden, App unverändert |
-| 2 | Client-Sampler: `wxmodel.ts`, `ensure`, Überblick+Kacheln, Fallback; **Feld Temperatur** (zunächst hinter `?wx=1`, jetzt Standard, `?wx=0` schaltet aus) | 2 Tage | zoom.earth-Vergleich möglich |
+| 1 | `scripts/wetter-icon.py` + `wetter.yml` + Format-Spezifikation; **nur Temperatur** (+ `latest.json`), Branch `data-wx` | 1,5 Tage | Daten vorhanden, App unverändert |
+| 2 | Client-Sampler: `wettermodell.ts`, `ensure`, Überblick+Kacheln, Fallback; **Feld Temperatur** (zunächst hinter `?wx=1`, jetzt Standard, `?wx=0` schaltet aus) | 2 Tage | zoom.earth-Vergleich möglich |
 | 3 | Übrige Felder in der Pipeline (Td, u/v, Böe-Max, Niederschlag-Rate, Bewölkung, PMSL, Schnee, CAPE) + Client-Abhängigkeitstabelle; Windpartikel/Isobaren prüfen | 2–3 Tage | alle Karten |
 | 4 | `fcmap`-Region aus Kacheln, Schalter entfernen (Standard), Open-Meteo-Raster nur noch Fallback, Docs (`DATENQUELLEN.md`, Attribution, `STRUKTUR.md`) | 1 Tag | Umschaltung |
 | 5 | Optional: Höhenkorrektur T (HSURF + DEM), ICON-EU-Kacheln 0,0625° für Europa, Böen aus Stundendateien | 2–4 Tage | Feinschliff |
@@ -128,7 +128,7 @@ Reihenfolge ist durch Fallback jederzeit rückrollbar; Schritte 1–2 ändern da
 
 ## 10. Verifikation (pro Schritt)
 
-- Pipeline: lokaler Lauf `python scripts/wx-icon.py --run latest --out /tmp/wx`, Punktproben gegen Open-Meteo (`models=icon_global`) – Abweichung T < 0,5 K, Wind < 1 m/s; `workflow_dispatch` im Fork/Branch prüfen.
+- Pipeline: lokaler Lauf `python scripts/wetter-icon.py --run latest --out /tmp/wx`, Punktproben gegen Open-Meteo (`models=icon_global`) – Abweichung T < 0,5 K, Wind < 1 m/s; `workflow_dispatch` im Fork/Branch prüfen.
 - Client: `pnpm exec tsc --noEmit`, Sichtprüfung durch dich im Browser (Tibet, Anden, Alpen, Küste) und Vergleich mit zoom.earth; Fallback testen durch umgeleitete/blockierte `data-wx`-URL.
 - Daten: Größenbericht je Variable im Workflow-Log, `latest.json`-Alter, Aufrufzahl gegen Open-Meteo (Netzwerk-Tab) = 0 im Normalbetrieb.
 

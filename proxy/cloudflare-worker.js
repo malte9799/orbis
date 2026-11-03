@@ -27,6 +27,9 @@ const HOSTS = {
   'opensky-network.org': 30,
   'overpass-api.de': 900,
   'overpass.private.coffee': 900,
+  'overpass.kumi.systems': 900,
+  // Wikimedia Commons (Bilder-/Metadaten-API), changes rarely
+  'commons.wikimedia.org': 86400,
   '511on.ca': 600,
   '511.alberta.ca': 600,
   'developer.nps.gov': 600,

@@ -1,5 +1,5 @@
 // Weather field files for Orbis (Cloudflare Worker in front of an R2 bucket, free plan: 100,000 requests/day).
-// Serves the OWX files written by scripts/wx-icon.py / .github/workflows/wx.yml (docs/WETTERDATEN-FORMAT.md)
+// Serves the OWX files written by scripts/wetter-icon.py / .github/workflows/wetter.yml (docs/WETTERDATEN-FORMAT.md)
 // with CORS, conditional requests and byte ranges. Runs are immutable (the path contains the run), so
 // browsers cache them for a year and one weather view costs only a handful of requests.
 //

@@ -171,8 +171,8 @@ export async function loadWahlen(): Promise<{ doc: WahlenDoc; geo: FeatureCollec
   if (!loadPromise)
     loadPromise = (async () => {
       const [w, g] = await Promise.all([
-        fetchJsonEtag<WahlenDoc>('/data/wahlen/de.json', 'wahlen'),
-        fetchJsonEtag<FeatureCollection>('/data/wahlen/de-geo.json', 'wahlen'),
+        fetchJsonEtag<WahlenDoc>(`${import.meta.env.BASE_URL}data/wahlen/de.json`, 'wahlen'),
+        fetchJsonEtag<FeatureCollection>(`${import.meta.env.BASE_URL}data/wahlen/de-geo.json`, 'wahlen'),
       ]);
       if (!w || !g) throw new Error('Wahldaten unvollständig');
       doc = w;

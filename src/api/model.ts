@@ -1,5 +1,5 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
-import { wxDeps, type WxLayer } from './wxmodel';
+import { wxDeps, type WxLayer } from './wettermodell';
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
@@ -40,7 +40,7 @@ export interface ModelGrid {
   data: Record<ModelVar, Float32Array>;
 }
 
-/** One variable of the ICON fields (src/api/wxmodel.ts) on a regular grid. */
+/** One variable of the ICON fields (src/api/wettermodell.ts) on a regular grid. */
 export interface WxGrid {
   lat0: number;
   lon0: number;

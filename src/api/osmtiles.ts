@@ -1,4 +1,4 @@
-import { DATA_BASE } from './data';
+import { OSM_BASE } from './data';
 import { fetchJson } from '../util';
 
 // Point data from the monthly OpenStreetMap extracts (scripts/cctv-heat.mjs, branch `data-osm`):
@@ -10,7 +10,7 @@ import { fetchJson } from '../util';
 export type TileSet = 'blitzer' | 'alpr' | 'webcam' | 'wind' | 'resource';
 type Box = { west: number; south: number; east: number; north: number };
 
-const BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+const BASE = OSM_BASE;
 const REGIONS = ['europe', 'russia', 'asia', 'north-america', 'central-america', 'south-america', 'africa', 'oceania'];
 const TILE = 2; // tiles per degree
 

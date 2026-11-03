@@ -25,6 +25,7 @@ import {
   sub,
   type Vec3,
 } from './ephemeris';
+import { assetUrl } from '../assets';
 
 // Interactive 3D solar system. Scene units are AU; a floating origin keeps the focused
 // body at (0,0,0) so float32 precision on the GPU is fine from 100 AU down to metres.
@@ -421,9 +422,9 @@ export function createSpaceView(
   const previews = new Map<string, THREE.Texture>();
   const texState = new Map<string, 'loading' | 'full' | 'failed'>();
   /** the Moon keeps the small map: its sharper textures and close-up tiles come from moon.ts */
-  const FULL_TEXTURE: Record<string, string> = { moon: './textures/moonmap2k.jpg' };
+  const FULL_TEXTURE: Record<string, string> = { moon: assetUrl('textures/moonmap2k.jpg') };
   /** relief only needs the small maps (the bump maps of Mercury and the Moon are the 15 MB textures) */
-  const BUMP_TEXTURE: Record<string, string> = { mercury: './textures/mercurymap.jpg', moon: './textures/moonmap2k.jpg' };
+  const BUMP_TEXTURE: Record<string, string> = { mercury: assetUrl('textures/mercurymap.jpg'), moon: assetUrl('textures/moonmap2k.jpg') };
   /** apparent radius (px) from which a body gets its full texture */
   const FULL_TEX_PX = 40;
 
@@ -452,7 +453,7 @@ export function createSpaceView(
         mat.needsUpdate = true;
       }
     };
-    img.src = './textures/planet-lowres.jpg';
+    img.src = assetUrl('textures/planet-lowres.jpg');
   }
 
   function loadFullTexture(b: Body) {
@@ -519,7 +520,7 @@ export function createSpaceView(
       t.anisotropy = 4;
       return t;
     };
-    const stars = load('./textures/galaxy_starfield.jpg');
+    const stars = load(assetUrl('textures/galaxy_starfield.jpg'));
     stars.mapping = THREE.EquirectangularReflectionMapping;
     scene.background = stars;
     scene.backgroundIntensity = 0.45;
@@ -562,7 +563,7 @@ export function createSpaceView(
       group.add(spin);
       group.rotation.x = -((b.tiltDeg ?? 0) * Math.PI) / 180;
       if (b.id === 'saturn') {
-        const ringTex = load('./textures/saturnringcolortrans.png');
+        const ringTex = load(assetUrl('textures/saturnringcolortrans.png'));
         ringTex.repeat.set(0.5, 1); // the image holds the ring twice side by side
         const ringR = 140_220 / AU_KM;
         const ring = new THREE.Mesh(
@@ -1399,7 +1400,7 @@ export function createSpaceView(
     const cell = ATLAS_CELL[b.id];
     const th =
       cell !== undefined
-        ? `<span class="sp-thumb" style="background-image:url('./textures/planet-atlas.jpg');background-size:${ATLAS.cols * 100}% ${ATLAS.rows * 100}%;background-position:${((cell % ATLAS.cols) / (ATLAS.cols - 1)) * 100}% ${(Math.floor(cell / ATLAS.cols) / (ATLAS.rows - 1)) * 100}%"></span>`
+        ? `<span class="sp-thumb" style="background-image:url('${assetUrl('textures/planet-atlas.jpg')}');background-size:${ATLAS.cols * 100}% ${ATLAS.rows * 100}%;background-position:${((cell % ATLAS.cols) / (ATLAS.cols - 1)) * 100}% ${(Math.floor(cell / ATLAS.cols) / (ATLAS.rows - 1)) * 100}%"></span>`
       : `<span class="sp-thumb ${b.kind}" style="--c:${b.color}">${b.kind === 'craft' ? CRAFT_ICON : ''}</span>`;
     // bodies with a detailed map (Earth weather map, planet maps)
     const detail = b.id === 'earth' || mapEnabled(b.id);

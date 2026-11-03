@@ -5,12 +5,13 @@ import { yieldToMain } from '../yield';
 
 export { decodeOwxRaw };
 
-// Forecast fields from the DWD ICON model, prepared by scripts/wx-icon.py (format: docs/WETTERDATEN-FORMAT.md)
+// Forecast fields from the DWD ICON model, prepared by scripts/wetter-icon.py (format: docs/WETTERDATEN-FORMAT.md)
 // and served by proxy/wx-worker.js. A coarse 0.5° overview of the whole world (all time steps) is always
 // loaded; when zoomed in, the 45° tiles (0.125°) covering the view are stitched into one detail grid.
 // ModelSampler mixes both on top of the Open-Meteo grid and falls back to that wherever a field is missing.
 
-export const WX_BASE = 'https://orbis-wx.malte9799.workers.dev';
+// VITE_WETTER_BASE überschreibt den Host (z. B. wetter.<domain>); ohne Angabe der bisherige Worker.
+export const WETTER_BASE = String(import.meta.env?.VITE_WETTER_BASE || 'https://orbis-wx.malte9799.workers.dev').replace(/\/+$/, '');
 const MAX_AGE_MS = 30 * 3600 * 1000;
 const META_TTL_MS = 5 * 60 * 1000;
 const TILE = 45;
@@ -129,7 +130,7 @@ let metaCache: { at: number; promise: Promise<WxMeta> } | null = null;
 
 export function getWxMeta(): Promise<WxMeta> {
   if (!metaCache || Date.now() - metaCache.at > META_TTL_MS) {
-    const promise = getJson<WxMeta>(`${WX_BASE}/v1/latest.json`).then((m) => {
+    const promise = getJson<WxMeta>(`${WETTER_BASE}/v1/latest.json`).then((m) => {
       if (m.v !== 1) throw new Error('Wetterdaten: unbekannte Version');
       if (Date.now() - m.issued > MAX_AGE_MS) throw new Error('Wetterdaten: Lauf zu alt');
       return m;
@@ -143,7 +144,7 @@ export function getWxMeta(): Promise<WxMeta> {
 }
 
 async function loadRaw(path: string): Promise<RawTile> {
-  const res = await fetchOk(`${WX_BASE}/v1/${path}.owx`, FILE_TIMEOUT_MS);
+  const res = await fetchOk(`${WETTER_BASE}/v1/${path}.owx`, FILE_TIMEOUT_MS);
   return decodeOffThread(await res.arrayBuffer());
 }
 
@@ -257,7 +258,7 @@ export class WxLayer {
   private overview = new Map<ModelVar, WxGrid>();
   /** detail mosaics for the view: the variables plus the model surface height ('hsurf') */
   readonly detail = new Map<string, WxGrid>();
-  /** terrain heights for the view (src/api/wxmodel.ts: DEM_PATH), null while not loaded */
+  /** terrain heights for the view (src/api/wettermodell.ts: DEM_PATH), null while not loaded */
   private dem: WxGrid | null = null;
   private detailKey = '';
   private viewToken = 0;

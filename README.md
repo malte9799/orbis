@@ -371,6 +371,31 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
 
 </details>
 
+<details>
+<summary><b>🌐 Eigene Hosts für Daten, OSM-Kacheln, Wetter und Assets (optional)</b></summary>
+
+<br>
+
+Alle Basisadressen sind per Build-Variable umschaltbar (`deploy.yml` reicht die Repository-Variablen durch, leer = bisheriges
+Verhalten). Lokal gehören sie in `.env.local`.
+
+| Repository-Variable | Build-Variable | Wirkung (Standard, wenn leer) |
+|---|---|---|
+| `DATA_BASE` | `VITE_DATA_BASE` | Basis der Daten-Snapshots (`raw.githubusercontent.com/…/data/`) |
+| `LIVE_BASE` | `VITE_LIVE_BASE` | schnell wechselnde Snapshots (Tsunami, Safecast, BfS-ODL, EURDEP, FIRMS, Demos); Standard: wie `DATA_BASE` |
+| `OSM_BASE` | `VITE_OSM_BASE` | OSM-Kacheln (CCTV-Dichte, Blitzer, ALPR …); Standard: Branch `data-osm` |
+| `WETTER_BASE` | `VITE_WETTER_BASE` | ICON-Wetterfelder (`/v1/latest.json`, `*.owx`); Standard: der bisherige Worker |
+| `ASSETS_BASE` | `VITE_ASSETS_BASE` | `models/`, `textures/`, `data/airports`, `data/incidents`, `data/games`; Standard: Dateien aus `public/` |
+
+Die Wetter-Action liest die Worker-Adresse aus `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`, wird als Fallback noch gelesen).
+
+**Assets auslagern:** Ist die Repository-Variable `ASSETS_BUCKET` gesetzt (plus die Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`), lädt der Deploy auf `main` diese Ordner nach R2 und entfernt sie aus `dist/`, bevor `gh-pages` geschrieben
+wird – auch bei Vorschauen, die dann die Assets von `main` nutzen. Der Bucket braucht eine CORS-Regel (`GET`/`HEAD`) für die Pages-Domain.
+Ohne `ASSETS_BUCKET` bleibt alles wie bisher in `gh-pages`.
+
+</details>
+
 ## ℹ️ Hinweise
 
 - **Raster:** Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 3 Tage).

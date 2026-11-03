@@ -1,7 +1,7 @@
 import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
-import { DATA_BASE } from '../../../api/data';
+import { OSM_BASE } from '../../../api/data';
 import { builtRegions } from '../../../api/osmtiles';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
@@ -18,7 +18,7 @@ const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'a
 //   cctv-<region>.json           density cells [lon, lat, count]
 //   cctv-<region>-tiles.json     the 0.5° tiles that exist
 //   cctv-<region>/<ix>_<iy>.json cameras of one tile (record layout: see `record` in the script)
-const HEAT_BASE = DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+const HEAT_BASE = OSM_BASE;
 const TILE = 2; // tiles per degree
 type Rec = [number, number, number, string, string, string, number, string, number];
 

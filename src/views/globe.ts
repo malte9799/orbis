@@ -31,7 +31,7 @@ import {
   type ModelGrid,
   type ModelVar,
 } from '../api/model';
-import { WxLayer, wxDeps, wxEnabled } from '../api/wxmodel';
+import { WxLayer, wxDeps, wxEnabled } from '../api/wettermodell';
 import { getCurrent, reverseGeocodePoint } from '../api/openmeteo';
 import {
   setWahlenKindToken,

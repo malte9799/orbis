@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
 import type { StyleSpecification } from 'maplibre-gl';
+import { assetUrl } from '../assets';
 
 // Data and geometry helpers shared by the games (country features, scopes, name matching, region lists).
 
@@ -14,7 +15,7 @@ export interface Scope {
   view?: BBox;
 }
 
-export const DATA = `${import.meta.env.BASE_URL}data/games/`;
+export const DATA = assetUrl('data/games/');
 export type BBox = [number, number, number, number];
 export const SCOPES: Scope[] = [
   { id: 'world', label: 'Welt', view: [-168, -56, 180, 80] },

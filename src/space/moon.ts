@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { assetUrl } from '../assets';
 
 // Moon details: sharper global textures (NASA CGI Moon Kit, prepared by the deploy workflow),
 // streamed close-up tiles (NASA Moon Trek, LRO WAC mosaic ≈ 100 m/px) and flags at the
@@ -558,14 +559,14 @@ export class BodyDetail {
     const m = this.material;
     if (this.baseStage < 1 && this.screenR > 50) {
       this.baseStage = 1;
-      this.loadTex('./textures/moon/lroc-4k.jpg', true, (t) => {
+      this.loadTex(assetUrl('textures/moon/lroc-4k.jpg'), true, (t) => {
         if (this.baseLevel >= 4) return t.dispose();
         m.map?.dispose();
         m.map = t;
         m.needsUpdate = true;
         this.baseLevel = 3;
       });
-      this.loadTex('./textures/moon/normal-4k.jpg', false, (t) => {
+      this.loadTex(assetUrl('textures/moon/normal-4k.jpg'), false, (t) => {
         m.normalMap = t;
         m.normalScale.set(1, 1);
         m.needsUpdate = true;
@@ -577,7 +578,7 @@ export class BodyDetail {
     }
     if (this.baseStage < 2 && this.screenR > 800 && this.o.maxTextureSize >= 8192) {
       this.baseStage = 2;
-      this.loadTex('./textures/moon/lroc-8k.jpg', true, (t) => {
+      this.loadTex(assetUrl('textures/moon/lroc-8k.jpg'), true, (t) => {
         m.map?.dispose();
         m.map = t;
         m.needsUpdate = true;

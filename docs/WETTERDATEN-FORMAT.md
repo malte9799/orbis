@@ -1,7 +1,7 @@
 # Wetterdaten-Format (OWX)
 
-Format der Wetterkarten-Felder, die `scripts/wx-icon.py` aus DWD-ICON-Rohdaten erzeugt und
-`.github/workflows/wx.yml` in einen Cloudflare-R2-Bucket lädt. Hintergrund und Migration:
+Format der Wetterkarten-Felder, die `scripts/wetter-icon.py` aus DWD-ICON-Rohdaten erzeugt und
+`.github/workflows/wetter.yml` in einen Cloudflare-R2-Bucket lädt. Hintergrund und Migration:
 [PLAN-GRIB-WETTERKARTEN.md](PLAN-GRIB-WETTERKARTEN.md). Version 1.
 
 ## Dateien im Bucket
@@ -38,19 +38,19 @@ Die ICON-Temperatur gilt für die geglättete Modelloberfläche (13 km). Für T�
 
 - **`hsurf`** (Höhe der Modelloberfläche, m): zeitinvariante ICON-Variable `HSURF`, wie die anderen Variablen unter
   `v1/<lauf>/hsurf/` (ein Zeitschritt, `static: true` in `latest.json`). Gleiches Gitter wie die Temperatur.
-- **`dem`** (Geländehöhe, m): `scripts/wx-dem.py` baut sie aus den Terrarium-Kacheln (Mapzen/AWS Open Data, Zoom 5) auf ein
+- **`dem`** (Geländehöhe, m): `scripts/wetter-dem.py` baut sie aus den Terrarium-Kacheln (Mapzen/AWS Open Data, Zoom 5) auf ein
   Lat/Lon-Gitter mit 0,0439° (≈ 4,9 km), 1025 × 1025 Punkte je 45°-Kachel, unter `v1/static/dem/t<c>_<r>.owx`. Meer = 0 m,
-  jenseits ±85,05° fehlt der Wert. Gesamt ~7 MB. Auslösen: Workflow `wx.yml` mit Eingabe `dem = true`.
+  jenseits ±85,05° fehlt der Wert. Gesamt ~7 MB. Auslösen: Workflow `wetter.yml` mit Eingabe `dem = true`.
 - Fehlt `hsurf` oder `dem`, bleibt die Temperatur unkorrigiert.
 - Hinweis zur Höhenquelle: [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 
 ## Auslieferung
 
 Der Bucket bleibt privat; ausgeliefert wird über den Worker `proxy/wx-worker.js` (R2-Binding `WX`) mit CORS, `ETag`/304 und
-`Range`. Seine Adresse ist die Repository-Variable `WX_PUBLIC_URL`. Das Tageslimit von 100 000 Aufrufen des kostenlosen
+`Range`. Seine Adresse ist die Repository-Variable `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`). Das Tageslimit von 100 000 Aufrufen des kostenlosen
 Worker-Tarifs gilt pro Konto (geteilt mit `orbis-proxy`); Läufe sind unveränderlich und werden vom Browser ein Jahr gecacht,
 `latest.json` zwei Minuten. Reicht das Limit nicht, ist der Wechsel auf den bezahlten Worker-Tarif oder eine eigene Domain
-nur ein neuer Wert für `WX_PUBLIC_URL`.
+nur ein neuer Wert für `WETTER_PUBLIC_URL`.
 
 ## latest.json
 
@@ -99,7 +99,7 @@ Jeder uint16-Wert `z` ist ein Zickzack-codiertes Residuum `d = (z >> 1) ^ −(z 
 2. Zeitliche Summe: `q[0] = s[0]`, `q[t] = q[t−1] + s[t]`.
 
 Der Encoder bildet das spiegelbildlich (erst Differenz zum Vorschritt, dann Plane-Prädiktor). Referenzdekoder: `decode()` in
-`scripts/wx-icon.py` (wird im Selbsttest `--selftest` gegen die Quelle geprüft).
+`scripts/wetter-icon.py` (wird im Selbsttest `--selftest` gegen die Quelle geprüft).
 
 ## Größe (Temperatur, Lauf 2026103012, 25 Schritte)
 

@@ -1,10 +1,11 @@
 import type { Geometry, Position } from 'geojson';
 import { bboxOf, loadData, SCOPES, scopeOf, type Feat } from './data';
 import type { QuizItem } from './namequiz';
+import { assetUrl } from '../assets';
 
 // Question sets for the name quiz: flags, capitals and outlines.
 
-const DATA = `${import.meta.env.BASE_URL}data/games/`;
+const DATA = assetUrl('data/games/');
 export const flagUrl = (code: string) => `${DATA}flags/${code}.svg`;
 const flagImg = (code: string, cls = 'fg-img') => `<img class="${cls}" alt="Flagge" src="${flagUrl(code)}" />`;
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');

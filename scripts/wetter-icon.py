@@ -9,9 +9,9 @@ Lat/Lon-Gitter (0,125°), quantisiert und schreibt Kacheln im OWX-Format (docs/W
   <out>/v1/<lauf>/<variable>/t<col>_<row>.owx  Kachel 45° × 45° mit 0,125°
   <out>/v1/latest.json                      Metadaten des neuesten vollständigen Laufs
 
-Aufruf (Workflow .github/workflows/wx.yml):
-  python scripts/wx-icon.py --out ../wx-out [--run latest|YYYYMMDDHH] [--vars t_2m] [--wait 40]
-                            [--published ../wx-prev/latest.json] [--work ../wx-work]
+Aufruf (Workflow .github/workflows/wetter.yml):
+  python scripts/wetter-icon.py --out ../wetter-out [--run latest|YYYYMMDDHH] [--vars t_2m] [--wait 40]
+                            [--published ../wetter-prev/latest.json] [--work ../wetter-work]
 
 Daten: Deutscher Wetterdienst (DWD), ICON, CC BY 4.0 – hier verändert (Gitter, Einheiten, Quantisierung).
 Abhängigkeiten: numpy, scipy, eccodes (pip).
@@ -255,7 +255,7 @@ def encode(q, header):
 
 
 def decode(blob):
-    """Gegenstück zu encode() – für den Selbsttest (der Browser-Dekoder folgt in src/api/wxmodel.ts)"""
+    """Gegenstück zu encode() – für den Selbsttest (der Browser-Dekoder folgt in src/api/wettermodell.ts)"""
     assert blob[:4] == b'OWX1'
     hl = struct.unpack('<I', blob[4:8])[0]
     h = json.loads(blob[8 : 8 + hl])

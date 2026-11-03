@@ -8,7 +8,7 @@ Lat/Lon-Gitter mit 0,0439° (≈ 4,9 km) um und schreibt sie im OWX-Format (docs
   <out>/v1/static/dem/t<col>_<row>.owx    45° × 45°, 1025 × 1025 Punkte, ein Zeitschritt, Meter
 
 Das Meer zählt als 0 m; jenseits von ±85,05° (Mercator-Grenze) fehlt der Wert (Korrektur 0).
-Aufruf (.github/workflows/wx-dem.yml):  python scripts/wx-dem.py --out ../wx-out
+Aufruf (.github/workflows/wetter.yml):  python scripts/wetter-dem.py --out ../wetter-out
 
 Höhen: Mapzen Terrain Tiles (AWS Open Data) – u. a. SRTM, GMTED2010, ETOPO1, ArcticDEM u. a., siehe
 https://github.com/tilezen/joerd/blob/master/docs/attribution.md
@@ -26,7 +26,7 @@ import urllib.request
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location('wxicon', os.path.join(HERE, 'wx-icon.py'))
+spec = importlib.util.spec_from_file_location('wettericon', os.path.join(HERE, 'wetter-icon.py'))
 wx = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wx)
 

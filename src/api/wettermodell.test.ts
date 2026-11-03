@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModelSampler, type ModelGrid, type ModelVar } from './model';
-import { decodeOwx, mosaic, tilesFor, wxDeps, WxLayer } from './wxmodel';
+import { decodeOwx, mosaic, tilesFor, wxDeps, WxLayer } from './wettermodell';
 
-// 3 steps of 5 × 6 values made by encode() in scripts/wx-icon.py (random noise on a ramp, one missing value,
+// 3 steps of 5 × 6 values made by encode() in scripts/wetter-icon.py (random noise on a ramp, one missing value,
 // and values near the int16 limits so the predictor wraps around)
 const FIXTURE = 'T1dYMaQAAAB7InZhciI6InRlbXBlcmF0dXJlXzJtIiwic2NhbGUiOjAuMSwib2Zmc2V0IjotNS4wLCJub2RhdGEiOi0zMjc2OCwicHJlZCI6InBsYW5lLXRpbWUiLCJsYXQwIjo5MCwibG9uMCI6LTE4MCwiZHgiOjAuMTI1LCJkeSI6MC4xMjUsIndyYXAiOmZhbHNlLCJudCI6MywibnkiOjUsIm54Ijo2fR+LCAAAAAAAAhP7b+NgZ2B35i8vgwjnATYmBma2Y+wizMyMl1g52Tg5ZH4y8Qowfn/HwyEpwszGOG8mMw+Hcvc8dnZWOXEhxicH2TkYWI5fYGRg4eYSFli6iJOTgWfaXAFmMXEOdoafvxiA4NdPBqwAIv4TJvv3L4KEi+OSBQCf/vg1tAAAAA==';
 const EXPECTED: (number | null)[][][] = [[[-3205.0, -2.0, 1.2, 4.3, 6.7, 9.8], [5.2, 8.3, 10.8, 13.9, 17.3, 19.9], [14.8, 18.2, 20.8, 23.9, 27.1, 30.0], [24.7, 27.7, 31.3, 34.2, 37.2, 40.0], [35.2, 37.9, 41.0, 44.2, 46.7, 49.9]], [[-3.6, -0.3, 3.0, 5.4, 8.6, 11.6], [7.0, 9.5, 12.7, 15.5, 18.4, 21.9], [16.4, 19.5, 22.7, null, 28.4, 32.0], [26.9, 30.0, 32.4, 35.9, 38.6, 41.7], [37.0, 39.5, 42.9, 45.5, 48.6, 52.0]], [[3195.0, 1.4, 4.3, 7.1, 10.3, 13.5], [8.4, 11.6, 14.3, 17.5, 20.6, 23.7], [18.3, 21.1, 24.6, 27.4, 30.7, 33.4], [28.3, 31.1, 34.4, 37.5, 40.6, 43.6], [38.2, 41.5, 44.6, 47.2, 50.3, 53.6]]];
