@@ -22,6 +22,8 @@ export interface DetailContent {
   link?: { url: string; label: string };
   /** gemeldete Strecke ([[lon,lat] …]), die auf der Karte hervorgehoben wird */
   route?: number[][];
+  /** Nachladen (z. B. Clip-Metadaten): sobald fertig, ersetzt es Felder, solange das Panel noch denselben Eintrag zeigt */
+  pending?: Promise<Partial<DetailContent>>;
 }
 
 export interface DetailPanelHooks {
@@ -62,6 +64,19 @@ export class DetailPanel {
     this.cur = d;
     this.onOpen?.();
     this.root.hidden = false;
+    this.render(d);
+    this.showRoute(true);
+    d.pending?.then(
+      (more) => {
+        if (this.cur !== d) return;
+        Object.assign(d, more, { pending: undefined });
+        this.render(d);
+      },
+      () => {},
+    );
+  }
+
+  private render(d: DetailContent) {
     this.root.querySelector<HTMLElement>('.fp-head')!.style.setProperty('--c', d.color);
     this.root.querySelector<HTMLElement>('.fp-ic')!.innerHTML = glyphSvg(d.glyph, d.color, 30);
     this.root.querySelector<HTMLElement>('.fp-title')!.textContent = d.title;
@@ -73,7 +88,6 @@ export class DetailPanel {
       ? `<button type="button" class="${fit ? '' : 'full'}" data-link="${escapeHtml(d.link.url)}">${escapeHtml(d.link.label)}</button>`
       : '';
     actions.innerHTML = fit + link;
-    this.showRoute(true);
   }
 
   close(keepHidden = false) {

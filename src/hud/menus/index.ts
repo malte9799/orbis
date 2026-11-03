@@ -15,3 +15,4 @@ export const WX_FAMILIES: WxFamily[] = collect(import.meta.glob<{ default: WxFam
 export const WX_MENU: WxMenuItem[] = collect(import.meta.glob<{ default: WxMenuItem & { order: number } }>('./wxmenu/*.ts', { eager: true }), 'wxmenu');
 export const TRAFFIC_MENU: TrafficCat[] = collect(import.meta.glob<{ default: TrafficCat & { order: number } }>('./traffic/*.ts', { eager: true }), 'traffic');
 export const INFRA_MENU: TrafficCat[] = collect(import.meta.glob<{ default: TrafficCat & { order: number } }>('./infra/*.ts', { eager: true }), 'infra');
+export const ZEUGEN_MENU: TrafficCat[] = collect(import.meta.glob<{ default: TrafficCat & { order: number } }>('./zeugen/*.ts', { eager: true }), 'zeugen');
