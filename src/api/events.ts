@@ -2,7 +2,7 @@ import { store } from '../store';
 import type { Feature, FeatureCollection, Geometry, LineString, Point, Polygon, MultiPolygon, Position } from 'geojson';
 import { fetchJson } from '../util';
 import { uTok } from '../units';
-import { snapshotJson } from './data';
+import { mirrorJson, snapshotJson } from './data';
 
 /** Kinds of natural events shown on the globe. */
 export type EventKind =
@@ -123,10 +123,8 @@ export interface EonetResult {
 }
 
 export async function loadEonet(): Promise<EonetResult> {
-  const data = await fetchJson<{ events: EonetEvent[] }>(
-    'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=45',
-    undefined,
-    30000,
+  const data = await mirrorJson('events/eonet.json', () =>
+    fetchJson<{ events: EonetEvent[] }>('https://eonet.gsfc.nasa.gov/api/v3/events?status=open&days=45', undefined, 30000),
   );
   const points: EventFeature[] = [];
   const tracks: EonetResult['tracks'] = [];
@@ -188,9 +186,11 @@ function unwrapTrack(coords: Position[]): Position[] {
 // USGS earthquakes (last 7 days, M2.5+)
 
 export async function loadQuakes(): Promise<EventFeature[]> {
-  const data = await fetchJson<
-    FeatureCollection<Point, { mag: number; place: string; time: number; url: string; tsunami: number; alert: string | null; title: string }>
-  >('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson');
+  const data = await mirrorJson('events/usgs-2.5_week.geojson', () =>
+    fetchJson<FeatureCollection<Point, { mag: number; place: string; time: number; url: string; tsunami: number; alert: string | null; title: string }>>(
+      'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson',
+    ),
+  );
   return data.features
     .filter((f) => f.geometry)
     .map((f) => {
@@ -233,6 +233,9 @@ const NWS_DE: Record<string, string> = {
   'Snow Squall Warning': 'Schneesturm-Warnung',
 };
 
+/** Key part of the clock worker's NWS mirror (events/nws/<slug>.geojson). */
+export const nwsSlug = (event: string) => event.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 export interface NwsResult {
   polygons: Feature<Polygon | MultiPolygon, { color: string; event: string }>[];
   points: EventFeature[];
@@ -241,14 +244,16 @@ export interface NwsResult {
 export async function loadNwsSevere(): Promise<NwsResult> {
   const results = await Promise.allSettled(
     Object.keys(NWS_EVENTS).map((event) =>
-      fetchJson<
-        FeatureCollection<
-          Polygon | MultiPolygon | null,
-          { event: string; headline?: string; areaDesc?: string; description?: string; onset?: string; expires?: string; ends?: string; '@id'?: string }
-        >
-      >(`https://api.weather.gov/alerts/active?event=${encodeURIComponent(event)}`, {
-        headers: { Accept: 'application/geo+json' },
-      }),
+      mirrorJson(`events/nws/${nwsSlug(event)}.geojson`, () =>
+        fetchJson<
+          FeatureCollection<
+            Polygon | MultiPolygon | null,
+            { event: string; headline?: string; areaDesc?: string; description?: string; onset?: string; expires?: string; ends?: string; '@id'?: string }
+          >
+        >(`https://api.weather.gov/alerts/active?event=${encodeURIComponent(event)}`, {
+          headers: { Accept: 'application/geo+json' },
+        }),
+      ),
     ),
   );
   if (results.every((r) => r.status === 'rejected')) throw new Error('NWS nicht erreichbar');
@@ -335,7 +340,7 @@ const GDACS_TYPE_DE: Record<string, string> = {
 };
 
 export async function loadGdacs(): Promise<EventFeature[]> {
-  const data = await fetchJson<
+  const data = await mirrorJson('events/gdacs.json', () => fetchJson<
     FeatureCollection<
       Geometry,
       {
@@ -350,7 +355,7 @@ export async function loadGdacs(): Promise<EventFeature[]> {
         severitydata?: { severitytext?: string };
       }
     >
-  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC;FL;VO;DR;WF', undefined, 30000);
+  >('https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=TC;FL;VO;DR;WF', undefined, 30000));
   const out: EventFeature[] = [];
   for (const f of data.features) {
     if (!f.geometry || f.geometry.type !== 'Point') continue;
@@ -409,9 +414,55 @@ export async function loadFirms(mapKey: string, source = 'VIIRS_NOAA20_NRT', day
   };
 }
 
+/**
+ * Compact snapshot format (v2) of firms/world.json: `{ v: 2, rows: [[lon, lat, frp, conf, minutes since 1970 UTC], …] }`
+ * with coordinates rounded to 3 decimals (~110 m, below the 375 m pixel size) and frp to 0.1 MW – about a quarter of the
+ * size of the GeoJSON FeatureCollection (v1) the snapshot used before; the reader accepts both.
+ */
+export interface FirmsPacked {
+  v: 2;
+  rows: [number, number, number, string, number][];
+}
+
+/** "2026-11-03 1728" (acq_date + acq_time, time possibly unpadded like "5") → minutes since the epoch. */
+export function firmsTimeToMinutes(time: string): number {
+  const [d, t = '0'] = time.split(' ');
+  const hhmm = t.padStart(4, '0');
+  return Math.floor(Date.parse(`${d}T${hhmm.slice(0, 2)}:${hhmm.slice(2)}:00Z`) / 60000);
+}
+
+export function firmsMinutesToTime(min: number): string {
+  const iso = new Date(min * 60000).toISOString(); // 2026-11-03T17:28:00.000Z
+  return `${iso.slice(0, 10)} ${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+}
+
+export function packFirms(features: FirmsFC['features']): FirmsPacked {
+  const rows: FirmsPacked['rows'] = [];
+  for (const f of features) {
+    const [lon, lat] = f.geometry.coordinates;
+    const min = firmsTimeToMinutes(f.properties.time);
+    if (!Number.isFinite(min)) continue;
+    rows.push([Math.round(lon * 1e3) / 1e3, Math.round(lat * 1e3) / 1e3, Math.round(f.properties.frp * 10) / 10, f.properties.conf, min]);
+  }
+  return { v: 2, rows };
+}
+
+/** Accepts the compact v2 format and the older GeoJSON FeatureCollection. */
+export function unpackFirms(data: FirmsFC | FirmsPacked): FirmsFC {
+  if (!('rows' in data)) return data;
+  return {
+    type: 'FeatureCollection',
+    features: data.rows.map(([lon, lat, frp, conf, min]) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [lon, lat] },
+      properties: { frp, conf, time: firmsMinutesToTime(min) },
+    })),
+  };
+}
+
 /** Shared worldwide FIRMS snapshot from the data branch (no user key needed). */
-export function loadFirmsSnapshot(): Promise<FirmsFC> {
-  return snapshotJson<FirmsFC>('firms/world.json');
+export async function loadFirmsSnapshot(): Promise<FirmsFC> {
+  return unpackFirms(await snapshotJson<FirmsFC | FirmsPacked>('firms/world.json'));
 }
 
 // ---------------------------------------------------------------------------

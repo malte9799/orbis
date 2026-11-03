@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { fetchJson, rampColor } from '../util';
 import { heightNum, uTok } from '../units';
-import { fetchText } from './data';
+import { fetchText, mirrorText } from './data';
 import { omFetch } from './omlimit';
 import { viaProxy } from './proxy';
 
@@ -35,7 +35,7 @@ const compass = (deg: number) => ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'][Ma
 // NOAA NDBC – latest observation of every buoy / coastal station (≤ 2 h old).
 
 export async function loadBuoys(): Promise<FeatureCollection<Point>> {
-  const text = await fetchText(viaProxy('https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt'), 30000);
+  const text = await mirrorText('ocean/ndbc-latest_obs.txt', () => fetchText(viaProxy('https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt'), 30000), 30000);
   const features: Feature<Point>[] = [];
   for (const line of text.split('\n')) {
     if (!line.trim() || line.startsWith('#')) continue;

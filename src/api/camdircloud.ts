@@ -1,7 +1,7 @@
 import type { Feature, Point } from 'geojson';
 import { store } from '../store';
 
-// Corrected viewing directions of webcams, kept in our own Cloudflare Worker (proxy/camdir-worker.js).
+// Corrected viewing directions of webcams, kept in our own Cloudflare Worker (Orbismap/data: workers/camdir).
 // Everybody reads them; writing needs the admin token (settings), later maybe suggestions of all users.
 // (camdir.ts estimates directions from the road – these corrections win over every estimate.)
 

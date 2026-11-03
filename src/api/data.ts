@@ -5,7 +5,7 @@
 
 function dataBase(): string {
   // Lokale Overrides für Tests: VITE_DATA_BASE zeigt dann auf einen Ordner mit Snapshot-Dateien.
-  if (import.meta.env?.VITE_DATA_BASE) return String(import.meta.env?.VITE_DATA_BASE);
+  if (import.meta.env?.VITE_DATA_BASE) return withSlash(String(import.meta.env.VITE_DATA_BASE));
   // Node (the data Action) has no location – snapshots are read only in the browser.
   if (typeof location === 'undefined') return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
   // On GitHub Pages (owner.github.io/repo) use that repository, otherwise the main one.
@@ -29,6 +29,35 @@ export const LIVE_BASE = import.meta.env?.VITE_LIVE_BASE ? withSlash(String(impo
 export const OSM_BASE = import.meta.env?.VITE_OSM_BASE
   ? withSlash(String(import.meta.env.VITE_OSM_BASE))
   : DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+
+/** Whether the clock-worker mirrors on LIVE_BASE (orbis-live) are used – only with an explicit VITE_LIVE_BASE. */
+export const LIVE_MIRROR = Boolean(import.meta.env?.VITE_LIVE_BASE);
+
+/** URL of a mirror object (`events/gdacs.json` …) below `base`; null without a base = mirrors off. */
+export function mirrorUrl(key: string, base: string | undefined | null): string | null {
+  if (!base) return null;
+  return withSlash(base) + key.replace(/^\/+/, '');
+}
+
+async function mirrorFetch<T>(key: string, read: (r: Response) => Promise<T>, live: () => Promise<T>, timeoutMs: number): Promise<T> {
+  const url = mirrorUrl(key, LIVE_MIRROR ? LIVE_BASE : null);
+  if (!url) return live();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status} – ${key}`);
+    return await read(res);
+  } catch {
+    return live();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Raw upstream mirror of the clock worker (orbis-live) first, the original source as fallback. Without VITE_LIVE_BASE: live only. */
+export const mirrorJson = <T>(key: string, live: () => Promise<T>, timeoutMs = 20000) => mirrorFetch<T>(key, (r) => r.json() as Promise<T>, live, timeoutMs);
+export const mirrorText = (key: string, live: () => Promise<string>, timeoutMs = 20000) => mirrorFetch<string>(key, (r) => r.text(), live, timeoutMs);
 
 const LIVE_PATHS = /^(tsunami\/|safecast\.json$|bfs-odl\.json$|eurdep\.json$|firms\/world\.json$|demos\.json$)/;
 

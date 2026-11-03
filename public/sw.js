@@ -57,7 +57,7 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Web Push (Fahrplan: saved commuter trips, see proxy/fahrplan-push-worker.js). The worker sends an
+// Web Push (Fahrplan: saved commuter trips, see Orbismap/data: workers/push). The worker sends an
 // encrypted JSON { title, body, tag, url }; it arrives here even while the app is closed.
 self.addEventListener('push', (event) => {
   let msg = {};

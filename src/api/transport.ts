@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson } from '../util';
+import { mirrorJson } from './data';
 
 // Live transport and spaceflight: rocket launches, airports, ships (AIS) and trains.
 
@@ -60,7 +61,9 @@ export async function loadLaunches(): Promise<FeatureCollection<Point>> {
   } catch {
     /* ignore */
   }
-  const json = await fetchJson<{ results: LL2Launch[] }>('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=40&mode=detailed&hide_recent_previous=true', undefined, 30000);
+  const json = await mirrorJson('space/launches/upcoming.json', () =>
+    fetchJson<{ results: LL2Launch[] }>('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=40&mode=detailed&hide_recent_previous=true', undefined, 30000),
+  );
   const byPad = new Map<string, { lon: number; lat: number; pad: string; place: string; launches: Launch[] }>();
   for (const l of json.results) {
     const lat = Number(l.pad?.latitude);

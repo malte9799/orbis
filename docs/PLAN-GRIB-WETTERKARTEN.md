@@ -31,7 +31,7 @@ Open-Meteo bleibt für Ortsansicht, Marine, Flood, Luftqualität – und als Fal
 | Format | eigenes Binärformat „OWX“: Int16-quantisiert, 2.-Ordnung-Delta entlang x, Zickzack, Byte-Planes, gzip → Client dekodiert mit `DecompressionStream('gzip')` (keine Bibliothek) |
 | Clientmodell | Überblick 0,5° (alle Zeiten, 1 Datei/Variable) + Detail 0,125° in 45°-Kacheln (alle Zeiten, 1 Datei/Variable/Kachel), lazy pro Variable |
 | Zeitauflösung | 3-stündlich, +0…+72 h (25 Schritte) – identisch zur heutigen Zeitleiste, `SUBSTEPS=3` bleibt |
-| Hosting | **Umgesetzt: Cloudflare R2 + Worker-Proxy** (`proxy/wx-worker.js`, Free-Tier: 10 GB, kein Egress). Pipeline (`wetter.yml`) lädt per S3-API hoch (Secrets `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, Variablen `R2_BUCKET`/`WETTER_PUBLIC_URL`); Basis-URL `WETTER_PUBLIC_URL` als Konstante im Client. Branch-Variante verworfen |
+| Hosting | **Umgesetzt: Cloudflare R2 + Worker-Proxy** (Custom Domain `orbis-wetter.maltee.dev`, Pipeline in Orbismap/data, Free-Tier: 10 GB, kein Egress). Pipeline (`wetter.yml`) lädt per S3-API hoch (Secrets `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, Variablen `R2_BUCKET`/`WETTER_PUBLIC_URL`); Basis-URL `WETTER_PUBLIC_URL` als Konstante im Client. Branch-Variante verworfen |
 
 ## 3. Datenquelle im Detail
 

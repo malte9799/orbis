@@ -1,6 +1,6 @@
 import { store } from '../store';
 
-// Shared data proxy (proxy/cloudflare-worker.js). Set at build time via the repository
+// Shared data proxy (Orbismap/data: workers/proxy). Set at build time via the repository
 // variable PROXY_URL (→ VITE_PROXY_URL), can be overridden per browser in the settings.
 
 // import.meta.env is undefined when the data Action imports this under Node

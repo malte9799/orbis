@@ -1,4 +1,4 @@
-// Creates a VAPID key pair for proxy/fahrplan-push-worker.js:  node scripts/vapid-keys.mjs
+// Creates a VAPID key pair for Orbismap/data: workers/push:  node scripts/vapid-keys.mjs
 // Public key → worker secret VAPID_PUBLIC, private key (JSON) → worker secret VAPID_PRIVATE.
 import { webcrypto as crypto } from 'node:crypto';
 

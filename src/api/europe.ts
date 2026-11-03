@@ -2,6 +2,7 @@ import type { Feature, FeatureCollection, MultiPolygon, Point, Polygon } from 'g
 import { fetchJson, fmt } from '../util';
 import { uTok } from '../units';
 import { omFetch } from './omlimit';
+import { mirrorJson } from './data';
 import { aqiLabel, describe, pollenLabel } from '../weather';
 import { EUROPE_CITIES, WORLD_CITIES, type City } from './cities';
 import type { EventFeature, EventProps } from './events';
@@ -27,9 +28,13 @@ export async function loadEmsc(): Promise<EventFeature[]> {
     limit: '2000',
     orderby: 'time',
   });
-  const data = await fetchJson<
-    FeatureCollection<Point, { mag: number; magtype?: string; time: string; depth?: number; flynn_region?: string; unid?: string }>
-  >(`https://www.seismicportal.eu/fdsnws/event/1/query?${q}`, undefined, 30000);
+  const data = await mirrorJson('events/emsc-europe.json', () =>
+    fetchJson<FeatureCollection<Point, { mag: number; magtype?: string; time: string; depth?: number; flynn_region?: string; unid?: string }>>(
+      `https://www.seismicportal.eu/fdsnws/event/1/query?${q}`,
+      undefined,
+      30000,
+    ),
+  );
   return data.features
     .filter((f) => f.geometry && f.properties?.mag != null)
     .map((f) => {

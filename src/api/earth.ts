@@ -1,7 +1,7 @@
 import type { Feature, FeatureCollection, Geometry, Point } from 'geojson';
 import { fetchJson } from '../util';
 import { uTok } from '../units';
-import { fetchText, snapshotJson, snapshotText } from './data';
+import { fetchText, mirrorJson, snapshotJson, snapshotText } from './data';
 
 // Earth & environment layers. All sources are free and keyless.
 
@@ -23,8 +23,12 @@ export interface AuroraResult {
 
 export async function loadAurora(): Promise<AuroraResult> {
   const [ovation, kp] = await Promise.all([
-    fetchJson<{ 'Forecast Time': string; coordinates: [number, number, number][] }>('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json', undefined, 25000),
-    fetchJson<(string | number)[][] | { Kp?: number; kp_index?: number }[]>('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json').catch(() => null),
+    mirrorJson('space/swpc/ovation_aurora_latest.json', () =>
+      fetchJson<{ 'Forecast Time': string; coordinates: [number, number, number][] }>('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json', undefined, 25000),
+    ),
+    mirrorJson('space/swpc/noaa-planetary-k-index.json', () =>
+      fetchJson<(string | number)[][] | { Kp?: number; kp_index?: number }[]>('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'),
+    ).catch(() => null),
   ]);
   const features: Feature<Point>[] = [];
   for (const [lon, lat, v] of ovation.coordinates) {
@@ -72,7 +76,7 @@ export async function loadSpaceWeather(): Promise<SpaceWeather> {
   const [spd, mg, xr] = await Promise.allSettled([
     fetchJson<{ proton_speed?: number }[]>(`${SWPC}/products/summary/solar-wind-speed.json`),
     fetchJson<{ bz_gsm?: number }[]>(`${SWPC}/products/summary/solar-wind-mag-field.json`),
-    fetchJson<{ flux?: number; energy?: string }[]>(`${SWPC}/json/goes/primary/xrays-1-day.json`),
+    mirrorJson('space/swpc/xrays-1-day.json', () => fetchJson<{ flux?: number; energy?: string }[]>(`${SWPC}/json/goes/primary/xrays-1-day.json`)),
   ]);
   let speed = spd.status === 'fulfilled' && Array.isArray(spd.value) ? num(spd.value[0]?.proton_speed) : NaN;
   let bz = mg.status === 'fulfilled' && Array.isArray(mg.value) ? num(mg.value[0]?.bz_gsm) : NaN;
@@ -271,9 +275,27 @@ async function loadBfs(): Promise<Feature<Point>[]> {
     });
 }
 
+/** One WFS page; a GeoServer exception (HTTP 400, XML) is turned into a readable message, e.g. when BfS drops the layer. */
+async function fetchEurdepPage(url: string): Promise<RawFc> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 40000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      const why = /<ows:ExceptionText>([^<]*)/.exec(body)?.[1]?.trim();
+      throw new Error(`EURDEP HTTP ${res.status}${why ? ` – ${why}` : ''}`);
+    }
+    return (await res.json()) as RawFc;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Live EURDEP download – European Radiological Data Exchange Platform (~3,500 probes in 40+ countries),
- * via BfS. Also used by scripts/fetch-data.ts for the data-branch snapshot.
+ * via BfS. NOTE (2026-11): BfS removed the layer opendata:eurdep_latestValue from its WFS (HTTP 400 "Feature type unknown"),
+ * no replacement is published – the loader fails with that message and the layer shows without EURDEP. Also used by scripts/fetch-data.ts for the data-branch snapshot.
  */
 export async function fetchEurdepRaw(): Promise<Feature<Point, Record<string, unknown>>[]> {
   // the server caps every page at 1,000 features regardless of `count`; each probe is stored once per
@@ -283,7 +305,7 @@ export async function fetchEurdepRaw(): Promise<Feature<Point, Record<string, un
     encodeURIComponent('analyzed_range_in_h=6');
   const best = new Map<string, Feature<Point, Record<string, unknown>>>();
   for (let start = 0; start < 20000; start += 1000) {
-    const page = await fetchJson<RawFc>(`${base}&startIndex=${start}`, undefined, 40000).catch((e) => {
+    const page = await fetchEurdepPage(`${base}&startIndex=${start}`).catch((e) => {
       if (start === 0) throw e;
       return { type: 'FeatureCollection' as const, features: [] };
     });
@@ -383,7 +405,9 @@ export async function loadCyclones(): Promise<FeatureCollection<Geometry>> {
   const parts: [string, number][] = [['point', 5], ['fcst', 6], ['cone', 7], ['pastpt', 10], ['past', 11]];
   const results = await Promise.all(
     parts.map(([part, layer]) =>
-      fetchJson<FeatureCollection<Geometry, Record<string, unknown>>>(`${NHC_MAP}/${layer}/query?where=1%3D1&outFields=*&f=geojson`, undefined, 30000).then((fc) =>
+      mirrorJson(`cyclones/nhc-${part}.geojson`, () =>
+        fetchJson<FeatureCollection<Geometry, Record<string, unknown>>>(`${NHC_MAP}/${layer}/query?where=1%3D1&outFields=*&f=geojson`, undefined, 30000),
+      ).then((fc) =>
         fc.features.filter((f) => f.geometry).map((f): Feature<Geometry, Record<string, unknown>> => ({ ...f, properties: { ...f.properties, part } })),
       ),
     ),

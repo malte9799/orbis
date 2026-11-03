@@ -4,7 +4,7 @@ import { pushBase } from './pushnotify';
 import { RAIL_MODES } from './transit';
 
 // Real-time delays of rail from the DB timetable data (official DB API Marketplace, "Timetables"). The key lives
-// in our worker (proxy/fahrplan-push-worker.js, POST /db/delays), so every user gets the data without an own key.
+// in our worker (Orbismap/data: workers/push, POST /db/delays), so every user gets the data without an own key.
 // Transitous shows the connections at once; this merges the exact delays, platforms and cancellations in later.
 // Only rail the DB timetable knows is matched – buses, trams and other operators keep what Transitous says.
 

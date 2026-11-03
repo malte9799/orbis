@@ -7,7 +7,7 @@ export default defineKey({
   group: 'webcams',
   tip: () => `Eigener Cloudflare-Worker mit korrigierten Kamera-Blickrichtungen. ${builtInCamdir() ? 'Leer lassen = eingebauter Worker.' : ''}`,
   steps: [
-    { t: '1. proxy/camdir-worker.js als Cloudflare-Worker deployen, KV-Namespace als CAMDIR binden (siehe README „Kamera-Richtungen“)', u: 'https://github.com/malte9799/orbis' },
+    { t: '1. Orbismap/data: workers/camdir als Cloudflare-Worker deployen, KV-Namespace als CAMDIR binden (siehe README „Kamera-Richtungen“)', u: 'https://github.com/malte9799/orbis' },
     { t: '2. Worker-URL (https://…workers.dev) hier eintragen' },
   ],
   optional: () => !!builtInCamdir(),
