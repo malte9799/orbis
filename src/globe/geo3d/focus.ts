@@ -97,6 +97,15 @@ export function maxDistanceZoom(altM: number, toCentre: number): number {
   return gap > 0 ? Math.log2(distanceAtZoom0(toCentre) / gap) : Infinity;
 }
 
+/**
+ * The nearest the camera may get as a zoom of the distance: where the map reaches its maximum zoom, but
+ * never nearer than `maxDistanceZoom`. Without that limit the camera hangs right next to an aircraft
+ * while the ground is its height away: the tile zoom follows the centre, so far too many tiles load.
+ */
+export function highestDistanceZoom(maxMapZoom: number, altM: number, pitch: number, t: number, toCentre: number): number {
+  return Math.min(distanceZoomFor(maxMapZoom, altM, pitch, t, toCentre), maxDistanceZoom(altM, toCentre));
+}
+
 /** The zoom of a distance to the object in metres. */
 export function distanceZoomOf(metres: number, toCentre: number): number {
   return Math.log2(distanceAtZoom0(toCentre) / (metres / EARTH_RADIUS_M));
@@ -230,7 +239,9 @@ export class GeoFocus {
     this.pitch = map.getPitch();
     const frame = this.stage.frame;
     const alt = target.position(performance.now())?.[2] ?? 0;
-    this.zoom = this.wanted = distanceZoomFor(map.getZoom() - latScale(c.lat), alt, this.pitch, frame?.t ?? 1, frame?.pxDistance ?? map.getCanvas().clientHeight * 1.5);
+    const toCentre = frame?.pxDistance ?? map.getCanvas().clientHeight * 1.5;
+    // from a map zoom nearer than the object's height allows, the distance zoom would be absurd (≈ 34)
+    this.zoom = this.wanted = Math.min(distanceZoomFor(map.getZoom() - latScale(c.lat), alt, this.pitch, frame?.t ?? 1, toCentre), maxDistanceZoom(alt, toCentre));
     this.startedAt = performance.now();
     if (this.restore) return; // on to another object: everything is set up already
     const handlers = HANDLERS.filter((h) => map[h].isEnabled());
@@ -337,9 +348,7 @@ export class GeoFocus {
     // a wheel turned on at the limit must not have to be turned all the way back
     const scale = latScale(centre[1]);
     const lowest = distanceZoomFor(map.getMinZoom() + 0.05 - scale, p[2], this.pitch, t, toCentre);
-    let highest = distanceZoomFor(map.getMaxZoom() - scale, p[2], this.pitch, t, toCentre);
-    // nearer on the globe would put the camera behind the object; the flat map has no such limit
-    if (t > 0) highest = Math.min(highest, maxDistanceZoom(p[2], toCentre));
+    const highest = highestDistanceZoom(map.getMaxZoom() - scale, p[2], this.pitch, t, toCentre);
     this.wanted = Math.max(lowest, Math.min(highest, this.wanted));
     this.zoom += (this.wanted - this.zoom) * (1 - Math.exp(-dt / ZOOM_SMOOTH_S));
     const zoom = mapZoomFor(this.zoom, p[2], this.pitch, t, toCentre) + scale;

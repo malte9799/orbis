@@ -697,6 +697,10 @@ export class PlanesLayer implements GeoPart {
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** hex of the aircraft whose trail is drawn at full strength */
   selected: string | null = null;
+  /** the camera sits in this aircraft (cockpit view): its own model, shadow and drop line would hide the view */
+  inside: string | null = null;
+  /** the camera follows this aircraft from outside: it shows its name without being hovered */
+  followed: string | null = null;
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
   private forecast: GeoLine[] = [];
@@ -752,7 +756,7 @@ export class PlanesLayer implements GeoPart {
     if (mode === 'off') {
       this.crowdHits = [];
       // far out without models the 2D icon can be hovered all the same
-      if (this.hovered) this.tracker.step(now);
+      if (this.hovered || this.followed) this.tracker.step(now);
       this.syncLabel();
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
@@ -805,7 +809,7 @@ export class PlanesLayer implements GeoPart {
       const hidden = frame.occluded(p.dLon, p.dLat, alt);
       // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
       const mpp = frame.metresPerPixel(p.dLon, p.dLat, alt);
-      if (models && !hidden) {
+      if (models && !hidden && p.hex !== this.inside) {
         if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
           if (p.obj) {
             this.object.remove(p.obj);
@@ -850,7 +854,7 @@ export class PlanesLayer implements GeoPart {
         for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
       this.syncTrail(frame, p, elev, flat, now);
-      if (hidden) {
+      if (hidden || p.hex === this.inside) {
         if (p.pulse) p.pulse.visible = false;
       } else this.syncPulse(frame, p, now, mpp, elev, flat);
     }
@@ -930,10 +934,11 @@ export class PlanesLayer implements GeoPart {
     this.map.triggerRepaint();
   }
 
-  /** Callsign above the hovered aircraft; moved here every frame so it never trails behind while zooming. */
+  /** Callsign above the hovered (or followed) aircraft; moved here every frame so it never trails behind while zooming. */
   private syncLabel() {
     const frame = this.frameNow;
-    const p = this.hovered ? this.tracker.planes.get(this.hovered) : undefined;
+    const hex = this.hovered ?? this.followed;
+    const p = hex ? this.tracker.planes.get(hex) : undefined;
     const pos = p && frame?.toScreen(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt);
     if (!p || !pos) {
       this.label.style.display = 'none';
