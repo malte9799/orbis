@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      3d-tiles-renderer:
+        specifier: ^0.5.3
+        version: 0.5.3(three@0.183.2)
       '@mapbox/vector-tile':
         specifier: ^3.0.0
         version: 3.0.0
@@ -50,6 +53,29 @@ importers:
         version: 2.1.9
 
 packages:
+
+  3d-tiles-renderer@0.5.3:
+    resolution: {integrity: sha512-i2TEtsboVa7C5pCpNKO3ctAopK0NlIReRb/CJKpvXDrwjWYL1M2oaKRZddvGDHE5udx7OyGN04glotqNruQYmQ==}
+    peerDependencies:
+      '@babylonjs/core': '>=8.0.0'
+      '@babylonjs/loaders': '>=8.0.0'
+      '@react-three/fiber': ^8.17.9 || ^9.0.0
+      react: ^18.3.1 || ^19.0.0
+      react-dom: ^18.3.1 || ^19.0.0
+      three: '>=0.167.0'
+    peerDependenciesMeta:
+      '@babylonjs/core':
+        optional: true
+      '@babylonjs/loaders':
+        optional: true
+      '@react-three/fiber':
+        optional: true
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      three:
+        optional: true
 
   '@dimforge/rapier3d-compat@0.12.0':
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
@@ -363,6 +389,9 @@ packages:
 
   '@mapbox/unitbezier@1.0.0':
     resolution: {integrity: sha512-fqd515fjBmANKGGsQ286E2Wvj/XvDFpGzwJxq4CI6jMQue6Oy04uCKp+JWKF00xRTmk6cEu1jPJ9p3xqH8YWqQ==}
+
+  '@mapbox/vector-tile@2.0.5':
+    resolution: {integrity: sha512-pXj8m7KTsqZt+1jsE0xIpGvqTSbblfkuEJL/NJmNePMtEwxO8V3XMDo9WMSfDeqHvCtBI9Lmt4mGcGR10zecmw==}
 
   '@mapbox/vector-tile@3.0.0':
     resolution: {integrity: sha512-Qf10S1uIHMk20ri/IVBnpS+esUEkVaR5Hftmz88jTInrpmWgPGJfPe3LVjjlE77trLx8tH6qjTG7uWH9hIq/0Q==}
@@ -770,6 +799,10 @@ packages:
     resolution: {integrity: sha512-XDF38WCH3z5OV/OVa8GKUNtLAyneuzbCisx7QUCF8Q6Nutx0WnJrQe5O+kOtBlLfRNUws98Y58Lblp+NJG5T4Q==}
     hasBin: true
 
+  pbf@4.0.2:
+    resolution: {integrity: sha512-J0ajxARhZfpUEebxYs1vhMGMuLSXtBe1e+fFPDrf2uA2hgo+UshKfNUWOz92HJNz6/NFEXseQPddnHkTreWRqg==}
+    hasBin: true
+
   pbf@5.1.2:
     resolution: {integrity: sha512-mnvGdvOrIvJOBGUEdGkrVXjN8E/VkIJCkf2eS1DH2yv82ORUlLttmDt0rWY38yYZmVwciZwBUvHM20qxBZf40w==}
     hasBin: true
@@ -780,6 +813,9 @@ packages:
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
+
+  pmtiles@4.5.0:
+    resolution: {integrity: sha512-CBeD4SoUluFziGdy/8k7FOjQxQy486n+929W/tWophauvMICpkZ26vGBWhDt/6b1FZQWNaf4jFdT/5+q0Wii5w==}
 
   polylabel@1.1.0:
     resolution: {integrity: sha512-bxaGcA40sL3d6M4hH72Z4NdLqxpXRsCFk8AITYg6x1rn1Ei3izf00UMLklerBZTO49aPA3CYrIwVulx2Bce2pA==}
@@ -1016,6 +1052,14 @@ packages:
 
 snapshots:
 
+  3d-tiles-renderer@0.5.3(three@0.183.2):
+    dependencies:
+      '@mapbox/vector-tile': 2.0.5
+      pbf: 4.0.2
+      pmtiles: 4.5.0
+    optionalDependencies:
+      three: 0.183.2
+
   '@dimforge/rapier3d-compat@0.12.0': {}
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -1174,6 +1218,12 @@ snapshots:
   '@mapbox/tiny-sdf@2.3.0': {}
 
   '@mapbox/unitbezier@1.0.0': {}
+
+  '@mapbox/vector-tile@2.0.5':
+    dependencies:
+      '@mapbox/point-geometry': 1.1.0
+      '@types/geojson': 7946.0.16
+      pbf: 4.0.2
 
   '@mapbox/vector-tile@3.0.0':
     dependencies:
@@ -1578,6 +1628,10 @@ snapshots:
       ieee754: 1.2.1
       resolve-protobuf-schema: 2.1.0
 
+  pbf@4.0.2:
+    dependencies:
+      resolve-protobuf-schema: 2.1.0
+
   pbf@5.1.2:
     dependencies:
       resolve-protobuf-schema: 2.1.0
@@ -1585,6 +1639,10 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
+
+  pmtiles@4.5.0:
+    dependencies:
+      fflate: 0.8.3
 
   polylabel@1.1.0:
     dependencies:
