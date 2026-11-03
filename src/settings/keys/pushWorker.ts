@@ -7,7 +7,7 @@ export default defineKey({
   group: 'transit',
   tip: () => `Eigener Cloudflare-Worker für den Fahrplan: Bahn-Verspätungen (DB-Daten) und Benachrichtigungen für Pendler-Verbindungen. ${builtInPush() ? 'Leer lassen = eingebauter Worker.' : ''}`,
   steps: [
-    { t: '1. proxy/fahrplan-push-worker.js als Cloudflare-Worker deployen, KV und Schlüssel einrichten (siehe README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“)', u: 'https://github.com/malte9799/orbis' },
+    { t: '1. Orbismap/data: workers/push als Cloudflare-Worker deployen, KV und Schlüssel einrichten (siehe README „Fahrplan: Bahn-Verspätungen & Benachrichtigungen“)', u: 'https://github.com/malte9799/orbis' },
     { t: '2. Worker-URL (https://…workers.dev) hier eintragen' },
   ],
   optional: () => !!builtInPush(),

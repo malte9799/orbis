@@ -46,8 +46,7 @@ Die ICON-Temperatur gilt für die geglättete Modelloberfläche (13 km). Für T�
 
 ## Auslieferung
 
-Der Bucket bleibt privat; ausgeliefert wird über den Worker `proxy/wx-worker.js` (R2-Binding `WX`) mit CORS, `ETag`/304 und
-`Range`. Seine Adresse ist die Repository-Variable `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`). Das Tageslimit von 100 000 Aufrufen des kostenlosen
+Ausgeliefert wird direkt aus dem R2-Bucket `orbis-wetter` über die Custom Domain `orbis-wetter.maltee.dev` (Cloudflare-CDN, CORS, `ETag`/304, `Range`); der frühere Worker `wx-worker` entfällt (Pipeline: Repo [Orbismap/data](https://github.com/Orbismap/data)). Die Adresse ist die Repository-Variable `WETTER_BASE`. Das Tageslimit von 100 000 Aufrufen des kostenlosen
 Worker-Tarifs gilt pro Konto (geteilt mit `orbis-proxy`); Läufe sind unveränderlich und werden vom Browser ein Jahr gecacht,
 `latest.json` zwei Minuten. Reicht das Limit nicht, ist der Wechsel auf den bezahlten Worker-Tarif oder eine eigene Domain
 nur ein neuer Wert für `WETTER_PUBLIC_URL`.

@@ -6,7 +6,7 @@ import { viaProxy } from './proxy';
 // klickbare Punkte gezeigt, approximierte Ortsangaben nur als Heatmap (Regel des Archivs: ein
 // Ortsname wird nie als exakter Punkt gezeichnet). Inhalts-links führen zur Archivseite und zum
 // Original-Post; das Detail-Panel bettet Video bzw. Foto vom Medien-Host des Archivs ein.
-// Zugriff: ohne CORS – daher über den Daten-Proxy (proxy/cloudflare-worker.js).
+// Zugriff: ohne CORS – daher über den Daten-Proxy (Orbismap/data: workers/proxy).
 
 const ORIGIN = 'https://archivegenocide.com';
 const GEO = `${ORIGIN}/geolocation/`;

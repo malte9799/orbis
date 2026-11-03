@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection } from 'geojson';
 import { fetchJson } from '../util';
+import { mirrorJson } from '../api/data';
 import type { Launch } from '../api/transport';
 
 // Launch tracker: full launch records from Launch Library 2 (The Space Devs), reminders via the
@@ -111,7 +112,9 @@ export async function getLaunchDetails(): Promise<LaunchDetail[]> {
       /* ignore */
     }
   }
-  const json = await fetchJson<{ results: LL2Launch[] }>('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=20&mode=detailed', undefined, 30000);
+  const json = await mirrorJson('space/launches/tracker.json', () =>
+    fetchJson<{ results: LL2Launch[] }>('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=20&mode=detailed', undefined, 30000),
+  );
   const videos = (l: LL2Launch) =>
     (l.vid_urls ?? [])
       .map((v) => ({ url: v.url ?? '', priority: v.priority ?? 99 }))

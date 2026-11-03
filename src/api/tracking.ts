@@ -5,6 +5,7 @@ import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
 import { distTxt, speedTxt, uTok } from '../units';
 import { kvGet, kvSet } from './idbCache';
+import { LIVE_MIRROR, mirrorText } from './data';
 
 // ---------------------------------------------------------------------------
 // Satellites – orbital elements from CelesTrak, positions computed in the browser (SGP4)
@@ -32,11 +33,19 @@ const TLE_CACHE_MS = 6 * 3600 * 1000;
 export async function loadSatGroup(group: string): Promise<Sat[]> {
   const key = `tle.${group}`;
   let text = store.cacheGet<string>(key, TLE_CACHE_MS);
+  // Starlink does not fit into localStorage; with the central mirror (refreshed every 2 h) it is kept in IndexedDB instead
+  if (!text && group === 'starlink' && LIVE_MIRROR) {
+    const c = await kvGet<{ at: number; text: string }>(key);
+    if (c && Date.now() - c.at < TLE_CACHE_MS) text = c.text;
+  }
   if (!text) {
-    const res = await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`);
-    if (!res.ok) throw new Error(`CelesTrak HTTP ${res.status}`);
-    text = await res.text();
+    text = await mirrorText(`space/tle/${group}.txt`, async () => {
+      const res = await fetch(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${group}&FORMAT=tle`);
+      if (!res.ok) throw new Error(`CelesTrak HTTP ${res.status}`);
+      return res.text();
+    });
     if (group !== 'starlink') store.cacheSet(key, text); // starlink is too big for localStorage
+    else if (LIVE_MIRROR) kvSet(key, { at: Date.now(), text });
   }
   const lines = text.split(/\r?\n/).map((l) => l.trimEnd()).filter(Boolean);
   const sats: Sat[] = [];

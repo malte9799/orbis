@@ -12,7 +12,7 @@ Orbis ist statisch (GitHub Pages) und hat dafür drei Wege – jede neue Quelle 
 | Weg | Wann | Wo |
 |---|---|---|
 | **B** Browser direkt | Anbieter sendet CORS-Header | `src/api/*.ts` |
-| **P** Daten-Proxy | kein CORS, aber live/ausschnittsbezogen nötig | Host + TTL in `HOSTS` von `proxy/cloudflare-worker.js`, Aufruf über `viaProxy()` |
+| **P** Daten-Proxy | kein CORS, aber live/ausschnittsbezogen nötig | Host + TTL in `HOSTS` von `Orbismap/data: workers/proxy`, Aufruf über `viaProxy()` |
 | **D** `data`-Branch | kein CORS, global, ≥ 15 min alt ist ok, oder Schlüssel nötig, der nicht in den Browser soll | Task in `scripts/fetch-data.ts`, Secret in `.github/workflows/data.yml` |
 
 Jede Ebene ist eine Datei `src/globe/layers/defs/<id>.ts` ([NEUER-LAYER.md](NEUER-LAYER.md)),

@@ -3,7 +3,7 @@ import { store, type SavedTrip } from '../store';
 import { fetchJson } from '../util';
 
 // Push notifications for saved commuter trips. The app only hands the trips to the push worker
-// (proxy/fahrplan-push-worker.js); the worker watches the timetable and sends Web Push messages –
+// (Orbismap/data: workers/push); the worker watches the timetable and sends Web Push messages –
 // that is what makes it work with the app closed.
 
 // import.meta.env is undefined when this is imported under Node

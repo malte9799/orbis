@@ -245,7 +245,7 @@ Alle Änderungen an `gh-pages` laufen über `scripts/gh-pages.sh`, das gleichzei
 <br>
 
 adsb.fi und OpenSky erlauben keine Abrufe direkt aus dem Browser (CORS), adsb.lol drosselt schnell, und die
-öffentlichen Overpass-Server (OpenStreetMap-Ebenen) lassen pro Nutzer nur wenige Anfragen zu. `proxy/cloudflare-worker.js`
+öffentlichen Overpass-Server (OpenStreetMap-Ebenen) lassen pro Nutzer nur wenige Anfragen zu. `Orbismap/data: workers/proxy`
 löst das: Er ergänzt die CORS-Header und speichert Antworten zwischen (Flugdaten ~8 s, Overpass 15 min), sodass viele
 Besucher am selben Ort nur eine Anfrage auslösen. Auch NOAA NDBC (Messbojen) und NOAA CO-OPS (Gezeitenpegel) laufen über den
 Proxy; nach einem Update des Proxy-Codes muss der Worker neu deployt werden. Der kostenlose Cloudflare-Tarif erlaubt
@@ -254,7 +254,7 @@ Proxy; nach einem Update des Proxy-Codes muss der Worker neu deployt werden. Der
 1. Auf [dash.cloudflare.com](https://dash.cloudflare.com) kostenlos registrieren.
 2. *Compute (Workers) → Workers & Pages → Create → Worker* („Start with Hello World“), Namen vergeben
    (z. B. `orbis-proxy`) → *Deploy*.
-3. *Edit code*: den Inhalt komplett durch `proxy/cloudflare-worker.js` ersetzen → *Deploy*.
+3. *Edit code*: den Inhalt komplett durch `Orbismap/data: workers/proxy` ersetzen → *Deploy*.
    Die Adresse lautet dann `https://orbis-proxy.<dein-konto>.workers.dev/`.
 4. Test im Browser: `https://orbis-proxy.<dein-konto>.workers.dev/?url=https%3A%2F%2Fapi.adsb.lol%2Fv2%2Fpoint%2F53.55%2F10%2F25`
    sollte JSON mit Flugzeugen zeigen.
@@ -280,7 +280,7 @@ Sichtfeld und die Reichweite des projizierten Bildes (dahinter blendet die „Wa
 *Speichern* schickt den Wert an einen eigenen Worker, den alle Besucher beim Laden der Webcams mitlesen.
 
 1. Cloudflare → *Workers & Pages → KV* → Namespace anlegen.
-2. Neuen Worker mit dem Inhalt von `proxy/camdir-worker.js` erstellen, unter *Bindings* den Namespace als `CAMDIR` einbinden.
+2. Neuen Worker mit dem Inhalt von `Orbismap/data: workers/camdir` erstellen, unter *Bindings* den Namespace als `CAMDIR` einbinden.
 3. *Settings → Variables and Secrets*: Secret `ADMIN_TOKEN` (lange Zufallszeichenfolge), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
 4. Repository-Variable `CAMDIR_URL` = Worker-Adresse (damit alle Besucher die Korrekturen sehen), danach den Deploy neu starten.
 5. In den Einstellungen unter *Webcams* den Token bei „Kamera-Richtungen: Token“ eintragen – erst dann erscheint der Editor im Panel.
@@ -296,7 +296,7 @@ Schreiben darf nur, wer den Token kennt. Vorschläge von allen Besuchern (Modera
 
 <br>
 
-Ein kleiner Worker (`proxy/fahrplan-push-worker.js`) macht für den Fahrplan zwei Dinge:
+Ein kleiner Worker (`Orbismap/data: workers/push`) macht für den Fahrplan zwei Dinge:
 
 - **Verspätungen der Bahn:** Die Verbindungen kommen sofort von Transitous (nur Plan-Zeiten, wo der Betreiber nichts meldet). Der Worker
   holt danach die genauen Verspätungen, Gleisänderungen und Ausfälle der Bahn von der offiziellen **DB-Fahrplan-Schnittstelle**
@@ -316,7 +316,7 @@ Einrichtung (alles im kostenlosen Tarif):
    (nach meinem Stand 60 Aufrufe pro Minute für alle Nutzer zusammen, der Worker speichert Antworten zwischen) bitte dort prüfen.
 2. Push-Schlüssel erzeugen: `node scripts/vapid-keys.mjs` – gibt `VAPID_PUBLIC` und `VAPID_PRIVATE` aus.
 3. Cloudflare → *Workers & Pages → KV* → Namespace anlegen (z. B. `orbis-push`).
-4. Neuen Worker mit dem Inhalt von `proxy/fahrplan-push-worker.js` erstellen. Unter *Bindings* den Namespace als `PUSH_KV` einbinden.
+4. Neuen Worker mit dem Inhalt von `Orbismap/data: workers/push` erstellen. Unter *Bindings* den Namespace als `PUSH_KV` einbinden.
 5. *Settings → Variables and Secrets*: Secrets `DB_CLIENT_ID` und `DB_API_KEY` (aus Schritt 1), `VAPID_PUBLIC` und `VAPID_PRIVATE`
    (aus Schritt 2), Text `VAPID_SUBJECT` (z. B. `mailto:du@example.org`), optional `ALLOWED_ORIGINS` (wie beim Daten-Proxy).
 6. *Settings → Trigger Events → Cron Triggers*: `* * * * *` (jede Minute) hinzufügen. Nur für die Benachrichtigungen nötig.

@@ -2,7 +2,7 @@ import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { OSM_BASE } from '../../../api/data';
-import { builtRegions } from '../../../api/osmtiles';
+import { builtRegions, loadOsmTiles, USE_PMTILES } from '../../../api/osmtiles';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml, fetchJson } from '../../../util';
@@ -14,12 +14,13 @@ const CCTV_COLOR = '#a78bfa';
 const CTYPE: Record<string, string> = { fixed: 'fest', dome: 'Kuppel', panning: 'Schwenkkamera', ptz: 'PTZ' };
 const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'außen (privat)', indoor: 'innen' };
 
-// Data: monthly extracts per region (scripts/cctv-heat.mjs) on their own branch next to `data`:
+// Data: monthly OpenStreetMap extracts (collectors/osm-tiles.mjs of the data repo, bucket orbis-osm):
+//   cctv.pmtiles    cameras as vector tiles, read through src/api/osmtiles.ts (record layout: see FIELDS there)
+//   heat/cctv.json  density cells [lon, lat, count] of the whole world (~1 km)
+// Without VITE_OSM_BASE the old JSON files of the `data-osm` branch are read instead (TODO: entfernen nach Umstellung):
 //   cctv-<region>.json           density cells [lon, lat, count]
-//   cctv-<region>-tiles.json     the 0.5° tiles that exist
-//   cctv-<region>/<ix>_<iy>.json cameras of one tile (record layout: see `record` in the script)
+//   cctv-<region>-tiles.json / cctv-<region>/<ix>_<iy>.json   the 0.5° tiles (loaded by osmtiles.ts)
 const HEAT_BASE = OSM_BASE;
-const TILE = 2; // tiles per degree
 type Rec = [number, number, number, string, string, string, number, string, number];
 
 type St = {
@@ -27,19 +28,21 @@ type St = {
   fc: FeatureCollection<Point> | null;
   fovKey: string;
   heat: 'idle' | 'loading' | 'done';
-  /** tiles that exist per region, null while loading */
-  index: Promise<Map<string, Set<string>>> | null;
-  tiles: Map<string, Promise<Rec[]>>;
 };
-const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '', heat: 'idle', index: null, tiles: new Map() }));
+const getState = (ctx: ExtraCtx) => ctx.state<St>('cctv', () => ({ key: '', fc: null, fovKey: '', heat: 'idle' }));
 
 async function loadHeat(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (st.heat !== 'idle') return;
   st.heat = 'loading';
-  const regions = await builtRegions();
-  const parts = await Promise.allSettled(regions.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
-  const cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
+  let cells: [number, number, number][] = [];
+  if (USE_PMTILES) {
+    cells = await fetchJson<[number, number, number][]>(`${HEAT_BASE}heat/cctv.json`, undefined, 60000).catch(() => []);
+  } else {
+    const regions = await builtRegions();
+    const parts = await Promise.allSettled(regions.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
+    cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
+  }
   if (!cells.length) {
     st.heat = 'idle';
     return;
@@ -50,33 +53,6 @@ async function loadHeat(ctx: ExtraCtx) {
     type: 'FeatureCollection',
     features: cells.map(([lon, lat, n]) => ({ type: 'Feature' as const, geometry: { type: 'Point' as const, coordinates: [lon, lat] }, properties: { n } })),
   });
-}
-
-function loadIndex(st: St) {
-  st.index ??= builtRegions().then(async (regions) => {
-    const res = await Promise.allSettled(regions.map((r) => fetchJson<string[]>(`${HEAT_BASE}cctv-${r}-tiles.json`, undefined, 30000)));
-    const index = new Map<string, Set<string>>();
-    res.forEach((p, i) => {
-      if (p.status === 'fulfilled') index.set(regions[i], new Set(p.value));
-    });
-    if (!index.size) st.index = null; // try again next time
-    return index;
-  });
-  return st.index;
-}
-
-/** cameras of one tile in one region (cached; a failed tile is retried next time) */
-function loadTile(st: St, region: string, tile: string): Promise<Rec[]> {
-  const key = `${region}/${tile}`;
-  let p = st.tiles.get(key);
-  if (!p) {
-    p = fetchJson<Rec[]>(`${HEAT_BASE}cctv-${key}.json`, undefined, 30000).catch((e) => {
-      st.tiles.delete(key);
-      throw e;
-    });
-    st.tiles.set(key, p);
-  }
-  return p;
 }
 
 const toFeature = ([lon, lat, dir, kind, ctype, mount, guard, operator, id]: Rec): Feature<Point> => ({
@@ -119,34 +95,25 @@ function loadNow(ctx: ExtraCtx) {
     ctx.set('cctv', { loading: false, note: st.heat === 'done' ? `Übersicht aus Monatsauszug · Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` : `Einzelkameras ab Zoomstufe ${CCTV_ZOOM}` });
     return;
   }
-  const b = ctx.map.getBounds();
-  const [x0, x1, y0, y1] = [Math.floor(b.getWest() * TILE), Math.floor(b.getEast() * TILE), Math.floor(b.getSouth() * TILE), Math.floor(b.getNorth() * TILE)];
-  const key = [x0, x1, y0, y1].join(',');
+  const b = ctx.viewBounds(2); // snapped to 0.5° like the old tiles, so small moves do not reload
+  const key = [b.west, b.east, b.south, b.north].join(',');
   if (key === st.key) return;
   st.key = key;
   ctx.set('cctv', { loading: true, note: undefined });
-  loadIndex(st)
-    .then(async (index) => {
-      if (!index.size) throw new Error('Kameradaten nicht erreichbar');
-      const jobs: Promise<Rec[]>[] = [];
-      for (let x = x0; x <= x1; x++) {
-        for (let y = y0; y <= y1; y++) {
-          for (const [region, tiles] of index) if (tiles.has(`${x}_${y}`)) jobs.push(loadTile(st, region, `${x}_${y}`));
-        }
-      }
-      const loaded = await Promise.allSettled(jobs);
+  loadOsmTiles<Rec>('cctv', b)
+    .then((snap) => {
+      if (!snap) throw new Error('Kameradaten nicht erreichbar');
       if (st.key !== key) return;
-      const failed = loaded.filter((r) => r.status === 'rejected').length;
-      const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features: loaded.flatMap((r) => (r.status === 'fulfilled' ? r.value.map(toFeature) : [])) };
+      const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features: snap.recs.map(toFeature) };
       ctx.setData('cctv', fc);
       st.fc = fc;
       updateCones(ctx);
       const n = fc.features.length;
-      if (failed) st.key = ''; // load the missing tiles again on the next move
+      if (!snap.complete) st.key = ''; // load the missing tiles again on the next move
       ctx.set('cctv', {
         loading: false,
         count: n,
-        note: failed ? `${failed} Kachel(n) nicht erreichbar` : n ? 'Stand: Monatsauszug von OpenStreetMap – real gibt es deutlich mehr' : 'keine Kameras im Ausschnitt (oder Region noch nicht im Monatsauszug)',
+        note: !snap.complete && !n ? 'Kameradaten teilweise nicht erreichbar' : n ? 'Stand: Monatsauszug von OpenStreetMap – real gibt es deutlich mehr' : 'keine Kameras im Ausschnitt (oder Region noch nicht im Monatsauszug)',
       });
     })
     .catch((e) => {
