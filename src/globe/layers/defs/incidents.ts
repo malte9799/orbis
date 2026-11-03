@@ -1,4 +1,4 @@
-import { defineExtra } from '../types';
+import { defineExtra, type ExtraCtx } from '../types';
 import { FONT_BOLD } from '../../vector';
 import { cardHtml } from '../../popup';
 import { INCIDENTS, incidentById } from '../../../incidents';
@@ -9,6 +9,22 @@ import { escapeHtml, fmt } from '../../../util';
 
 const COLOR = '#ef5350';
 const SRC = 'Rekonstruktion: Flightradar24-Daten, Quellen im Panel';
+
+/** Name groß, darunter die Kennung kleiner (mehrzeiliges Label) */
+const LABEL = ['format', ['get', 'name'], {}, '\n', {}, ['get', 'short'], { 'font-scale': 0.75 }] as never;
+const NO_LABEL = ['format', ''] as never;
+/** Marker groß, solange keine Rekonstruktion läuft; währenddessen klein (die Spur zeigt das Ereignis selbst) */
+const ICON_BIG = ['interpolate', ['linear'], ['zoom'], 1, 1.5, 8, 2.1] as never;
+const ICON_SMALL = ['interpolate', ['linear'], ['zoom'], 1, 0.7, 8, 1] as never;
+
+/** schaltet den Marker zwischen groß (ohne Simulation) und klein (Rekonstruktion offen) */
+function setSimulating(ctx: ExtraCtx, on: boolean) {
+  if (!ctx.map.getLayer('incidents')) return;
+  ctx.map.setLayoutProperty('incidents', 'icon-size', on ? ICON_SMALL : ICON_BIG);
+  ctx.map.setLayoutProperty('incidents', 'text-offset', on ? [0, 1.4] : [0, 1.5]);
+}
+
+export const incidentsApi = { setSimulating };
 
 export default defineExtra({
   id: 'incidents',
@@ -32,12 +48,14 @@ export default defineExtra({
         layout: {
           ...hidden,
           'icon-image': 'glyph-plane',
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 1, 0.7, 8, 1],
+          'icon-size': ICON_BIG,
           'icon-allow-overlap': true,
-          'text-field': ['step', ['zoom'], '', 4, ['get', 'short']],
+          'text-field': ['step', ['zoom'], NO_LABEL, 3, LABEL],
           'text-font': FONT_BOLD,
-          'text-size': 10.5,
-          'text-offset': [0, 1.4],
+          'text-size': 12.5,
+          // „Learjet-Absturz“ bleibt in einer Zeile (Standard bricht bei 10 em um)
+          'text-max-width': 20,
+          'text-offset': [0, 1.5],
           'text-anchor': 'top',
           'text-optional': true,
         },
@@ -52,10 +70,14 @@ export default defineExtra({
       features: INCIDENTS.map((d) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [d.lon, d.lat] },
-        properties: { id: d.id, title: d.title, subtitle: d.subtitle, when: d.when, short: d.aircraft.reg },
+        properties: { id: d.id, title: d.title, name: d.shortTitle ?? d.title, subtitle: d.subtitle, when: d.when, short: d.aircraft.reg },
       })),
     });
     ctx.set('incidents', { count: INCIDENTS.length, note: 'Klick auf einen Marker öffnet die Rekonstruktion' });
+  },
+  // Ebene ausgeblendet: Rekonstruktion und ein darin laufendes Video enden
+  disable(ctx) {
+    ctx.closeIncident?.();
   },
   click({ ctx, p, pt }) {
     const d = incidentById(String(p.id));

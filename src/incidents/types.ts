@@ -24,6 +24,8 @@ export interface IncidentMedia {
   /** woher: "X", "Instagram" … */
   platform: string;
   url: string;
+  /** Vorschaubild (Pfad unter public/) für das Tooltip an der Marke; ohne: erstes Bild der Videodatei, sonst nur Titel */
+  thumb?: string;
   /** Videodatei im Projekt (Pfad unter public/): wird direkt im Panel abgespielt; hat Vorrang vor der Einbettung des Hosters */
   file?: string;
   /** Überschrift in der Liste ("Einschlag", "Danach" …) */
@@ -52,6 +54,8 @@ export interface IncidentDef {
   /** Reihenfolge in Listen; Lücken lassen */
   order: number;
   title: string;
+  /** kurzer Name für das Label auf der Karte ("Learjet-Absturz") */
+  shortTitle?: string;
   subtitle: string;
   /** Beginn der Rekonstruktion in der Liste: Datum/Zeit des Ereignisses (ISO, UTC) */
   when: string;

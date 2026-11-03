@@ -18,6 +18,7 @@ export default defineIncident({
   id: 'n722bd-2026-11-01',
   order: 10,
   title: 'Learjet-Absturz bei Greenacres, Florida',
+  shortTitle: 'Learjet-Absturz',
   subtitle: 'N722BD · Austin → North Eleuthera · 1. Nov. 2026',
   when: '2026-11-01T17:50:00Z',
   lat: 26.632889,
@@ -69,16 +70,15 @@ export default defineIncident({
       src: { label: 'Wikipedia', url: 'https://en.wikipedia.org/wiki/2026_Palm_Beach_County_Learjet_60_crash' },
     },
   ],
-  // Videos nur einbetten/verlinken. Position und Zeit je Video selbst festlegen: `t` (Unix-s, UTC) setzt die Marke auf der
+  // Videos: `file` spielt die Datei im Panel ab, sonst Einbettung des Hosters bzw. Link. `t` (Unix-s, UTC) setzt die Marke auf der
   // Zeitleiste, `at: { lat, lon }` die Marke auf der Karte (ohne `at` auf der Flugspur zur Zeit `t`).
   media: [
-    { group: 'Einschlag', title: 'Reel', platform: 'Instagram', note: 'lang, fern', url: 'https://www.instagram.com/reels/DfNekoeguTB/' },
-    { group: 'Einschlag', title: 'Video 2', platform: 'Reddit', note: 'mittel', url: 'https://www.reddit.com/r/aircrashinvestigation/comments/1xlg0o9/learjet_60_n722bd_crashes_near_greenacres_video_2/' },
-    { group: 'Einschlag', title: 'Dashcam', platform: 'Reddit', note: 'Explosion nah', url: 'https://www.reddit.com/r/aviation/comments/1xlcp7p/dashcam_footage_of_01nov26_crash_in_west_palm/' },
-    { group: 'Danach', title: 'Krater', platform: 'Facebook', note: 'CBS News', url: 'https://www.facebook.com/CBSNews/videos/a-massive-crater-was-seen-on-the-ground-following-a-deadly-plane-crash-in-palm-b/4579722982346152/' },
-    { group: 'Danach', title: 'Reel', platform: 'Facebook', url: 'https://www.facebook.com/reel/1643065457610833' },
-    { group: 'Danach', title: 'Reel', platform: 'Instagram', url: 'https://www.instagram.com/reels/DfNbf3JAtUo/' },
-    { group: 'Danach', title: 'Hubschrauber', platform: 'Instagram', note: 'Heli', url: 'https://www.instagram.com/reels/DfNbL1uhajg/' },
+    { group: 'Einschlag', title: 'Reel', platform: 'Instagram', note: 'lang, fern', file: 'data/incidents/n722bd-2026-11-01/videos/instagram-lang-fern.mp4', url: 'https://www.instagram.com/reels/DfNekoeguTB/', t: 1793555376, at: { lat: 26.62805, lon: -80.113084 } },
+    { group: 'Einschlag', title: 'Dashcam', platform: 'Reddit', note: 'Explosion nah', file: 'data/incidents/n722bd-2026-11-01/videos/dashcam.mp4', url: 'https://www.reddit.com/r/aviation/comments/1xlcp7p/dashcam_footage_of_01nov26_crash_in_west_palm/', t: 1793555376, at: { lat: 26.63349, lon: -80.112832 } },
+    { group: 'Danach', title: 'Krater', platform: 'Facebook', note: 'CBS News', file: 'data/incidents/n722bd-2026-11-01/videos/krater.mp4', url: 'https://www.facebook.com/CBSNews/videos/a-massive-crater-was-seen-on-the-ground-following-a-deadly-plane-crash-in-palm-b/4579722982346152/', at: { lat: 26.633081, lon: -80.113023 } },
+    { group: 'Danach', title: 'Reel', platform: 'Facebook', file: 'data/incidents/n722bd-2026-11-01/videos/facebook-reel.mp4', url: 'https://www.facebook.com/reel/1643065457610833', at: { lat: 26.633013, lon: -80.113309 } },
+    { group: 'Danach', title: 'Reel', platform: 'Instagram', file: 'data/incidents/n722bd-2026-11-01/videos/instagram-danach.mp4', url: 'https://www.instagram.com/reels/DfNbf3JAtUo/', at: { lat: 26.6328, lon: -80.112771 } },
+    { group: 'Danach', title: 'Hubschrauber', platform: 'Instagram', note: 'Heli', file: 'data/incidents/n722bd-2026-11-01/videos/hubschrauber.mp4', url: 'https://www.instagram.com/reels/DfNbL1uhajg/', at: { lat: 26.625846, lon: -80.113454 } },
   ],
   audio: {
     src: 'data/incidents/n722bd-2026-11-01/funk.m4a',

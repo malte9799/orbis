@@ -1466,7 +1466,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat), openIncident: (id) => openIncident(id) });
+      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat), openIncident: (id) => openIncident(id), closeIncident: () => incidentPanel?.close() });
       extras.init();
       routing = createRouting(
         map!,
@@ -1527,6 +1527,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       incidentPanel = new IncidentPanel(el, {
         map: () => map,
         stage: () => geoStage,
+        simulating: (on) => extras?.setIncidentSimulating(on),
         focus: () => geoFocus,
         dock: dockEl,
         dockChanged: () => hud?.syncSheet(),
