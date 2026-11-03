@@ -697,6 +697,8 @@ export class PlanesLayer implements GeoPart {
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** hex of the aircraft whose trail is drawn at full strength */
   selected: string | null = null;
+  /** the camera sits in this aircraft (cockpit view): its own model, shadow and drop line would hide the view */
+  inside: string | null = null;
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
   private forecast: GeoLine[] = [];
@@ -805,7 +807,7 @@ export class PlanesLayer implements GeoPart {
       const hidden = frame.occluded(p.dLon, p.dLat, alt);
       // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
       const mpp = frame.metresPerPixel(p.dLon, p.dLat, alt);
-      if (models && !hidden) {
+      if (models && !hidden && p.hex !== this.inside) {
         if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
           if (p.obj) {
             this.object.remove(p.obj);
@@ -850,7 +852,7 @@ export class PlanesLayer implements GeoPart {
         for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
       this.syncTrail(frame, p, elev, flat, now);
-      if (hidden) {
+      if (hidden || p.hex === this.inside) {
         if (p.pulse) p.pulse.visible = false;
       } else this.syncPulse(frame, p, now, mpp, elev, flat);
     }

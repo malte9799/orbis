@@ -144,11 +144,13 @@ export class Airport3D {
         },
       }),
       entered: () => {
+        this.layer.inside = cockpit ? hex : null;
         if (this.layer.selected === hex) return;
         selectedHere = true;
         this.select(hex);
       },
       released: () => {
+        if (this.layer.inside === hex) this.layer.inside = null;
         if (selectedHere && this.layer.selected === hex) this.select(null);
       },
     };
