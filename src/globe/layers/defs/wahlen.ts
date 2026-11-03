@@ -20,8 +20,9 @@ const COLOR = '#a626a4';
 const GLYPH: GlyphId = 'vote';
 const NO_DATA = '#4a5158';
 const SOURCE =
-  'Wahlergebnisse: <a href="https://german-elections.com">GERDA – German Election Database</a> (CC BY 4.0); ' +
-  'Grenzen: GeoBasis-DE / BKG via <a href="https://github.com/isellsoap/deutschlandGeoJSON">deutschlandGeoJSON</a> (CC BY 4.0)';
+  'Bundestagswahlen: <a href="https://german-elections.com">GERDA – German Election Database</a> (CC BY 4.0); ' +
+  'Landtagswahlen: © <a href="https://www.regionalstatistik.de">Statistische Ämter des Bundes und der Länder</a> (<a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a>, via GERDA, auf Länder aggregiert); ' +
+  'Grenzen: © GeoBasis-DE / <a href="https://www.bkg.bund.de">BKG</a> (2026) (<a href="https://www.govdata.de/dl-de/by-2-0">dl-de/by-2-0</a>, vereinfacht)';
 
 /** Karten-Features mit Siegerfarbe; `k` (ISO-Gebietscode) verbindet Eigenschaften und Daten */
 function features(geo: FeatureCollection<Geometry> | null): Feature<Geometry, { k: string; n: string; c?: string; w?: string }>[] {

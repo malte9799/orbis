@@ -224,10 +224,11 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 
 | Anbieter | Verwendung in Orbis | Zugang |
 |---|---|---|
-| [GERDA – German Election Database](https://german-elections.com) (Heddesheimer, Hilbig, Sichart & Wiedemann 2025, [GitHub](https://github.com/awiedem/german_election_data)) | Wahlergebnisse der Ebene „Wahlen“: Bundestagswahlen (Kreisdaten → auf die 16 Bundesländer aggregiert) und Landtagswahlen (Wahlkreisdaten → aggregiert), ab 1990. Snapshot `public/data/wahlen/de.json`, gebaut von `scripts/wahlen-data.mjs` | 🟢 CC BY 4.0, 📦 |
-| [deutschlandGeoJSON](https://github.com/isellsoap/deutschlandGeoJSON) (aus GeoBasis-DE / BKG) | Bundesländer-Umrisse der Ebene „Wahlen“ (`public/data/wahlen/de-geo.json`) | 🟢 CC BY 4.0 (Daten © BKG), 📦 |
+| [GERDA – German Election Database](https://german-elections.com) (Heddesheimer, Hilbig, Sichart & Wiedemann 2025, [GitHub](https://github.com/awiedem/german_election_data)) | Bundestagswahlen der Ebene „Wahlen“ (`federal_cty_unharm.csv`, Kreisdaten → auf die 16 Bundesländer aggregiert), ab 1990 | 🟢 CC BY 4.0 (nur die aufbereiteten Bundesdaten), 📦 |
+| [Regionaldatenbank Deutschland](https://www.regionalstatistik.de) (© Statistische Ämter des Bundes und der Länder), über die GERDA-Datei `ltw_wkr_unharm.csv` | Landtagswahlen der Ebene „Wahlen“ (Wahlkreisdaten → auf Länder aggregiert), ab 1990. Die GERDA-Lizenz (CC BY 4.0) gilt ausdrücklich nicht für die Landtagswahl-Daten; maßgeblich ist die Lizenz der Quelle (Impressum der Regionaldatenbank: Datenlizenz Deutschland – Namensnennung – 2.0, Quellenvermerk „© Statistische Ämter des Bundes und der Länder“, Änderung gekennzeichnet). Restrisiko: GERDA vergibt für ihre Aufbereitung der Landesdaten keine eigene Lizenz | 🟢 dl-de/by-2-0, 📦 |
+| [BKG Verwaltungsgebiete 1:2 500 000 (VG2500)](https://gdz.bkg.bund.de/index.php/default/verwaltungsgebiete-1-2-500-000-stand-31-12-vg2500-12-31.html) (WFS `sgx.geodatenzentrum.de/wfs_vg2500`, Ebene `vg2500_lan`) | Bundesländer-Umrisse der Ebene „Wahlen“ (nur Landflächen `GF=9`, vereinfacht). Ersetzt deutschlandGeoJSON (Lizenz unklar) | 🟢 dl-de/by-2-0, © GeoBasis-DE / BKG, 📦 |
 
-Historische Wahlergebnisse ändern sich nicht mehr nachträglich, deshalb werden die Dateien einmalig gebaut und eingecheckt; kein laufender Abruf nötig.
+Gebaut vom orbis-data-Sammler (Task `wahlen`, Gruppe `manual`, Ausgabe `wahlen/de.json` + `wahlen/de-geo.json`); die eingecheckten Kopien in `public/data/wahlen/` (`scripts/wahlen-data.mjs`, Logik in `scripts/wahlen-build.mjs`, identisch mit `collectors/wahlen.mjs` in orbis-data) dienen lokal und als Fallback. Historische Wahlergebnisse ändern sich nicht mehr nachträglich; der Task läuft nur bei Bedarf.
 
 ## 11. Basiskarten, Gelände & Geokodierung
 
