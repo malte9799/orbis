@@ -3,6 +3,7 @@ import { store } from '../store';
 import { fetchJson } from '../util';
 import { overpass } from './overpass';
 import { snapshotOrNull } from './osmtiles';
+import { viaProxy } from './proxy';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -299,5 +300,70 @@ export async function loadSpeedcams(b: Bounds): Promise<FeatureCollection<Point>
   }
   const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features };
   speedcamCache.set(bb, { at: Date.now(), fc });
+  return fc;
+}
+
+// ---------------------------------------------------------------------------
+// Mobile (temporary) speed checks: crowd-reported by the blitzer.de community,
+// read from the public map endpoint their own web map uses (no official API,
+// no API key or terms for third-party use). Unofficial and unstable – shape
+// or availability can change without notice. A map of reports, not a warning
+// system – in Germany using one while driving is illegal (§ 23 StVO).
+//
+// Request/response shape confirmed 2026-11 against the current client
+// (github.com/abderlahmanalhnedi/hass-blitzerde, custom_components/blitzerde):
+// GET https://www.blitzer.de/karte/api/markers?type=<codes>&box=<lowLat,lowLng,highLat,highLng>&z=18
+// → { pois: Marker[] | null }, Marker: { lat, lng, type, vmax, counter,
+//     address?: { city, street, zip_code }, info?: { fixed, partly_fixed, desc },
+//     create_date, confirm_date }
+
+const BLITZERDE_URL = 'https://www.blitzer.de/karte/api/markers';
+// Mobile/trailer-mounted control codes (speed, red-light, section, distance, weight…) –
+// excludes the "fixed" (stationary) and "archive" families already covered by the OSM layer.
+const MOBILE_TYPE_CODES = ['1', '7', '201', '2', '11', '110', '12', '113', '6', '101', '3', '117', '4', '5'];
+
+type BlitzerdeMarker = {
+  lat?: number | string;
+  lng?: number | string;
+  type?: string | number;
+  vmax?: string | number;
+  counter?: number;
+  address?: { city?: string; street?: string; zip_code?: string };
+  info?: { fixed?: string | number; partly_fixed?: string | number; desc?: string };
+  create_date?: string;
+  confirm_date?: string;
+};
+
+const mobileCamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
+const MOBILE_CAM_TTL = 3 * 60000; // kurzlebig: Standorte verschwinden nach wenigen Stunden
+
+export async function loadMobileSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  const bb = `${b.south.toFixed(7)},${b.west.toFixed(7)},${b.north.toFixed(7)},${b.east.toFixed(7)}`;
+  const hit = mobileCamCache.get(bb);
+  if (hit && Date.now() - hit.at < MOBILE_CAM_TTL) return hit.fc;
+  const url = `${BLITZERDE_URL}?type=${MOBILE_TYPE_CODES.join(',')}&box=${bb}&z=18`;
+  const json = await fetchJson<{ pois?: BlitzerdeMarker[] | null }>(viaProxy(url), undefined, 15000);
+  const pois = json.pois ?? [];
+  const features: Feature<Point>[] = [];
+  for (const m of pois) {
+    const lat = Number(m.lat);
+    const lon = Number(m.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    // "fixed"/"partly_fixed" markers duplicate the OSM layer – skip, this layer is mobile-only
+    if (String(m.info?.fixed ?? '') === '1' || String(m.info?.partly_fixed ?? '') === '1') continue;
+    const addr = m.address ?? {};
+    features.push(
+      point(lon, lat, {
+        kind: 'mobile',
+        title: 'Mobiler Blitzer (Meldung)',
+        subtitle: [addr.street, addr.city].filter(Boolean).join(', ') || m.info?.desc || '',
+        speed: m.vmax != null && m.vmax !== '?' ? String(m.vmax) : '',
+        votes: m.counter ?? '',
+        reported: m.confirm_date ?? m.create_date ?? '',
+      }),
+    );
+  }
+  const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features };
+  mobileCamCache.set(bb, { at: Date.now(), fc });
   return fc;
 }

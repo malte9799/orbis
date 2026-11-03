@@ -10,5 +10,6 @@ export default defineMenuCat({
     { label: 'Kennzeichen-Kameras', layers: ['alpr'] },
     { label: 'Überwachungskameras (CCTV)', layers: ['cctv'] },
     { label: 'Blitzer & Rotlicht', layers: ['blitzer'] },
+    { label: 'Mobile Blitzer', layers: ['blitzer-mobil'] },
   ],
 });
