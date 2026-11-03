@@ -4,6 +4,7 @@ import { fetchJson } from '../util';
 import { overpass } from './overpass';
 import { snapshotOrNull } from './osmtiles';
 import { viaProxy } from './proxy';
+import { kvGet, kvSet, kvEntriesByPrefix } from './idbCache';
 
 // Cameras: public live webcams and licence-plate readers (ALPR) mapped in OpenStreetMap.
 
@@ -323,6 +324,7 @@ const BLITZERDE_URL = 'https://www.blitzer.de/karte/api/markers';
 const MOBILE_TYPE_CODES = ['1', '7', '201', '2', '11', '110', '12', '113', '6', '101', '3', '117', '4', '5'];
 
 type BlitzerdeMarker = {
+  id?: string | number;
   lat?: number | string;
   lng?: number | string;
   type?: string | number;
@@ -334,36 +336,111 @@ type BlitzerdeMarker = {
   confirm_date?: string;
 };
 
-const mobileCamCache = new Map<string, { at: number; fc: FeatureCollection<Point> }>();
+// Grid of fixed tiles (not the raw viewport bbox) so that overlapping views – panning a
+// little, or reopening the app over a previously seen area – reuse tiles already on disk
+// instead of re-requesting a slightly different box every time. Sized so a full screen at
+// the minimum zoom (MOBILE_DETAIL_ZOOM, see blitzer-mobil.ts) needs only a handful of tiles.
+const MOBILE_TILE_DEG = 0.15;
 const MOBILE_CAM_TTL = 3 * 60000; // kurzlebig: Standorte verschwinden nach wenigen Stunden
+const IDB_PREFIX = 'blitzer-mobil-tile:';
 
-export async function loadMobileSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
-  const bb = `${b.south.toFixed(7)},${b.west.toFixed(7)},${b.north.toFixed(7)},${b.east.toFixed(7)}`;
-  const hit = mobileCamCache.get(bb);
-  if (hit && Date.now() - hit.at < MOBILE_CAM_TTL) return hit.fc;
+type TileEntry = { at: number; features: Feature<Point>[] };
+const tileMemory = new Map<string, TileEntry>();
+
+const tileKey = (tx: number, ty: number) => `${tx},${ty}`;
+
+function parseMarker(m: BlitzerdeMarker): Feature<Point> | null {
+  // large bounding boxes get server-side clustered summary markers (type 1000, no id) instead
+  // of real locations – their position is a shifting cluster centroid, not a report, and jumps
+  // around on every small pan/zoom change; skip them, only plot markers with a stable id
+  if (!m.id) return null;
+  const lat = Number(m.lat);
+  const lon = Number(m.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  // "fixed"/"partly_fixed" markers duplicate the OSM layer – skip, this layer is mobile-only
+  if (String(m.info?.fixed ?? '') === '1' || String(m.info?.partly_fixed ?? '') === '1') return null;
+  const addr = m.address ?? {};
+  return point(lon, lat, {
+    kind: 'mobile',
+    title: 'Mobiler Blitzer (Meldung)',
+    subtitle: [addr.street, addr.city].filter(Boolean).join(', ') || m.info?.desc || '',
+    speed: m.vmax != null && m.vmax !== '?' ? String(m.vmax) : '',
+    votes: m.counter ?? '',
+    reported: m.confirm_date ?? m.create_date ?? '',
+  });
+}
+
+// One-time index of every tile already on disk (key only), so a low-zoom view can show
+// cached reports without probing hundreds of individual tiles against IndexedDB.
+let tileIndexHydrated: Promise<void> | null = null;
+function hydrateTileIndex(): Promise<void> {
+  tileIndexHydrated ??= kvEntriesByPrefix<TileEntry>(IDB_PREFIX).then((entries) => {
+    for (const { key, value } of entries) {
+      const k = key.slice(IDB_PREFIX.length);
+      if (!tileMemory.has(k)) tileMemory.set(k, value);
+    }
+  });
+  return tileIndexHydrated;
+}
+
+async function loadTile(tx: number, ty: number): Promise<Feature<Point>[]> {
+  const key = tileKey(tx, ty);
+  const mem = tileMemory.get(key);
+  if (mem && Date.now() - mem.at < MOBILE_CAM_TTL) return mem.features;
+  // not (or no longer) in memory this session – check the persistent cache first (fast, no network)
+  const stored = await kvGet<TileEntry>(IDB_PREFIX + key);
+  if (stored && Date.now() - stored.at < MOBILE_CAM_TTL) {
+    tileMemory.set(key, stored);
+    return stored.features;
+  }
+  const south = ty * MOBILE_TILE_DEG;
+  const west = tx * MOBILE_TILE_DEG;
+  const bb = `${south.toFixed(7)},${west.toFixed(7)},${(south + MOBILE_TILE_DEG).toFixed(7)},${(west + MOBILE_TILE_DEG).toFixed(7)}`;
   const url = `${BLITZERDE_URL}?type=${MOBILE_TYPE_CODES.join(',')}&box=${bb}&z=18`;
   const json = await fetchJson<{ pois?: BlitzerdeMarker[] | null }>(viaProxy(url), undefined, 15000);
-  const pois = json.pois ?? [];
+  const features = (json.pois ?? []).map(parseMarker).filter((f): f is Feature<Point> => f !== null);
+  const entry: TileEntry = { at: Date.now(), features };
+  tileMemory.set(key, entry);
+  kvSet(IDB_PREFIX + key, entry);
+  return features;
+}
+
+function tileRange(b: Bounds) {
+  return {
+    txMin: Math.floor(b.west / MOBILE_TILE_DEG),
+    txMax: Math.floor(b.east / MOBILE_TILE_DEG),
+    tyMin: Math.floor(b.south / MOBILE_TILE_DEG),
+    tyMax: Math.floor(b.north / MOBILE_TILE_DEG),
+  };
+}
+const clipToBounds = (features: Feature<Point>[], b: Bounds) =>
+  features.filter((f) => {
+    const [lon, lat] = f.geometry.coordinates;
+    return lon >= b.west && lon <= b.east && lat >= b.south && lat <= b.north;
+  });
+
+export async function loadMobileSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  const { txMin, txMax, tyMin, tyMax } = tileRange(b);
+  const jobs: Promise<Feature<Point>[]>[] = [];
+  for (let tx = txMin; tx <= txMax; tx++) for (let ty = tyMin; ty <= tyMax; ty++) jobs.push(loadTile(tx, ty));
+  const tiles = await Promise.all(jobs);
+  return { type: 'FeatureCollection', features: clipToBounds(tiles.flat(), b) };
+}
+
+/**
+ * Whatever is already cached (memory or IndexedDB) for `b`, without ever fetching – used below
+ * the layer's minimum query zoom so already-known reports still show on a wide, zoomed-out view.
+ */
+export async function cachedMobileSpeedcams(b: Bounds): Promise<FeatureCollection<Point>> {
+  await hydrateTileIndex();
+  const { txMin, txMax, tyMin, tyMax } = tileRange(b);
+  const now = Date.now();
   const features: Feature<Point>[] = [];
-  for (const m of pois) {
-    const lat = Number(m.lat);
-    const lon = Number(m.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    // "fixed"/"partly_fixed" markers duplicate the OSM layer – skip, this layer is mobile-only
-    if (String(m.info?.fixed ?? '') === '1' || String(m.info?.partly_fixed ?? '') === '1') continue;
-    const addr = m.address ?? {};
-    features.push(
-      point(lon, lat, {
-        kind: 'mobile',
-        title: 'Mobiler Blitzer (Meldung)',
-        subtitle: [addr.street, addr.city].filter(Boolean).join(', ') || m.info?.desc || '',
-        speed: m.vmax != null && m.vmax !== '?' ? String(m.vmax) : '',
-        votes: m.counter ?? '',
-        reported: m.confirm_date ?? m.create_date ?? '',
-      }),
-    );
+  for (let tx = txMin; tx <= txMax; tx++) {
+    for (let ty = tyMin; ty <= tyMax; ty++) {
+      const entry = tileMemory.get(tileKey(tx, ty));
+      if (entry && now - entry.at < MOBILE_CAM_TTL) features.push(...entry.features);
+    }
   }
-  const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features };
-  mobileCamCache.set(bb, { at: Date.now(), fc });
-  return fc;
+  return { type: 'FeatureCollection', features: clipToBounds(features, b) };
 }

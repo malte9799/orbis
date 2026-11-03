@@ -1,32 +1,39 @@
 import { defineExtra, type ExtraCtx } from '../types';
-import { empty } from '../shared/geo';
-import { CAM_DETAIL_ZOOM, CAM_ZOOM_RED } from '../shared/cams';
+import { CAM_ZOOM_RED } from '../shared/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml } from '../../../util';
-import { loadMobileSpeedcams } from '../../../api/cams';
+import { loadMobileSpeedcams, cachedMobileSpeedcams } from '../../../api/cams';
 import { speedTxt, coordsTxt } from '../../../units';
+
+// Below this zoom the bounding box is wide enough that Blitzer.de returns only clustered
+// summary markers (filtered out in loadMobileSpeedcams) instead of real reports – querying
+// would mostly come back empty, so only already-cached tiles are shown (MIN_ZOOM..QUERY_ZOOM).
+const MOBILE_QUERY_ZOOM = 12;
+const MOBILE_MIN_ZOOM = 9;
 
 type St = { key: string };
 const getState = (ctx: ExtraCtx) => ctx.state<St>('blitzer-mobil', () => ({ key: '' }));
 
 function loadNow(ctx: ExtraCtx) {
   const st = getState(ctx);
-  if (ctx.map.getZoom() < CAM_DETAIL_ZOOM) {
-    ctx.setData('blitzer-mobil', empty());
+  const zoom = ctx.map.getZoom();
+  if (zoom < MOBILE_MIN_ZOOM) {
+    ctx.setData('blitzer-mobil', { type: 'FeatureCollection', features: [] });
     st.key = '';
-    ctx.set('blitzer-mobil', { note: `Details ab Zoomstufe ${CAM_DETAIL_ZOOM}` });
+    ctx.set('blitzer-mobil', { note: `Details ab Zoomstufe ${MOBILE_MIN_ZOOM}` });
     return;
   }
   const b = ctx.viewBounds();
   const key = Object.values(b).join(',');
   if (key === st.key) return;
   st.key = key;
-  ctx.set('blitzer-mobil', { loading: true, note: undefined });
-  loadMobileSpeedcams(b)
+  const live = zoom >= MOBILE_QUERY_ZOOM;
+  ctx.set('blitzer-mobil', { loading: live, note: undefined });
+  (live ? loadMobileSpeedcams(b) : cachedMobileSpeedcams(b))
     .then((fc) => {
       if (st.key !== key) return;
       ctx.setData('blitzer-mobil', fc);
-      const notes = ['Community-Meldungen, keine Fahrwarnung (in DE verboten während der Fahrt)'];
+      const notes = [live ? 'Community-Meldungen, keine Fahrwarnung (in DE verboten während der Fahrt)' : `nur bereits geladene Meldungen – für Live-Daten ab Zoom ${MOBILE_QUERY_ZOOM}`];
       if (!fc.features.length) notes.unshift('keine Meldungen im Ausschnitt');
       ctx.set('blitzer-mobil', { loading: false, count: fc.features.length, note: notes.join(' · ') });
     })
@@ -44,7 +51,7 @@ export default defineExtra({
   section: 'infra',
   cat: 'verkehr',
   label: 'Mobile Blitzer',
-  hint: 'Community-gemeldete mobile Geschwindigkeitskontrollen (ab Zoom 9) – inoffizielle, nicht garantierte Quelle (Blitzer.de); Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)',
+  hint: `Community-gemeldete mobile Geschwindigkeitskontrollen (ab Zoom ${MOBILE_MIN_ZOOM}, Live-Daten ab Zoom ${MOBILE_QUERY_ZOOM}) – inoffizielle, nicht garantierte Quelle (Blitzer.de); Lageplan, keine Fahrwarnung (in DE Nutzung während der Fahrt verboten)`,
   glyph: 'blitzer',
   icon: 'blitzer',
   color: '#ff7043',
@@ -58,9 +65,9 @@ export default defineExtra({
         layout: hidden,
         paint: {
           'circle-color': '#ff7043',
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 3, 14, 6],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], MOBILE_MIN_ZOOM, 2.5, 16, 6],
           'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 0.6, 14, 1.5],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], MOBILE_MIN_ZOOM, 0.5, 16, 1.5],
         },
       },
       'marker',

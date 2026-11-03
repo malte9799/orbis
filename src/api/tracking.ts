@@ -4,6 +4,7 @@ import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson, fmt } from '../util';
 import { distTxt, speedTxt, uTok } from '../units';
+import { kvGet, kvSet } from './idbCache';
 
 // ---------------------------------------------------------------------------
 // Satellites – orbital elements from CelesTrak, positions computed in the browser (SGP4)
@@ -308,33 +309,6 @@ let lastProxy: string | undefined;
 
 // ---------------------------------------------------------------------------
 // Browser cache (IndexedDB – the worldwide overview is too big for localStorage)
-
-const idb = (): Promise<IDBDatabase> =>
-  new Promise((resolve, reject) => {
-    const req = indexedDB.open('orbis-cache', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('kv');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-
-async function kvGet<T>(key: string): Promise<T | undefined> {
-  try {
-    const db = await idb();
-    return await new Promise((resolve) => {
-      const r = db.transaction('kv').objectStore('kv').get(key);
-      r.onsuccess = () => resolve(r.result as T | undefined);
-      r.onerror = () => resolve(undefined);
-    });
-  } catch {
-    return undefined;
-  }
-}
-
-function kvSet(key: string, value: unknown) {
-  idb()
-    .then((db) => db.transaction('kv', 'readwrite').objectStore('kv').put(value, key))
-    .catch(() => undefined);
-}
 
 /** Latest position of every aircraft seen in a zoomed-in request – they beat the (older) overview when zooming out. */
 const LIVE_KEEP_MS = 3600000;
