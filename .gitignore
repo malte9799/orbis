@@ -9,3 +9,5 @@ public/textures/moon/
 public/models/iss-detail.glb
 
 Obsidian/
+dist-cf/
+.wrangler/

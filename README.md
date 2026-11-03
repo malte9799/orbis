@@ -396,6 +396,27 @@ Ohne `ASSETS_BUCKET` bleibt alles wie bisher in `gh-pages`.
 
 </details>
 
+<details>
+<summary><b>☁️ Hosting maltee.dev/orbis (Cloudflare, parallel zu GitHub Pages)</b></summary>
+
+<br>
+
+Die App läuft zusätzlich als assets-only Worker `orbis-site` (`wrangler.jsonc`) unter **https://maltee.dev/orbis/** (Route
+`maltee.dev/orbis*`); GitHub Pages bleibt unverändert, es gibt keine Weiterleitung. Statische Requests auf Workers Assets sind
+kostenlos; Limits: 25 MiB pro Datei, 20.000 Dateien pro Version – größere Dateien (aktuell `models/europaclipper.glb`) müssen über
+`ASSETS_BUCKET`/`ASSETS_BASE` nach R2 (siehe oben).
+
+- **Deploy:** `deploy.yml` führt nach dem Build und nach „Remove assets from dist“ `scripts/cf-stage.sh` aus (`dist/` → `dist-cf/orbis/`,
+  bricht bei Dateien > 25 MiB ab). Auf `main` folgt `wrangler deploy`, auf jedem anderen Branch `wrangler versions upload --preview-alias <branch>`.
+- **Vorschauen:** `https://<branch>-orbis-site.malte9799.workers.dev/orbis/` (Link steht in der Job-Zusammenfassung; Alias = Branch-Name, klein, max. 52 Zeichen).
+- **Secrets** in `malte9799/orbis`: `CLOUDFLARE_API_TOKEN` (Berechtigung „Workers Scripts: Edit“, Zone „Workers Routes: Edit“ für maltee.dev) und
+  `CLOUDFLARE_ACCOUNT_ID`. Fehlen sie, wird der Cloudflare-Schritt mit Warnung übersprungen; ein Fehler dort blockiert GitHub Pages nicht.
+- **Lokal:** `pnpm build && bash scripts/cf-stage.sh && pnpm exec wrangler dev` (dann `http://localhost:8787/orbis/`).
+- **CORS:** `ALLOWED_ORIGINS` (Dashboard-Variable) von Proxy-, Camdir- und Push-Worker muss `https://maltee.dev` enthalten (exakte Origin, kommagetrennt);
+  für Vorschauen zusätzlich die jeweilige `https://<alias>-orbis-site.malte9799.workers.dev`-Origin (kein Wildcard-Matching).
+
+</details>
+
 ## ℹ️ Hinweise
 
 - **Raster:** Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 3 Tage).

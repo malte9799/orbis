@@ -1,0 +1,18 @@
+// Assets-only Worker: serves the Vite build at https://maltee.dev/orbis/ (see README "Hosting maltee.dev/orbis").
+// `scripts/cf-stage.sh` copies dist/ to dist-cf/orbis/ so that the URL path /orbis/... maps to files.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "orbis-site",
+  "compatibility_date": "2026-10-01",
+  "account_id": "6b3e7dfbc4ebf1d464dc32024e0e338f",
+  "assets": {
+    "directory": "./dist-cf",
+    // /orbis -> /orbis/ (redirect), /orbis/ -> orbis/index.html
+    "html_handling": "auto-trailing-slash",
+    // single index.html with hash routing (#/karte …): unknown paths are real 404s, not index.html
+    "not_found_handling": "none"
+  },
+  "routes": [{ "pattern": "maltee.dev/orbis*", "zone_name": "maltee.dev" }],
+  "workers_dev": true,
+  "preview_urls": true
+}
