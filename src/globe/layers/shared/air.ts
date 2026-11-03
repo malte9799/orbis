@@ -149,13 +149,18 @@ export function flightInfo(ctx: ExtraCtx, hex: string): FlightInfo | null {
   const p = f.properties as Record<string, unknown>;
   const live = st.airport3d?.planeInfo(hex);
   const [lon, lat] = f.geometry.coordinates;
+  const reg = String(p.reg ?? '');
+  const type = String(p.type ?? '');
+  const operator = String(p.operator ?? '');
+  // readsb's own database doesn't know every aircraft; adsbdb fills what's missing (fetched once per hex on selection)
+  const fallback = !reg || !type || !operator ? st.airport3d?.aircraft(hex) : null;
   return {
     hex,
     callsign: String(p.callsign ?? ''),
-    reg: String(p.reg ?? ''),
-    type: String(p.type ?? ''),
+    reg: reg || fallback?.reg || '',
+    type: type || fallback?.type || '',
     icao: String(p.icao ?? ''),
-    operator: String(p.operator ?? ''),
+    operator: operator || fallback?.operator || '',
     altM: live ? live.altM : Number(p.altM) || 0,
     speedKmh: p.speedKmh != null ? Number(p.speedKmh) : null,
     track: live ? live.track : Number(p.track) || 0,

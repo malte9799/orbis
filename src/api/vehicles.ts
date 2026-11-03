@@ -330,6 +330,35 @@ export const FEEDS: VehicleFeed[] = [
     },
   },
   {
+    id: 'hsl',
+    label: 'HSL (Helsinki)',
+    bbox: [24.4, 59.9, 25.6, 60.5],
+    every: 20,
+    async load() {
+      // route_id alone doesn't tell bus/tram/metro apart without the (paid-registration) routing API – shown as one mode for now
+      return gtfsRt(viaProxy('https://realtime.hsl.fi/realtime/vehicle-positions/v2/hsl'), 'BUS');
+    },
+  },
+  {
+    // nationwide feed (buses, trams, metro, regional rail) – no bbox filter on the source, OVapi rate-limits hard
+    id: 'ovapi',
+    label: 'OVapi (Niederlande)',
+    bbox: [3.3, 50.7, 7.3, 53.6],
+    every: 30,
+    async load() {
+      return gtfsRt(viaProxy('https://gtfs.ovapi.nl/nl/vehiclePositions.pb'), 'BUS');
+    },
+  },
+  {
+    id: 'translink-seq',
+    label: 'TransLink (Brisbane)',
+    bbox: [151.9, -28.3, 153.6, -26.3],
+    every: 30,
+    async load() {
+      return gtfsRt(viaProxy('https://gtfsrt.api.translink.com.au/api/realtime/SEQ/VehiclePositions'), 'BUS');
+    },
+  },
+  {
     id: 'victoria',
     label: 'Transport Victoria (Melbourne)',
     bbox: [140.9, -39.2, 150.0, -33.9],

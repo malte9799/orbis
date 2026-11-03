@@ -122,7 +122,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [adsb.lol](https://adsb.lol) | Flugzeuge live (ab Zoom 5), 1. Wahl; Militärflugzeuge weltweit (`/v2/mil`, auch in der Weltübersicht, Filter „Nur Militär“); GPS-Störungen aus der gemeldeten Navigationsgenauigkeit (NIC/NACp, `gpsOkBefore`) – Zellen-Methode nach [gpsjam.org](https://gpsjam.org), Schwellen nach God's Eye View | 🟢 ODbL, 🌐 |
 | [adsb.fi](https://adsb.fi) · [OpenData](https://opendata.adsb.fi) | Flugzeuge live, Rückfall | 🟢 🌐 |
 | [OpenSky Network](https://opensky-network.org) | Flugzeuge (Weltübersicht alle 2 min, im Browser gecacht; zuvor herangezoomte Flugzeuge zeigen ihre neuere Position), Flughafen-Abflüge/-Ankünfte vom Vortag | 🟢 🌐 |
-| [adsbdb](https://www.adsbdb.com) | Route (Start-/Zielflughafen) des gewählten Flugzeugs nach Callsign: gestrichelte Prognoselinie und Seitenleiste; Community-Daten, kein Flugplan | 🟢 🌐 |
+| [adsbdb](https://www.adsbdb.com) | Route (Start-/Zielflughafen) des gewählten Flugzeugs nach Callsign: gestrichelte Prognoselinie und Seitenleiste; Typ/Modell/Kennzeichen als Fallback, falls readsbs eigene Datenbank sie nicht kennt; Community-Daten, kein Flugplan | 🟢 🌐 |
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Flughafen 3D (ab Zoom 11): Start- und Landebahnen, Rollwege, Vorfelder, Gates, Befeuerung (Gebäude liefert die Grundkarte) (`aeroway=*`); große Flughäfen liegen vorab erzeugt in `public/data/airports/` (`scripts/airports.ts`), alle anderen kommen live von Overpass; die Flugzeuge dazu kommen von den ADS-B-Quellen oben | 🟢 ODbL, 🌐, 📦 |
 | [SondeHub](https://sondehub.org) | Wetterballons (Radiosonden): Position, Höhe, Steigrate, Frequenz, Bodenempfänger; als 3D-Ballonmodell im Flugverkehr (Klick → Detailpanel) und als 2D-Symbole | 🟢 |
 | [The Space Devs – Launch Library 2](https://thespacedevs.com) | Raketenstarts mit Countdown & Livestream-Link | 🟢 |
@@ -145,6 +145,9 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Metro Transit](https://svc.metrotransit.org) (GTFS-RT) | Minneapolis–St Paul, Busse und Stadtbahn | 🟢 |
 | [CapMetro](https://data.texas.gov/d/eiei-9rpf) (GTFS-RT, data.texas.gov) | Austin, Busse und MetroRail | 🟢 |
 | [TTC via umoiq](https://retro.umoiq.com) | Toronto | 🟢 |
+| [HSL](https://realtime.hsl.fi) (GTFS-RT) | Helsinki, Busse/Trams/Metro (vorerst ohne Unterscheidung) | 🟢 🌐 |
+| [OVapi](https://gtfs.ovapi.nl) (GTFS-RT) | Niederlande landesweit, Busse | 🟢 🌐, drosselt hart |
+| [TransLink SEQ](https://gtfsrt.api.translink.com.au) (GTFS-RT) | Brisbane/South East Queensland, Busse | 🟢 CC BY 4.0, 🌐 |
 | [data.gov.my – GTFS-Realtime](https://api.data.gov.my) | Malaysia | 🟢 |
 | [Transport Victoria](https://opendata.transport.vic.gov.au) | Melbourne/Victoria | 🔑 |
 | [CTA Train Tracker](https://www.transitchicago.com/developers/) | Chicago „L“ | 🔑 |
