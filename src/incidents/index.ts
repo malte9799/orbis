@@ -22,12 +22,16 @@ export { assetUrl };
 
 const cache = new Map<string, Promise<TrackPoint[]>>();
 
+// Kleine Spuren liegen in src/incidents/data und stecken im Bundle ('bundle:<id>/<datei>.json'): sie kommen so mit jedem Build
+// (auch Vorschauen) an, ohne dass sie erst nach R2 hochgeladen werden müssen. Große Dateien (Videos, Ton) gehören nach public/.
+const bundled = import.meta.glob<{ pts: TrackPoint[] }>('./data/**/*.json', { import: 'default' });
+
 function loadPoints(key: string, path: string): Promise<TrackPoint[]> {
   let p = cache.get(key);
   if (!p) {
-    p = fetch(assetUrl(path))
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((j: { pts: TrackPoint[] }) => j.pts);
+    const local = path.startsWith('bundle:') ? bundled[`./data/${path.slice(7)}`] : null;
+    if (path.startsWith('bundle:') && !local) return Promise.reject(new Error(`Spur ${path} fehlt`));
+    p = (local ? local() : fetch(assetUrl(path)).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))).then((j: { pts: TrackPoint[] }) => j.pts);
     p.catch(() => cache.delete(key));
     cache.set(key, p);
   }

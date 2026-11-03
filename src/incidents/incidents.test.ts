@@ -80,7 +80,7 @@ describe('Titan-Rekonstruktion', () => {
   it('Definition und Spuren passen zusammen', async () => {
     const { readFileSync } = await import('node:fs');
     const { default: def } = await import('./defs/titan-2023-06-18');
-    const load = (p: string) => (JSON.parse(readFileSync(`public/${p}`, 'utf8')) as { pts: TrackPoint[] }).pts;
+    const load = (p: string) => (JSON.parse(readFileSync(`src/incidents/data/${p.slice(7)}`, 'utf8')) as { pts: TrackPoint[] }).pts;
     const sub = load(def.track);
     const ship = load(def.ship!.track);
     // Tiefen sind negativ, die Spur sinkt gleichmäßig bis 3.346 m und endet mit der Implosion

@@ -1,11 +1,11 @@
 // Erzeugt die beiden Spuren der Titan-Rekonstruktion (src/incidents/defs/titan-2023-06-18.ts):
-//   public/data/incidents/titan-2023-06-18/track.json  Tauchboot Titan, "Höhe" = Tiefe in m (negativ)
-//   public/data/incidents/titan-2023-06-18/ship.json   Polar Prince: St. John's → Tauchplatz
+//   src/incidents/data/titan-2023-06-18/track.json  Tauchboot Titan, "Höhe" = Tiefe in m (negativ)
+//   src/incidents/data/titan-2023-06-18/ship.json   Polar Prince: St. John's → Tauchplatz
 // Veröffentlicht sind nur wenige Eckwerte (siehe dataNotes in der Definition); alles dazwischen ist berechnet und
 // im JSON mit einem 7. Feld (1) markiert. Aufruf: node scripts/titan-track.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
 
-const dir = 'public/data/incidents/titan-2023-06-18';
+const dir = 'src/incidents/data/titan-2023-06-18';
 mkdirSync(dir, { recursive: true });
 const U = (iso) => Math.floor(Date.parse(iso) / 1000);
 const R = Math.PI / 180;

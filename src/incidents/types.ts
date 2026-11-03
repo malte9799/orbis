@@ -73,7 +73,7 @@ export interface IncidentDef {
   /** sachliche Kurzfassung mit Quellen */
   summary: string;
   craft: { callsign: string; reg: string; hex?: string; type: string; from: string; to: string };
-  /** Pfad der Flugspur (Tauchspur) unter public/ */
+  /** Pfad der Flugspur (Tauchspur) unter public/; 'bundle:<id>/<datei>.json': kleine Spur aus src/incidents/data, im Bundle */
   track: string;
   /** Begleitschiff (z. B. Mutterschiff): eigene Spur im gleichen Format (Höhe 0), wird als Schiff gezeigt */
   ship?: { name: string; track: string };

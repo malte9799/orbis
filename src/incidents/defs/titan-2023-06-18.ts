@@ -35,8 +35,8 @@ export default defineIncident({
   summary:
     'Das Tauchboot Titan des Unternehmens OceanGate tauchte am 18. Juni 2023 vom Begleitschiff Polar Prince zum Wrack der Titanic. Nach gut 90 Minuten, in {{d:3346}} Tiefe, riss der Kontakt ab: Der Druckkörper aus Kohlefaser war implodiert, alle fünf Insassen starben sofort. Nach einer mehrtägigen Suche fand ein Tauchroboter am 22. Juni die Trümmer rund 500 m nordöstlich des Titanic-Bugs. Die US-Küstenwache nannte das Unglück 2025 „vermeidbar“.',
   craft: { callsign: 'Titan', reg: 'OceanGate Titan', type: 'Tauchboot', from: 'Polar Prince (Tauchplatz im Nordatlantik)', to: 'Wrack der Titanic' },
-  track: 'data/incidents/titan-2023-06-18/track.json',
-  ship: { name: 'Polar Prince', track: 'data/incidents/titan-2023-06-18/ship.json' },
+  track: 'bundle:titan-2023-06-18/track.json',
+  ship: { name: 'Polar Prince', track: 'bundle:titan-2023-06-18/ship.json' },
   seabedM: 3800,
   localTime: { label: 'Neufundland (NDT)', offsetH: -2.5 },
   focus: { from: DIVE, to: IMPLODE + 120 },

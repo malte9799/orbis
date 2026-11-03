@@ -10,7 +10,7 @@ Neue Dinge sind meist **eine neue Datei** in einem Ordner; die Sammlung geschieh
 | Ereignis-Feed (EONET, USGS …) | `src/globe/events/feeds/<id>.ts` | `defineFeed` |
 | Ereignis-Gruppe (Erdbeben, Brände …) | `src/globe/events/groups/<id>.ts` | `defineGroup` |
 | Karten-Menü: Verkehr / Infrastruktur / Wetter-Familie / Wetter-Menü | `src/hud/menus/{traffic,infra,wxfamilies,wxmenu}/<id>.ts` | `defineMenuCat`, `defineWxFamily`, `defineWxMenuItem` |
-| Ereignis-Rekonstruktion (Flugbahn, Funk, Videos) | `src/incidents/defs/<id>.ts` + `public/data/incidents/<id>/` | `defineIncident`; Flugzeug: Spur per `scripts/incident-track.mjs` aus dem Flightradar24-CSV; Tauchboot (`kind: 'submersible'`, Tiefe in m negativ, optional Begleitschiff `ship`): `scripts/titan-track.mjs` |
+| Ereignis-Rekonstruktion (Flugbahn, Funk, Videos) | `src/incidents/defs/<id>.ts` + `public/data/incidents/<id>/` | `defineIncident`; Flugzeug: Spur per `scripts/incident-track.mjs` aus dem Flightradar24-CSV; Tauchboot (`kind: 'submersible'`, Tiefe in m negativ, optional Begleitschiff `ship`): `scripts/titan-track.mjs` (kleine Spuren liegen unter `src/incidents/data/<id>/` und stecken im Bundle, `track: 'bundle:<id>/…'`) |
 | Klick-Aktion im HUD (`data-act="…"`) | `src/hud/actions/<thema>.ts` | Funktion `(core) => ({ name: (id, v, ev) => … })` |
 | API-Schlüssel im Einstellungs-Panel (Gruppe, Kurzanleitung, Hinweis) | `src/settings/keys/<id>.ts` | `defineKey` |
 | Einstellungs-Panel (Allgemein, Einheiten, Schlüssel) / Einheiten-Umrechnung | `src/views/settings.ts` / `src/units.ts` | – |
