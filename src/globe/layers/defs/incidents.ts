@@ -2,13 +2,14 @@ import { defineExtra, type ExtraCtx } from '../types';
 import { FONT_BOLD } from '../../vector';
 import { cardHtml } from '../../popup';
 import { INCIDENTS, incidentById } from '../../../incidents';
+import { profileOf } from '../../../incidents/kind';
 import { escapeHtml, fmt } from '../../../util';
 
 // Rekonstruktionen von Ereignissen (Flugunfälle …): ein Marker pro Ereignis (src/incidents/defs), Klick öffnet das
 // Panel mit Wiedergabe. Spur, Ereignismarken und Flugzeug zeichnet die 3D-Ebene des Panels (src/incidents/layer3d.ts).
 
 const COLOR = '#ef5350';
-const SRC = 'Rekonstruktion: Flightradar24-Daten, Quellen im Panel';
+const SRC = 'Rekonstruktion: Flightradar24, US-Küstenwache u. a., Quellen im Panel';
 
 /** Name groß, darunter die Kennung kleiner (mehrzeiliges Label) */
 const LABEL = ['format', ['get', 'name'], {}, '\n', {}, ['get', 'short'], { 'font-scale': 0.75 }] as never;
@@ -32,7 +33,7 @@ export default defineExtra({
   section: 'air',
   cat: 'gefahr',
   label: 'Ereignisse nachgestellt',
-  hint: 'Flugbahn, Funk und Videos eines Unglücks zum Abspielen – Flightradar24 u. a.',
+  hint: 'Flugbahn bzw. Tauchspur, Funk, Nachrichten und Videos eines Unglücks zum Abspielen',
   glyph: 'plane',
   icon: 'warn',
   color: COLOR,
@@ -47,7 +48,7 @@ export default defineExtra({
         source: 'incidents',
         layout: {
           ...hidden,
-          'icon-image': 'glyph-plane',
+          'icon-image': ['concat', 'glyph-', ['get', 'glyph']],
           'icon-size': ICON_BIG,
           'icon-allow-overlap': true,
           'text-field': ['step', ['zoom'], NO_LABEL, 3, LABEL],
@@ -70,7 +71,7 @@ export default defineExtra({
       features: INCIDENTS.map((d) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [d.lon, d.lat] },
-        properties: { id: d.id, title: d.title, name: d.shortTitle ?? d.title, subtitle: d.subtitle, when: d.when, short: d.aircraft.reg },
+        properties: { id: d.id, title: d.title, name: d.shortTitle ?? d.title, subtitle: d.subtitle, when: d.when, short: d.craft.reg, glyph: profileOf(d).glyph },
       })),
     });
     ctx.set('incidents', { count: INCIDENTS.length, note: 'Klick auf einen Marker öffnet die Rekonstruktion' });
@@ -86,13 +87,13 @@ export default defineExtra({
     return {
       type: 'html',
       html: cardHtml({
-        glyph: 'plane',
+        glyph: profileOf(d).glyph,
         color: COLOR,
         title: d.title,
         subtitle: `${d.subtitle} · ${fmt.dateTime(d.when)}`,
         description: d.summary,
         extra: `<div class="pop-sub">${escapeHtml(d.place)}</div>${btn}`,
-        source: 'Flightradar24, Berichte',
+        source: d.craft.hex ? 'Flightradar24, Berichte' : 'Berichte, Quellen im Panel',
         url: d.sources[0]?.url,
       }),
       lng: pt[0],

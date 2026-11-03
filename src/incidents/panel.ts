@@ -1,14 +1,15 @@
 import type { Map as MlMap } from 'maplibre-gl';
 import { sampleAt } from './track';
-import { assetUrl, loadTrack } from './index';
+import { assetUrl, loadShipTrack, loadTrack } from './index';
+import { pressureBar, profileOf, type KindProfile } from './kind';
 import type { IncidentDef, IncidentMedia, Sample, TrackPoint } from './types';
 import { embedOf } from './embed';
-import { IncidentScene, ftToM, pitchOf, type IncidentMark } from './layer3d';
+import { IncidentScene, pitchOf, type IncidentMark } from './layer3d';
 import type { GeoFocus } from '../globe/geo3d/focus';
 import type { GeoStage, GeoTarget } from '../globe/geo3d/stage';
 import { escapeHtml, safeUrl, toast } from '../util';
 import { OPTIONS_EVENT } from '../store';
-import { altTxt, climbFtTxt, kntTxt, localize } from './units';
+import { altTxt, climbFtTxt, depthTxt, kntTxt, localize } from './units';
 import { glyphSvg } from '../globe/icons';
 import { tile } from '../globe/sidepanel';
 import '../globe/flightpanel.css';
@@ -33,7 +34,7 @@ export interface IncidentPanelHooks {
   dockChanged(): void;
 }
 
-const SPEEDS = [1, 5, 30, 120];
+const SPEEDS = [1, 5, 30, 120, 900, 3600];
 /** Der Fokus leitet seinen Abstand zum Flugzeug aus dem Kartenzoom ab. Aus Zoom 16 (Bodenmaßstab) wird bei einem Flugzeug in 10 km Höhe
  *  ein Abstand von fast null: die Seite hängt. Deshalb vor dem Folgen höchstens so weit hineingezoomt. */
 const MAX_START_ZOOM = 10;
@@ -54,6 +55,8 @@ export class IncidentPanel {
   private curEvent: HTMLElement | null = null;
   private def: IncidentDef | null = null;
   private pts: TrackPoint[] = [];
+  private shipPts: TrackPoint[] = [];
+  private kind: KindProfile = profileOf({});
   private layer: IncidentScene | null = null;
   private lastIdx = -2;
   private lastGone = false;
@@ -81,7 +84,7 @@ export class IncidentPanel {
     this.root.className = 'fp incident';
     this.root.hidden = true;
     this.root.innerHTML = `
-      <div class="fp-head"><i class="fp-ic">${glyphSvg('plane', '#ef5350', 30)}</i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
+      <div class="fp-head"><i class="fp-ic"></i><span class="fp-title"></span><button type="button" class="fp-close" aria-label="Schließen">×</button></div>
       <div class="fp-sub"></div>
       <div class="fp-body"></div>`;
     parent.append(this.root);
@@ -132,21 +135,24 @@ export class IncidentPanel {
     this.h.closeOthers();
     this.close();
     this.def = def;
+    this.kind = profileOf(def);
     this.root.hidden = false;
+    this.root.querySelector('.fp-ic')!.innerHTML = glyphSvg(this.kind.glyph, this.kind.color, 30);
     this.root.querySelector('.fp-title')!.textContent = def.title;
     this.root.querySelector('.fp-sub')!.textContent = def.subtitle;
-    this.body.innerHTML = '<div class="fp-note">Flugspur wird geladen …</div>';
+    this.body.innerHTML = `<div class="fp-note">${this.kind.trackName} wird geladen …</div>`;
     try {
-      this.pts = await loadTrack(def);
+      [this.pts, this.shipPts] = await Promise.all([loadTrack(def), loadShipTrack(def)]);
     } catch {
       if (this.def !== def) return;
-      this.body.innerHTML = '<div class="fp-note">Die Flugspur konnte nicht geladen werden.</div>';
-      toast('Flugspur nicht erreichbar.', 'error');
+      this.body.innerHTML = `<div class="fp-note">Die ${this.kind.trackName} konnte nicht geladen werden.</div>`;
+      toast(`${this.kind.trackName} nicht erreichbar.`, 'error');
       return;
     }
     if (this.def !== def) return; // inzwischen geschlossen/anderes Ereignis
     const lastEvent = Math.max(...def.events.map((e) => e.t));
-    this.from = this.pts[0][0];
+    const firstEvent = Math.min(...def.events.map((e) => e.t));
+    this.from = Math.min(this.pts[0][0], this.shipPts[0]?.[0] ?? Infinity, firstEvent);
     this.to = Math.max(this.pts[this.pts.length - 1][0], lastEvent);
     this.win = 'end';
     this.t = def.focus.from;
@@ -154,12 +160,13 @@ export class IncidentPanel {
     this.rebase();
     const stage = this.h.stage();
     if (!stage) return;
-    this.layer = new IncidentScene(map);
+    this.layer = new IncidentScene(map, def.kind);
     this.target = this.makeTarget(def);
     this.layer.target = this.target;
     stage.add(this.layer);
     this.lastIdx = -2;
-    this.layer.setFullTrack(this.pts.map((p, i) => [p[2], p[1], ftToM(p[3] ?? sampleAt(this.pts, this.pts[i][0]).alt ?? 0)]));
+    this.layer.setFullTrack(this.pts.map((p, i) => [p[2], p[1], this.m(p[3] ?? sampleAt(this.pts, this.pts[i][0]).alt ?? 0)]));
+    if (this.shipPts.length) this.layer.setShipRoute(this.shipPts.map((p) => [p[2], p[1], 0]));
     this.layer.setMarks(this.markList());
     this.bindMarks(map);
     if (def.audio?.startUnix != null) {
@@ -200,6 +207,11 @@ export class IncidentPanel {
     this.following = false;
     if (this.layer) this.h.stage()?.remove(this.layer);
     this.layer = null;
+  }
+
+  /** Wert der Spur (ft bzw. Tiefe in m, negativ) in Metern über dem Meeresspiegel/Boden */
+  private m(v: number) {
+    return this.kind.toM(v);
   }
 
   private get win_() {
@@ -387,7 +399,7 @@ export class IncidentPanel {
     const ev: IncidentMark[] = this.def!.events.map((e, i) => {
       const s = sampleAt(this.pts, e.t);
       const at = e.at ?? s;
-      return { lon: at.lon, lat: at.lat, altM: e.at ? 0 : ftToM(s.alt ?? 0), color: color[e.kind], ref: { kind: 'event' as const, i } };
+      return { lon: at.lon, lat: at.lat, altM: e.at ? 0 : this.m(s.alt ?? 0), color: color[e.kind], ref: { kind: 'event' as const, i } };
     });
     // Videos mit Zeit und/oder Ort: mit Ort am Boden, sonst auf der Spur zur Zeit der Aufnahme
     const vid: IncidentMark[] = this.media()
@@ -396,7 +408,7 @@ export class IncidentPanel {
       .map(({ m, i }) => {
         const s = sampleAt(this.pts, m.t ?? this.pts[this.pts.length - 1][0]);
         const at = m.at ?? s;
-        return { lon: at.lon, lat: at.lat, altM: m.at ? 0 : ftToM(s.alt ?? 0), color: 0x26c6da, ref: { kind: 'media' as const, i } };
+        return { lon: at.lon, lat: at.lat, altM: m.at ? 0 : this.m(s.alt ?? 0), color: 0x26c6da, ref: { kind: 'media' as const, i } };
       });
     return [...ev, ...vid];
   }
@@ -502,10 +514,11 @@ export class IncidentPanel {
     return {
       source: 'incident',
       slug: def.id,
-      label: def.aircraft.callsign,
+      label: def.craft.callsign,
       position: (now) => {
         const s = sampleAt(this.pts, this.timeAt(now));
-        return [s.lon, s.lat, ftToM(s.alt ?? 0)];
+        // Tauchboot: die Kamera zielt auf die Wasseroberfläche darüber (unter Wasser gibt es nichts zu sehen als das Boot selbst)
+        return [s.lon, s.lat, this.kind.sub ? 0 : this.m(s.alt ?? 0)];
       },
     };
   }
@@ -517,7 +530,8 @@ export class IncidentPanel {
     const end = this.pts[this.pts.length - 1][0];
     // nach dem letzten Punkt bleibt das Flugzeug an dessen Position und sinkt weiter (Höhe fortgeschrieben) bis zum Boden
     const alt = s.alt ?? 0;
-    const gone = this.t > end && alt <= 0;
+    // Tauchboot: vor dem Ablegen noch an Bord, nach der Implosion nicht mehr da
+    const gone = this.kind.sub ? this.t > end || this.t < this.pts[0][0] : this.t > end && alt <= 0;
     const scene = this.layer;
     if (!scene) return;
     // die Spur wird neu gebaut, wenn ein Punkt dazukommt; dazwischen bewegt sich nur ihr Kopf mit dem Flugzeug
@@ -526,7 +540,11 @@ export class IncidentPanel {
       this.lastGone = gone;
       scene.setTrail(this.trailTo(s));
     }
-    scene.setPose(gone ? null : { lon: s.lon, lat: s.lat, altM: ftToM(alt), track: s.trk, pitch: this.pitchAt(s) });
+    scene.setPose(gone ? null : { lon: s.lon, lat: s.lat, altM: this.m(alt), track: s.trk, pitch: this.pitchAt(s) });
+    if (this.shipPts.length) {
+      const sh = sampleAt(this.shipPts, this.t);
+      scene.setShipPose({ lon: sh.lon, lat: sh.lat, track: sh.trk });
+    }
     const now = performance.now();
     if (ui || now - this.lastUi > 90) {
       this.lastUi = now;
@@ -536,6 +554,7 @@ export class IncidentPanel {
 
   /** Nickwinkel = Winkel der gezeigten Bahn: Höhenänderung gegen den zurückgelegten Weg in einem kurzen Fenster um t */
   private pitchAt(s: Sample): number {
+    if (this.kind.sub) return 0;
     const first = this.pts[0][0];
     const end = this.pts[this.pts.length - 1][0];
     const t1 = Math.min(end, s.t + 0.25);
@@ -553,18 +572,22 @@ export class IncidentPanel {
     const step = Math.max(1, Math.floor(s.i / 400));
     for (let i = 0; i <= s.i; i += step) {
       const p = this.pts[i];
-      out.push([p[2], p[1], ftToM(p[3] ?? sampleAt(this.pts, p[0]).alt ?? 0)]);
+      out.push([p[2], p[1], this.m(p[3] ?? sampleAt(this.pts, p[0]).alt ?? 0)]);
     }
-    out.push([s.lon, s.lat, ftToM(s.alt ?? 0)]);
+    out.push([s.lon, s.lat, this.m(s.alt ?? 0)]);
     return out;
   }
 
   private readout(s: Sample) {
     const q = <T extends HTMLElement>(sel: string) => this.body.querySelector<T>(sel);
     const bq = <T extends HTMLElement>(sel: string) => this.bar.querySelector<T>(sel);
-    const readoutTxt = [s.alt == null ? null : altTxt(s.alt, true) + (s.altHeld ? ' *' : ''), kntTxt(s.gs), s.vs == null ? null : climbFtTxt(s.vs, true)].filter(Boolean).join(' · ');
+    const sub = this.kind.sub;
+    const alt = (v: number) => (sub ? depthTxt(-v, true) : altTxt(v, true));
+    const rate = (v: number) => climbFtTxt(sub ? v / 0.3048 : v, true);
+    const readoutTxt = [s.alt == null ? null : alt(s.alt) + (s.altHeld ? ' *' : ''), sub ? null : kntTxt(s.gs), s.vs == null ? null : rate(s.vs)].filter(Boolean).join(' · ');
     const head = bq('.tl-head');
-    if (head) head.innerHTML = `<b>${clock(this.t)} UTC</b><span>${clock(this.t, -5)} Florida · ${readoutTxt}</span>`;
+    const lt = this.def?.localTime;
+    if (head) head.innerHTML = `<b>${clock(this.t)} UTC</b><span>${lt ? `${clock(this.t, lt.offsetH)} ${escapeHtml(lt.label)} · ` : ''}${readoutTxt}</span>`;
     const tl = bq('.tl-time');
     if (tl) tl.innerHTML = `<b>${clock(this.t)}</b><small>UTC</small>`;
     const range = bq<HTMLInputElement>('.tl-range');
@@ -577,10 +600,17 @@ export class IncidentPanel {
       const el = q(`[data-metric="${k}"] b`);
       if (el) el.innerHTML = v;
     };
-    set('alt', s.alt == null ? '–' : altTxt(s.alt, true) + (s.altHeld ? ' *' : ''));
+    set('alt', s.alt == null ? '–' : alt(s.alt) + (s.altHeld ? ' *' : ''));
     set('gs', kntTxt(s.gs));
-    set('vs', s.vs == null ? '–' : climbFtTxt(s.vs, true));
+    set('vs', s.vs == null ? '–' : rate(s.vs));
     set('trk', `${Math.round(s.trk)}°`);
+    if (sub) {
+      const depth = Math.max(0, -(s.alt ?? 0));
+      const bar = pressureBar(depth);
+      set('bar', `${Math.round(bar).toLocaleString('de-DE')} bar <small class="ic-ft">(${Math.round(bar * 14.5038).toLocaleString('de-DE')} psi)</small>`);
+      const seabed = this.def?.seabedM;
+      set('above', seabed ? depthTxt(Math.max(0, seabed - depth), true) : '–');
+    }
     const cur = this.body.querySelector<SVGElement>('.ic-chart .cursor');
     const dot = this.body.querySelector<SVGElement>('.ic-chart .dot');
     const w = this.win_;
@@ -620,8 +650,10 @@ export class IncidentPanel {
     this.curEvent = curEv;
   }
 
-  private yOf(ft: number) {
-    return 58 - (Math.min(ft, 42000) / 42000) * 54;
+  /** Höhenprofil: Flugzeug steigt nach oben, Tauchboot sinkt nach unten (Meeresspiegel oben) */
+  private yOf(v: number) {
+    if (this.kind.sub) return 4 + (Math.min(Math.max(-v, 0), this.def?.seabedM ?? 3800) / (this.def?.seabedM ?? 3800)) * 54;
+    return 58 - (Math.min(v, 42000) / 42000) * 54;
   }
 
   private chart(): string {
@@ -630,7 +662,7 @@ export class IncidentPanel {
     if (seg.length < 2) return '';
     const stride = Math.max(1, Math.floor(seg.length / 300));
     const xy = seg.filter((_, i) => i % stride === 0).map((p) => `${(((p[0] - w.from) / Math.max(1, w.to - w.from)) * 300).toFixed(1)},${this.yOf(p[3]!).toFixed(1)}`);
-    return `<svg class="ic-chart" viewBox="0 0 300 62" preserveAspectRatio="none" role="img" aria-label="Höhenprofil">
+    return `<svg class="ic-chart${this.kind.sub ? ' deep' : ''}" viewBox="0 0 300 62" preserveAspectRatio="none" role="img" aria-label="${this.kind.sub ? 'Tiefenprofil' : 'Höhenprofil'}">
       <polyline class="area" points="${xy.join(' ')}"/><line class="cursor" x1="0" x2="0" y1="0" y2="62"/><circle class="dot" cx="0" cy="58" r="3"/></svg>`;
   }
 
@@ -669,18 +701,21 @@ export class IncidentPanel {
          <div class="fp-note">${escapeHtml(a.title)} · Quelle: ${link(a.credit)}${
            a.startUnix != null ? '<br>Der Ton läuft synchron zur Spur (nur bei Tempo 1×); Stummschaltung in der Leiste unten.' : '<br>Noch nicht mit der Spur synchronisiert (Startzeit des Clips unbekannt) – er läuft für sich.'
          }</div>${cues ? `<div class="fp-note">Transkript (Englisch, Untertitel zum Clip, ungeprüft):</div>${cues}` : ''}`
-      : '<div class="fp-note">Kein Funkverkehr hinterlegt.</div>';
+      : `<div class="fp-note">${this.kind.sub ? 'Keine Tonaufnahme hinterlegt.' : 'Kein Funkverkehr hinterlegt.'}</div>`;
     this.body.innerHTML = `
       ${this.chart()}
       <div class="sp-tiles" style="margin-top:8px">
-        ${tile('Höhe', '–', { metric: 'alt' })}${tile('Steigen/Sinken', '–', { metric: 'vs' })}
-        ${tile('Tempo (über Grund)', '–', { metric: 'gs' })}${tile('Kurs', '–', { metric: 'trk' })}
+        ${
+          this.kind.sub
+            ? `${tile('Tiefe', '–', { metric: 'alt' })}${tile('Sinken', '–', { metric: 'vs' })}${tile('Wasserdruck (ca.)', '–', { metric: 'bar' })}${tile('Über dem Meeresboden', '–', { metric: 'above' })}`
+            : `${tile('Höhe', '–', { metric: 'alt' })}${tile('Steigen/Sinken', '–', { metric: 'vs' })}${tile('Tempo (über Grund)', '–', { metric: 'gs' })}${tile('Kurs', '–', { metric: 'trk' })}`
+        }
       </div>
       ${detail('events', 'Ereignisse', `<ul class="ic-events">${ev.map((e) => `<li><button type="button" data-act="jump" data-t="${e.t}" class="${e.kind}"><b>${localize(escapeHtml(e.label), true)}</b><time>${clock(e.t)}</time>${e.text ? `<span>${localize(escapeHtml(e.text), true)}</span>` : ''}</button></li>`).join('')}</ul>`)}
-      ${detail('funk', 'Funkverkehr', audio)}
+      ${detail('funk', this.kind.sub ? 'Ton' : 'Funkverkehr', audio)}
       ${detail('media', 'Videos & Berichte', media)}
-      ${detail('info', 'Zum Ereignis', `<div class="fp-note">${localize(escapeHtml(d.summary), true)}<br>${escapeHtml(d.aircraft.type)} ${escapeHtml(d.aircraft.reg)} · ${escapeHtml(d.aircraft.from)} → ${escapeHtml(d.aircraft.to)}</div>`)}
-      ${detail('notes', 'Hinweise zu den Daten', `<ul class="ic-notes">${d.dataNotes.map((n) => `<li>${localize(escapeHtml(n), true)}</li>`).join('')}</ul><div class="fp-note">* Höhe fortgeschrieben (letzte bekannte Sinkrate), keine Messung</div>`)}
+      ${detail('info', 'Zum Ereignis', `<div class="fp-note">${localize(escapeHtml(d.summary), true)}<br>${escapeHtml(d.craft.type)} ${escapeHtml(d.craft.reg)} · ${escapeHtml(d.craft.from)} → ${escapeHtml(d.craft.to)}</div>`)}
+      ${detail('notes', 'Hinweise zu den Daten', `<ul class="ic-notes">${d.dataNotes.map((n) => `<li>${localize(escapeHtml(n), true)}</li>`).join('')}</ul><div class="fp-note">${this.kind.sub ? '* Wert berechnet, keine Messung' : '* Höhe fortgeschrieben (letzte bekannte Sinkrate), keine Messung'}</div>`)}
       ${detail('src', 'Quellen', `<ul class="ic-notes">${d.sources.map((s) => `<li>${link(s)}</li>`).join('')}</ul>`)}`;
     this.renderBar();
     this.readout(sampleAt(this.pts, this.t));
@@ -702,7 +737,7 @@ export class IncidentPanel {
       .join('');
     const labels = d.events
       .filter((e) => e.kind === 'impact' && e.t >= w.from && e.t <= w.to)
-      .map((e) => `<span style="left:${pos(e.t)}%">Einschlag</span>`)
+      .map((e) => `<span style="left:${pos(e.t)}%">${this.kind.impact}</span>`)
       .join('');
     const btn = (act: string, label: string, inner: string, extra = '') => `<button type="button" class="btn icon-btn ti-b ${extra}" data-act="${act}" aria-label="${label}" data-tip="${label}">${inner}</button>`;
     const svg = (path: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -718,9 +753,9 @@ export class IncidentPanel {
       <div class="ti-ctl">
         <select class="ic-speed" aria-label="Wiedergabetempo" title="Wiedergabetempo (Ton nur bei 1×)">${SPEEDS.map((v) => `<option value="${v}" ${v === this.speed ? 'selected' : ''}>${v}×</option>`).join('')}</select>
         <button type="button" class="ti-chip ${this.win === 'end' ? 'on' : ''}" data-act="win" data-v="end" data-tip="Nur die letzten Minuten">Endphase</button>
-        <button type="button" class="ti-chip ${this.win === 'all' ? 'on' : ''}" data-act="win" data-v="all" data-tip="Von Austin bis zum Einschlag">Ganzer Flug</button>
+        <button type="button" class="ti-chip ${this.win === 'all' ? 'on' : ''}" data-act="win" data-v="all" data-tip="${this.kind.full.tip}">${this.kind.full.label}</button>
         ${d.audio?.startUnix != null ? btn('mute', 'Ton an/aus', '', 'ti-mute') : ''}
-        ${btn('follow', 'Kamera folgt dem Flugzeug', svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'), this.following ? 'on' : '')}
+        ${btn('follow', this.kind.followTip, svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>'), this.following ? 'on' : '')}
         ${btn('close', 'Rekonstruktion schließen', svg('<path d="M6 6l12 12M18 6L6 18"/>'))}
       </div>`;
     this.syncPlayBtn();

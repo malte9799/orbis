@@ -26,8 +26,9 @@ export default defineIncident({
   place: 'Greenacres, Palm Beach County (Military Trail / 10th Ave N)',
   summary:
     'Ein Learjet 60 stürzte auf dem Flug von Austin (Texas) nach North Eleuthera (Bahamas) in Palm Beach County ab. Alle neun Personen an Bord kamen ums Leben. FAA und NTSB ermitteln, eine Ursache ist nicht bekannt.',
-  aircraft: { callsign: 'N722BD', reg: 'N722BD', hex: 'A9AB17', type: 'Learjet 60', from: 'Austin–Bergstrom (KAUS)', to: 'North Eleuthera (MYEH)' },
+  craft: { callsign: 'N722BD', reg: 'N722BD', hex: 'A9AB17', type: 'Learjet 60', from: 'Austin–Bergstrom (KAUS)', to: 'North Eleuthera (MYEH)' },
   track: 'data/incidents/n722bd-2026-11-01/track.json',
+  localTime: { label: 'Florida', offsetH: -5 },
   focus: { from: 1793555100, to: 1793555380 },
   dataNotes: [
     'Flugspur: ADS-B-Daten von Flightradar24. Höhe in Fuß (barometrisch), Geschwindigkeit als Groundspeed in Knoten, alle Zeiten UTC (Florida: UTC−5, Austin: UTC−6).',

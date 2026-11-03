@@ -22,15 +22,20 @@ export { assetUrl };
 
 const cache = new Map<string, Promise<TrackPoint[]>>();
 
-/** Flugspur eines Ereignisses (einmal geladen, dann im Speicher) */
-export function loadTrack(def: IncidentDef): Promise<TrackPoint[]> {
-  let p = cache.get(def.id);
+function loadPoints(key: string, path: string): Promise<TrackPoint[]> {
+  let p = cache.get(key);
   if (!p) {
-    p = fetch(assetUrl(def.track))
+    p = fetch(assetUrl(path))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((j: { pts: TrackPoint[] }) => j.pts);
-    p.catch(() => cache.delete(def.id));
-    cache.set(def.id, p);
+    p.catch(() => cache.delete(key));
+    cache.set(key, p);
   }
   return p;
 }
+
+/** Flugspur eines Ereignisses (einmal geladen, dann im Speicher) */
+export const loadTrack = (def: IncidentDef): Promise<TrackPoint[]> => loadPoints(def.id, def.track);
+
+/** Spur des Begleitschiffs (leer, wenn das Ereignis keins hat) */
+export const loadShipTrack = (def: IncidentDef): Promise<TrackPoint[]> => (def.ship ? loadPoints(`${def.id}:ship`, def.ship.track) : Promise.resolve([]));

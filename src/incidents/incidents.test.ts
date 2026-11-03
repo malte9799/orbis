@@ -75,3 +75,23 @@ describe('Einbettung', () => {
     expect(embedOf('https://www.reddit.com/r/aviation/')).toBeNull();
   });
 });
+
+describe('Titan-Rekonstruktion', () => {
+  it('Definition und Spuren passen zusammen', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { default: def } = await import('./defs/titan-2023-06-18');
+    const load = (p: string) => (JSON.parse(readFileSync(`public/${p}`, 'utf8')) as { pts: TrackPoint[] }).pts;
+    const sub = load(def.track);
+    const ship = load(def.ship!.track);
+    // Tiefen sind negativ, die Spur sinkt gleichmäßig bis 3.346 m und endet mit der Implosion
+    expect(sub[0][3]).toBe(0);
+    expect(sub.at(-1)![3]).toBeCloseTo(-3346.28);
+    for (let i = 1; i < sub.length; i++) expect(sub[i][3]!).toBeLessThanOrEqual(sub[i - 1][3]!);
+    // Schiff liegt beim Abtauchen am Tauchplatz
+    const at = sampleAt(ship, sub[0][0]);
+    expect(Math.hypot(at.lat - sub[0][1], at.lon - sub[0][2])).toBeLessThan(0.01);
+    // Sinkrate rund 36 m/min
+    expect(sampleAt(sub, sub[0][0] + 1800).vs!).toBeCloseTo(-35.9, 0);
+    expect(def.events.some((e) => e.kind === 'impact' && e.t === sub.at(-1)![0])).toBe(true);
+  });
+});
