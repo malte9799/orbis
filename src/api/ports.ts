@@ -1,7 +1,9 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
+import { DATA_BASE } from './data';
 
 // Seaports: the NGA World Port Index (size, depths, vessel limits, facilities) plus the UN/LOCODE
-// seaports (Upply, CC BY 4.0) it does not list. Built by scripts/ports.mjs → public/data/ports.json.
+// seaports (Upply, CC BY 4.0) it does not list. Built by the orbis-data collector (task `ports`, group `manual`) → ${DATA_BASE}ports.json; the committed copy in
+// public/data/ports.json (scripts/ports.mjs) serves local dev without VITE_DATA_BASE and as fallback.
 
 /** [lon, lat, name, UN/LOCODE, country, tier, type, channel depth, pier depth, max length, max draft, pilotage, shelter, facilities]; UN/LOCODE-only ports stop after the tier */
 type Row = [number, number, string, string, string, number, string?, number?, number?, number?, number?, number?, string?, string?];
@@ -24,8 +26,9 @@ const FACILITY: Record<string, string> = { C: 'Container', R: 'Ro-Ro', S: 'Schü
 let cache: Promise<FeatureCollection<Point>> | null = null;
 
 export function loadPorts(): Promise<FeatureCollection<Point>> {
-  cache ??= fetch(`${import.meta.env.BASE_URL}data/ports.json`)
-    .then((r) => (r.ok ? (r.json() as Promise<{ ports: Row[] }>) : Promise.reject(new Error(`HTTP ${r.status}`))))
+  const local = `${import.meta.env.BASE_URL}data/ports.json`;
+  const read = (url: string) => fetch(url).then((r) => (r.ok ? (r.json() as Promise<{ ports: Row[] }>) : Promise.reject(new Error(`HTTP ${r.status}`))));
+  cache ??= (import.meta.env.VITE_DATA_BASE ? read(`${DATA_BASE}ports.json`).catch(() => read(local)) : read(local))
     .then(({ ports }) => ({
       type: 'FeatureCollection' as const,
       features: ports.map((r): Feature<Point> => {

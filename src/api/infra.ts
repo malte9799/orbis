@@ -215,12 +215,15 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-export async function loadPowerPlants(): Promise<FeatureCollection<Point>> {
-  const res = await fetch(
-    'https://raw.githubusercontent.com/wri/global-power-plant-database/master/output_database/global_power_plant_database.csv',
-  );
-  if (!res.ok) throw new Error(`GPPD HTTP ${res.status}`);
-  const [header, ...rows] = parseCsv(await res.text());
+/** Snapshot row of a plant: [lon, lat, capacity MW, primary fuel, name, country, commissioning year (0 = unknown), owner, source URL]. */
+export type PowerRow = [number, number, number, string, string, string, number, string, string];
+
+/**
+ * Packs the WRI CSV into snapshot rows (only the columns the layers render, coordinates rounded to 4 decimals,
+ * capacity to 0.1 MW), biggest plants first. Used by the orbis-data collector (wri/powerplants.json) and the live fallback.
+ */
+export function packPowerPlants(csv: string): PowerRow[] {
+  const [header, ...rows] = parseCsv(csv);
   const col = (n: string) => header.indexOf(n);
   const iName = col('name');
   const iMw = col('capacity_mw');
@@ -231,32 +234,61 @@ export async function loadPowerPlants(): Promise<FeatureCollection<Point>> {
   const iYear = col('commissioning_year');
   const iOwner = col('owner');
   const iUrl = col('url');
-  const features: Feature<Point>[] = [];
+  if ([iName, iMw, iLat, iLon, iFuel].some((i) => i < 0)) throw new Error('GPPD: unexpected CSV header');
+  const out: PowerRow[] = [];
   for (const r of rows) {
     const lat = parseFloat(r[iLat]);
     const lon = parseFloat(r[iLon]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    const fuel = FUELS[r[iFuel]] ? r[iFuel] : 'Other';
-    const f = FUELS[fuel];
-    const mw = parseFloat(r[iMw]) || 0;
     const year = parseInt(r[iYear], 10);
-    features.push({
+    out.push([
+      Math.round(lon * 1e4) / 1e4,
+      Math.round(lat * 1e4) / 1e4,
+      Math.round((parseFloat(r[iMw]) || 0) * 10) / 10,
+      FUELS[r[iFuel]] ? r[iFuel] : 'Other',
+      r[iName] ?? '',
+      r[iCountry] ?? '',
+      Number.isFinite(year) ? year : 0,
+      r[iOwner] ?? '',
+      r[iUrl] ?? '',
+    ]);
+  }
+  // big plants first so they win label/icon collisions
+  return out.sort((a, b) => b[2] - a[2]);
+}
+
+/** Map features from snapshot rows (big plants first). */
+export function powerFeatures(rows: PowerRow[]): FeatureCollection<Point> {
+  const features: Feature<Point>[] = rows.map(([lon, lat, mw, fuel, name, country, year, owner, url]) => {
+    const f = FUELS[fuel] ?? FUELS.Other;
+    return {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [lon, lat] },
       properties: {
         cat: f.cat,
         color: f.color,
         mw,
-        title: r[iName] || f.label,
-        subtitle: [f.label, `${fmt.num(mw, mw < 10 ? 1 : 0)} MW`, r[iCountry], year ? `seit ${year}` : '', r[iOwner]].filter(Boolean).join(' · '),
-        url: r[iUrl] || 'https://datasets.wri.org/dataset/globalpowerplantdatabase',
+        title: name || f.label,
+        subtitle: [f.label, `${fmt.num(mw, mw < 10 ? 1 : 0)} MW`, country, year ? `seit ${year}` : '', owner].filter(Boolean).join(' · '),
+        url: url || 'https://datasets.wri.org/dataset/globalpowerplantdatabase',
         source: 'WRI Global Power Plant Database',
       },
-    });
-  }
-  // big plants first so they win label/icon collisions
-  features.sort((a, b) => (b.properties!.mw as number) - (a.properties!.mw as number));
+    };
+  });
   return { type: 'FeatureCollection', features };
+}
+
+export const GPPD_URL = 'https://raw.githubusercontent.com/wri/global-power-plant-database/master/output_database/global_power_plant_database.csv';
+
+async function fetchPowerRows(): Promise<PowerRow[]> {
+  const res = await fetch(GPPD_URL);
+  if (!res.ok) throw new Error(`GPPD HTTP ${res.status}`);
+  return packPowerPlants(await res.text());
+}
+
+/** Weekly snapshot (wri/powerplants.json, orbis-data), the large original CSV as fallback. */
+export async function loadPowerPlants(): Promise<FeatureCollection<Point>> {
+  return powerFeatures(await snapshotJson<PowerRow[]>('wri/powerplants.json', fetchPowerRows, 40000));
 }
 
 // ---------------------------------------------------------------------------
