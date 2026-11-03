@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cockpitView, distanceZoomFor, distanceZoomOf, focusCentre, mapZoomFor, maxDistanceZoom, placeAhead, sightToObject } from './focus';
+import { cockpitView, distanceZoomFor, distanceZoomOf, focusCentre, highestDistanceZoom, mapZoomFor, maxDistanceZoom, placeAhead, sightToObject } from './focus';
 import { frame, H, TO_CENTRE, W } from './testcamera';
 import { toUnit, type Vec3 } from './frame';
 
@@ -143,5 +143,18 @@ describe('zoom limit', () => {
     const zoom = mapZoomFor(maxDistanceZoom(GEO_M, TO_CENTRE), GEO_M, 30, 1, TO_CENTRE);
     const c = frame(ZOOM_OF(zoom, 0), 1, -40, 0, 30, 0).camera;
     expect(Math.hypot(c[0], c[1], c[2])).toBeGreaterThan(1 + GEO_M / 6371008.8);
+  });
+});
+
+describe('highestDistanceZoom', () => {
+  it('keeps the camera away from a high aircraft on the flat map too', () => {
+    // flat map (t = 0), zoom 16 allowed: the camera still stays about a third of the height from the object
+    const dz = highestDistanceZoom(16, 10000, 60, 0, TO_CENTRE);
+    expect(dz).toBeCloseTo(maxDistanceZoom(10000, TO_CENTRE), 6);
+    expect(mapZoomFor(dz, 10000, 60, 0, TO_CENTRE)).toBeLessThan(15.5);
+  });
+
+  it('is the map limit near the ground', () => {
+    expect(highestDistanceZoom(16, 0, 60, 0, TO_CENTRE)).toBeCloseTo(16, 6);
   });
 });
