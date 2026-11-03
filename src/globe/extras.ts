@@ -14,6 +14,7 @@ import { satsApi } from './layers/shared/sats';
 import { shipsApi } from './layers/shared/ships';
 import { vehiclesApi } from './layers/shared/vehicles';
 import { launchesApi } from './layers/defs/launches';
+import { incidentsApi } from './layers/defs/incidents';
 import { airApi } from './layers/shared/air';
 import { lightningApi } from './layers/defs/lightning';
 import { CLICK_HANDLERS, EXTRAS, LAYERS, type ExtraCtx, type ExtraId, type ExtraInfo } from './layers';
@@ -144,7 +145,7 @@ export class ExtraLayers {
   constructor(
     private map: MlMap,
     private stage: GeoStage,
-    private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void; openIncident?: (id: string) => void },
+    private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void; openIncident?: (id: string) => void; closeIncident?: () => void },
   ) {
     const self = this;
     this.ctx = {
@@ -181,6 +182,9 @@ export class ExtraLayers {
       },
       get openIncident() {
         return hooks.openIncident;
+      },
+      get closeIncident() {
+        return hooks.closeIncident;
       },
     };
   }
@@ -408,6 +412,11 @@ export class ExtraLayers {
   /** Simulated live track of the rocket followed in the launch panel (null: hide it). */
   setLaunchLive(data: { line: FeatureCollection; pos: FeatureCollection } | null) {
     launchesApi.setLive(this.ctx, data);
+  }
+
+  /** Rekonstruktion offen (true): der Marker wird klein, sonst groß. */
+  setIncidentSimulating(on: boolean) {
+    incidentsApi.setSimulating(this.ctx, on);
   }
 
   /** Called after the map stopped moving. */

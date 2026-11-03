@@ -21,6 +21,8 @@ export interface IncidentPanelHooks {
   map(): MlMap | null;
   /** schließt die anderen rechten Panels */
   closeOthers(): void;
+  /** die Rekonstruktion wurde geöffnet (true) bzw. geschlossen (false): der Marker der Ebene wird klein bzw. groß */
+  simulating(on: boolean): void;
   /** der Kamera-Fokus der Karte (src/globe/geo3d/focus.ts): „Folgen“ läuft darüber */
   focus(): GeoFocus | null;
   /** die 3D-Bühne der Karte (src/globe/geo3d), auf der die Rekonstruktion gezeichnet wird */
@@ -32,6 +34,9 @@ export interface IncidentPanelHooks {
 }
 
 const SPEEDS = [1, 5, 30, 120];
+/** Der Fokus leitet seinen Abstand zum Flugzeug aus dem Kartenzoom ab. Aus Zoom 16 (Bodenmaßstab) wird bei einem Flugzeug in 10 km Höhe
+ *  ein Abstand von fast null: die Seite hängt. Deshalb vor dem Folgen höchstens so weit hineingezoomt. */
+const MAX_START_ZOOM = 10;
 const pad2 = (n: number) => String(n).padStart(2, '0');
 /** "17:48:39" in UTC bzw. mit Versatz in Stunden (Florida: −5) */
 const clock = (t: number, offsetH = 0) => {
@@ -63,6 +68,8 @@ export class IncidentPanel {
   /** Wiedergabezeit als Funktion der Uhr: ab `at` (ms, performance.now) läuft sie von `t` aus mit `speed` weiter */
   private base = { t: 0, at: 0 };
   private target: GeoTarget | null = null;
+  /** Hover und Klick auf die Marken der 3D-Szene */
+  private markCleanup: (() => void) | null = null;
   private raf = 0;
   private lastUi = 0;
   private open_ = new Set<string>(['events', 'funk']);
@@ -154,6 +161,7 @@ export class IncidentPanel {
     this.lastIdx = -2;
     this.layer.setFullTrack(this.pts.map((p, i) => [p[2], p[1], ftToM(p[3] ?? sampleAt(this.pts, this.pts[i][0]).alt ?? 0)]));
     this.layer.setMarks(this.markList());
+    this.bindMarks(map);
     if (def.audio?.startUnix != null) {
       this.audio = new Audio(assetUrl(def.audio.src));
       this.audio.preload = 'auto';
@@ -161,17 +169,22 @@ export class IncidentPanel {
     }
     this.bar.hidden = false;
     this.dockOn(true);
+    this.h.simulating(true);
     this.render();
     this.apply(true);
     // die Kamera folgt über den Fokus der Karte; gekippt starten
     const focus = this.h.focus();
     if (focus) {
-      focus.start(this.target);
+      this.startFocus(focus);
       focus.setPitch(60, true);
     }
   }
 
   close() {
+    // ohne offenes Ereignis nichts zu tun (die Ebene ruft das bei jedem Anwenden, solange sie aus ist)
+    if (!this.def) return;
+    this.markCleanup?.();
+    this.markCleanup = null;
     this.setPlaying(false);
     cancelAnimationFrame(this.raf);
     this.audio?.pause();
@@ -180,6 +193,7 @@ export class IncidentPanel {
     this.root.hidden = true;
     this.bar.hidden = true;
     this.dockOn(false);
+    this.h.simulating(false);
     const focus = this.h.focus();
     if (focus?.target === this.target && this.target) focus.stop();
     this.target = null;
@@ -193,21 +207,183 @@ export class IncidentPanel {
     return this.win === 'end' ? { from: d.focus.from, to: Math.min(d.focus.to, this.to) } : { from: this.from, to: this.to };
   }
 
+  /** die Videos des Ereignisses */
+  private media(): IncidentMedia[] {
+    return this.def?.media ?? [];
+  }
+
+  /** Hover (Tooltip mit Vorschaubild) und Klick auf die Marken, die in der 3D-Szene schweben */
+  private bindMarks(map: MlMap) {
+    this.markCleanup?.();
+    const box = map.getCanvasContainer();
+    const tip = document.createElement('div');
+    tip.className = 'ic-tip';
+    tip.hidden = true;
+    box.append(tip);
+    /** das angeheftete Tooltip einer Video-Marke, in dem das Video läuft */
+    let pin: { el: HTMLDivElement; ref: NonNullable<IncidentMark['ref']> } | null = null;
+    let down: { x: number; y: number } | null = null;
+    const local = (e: MouseEvent): [number, number] => {
+      const r = box.getBoundingClientRect();
+      return [e.clientX - r.left, e.clientY - r.top];
+    };
+    // über der Marke, mittig; fehlt oben der Platz, darunter. Maße vom Canvas: der Container der Karte hat selbst keine Höhe
+    const place = (el: HTMLElement, at: [number, number]) => {
+      const canvas = map.getCanvas();
+      const [w, h] = [el.offsetWidth, el.offsetHeight];
+      const left = Math.max(4, Math.min(canvas.clientWidth - w - 4, at[0] - w / 2));
+      const above = at[1] - h - 16;
+      el.style.left = `${left}px`;
+      el.style.top = `${above >= 4 ? above : Math.min(canvas.clientHeight - h - 4, at[1] + 16)}px`;
+    };
+    const unpin = () => {
+      if (!pin) return;
+      pin.el.querySelector('video')?.pause();
+      pin.el.remove();
+      pin = null;
+    };
+    const pinMark = (mark: IncidentMark & { screen: [number, number] }) => {
+      const ref = mark.ref;
+      if (!ref || ref.kind !== 'media') return;
+      unpin();
+      const m = this.media()[ref.i];
+      if (m.t != null) this.seek(m.t);
+      // der Funk-Ton und das Video sollen sich nicht überlagern
+      this.setPlaying(false);
+      const e = m.file ? null : embedOf(m.url);
+      const body = m.file
+        ? `<video controls autoplay playsinline src="${escapeHtml(assetUrl(m.file))}"></video>`
+        : e
+          ? `<iframe src="${escapeHtml(e.src)}" style="height:${Math.min(e.height, 360)}px" title="${escapeHtml(`${m.title} (${m.platform})`)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`
+          : `<div class="ic-tip-none">${escapeHtml(m.platform)}</div>`;
+      const el = document.createElement('div');
+      el.className = 'ic-tip ic-pin';
+      el.innerHTML = `${body}<div class="ic-pin-h"><div class="ic-tip-t"><b>${escapeHtml(m.title)}</b><span>${escapeHtml(m.platform)}${m.note ? ` · ${escapeHtml(m.note)}` : ''}${m.t != null ? ` · ${clock(m.t)} UTC` : ''}</span></div><button type="button" class="ic-pin-x" aria-label="Schließen">✕</button></div>`;
+      el.querySelector('.ic-pin-x')!.addEventListener('click', unpin);
+      box.append(el);
+      pin = { el, ref };
+      tip.hidden = true;
+      place(el, mark.screen);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (pin) return;
+      const [x, y] = local(e);
+      const mark = this.layer?.markAt(x, y) ?? null;
+      box.style.cursor = mark ? 'pointer' : '';
+      if (!mark) {
+        tip.hidden = true;
+        return;
+      }
+      this.fillTip(tip, mark);
+      tip.hidden = false;
+      place(tip, mark.screen);
+    };
+    const onLeave = () => {
+      tip.hidden = true;
+      box.style.cursor = '';
+    };
+    const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    const onClick = (e: MouseEvent) => {
+      if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
+      // im angehefteten Tooltip (Player, Schließen): nicht anfassen
+      if (pin?.el.contains(e.target as Node)) return;
+      const [x, y] = local(e);
+      const mark = this.layer?.markAt(x, y);
+      if (mark?.ref?.kind === 'media') {
+        // die Karte bekommt den Klick nicht (sonst Wetter-Popup oder Fokus auf etwas dahinter)
+        e.stopPropagation();
+        e.preventDefault();
+        pinMark(mark);
+        return;
+      }
+      // woanders hingeklickt: das Video endet, der Klick geht normal weiter
+      unpin();
+      if (!mark?.ref) return;
+      e.stopPropagation();
+      e.preventDefault();
+      tip.hidden = true;
+      this.activate(mark);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') unpin();
+    };
+    // das angeheftete Tooltip bleibt an der Marke, auch wenn die Karte sich bewegt; ist sie nicht zu sehen, pausiert das Video
+    const onRender = () => {
+      if (!pin) return;
+      const at = this.layer?.screenOf(pin.ref) ?? null;
+      pin.el.style.visibility = at ? '' : 'hidden';
+      if (at) place(pin.el, at);
+      else pin.el.querySelector('video')?.pause();
+    };
+    box.addEventListener('pointermove', onMove);
+    box.addEventListener('pointerleave', onLeave);
+    box.addEventListener('pointerdown', onDown, true);
+    box.addEventListener('click', onClick, true);
+    window.addEventListener('keydown', onKey);
+    map.on('render', onRender);
+    this.markCleanup = () => {
+      unpin();
+      box.removeEventListener('pointermove', onMove);
+      box.removeEventListener('pointerleave', onLeave);
+      box.removeEventListener('pointerdown', onDown, true);
+      box.removeEventListener('click', onClick, true);
+      window.removeEventListener('keydown', onKey);
+      map.off('render', onRender);
+      box.style.cursor = '';
+      tip.remove();
+    };
+  }
+
+  /** Inhalt des Tooltips einer Marke: bei Videos das Vorschaubild, sonst Titel und Zeit */
+  private fillTip(tip: HTMLElement, mark: IncidentMark) {
+    const ref = mark.ref;
+    if (!ref || !this.def) return;
+    const key = `${ref.kind}:${ref.i}`;
+    if (tip.dataset.key === key) return;
+    tip.dataset.key = key;
+    if (ref.kind === 'media') {
+      const m = this.media()[ref.i];
+      const src = m.thumb ? assetUrl(m.thumb) : null;
+      const vid = !src && m.file ? assetUrl(m.file) : null;
+      // das erste Bild der Videodatei dient als Vorschau (#t=0.1): kein eigenes Vorschaubild nötig
+      const pic = src
+        ? `<img src="${escapeHtml(src)}" alt="" loading="lazy">`
+        : vid
+          ? `<video src="${escapeHtml(vid)}#t=0.1" muted playsinline preload="metadata"></video>`
+          : `<div class="ic-tip-none">${escapeHtml(m.platform)}</div>`;
+      tip.innerHTML = `${pic}<div class="ic-tip-t"><b>${escapeHtml(m.title)}</b><span>${escapeHtml(m.platform)}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</span>${m.t != null ? `<span>${clock(m.t)} UTC</span>` : ''}</div>`;
+    } else {
+      const e = this.def.events[ref.i];
+      tip.innerHTML = `<div class="ic-tip-t"><b>${localize(escapeHtml(e.label), true)}</b><span>${clock(e.t)} UTC</span></div>`;
+    }
+  }
+
+  /** Klick auf eine Marke: Ereignis → zur Zeit springen; Video → Abschnitt öffnen, zur Zeit springen, Player starten */
+  private activate(mark: IncidentMark) {
+    const ref = mark.ref;
+    if (!ref || !this.def) return;
+    if (ref.kind === 'event') {
+      this.seek(this.def.events[ref.i].t);
+      return;
+    }
+  }
+
   /** Ereignismarken in der Höhe der Spur zur Zeit des Ereignisses (mit eigenem Ort, z. B. der Einschlag: am Boden dort) */
   private markList(): IncidentMark[] {
     const color = { radio: 0xab47bc, impact: 0xef5350, weather: 0x42a5f5, flight: 0xffffff, info: 0xffffff } as const;
-    const ev = this.def!.events.map((e) => {
+    const ev: IncidentMark[] = this.def!.events.map((e, i) => {
       const s = sampleAt(this.pts, e.t);
       const at = e.at ?? s;
-      return { lon: at.lon, lat: at.lat, altM: e.at ? 0 : ftToM(s.alt ?? 0), color: color[e.kind] };
+      return { lon: at.lon, lat: at.lat, altM: e.at ? 0 : ftToM(s.alt ?? 0), color: color[e.kind], ref: { kind: 'event' as const, i } };
     });
-    // Videos mit Zeit und/oder Ort (von Hand gesetzt): mit Ort am Boden, sonst auf der Spur zur Zeit der Aufnahme
-    const vid = this.def!.media
-      .filter((m) => m.at || m.t != null)
-      .map((m) => {
+    // Videos mit Zeit und/oder Ort: mit Ort am Boden, sonst auf der Spur zur Zeit der Aufnahme
+    const vid: IncidentMark[] = this.media()
+      .map((m, i) => ({ m, i }))
+      .filter(({ m }) => m.at || m.t != null)
+      .map(({ m, i }) => {
         const s = sampleAt(this.pts, m.t ?? this.pts[this.pts.length - 1][0]);
         const at = m.at ?? s;
-        return { lon: at.lon, lat: at.lat, altM: m.at ? 0 : ftToM(s.alt ?? 0), color: 0x26c6da };
+        return { lon: at.lon, lat: at.lat, altM: m.at ? 0 : ftToM(s.alt ?? 0), color: 0x26c6da, ref: { kind: 'media' as const, i } };
       });
     return [...ev, ...vid];
   }
@@ -294,10 +470,17 @@ export class IncidentPanel {
     this.bar.querySelector('[data-act=follow]')?.classList.toggle('on', on);
   }
 
+  /** Karte vor dem Fokus auf einen sinnvollen Zoom bringen (siehe MAX_START_ZOOM) */
+  private startFocus(focus: GeoFocus) {
+    const map = this.h.map();
+    if (map && map.getZoom() > MAX_START_ZOOM) map.jumpTo({ zoom: MAX_START_ZOOM });
+    focus.start(this.target!);
+  }
+
   private setFollow(on: boolean) {
     const focus = this.h.focus();
     if (!focus || !this.target) return;
-    if (on) focus.start(this.target);
+    if (on) this.startFocus(focus);
     else if (focus.target === this.target) focus.stop();
   }
 
@@ -447,6 +630,7 @@ export class IncidentPanel {
       const u = safeUrl(l.url);
       return u ? `<a href="${escapeHtml(u)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.label)} ↗</a>` : escapeHtml(l.label);
     };
+    const vids = this.media();
     const mediaRow = (m: IncidentMedia, i: number) => {
       const can = !!m.file || !!embedOf(m.url);
       return `<li class="ic-media"><div class="ic-mh"><b>${escapeHtml(m.title)}</b><span>${escapeHtml(m.platform)}${m.note ? ` · ${escapeHtml(m.note)}` : ''}</span></div>
@@ -456,11 +640,12 @@ export class IncidentPanel {
           ${link({ label: 'Original', url: m.url })}
         </div><div class="ic-embed" data-i="${i}" hidden></div></li>`;
     };
-    const groups = [...new Set(d.media.map((m) => m.group ?? ''))];
-    const media = d.media.length
+    const groups = [...new Set(vids.map((m) => m.group ?? ''))];
+    const media = vids.length
       ? groups
-          .map((g) => `${g ? `<div class="ic-mg">${escapeHtml(g)}</div>` : ''}<ul class="ic-medias">${d.media.map((m, i) => ((m.group ?? '') === g ? mediaRow(m, i) : '')).join('')}</ul>`)
-          .join('') + `<div class="fp-note">Die Videos gehören den Urhebern (Quelle: „Original“). ${d.media.some((m) => !m.file && embedOf(m.url)) ? 'Eingebettete Player laden beim Abspielen vom jeweiligen Anbieter und können Cookies setzen.' : ''}</div>`
+          .map((g) => `${g ? `<div class="ic-mg">${escapeHtml(g)}</div>` : ''}<ul class="ic-medias">${vids.map((m, i) => ((m.group ?? '') === g ? mediaRow(m, i) : '')).join('')}</ul>`)
+          .join('') +
+        `<div class="fp-note">Die Videos gehören den Urhebern (Quelle: „Original“). ${vids.some((m) => !m.file && embedOf(m.url)) ? 'Eingebettete Player laden beim Abspielen vom jeweiligen Anbieter und können Cookies setzen.' : ''}</div>`
       : '<div class="fp-note">Noch keine Videos eingetragen.</div>';
     const a = d.audio;
     const cues = a?.cues?.length
@@ -498,7 +683,7 @@ export class IncidentPanel {
       .filter((e) => e.t >= w.from && e.t <= w.to)
       .map((e) => `<i class="${e.kind}" style="left:${pos(e.t)}%" title="${escapeHtml(localize(e.label))}"></i>`)
       .join('');
-    const mticks = d.media
+    const mticks = this.media()
       .filter((m) => m.t != null && m.t >= w.from && m.t <= w.to)
       .map((m) => `<i class="video" style="left:${pos(m.t!)}%" title="${escapeHtml(`${m.title} (${m.platform})`)}"></i>`)
       .join('');
@@ -562,7 +747,7 @@ export class IncidentPanel {
 
   /** Video des Hosters eingebettet zeigen bzw. wieder einklappen (lädt erst beim Klick, vorher kein Kontakt zum Anbieter) */
   private toggleEmbed(i: number, btn: HTMLElement) {
-    const m = this.def?.media[i];
+    const m = this.media()[i];
     const box = this.body.querySelector<HTMLElement>(`.ic-embed[data-i="${i}"]`);
     const e = m ? embedOf(m.url) : null;
     if (!m || !box || (!e && !m.file)) return;

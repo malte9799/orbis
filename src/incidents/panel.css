@@ -340,3 +340,85 @@
   display: block;
   margin-top: 1px;
 }
+
+/* Tooltip an den Marken (Vorschaubild und Titel) */
+.ic-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 220px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(13, 18, 38, 0.94);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.ic-tip[hidden] {
+  display: none;
+}
+.ic-tip img,
+.ic-tip video,
+.ic-tip-none {
+  display: block;
+  width: 208px;
+  height: 117px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #000;
+  margin-bottom: 5px;
+}
+.ic-tip-none {
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.06);
+}
+.ic-tip-t {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ic-tip-t span {
+  color: var(--text-2);
+}
+
+/* angeheftetes Tooltip: das Video läuft darin */
+.ic-pin {
+  max-width: 252px;
+  padding: 6px;
+  pointer-events: auto;
+  z-index: 6;
+}
+.ic-pin video,
+.ic-pin iframe {
+  display: block;
+  width: 240px;
+  max-height: 340px;
+  border: 0;
+  border-radius: 6px;
+  background: #000;
+}
+.ic-pin-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 5px;
+}
+.ic-pin-x {
+  flex: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ic-pin-x:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

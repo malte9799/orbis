@@ -66,6 +66,8 @@ export interface ExtraCtx {
   readonly openLaunch?: (l: Launch, lng: number, lat: number) => void;
   /** opens the reconstruction panel of an incident (set by the page that hosts the map) */
   readonly openIncident?: (id: string) => void;
+  /** closes the reconstruction panel (and with it a video playing in a marker) */
+  readonly closeIncident?: () => void;
   /** load once (or again after `maxAge`), then refresh every `maxAge` while the layer is on */
   loadOnce(id: ExtraId, maxAge: number, fn: () => Promise<{ count?: number; note?: string } | void>): void;
 }

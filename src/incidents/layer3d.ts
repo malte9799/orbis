@@ -30,6 +30,8 @@ export interface IncidentMark {
   lat: number;
   altM: number;
   color: number;
+  /** woher die Marke kommt: Ereignis oder Video (Index in der Liste des Ereignisses) – für Hover und Klick */
+  ref?: { kind: 'event' | 'media'; i: number };
 }
 
 export const ftToM = (ft: number) => ft * FT;
@@ -63,6 +65,10 @@ function bandColor(ft: number): { band: number; color: string } {
 const MIN_PX = 26;
 const MODEL_LENGTH_M = 18.8;
 const MARK_PX = 5;
+/** Wand: unter diesem Kartenmaßstab (m pro Pixel in der Bildmitte) ganz weg, über dem zweiten voll da (Zoom 12 ≈ 30 m/px, Zoom 10 ≈ 120 m/px) */
+const WALL_NEAR_M = 40;
+const WALL_FAR_M = 120;
+const WALL_OPACITY = 0.28;
 const FLATTEN = new THREE.Matrix4().makeScale(1, 1, 0.001);
 
 export class IncidentScene implements GeoPart {
@@ -74,7 +80,7 @@ export class IncidentScene implements GeoPart {
   private plane = new THREE.Mesh(airliner(0.5), new THREE.MeshLambertMaterial({ color: 0xff5a4a, side: THREE.DoubleSide }));
   private shadow = new THREE.Mesh(airliner(0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
   private markGeo = new THREE.SphereGeometry(1, 14, 10);
-  private marks: { data: IncidentMark; mesh: THREE.Mesh }[] = [];
+  private marks: { data: IncidentMark; mesh: THREE.Mesh; screen: [number, number] | null }[] = [];
   /** gestrichelte Gesamtspur (auch der noch nicht geflogene Teil) */
   private full: GeoLine | null = null;
   /** geflogene Spur: eine Linie je Höhenstufe */
@@ -86,7 +92,7 @@ export class IncidentScene implements GeoPart {
   constructor(private map: MlMap) {
     for (const m of [this.plane, this.shadow]) m.matrixAutoUpdate = false;
     this.object.add(this.shadow, this.plane, this.wall.object);
-    this.wall.setStyle(0.28, 0);
+    this.wall.setStyle(WALL_OPACITY, 0);
   }
 
   /** Gesamte Spur [lon, lat, m über Grund] für die gestrichelte Linie */
@@ -113,7 +119,7 @@ export class IncidentScene implements GeoPart {
       const mesh = new THREE.Mesh(this.markGeo, new THREE.MeshBasicMaterial({ color: data.color }));
       mesh.matrixAutoUpdate = false;
       this.object.add(mesh);
-      return { data, mesh };
+      return { data, mesh, screen: null };
     });
     this.map.triggerRepaint();
   }
@@ -172,6 +178,26 @@ export class IncidentScene implements GeoPart {
     return this.target && this.pose ? [this.target] : [];
   }
 
+  /** Die Marke unter einem Bildschirmpunkt (CSS px, im Abstand von höchstens `radius`); die nächste gewinnt. */
+  markAt(x: number, y: number, radius = MARK_PX + 7): (IncidentMark & { screen: [number, number] }) | null {
+    let best: (IncidentMark & { screen: [number, number] }) | null = null;
+    let bestD = radius;
+    for (const { data, screen } of this.marks) {
+      if (!screen) continue;
+      const d = Math.hypot(screen[0] - x, screen[1] - y);
+      if (d <= bestD) {
+        best = { ...data, screen };
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Bildschirmposition (CSS px) der Marke mit dieser Herkunft im zuletzt gezeichneten Bild; null: nicht zu sehen */
+  screenOf(ref: NonNullable<IncidentMark['ref']>): [number, number] | null {
+    return this.marks.find((m) => m.data.ref?.kind === ref.kind && m.data.ref.i === ref.i)?.screen ?? null;
+  }
+
   private lift(lon: number, lat: number) {
     return this.map.getTerrain() ? (this.map.queryTerrainElevation([lon, lat]) ?? 0) : 0;
   }
@@ -192,9 +218,19 @@ export class IncidentScene implements GeoPart {
       else this.drop.object.visible = false;
     }
     this.full?.update(frame, now, lift);
-    if (this.trailLen > 1) this.wall.update(frame, now, lift);
-    for (const { data: d, mesh } of this.marks) {
+    // Die Wand reicht vom Flugzeug (10 km hoch) bis zum Boden. Steht die Kamera niedrig (flache Karte, Zoom 12 und mehr), überspannt sie
+    // den ganzen Bildschirm, und ihre 500 Teilstücke übereinander blenden die Grafikkarte tot (die Seite hängt). Deshalb nach dem
+    // Maßstab der Karte ausblenden – nicht nach dem Abstand zum Flugzeug, der bei hoch fliegenden Flugzeugen immer groß ist.
+    const share = Math.max(0, Math.min(1, (frame.centreMetresPerPixel - WALL_NEAR_M) / (WALL_FAR_M - WALL_NEAR_M)));
+    this.wall.object.visible = this.trailLen > 1 && share > 0;
+    if (this.wall.object.visible) {
+      this.wall.setStyle(WALL_OPACITY * share, 0);
+      this.wall.update(frame, now, lift);
+    }
+    for (const m of this.marks) {
+      const { data: d, mesh } = m;
       mesh.visible = !frame.occluded(d.lon, d.lat, d.altM + lift);
+      m.screen = mesh.visible ? frame.toScreen(d.lon, d.lat, d.altM + lift) : null;
       frame.place(mesh.matrix, d.lon, d.lat, d.altM + lift, 0, MARK_PX * frame.metresPerPixel(d.lon, d.lat, d.altM + lift));
     }
     return false;
