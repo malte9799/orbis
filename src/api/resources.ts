@@ -1,5 +1,6 @@
 import type { Feature, FeatureCollection, LineString, Point } from 'geojson';
 import { fetchJson } from '../util';
+import { snapshotJson } from './data';
 import { overpass } from './overpass';
 import { snapshotOrNull } from './osmtiles';
 
@@ -92,6 +93,52 @@ const WD_CLASSES = [
 
 const WD_CACHE = 'wg.resources.wd.v1';
 
+export const WD_QUERY = `SELECT ?item ?itemLabel ?coord ?classLabel (GROUP_CONCAT(DISTINCT ?prodLabel; separator=", ") AS ?products) WHERE {
+    VALUES ?cl { ${WD_CLASSES.map((c) => `"${c}"@en`).join(' ')} }
+    ?class rdfs:label ?cl .
+    ?item wdt:P31 ?class ; wdt:P625 ?coord .
+    OPTIONAL { ?item wdt:P1056 ?prod . ?prod rdfs:label ?prodLabel . FILTER(LANG(?prodLabel) = "en") }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "de,en". ?item rdfs:label ?itemLabel . ?class rdfs:label ?classLabel . }
+  } GROUP BY ?item ?itemLabel ?coord ?classLabel LIMIT 40000`;
+
+export const WD_SPARQL_URL = `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(WD_QUERY)}`;
+
+/** Snapshot row: [lon, lat, Wikidata Q-id, label, class label, products]. */
+export type WdRow = [number, number, string, string, string, string];
+
+/** Packs the SPARQL answer into snapshot rows (deduplicated by item, coordinates rounded to 4 decimals). */
+export function packWikidata(json: { results: { bindings: Partial<Record<string, { value: string }>>[] } }): WdRow[] {
+  const seen = new Set<string>();
+  const rows: WdRow[] = [];
+  for (const b of json.results?.bindings ?? []) {
+    const id = b.item?.value.split('/').pop();
+    if (!id || seen.has(id)) continue;
+    const m = /Point\(([-\d.eE]+) ([-\d.eE]+)\)/.exec(b.coord?.value ?? '');
+    if (!m) continue;
+    seen.add(id);
+    rows.push([Math.round(Number(m[1]) * 1e4) / 1e4, Math.round(Number(m[2]) * 1e4) / 1e4, id, b.itemLabel?.value ?? id, b.classLabel?.value ?? '', b.products?.value ?? '']);
+  }
+  return rows;
+}
+
+export function wikidataFeatures(rows: WdRow[]): FeatureCollection<Point> {
+  const features: Feature<Point>[] = rows.map(([lon, lat, id, title, cls, products]) =>
+    point(lon, lat, classify(`${products} ${cls}`), {
+      title,
+      subtitle: [cls, products].filter(Boolean).join(' · '),
+      url: `https://www.wikidata.org/wiki/${id}`,
+      source: 'Wikidata',
+      lvl: 0,
+    }),
+  );
+  return { type: 'FeatureCollection', features };
+}
+
+async function fetchWikidataRows(): Promise<WdRow[]> {
+  return packWikidata(await fetchJson(WD_SPARQL_URL, { headers: { Accept: 'application/sparql-results+json' } }, 60000));
+}
+
+/** Daily snapshot (wikidata/resources.json, orbis-data), the live SPARQL query as fallback. */
 export async function loadWikidataResources(): Promise<FeatureCollection<Point>> {
   try {
     const c = JSON.parse(localStorage.getItem(WD_CACHE) ?? 'null') as { at: number; fc: FeatureCollection<Point> } | null;
@@ -99,40 +146,7 @@ export async function loadWikidataResources(): Promise<FeatureCollection<Point>>
   } catch {
     /* ignore */
   }
-  const query = `SELECT ?item ?itemLabel ?coord ?classLabel (GROUP_CONCAT(DISTINCT ?prodLabel; separator=", ") AS ?products) WHERE {
-    VALUES ?cl { ${WD_CLASSES.map((c) => `"${c}"@en`).join(' ')} }
-    ?class rdfs:label ?cl .
-    ?item wdt:P31 ?class ; wdt:P625 ?coord .
-    OPTIONAL { ?item wdt:P1056 ?prod . ?prod rdfs:label ?prodLabel . FILTER(LANG(?prodLabel) = "en") }
-    SERVICE wikibase:label { bd:serviceParam wikibase:language "de,en". ?item rdfs:label ?itemLabel . ?class rdfs:label ?classLabel . }
-  } GROUP BY ?item ?itemLabel ?coord ?classLabel LIMIT 40000`;
-  const json = await fetchJson<{ results: { bindings: Record<string, { value: string }>[] } }>(
-    `https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(query)}`,
-    { headers: { Accept: 'application/sparql-results+json' } },
-    60000,
-  );
-  const seen = new Set<string>();
-  const features: Feature<Point>[] = [];
-  for (const b of json.results.bindings) {
-    const id = b.item.value.split('/').pop()!;
-    if (seen.has(id)) continue;
-    const m = /Point\(([-\d.eE]+) ([-\d.eE]+)\)/.exec(b.coord.value);
-    if (!m) continue;
-    seen.add(id);
-    const products = b.products?.value ?? '';
-    const cls = b.classLabel?.value ?? '';
-    const cat = classify(`${products} ${cls}`);
-    features.push(
-      point(Number(m[1]), Number(m[2]), cat, {
-        title: b.itemLabel?.value ?? id,
-        subtitle: [cls, products].filter(Boolean).join(' · '),
-        url: `https://www.wikidata.org/wiki/${id}`,
-        source: 'Wikidata',
-        lvl: 0,
-      }),
-    );
-  }
-  const fc: FeatureCollection<Point> = { type: 'FeatureCollection', features };
+  const fc = wikidataFeatures(await snapshotJson<WdRow[]>('wikidata/resources.json', fetchWikidataRows, 40000));
   try {
     localStorage.setItem(WD_CACHE, JSON.stringify({ at: Date.now(), fc }));
   } catch {
