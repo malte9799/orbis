@@ -112,6 +112,39 @@ jobs:
           VITE_PUSH_URL: ${{ vars.PUSH_URL }}
           # optional Mapillary client token for the street game (public by nature, it ends up in the bundle) – same place, Variables
           VITE_MAPILLARY_TOKEN: ${{ vars.MAPILLARY_TOKEN }}
+          # optional own hosts (empty = built-in defaults, see README "Eigene Hosts"): snapshot bases, OSM tiles, weather fields, big assets
+          VITE_DATA_BASE: ${{ vars.DATA_BASE }}
+          VITE_LIVE_BASE: ${{ vars.LIVE_BASE }}
+          VITE_OSM_BASE: ${{ vars.OSM_BASE }}
+          VITE_WETTER_BASE: ${{ vars.WETTER_BASE }}
+          VITE_ASSETS_BASE: ${{ vars.ASSETS_BASE }}
+      # Big static assets (models/, textures/ incl. the Moon textures and iss-detail.glb from above, data/airports|incidents|games)
+      # live in an R2 bucket instead of gh-pages (1 GB limit). Only active with the repository variable ASSETS_BUCKET:
+      # main uploads them, every branch (previews included) ships a dist/ without them and uses the ones from main.
+      # TODO: content-hashed paths (immutable caching) – for now plain paths with a one-day cache.
+      - name: Upload assets to R2
+        if: github.ref == 'refs/heads/main' && vars.ASSETS_BUCKET != ''
+        env:
+          R2_BUCKET: ${{ vars.ASSETS_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          # R2 does not understand the new checksum headers of the AWS CLI
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          AWS_DEFAULT_REGION: auto
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
+            echo "::warning::R2 nicht konfiguriert – Assets-Upload übersprungen"; exit 0
+          fi
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          for d in models textures data/airports data/incidents data/games; do
+            aws s3 sync "public/$d" "s3://$R2_BUCKET/$d" --endpoint-url "$EP" \
+              --cache-control "public, max-age=86400" --only-show-errors
+          done
+      - name: Remove assets from dist
+        if: vars.ASSETS_BUCKET != '' && vars.ASSETS_BASE != ''
+        run: rm -rf dist/models dist/textures dist/data/airports dist/data/incidents dist/data/games
       # Preview-Tab-Titel „Orbis – #prN <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten
       # (Index-Preview behält den Standardtitel). Ohne PR zum Branch → Branch-Name als Fallback.
       - name: 'Preview-Titel: #pr + Titel'
@@ -134,6 +167,29 @@ jobs:
         run: bash scripts/pr-status.sh "Veröffentlichen"
       - name: Publish to gh-pages
         run: bash scripts/gh-pages.sh publish "${{ steps.n.outputs.dir }}" dist
+      # Cloudflare Workers Static Assets (wrangler.jsonc, Worker `orbis-site`): main -> https://maltee.dev/orbis/,
+      # every other branch -> preview URL https://<alias>-orbis-site.<subdomain>.workers.dev/orbis/ (see README "Hosting maltee.dev/orbis").
+      # Runs AFTER "Remove assets from dist" (files > 25 MiB must come from R2). Skipped without the secret CLOUDFLARE_API_TOKEN.
+      # A failure here must not block GitHub Pages, hence continue-on-error (the error shows up as annotation).
+      - name: Cloudflare (maltee.dev/orbis)
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID nicht gesetzt – Cloudflare-Deploy übersprungen"; exit 0
+          fi
+          bash scripts/cf-stage.sh dist dist-cf
+          if [ "$BRANCH" = "main" ]; then
+            pnpm exec wrangler deploy
+            echo "Cloudflare: https://maltee.dev/orbis/" >> "$GITHUB_STEP_SUMMARY"
+          else
+            # DNS label: lowercase [a-z0-9-], max 63 chars incl. "-orbis-site" (11) -> alias <= 52, no leading/trailing "-"
+            alias=$(bash scripts/gh-pages.sh slug "$BRANCH" | tr 'A-Z' 'a-z' | sed 's#[^a-z0-9]#-#g; s#--*#-#g; s#^-##' | cut -c1-52 | sed 's#-$##')
+            pnpm exec wrangler versions upload --preview-alias "$alias" --message "${SHA:0:7} $BRANCH"
+            echo "Cloudflare-Vorschau: https://$alias-orbis-site.malte9799.workers.dev/orbis/" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - name: 'Status: Online prüfen'
         if: steps.n.outputs.dir != '.'
         run: bash scripts/pr-status.sh "Online prüfen"

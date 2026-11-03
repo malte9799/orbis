@@ -17,11 +17,26 @@ function dataBase(): string {
 
 export const DATA_BASE = dataBase();
 
+function withSlash(u: string): string {
+  return u.endsWith('/') ? u : u + '/';
+}
+
+// Schnell wechselnde Snapshots (Minuten-Takt) können von einem eigenen Host kommen (VITE_LIVE_BASE); ohne Angabe
+// liegen sie wie bisher in DATA_BASE.
+export const LIVE_BASE = import.meta.env?.VITE_LIVE_BASE ? withSlash(String(import.meta.env.VITE_LIVE_BASE)) : DATA_BASE;
+
+// OSM-Kacheln (Kamera-Dichte, Blitzer …): VITE_OSM_BASE, sonst der `data-osm`-Branch neben `data`.
+export const OSM_BASE = import.meta.env?.VITE_OSM_BASE
+  ? withSlash(String(import.meta.env.VITE_OSM_BASE))
+  : DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+
+const LIVE_PATHS = /^(tsunami\/|safecast\.json$|bfs-odl\.json$|eurdep\.json$|firms\/world\.json$|demos\.json$)/;
+
 async function get(path: string, timeoutMs: number): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(DATA_BASE + path, { signal: ctrl.signal });
+    const res = await fetch((LIVE_PATHS.test(path) ? LIVE_BASE : DATA_BASE) + path, { signal: ctrl.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status} – ${path}`);
     return res;
   } finally {

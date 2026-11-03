@@ -13,6 +13,7 @@ import {
 } from './ephemeris';
 import { getMarsTracks, heliAt, roverAt } from './mars';
 import { trajectoryAt } from './trajectories';
+import { assetUrl } from '../assets';
 
 export type BodyKind = 'star' | 'planet' | 'dwarf' | 'moon' | 'asteroid' | 'craft';
 
@@ -48,7 +49,7 @@ export interface Body {
 
 export type PositionContext = (id: string) => Vec3;
 
-const tex = (f: string) => `./textures/${f}`;
+const tex = (f: string) => assetUrl(`textures/${f}`);
 const planet = (id: string) => (ms: number) => planetPosition(id, ms);
 
 const moon = (o: MoonOrbit) => ({
@@ -728,10 +729,10 @@ export function setSatLookup(fn: typeof satLookup) {
 
 /** detailRotY: rotation (rad, about the model's vertical axis) that aligns the detailed model with the small one */
 const m = (file: string, sizeM: number, note?: string, detail?: string, detailRotY?: number) => ({
-  url: `./models/${file}`,
+  url: assetUrl(`models/${file}`),
   sizeM,
   note,
-  detailUrl: detail ? `./models/${detail}` : undefined,
+  detailUrl: detail ? assetUrl(`models/${detail}`) : undefined,
   detailRotY,
 });
 

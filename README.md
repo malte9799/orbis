@@ -371,6 +371,52 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
 
 </details>
 
+<details>
+<summary><b>🌐 Eigene Hosts für Daten, OSM-Kacheln, Wetter und Assets (optional)</b></summary>
+
+<br>
+
+Alle Basisadressen sind per Build-Variable umschaltbar (`deploy.yml` reicht die Repository-Variablen durch, leer = bisheriges
+Verhalten). Lokal gehören sie in `.env.local`.
+
+| Repository-Variable | Build-Variable | Wirkung (Standard, wenn leer) |
+|---|---|---|
+| `DATA_BASE` | `VITE_DATA_BASE` | Basis der Daten-Snapshots (`raw.githubusercontent.com/…/data/`) |
+| `LIVE_BASE` | `VITE_LIVE_BASE` | schnell wechselnde Snapshots (Tsunami, Safecast, BfS-ODL, EURDEP, FIRMS, Demos); Standard: wie `DATA_BASE` |
+| `OSM_BASE` | `VITE_OSM_BASE` | OSM-Kacheln (CCTV-Dichte, Blitzer, ALPR …); Standard: Branch `data-osm` |
+| `WETTER_BASE` | `VITE_WETTER_BASE` | ICON-Wetterfelder (`/v1/latest.json`, `*.owx`); Standard: der bisherige Worker |
+| `ASSETS_BASE` | `VITE_ASSETS_BASE` | `models/`, `textures/`, `data/airports`, `data/incidents`, `data/games`; Standard: Dateien aus `public/` |
+
+Die Wetter-Action liest die Worker-Adresse aus `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`, wird als Fallback noch gelesen).
+
+**Assets auslagern:** Ist die Repository-Variable `ASSETS_BUCKET` gesetzt (plus die Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`), lädt der Deploy auf `main` diese Ordner nach R2 und entfernt sie aus `dist/`, bevor `gh-pages` geschrieben
+wird – auch bei Vorschauen, die dann die Assets von `main` nutzen. Der Bucket braucht eine CORS-Regel (`GET`/`HEAD`) für die Pages-Domain.
+Ohne `ASSETS_BUCKET` bleibt alles wie bisher in `gh-pages`.
+
+</details>
+
+<details>
+<summary><b>☁️ Hosting maltee.dev/orbis (Cloudflare, parallel zu GitHub Pages)</b></summary>
+
+<br>
+
+Die App läuft zusätzlich als assets-only Worker `orbis-site` (`wrangler.jsonc`) unter **https://maltee.dev/orbis/** (Route
+`maltee.dev/orbis*`); GitHub Pages bleibt unverändert, es gibt keine Weiterleitung. Statische Requests auf Workers Assets sind
+kostenlos; Limits: 25 MiB pro Datei, 20.000 Dateien pro Version – größere Dateien (aktuell `models/europaclipper.glb`) müssen über
+`ASSETS_BUCKET`/`ASSETS_BASE` nach R2 (siehe oben).
+
+- **Deploy:** `deploy.yml` führt nach dem Build und nach „Remove assets from dist“ `scripts/cf-stage.sh` aus (`dist/` → `dist-cf/orbis/`,
+  bricht bei Dateien > 25 MiB ab). Auf `main` folgt `wrangler deploy`, auf jedem anderen Branch `wrangler versions upload --preview-alias <branch>`.
+- **Vorschauen:** `https://<branch>-orbis-site.malte9799.workers.dev/orbis/` (Link steht in der Job-Zusammenfassung; Alias = Branch-Name, klein, max. 52 Zeichen).
+- **Secrets** in `malte9799/orbis`: `CLOUDFLARE_API_TOKEN` (Berechtigung „Workers Scripts: Edit“, Zone „Workers Routes: Edit“ für maltee.dev) und
+  `CLOUDFLARE_ACCOUNT_ID`. Fehlen sie, wird der Cloudflare-Schritt mit Warnung übersprungen; ein Fehler dort blockiert GitHub Pages nicht.
+- **Lokal:** `pnpm build && bash scripts/cf-stage.sh && pnpm exec wrangler dev` (dann `http://localhost:8787/orbis/`).
+- **CORS:** `ALLOWED_ORIGINS` (Dashboard-Variable) von Proxy-, Camdir- und Push-Worker muss `https://maltee.dev` enthalten (exakte Origin, kommagetrennt);
+  für Vorschauen zusätzlich die jeweilige `https://<alias>-orbis-site.malte9799.workers.dev`-Origin (kein Wildcard-Matching).
+
+</details>
+
 ## ℹ️ Hinweise
 
 - **Raster:** Die Vorhersage-Ebenen basieren auf einem globalen Raster von 15° × 10° (408 Punkte, alle 3 Stunden für 3 Tage).

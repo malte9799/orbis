@@ -1,6 +1,7 @@
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { overpass } from './overpass';
 import { LIGHT_COLOURS, LIGHT_TYPES, parseAirport, type AirportLayout, type Bounds, type OsmElement } from './airport-parse';
+import { assetUrl } from '../assets';
 
 export type { AirportKind, AirportLayout, Bounds } from './airport-parse';
 
@@ -38,7 +39,7 @@ export interface StaticAirport {
   iata?: string;
 }
 
-const STATIC = `${import.meta.env.BASE_URL}data/airports/`;
+const STATIC = assetUrl('data/airports/');
 let staticIndex: { at: number; list: Promise<StaticAirport[]> } | null = null;
 
 /** The airports that ship with a layout; an unreachable index is retried after a minute. */

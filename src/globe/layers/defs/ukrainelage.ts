@@ -6,6 +6,7 @@ import { tile, category, graph } from '../../sidepanel';
 import type { DetailContent } from '../../detailpanel';
 import type { GlyphId } from '../../icons';
 import { oblastKey, ukraineOblast, type UkraineOblastData, type UkraineRegion } from '../../../api/ukraine';
+import { assetUrl } from '../../../assets';
 
 // Lage in der Ukraine nach Oblast: Vorfälle mit Explosivwaffen gegen Zivile (Insecurity Insight,
 // CC BY-SA), Luftalarm-Stunden (offizielle Alarme, MIT) – die Fläche färbt sich nach der Zahl der
@@ -105,7 +106,7 @@ export default defineExtra({
     ctx.loadOnce('ukrainelage', 12 * 3600000, async () => {
       const [data, geo] = await Promise.all([
         ukraineOblast(),
-        fetch(`${import.meta.env?.BASE_URL ?? '/'}data/games/admin1/UA.json`).then((r) => {
+        fetch(assetUrl('data/games/admin1/UA.json')).then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status} – UA.json`);
           return r.json() as Promise<FeatureCollection<Geometry, { en: string; type: string }>>;
         }),

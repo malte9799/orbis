@@ -1,6 +1,6 @@
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
-import { proxyBase } from './proxy';
+import { proxyBase, viaProxy } from './proxy';
 import { fetchJson } from '../util';
 
 // Live transport and spaceflight: rocket launches, airports, ships (AIS) and trains.
@@ -125,8 +125,8 @@ export async function loadAirportFlights(icao: string): Promise<{ departures: Ai
   type F = { callsign: string | null; estDepartureAirport: string | null; estArrivalAirport: string | null; firstSeen: number; lastSeen: number };
   const base = 'https://opensky-network.org/api/flights';
   const [dep, arr] = await Promise.allSettled([
-    fetchJson<F[]>(`${base}/departure?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`, undefined, 20000),
-    fetchJson<F[]>(`${base}/arrival?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`, undefined, 20000),
+    fetchJson<F[]>(viaProxy(`${base}/departure?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`), undefined, 20000),
+    fetchJson<F[]>(viaProxy(`${base}/arrival?airport=${encodeURIComponent(icao)}&begin=${begin}&end=${end}`), undefined, 20000),
   ]);
   if (dep.status === 'rejected' && arr.status === 'rejected') throw dep.reason;
   const map = (list: F[], other: 'estArrivalAirport' | 'estDepartureAirport', t: 'firstSeen' | 'lastSeen') =>

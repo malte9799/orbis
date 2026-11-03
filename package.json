@@ -26,12 +26,14 @@
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
-    "vitest": "^2.1.9"
+    "vitest": "^2.1.9",
+    "wrangler": "4.157.0"
   },
   "packageManager": "pnpm@10.29.1",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "esbuild"
+      "esbuild",
+      "workerd"
     ]
   }
 }

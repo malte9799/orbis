@@ -56,17 +56,34 @@ const xrayClass = (flux: number) => {
   return `${c}${(flux / base).toFixed(1)}`;
 };
 
+const SWPC = 'https://services.swpc.noaa.gov';
+const num = (v: unknown) => (v == null || v === '' ? NaN : Number(v));
+
+/** Newest RTSW row of the active spacecraft (rows are unordered across sources); falls back to the newest row overall. */
+export function pickRtsw<T extends object>(rows: unknown, field: keyof T): (T & { time_tag?: string; active?: boolean }) | null {
+  if (!Array.isArray(rows)) return null;
+  const ok = (rows as (T & { time_tag?: string; active?: boolean })[]).filter((r) => r && Number.isFinite(num((r as Record<keyof T, unknown>)[field])) && num((r as Record<keyof T, unknown>)[field]) > -9990);
+  const pool = ok.some((r) => r.active) ? ok.filter((r) => r.active) : ok;
+  return pool.reduce<(T & { time_tag?: string; active?: boolean }) | null>((best, r) => (!best || String(r.time_tag) > String(best.time_tag) ? r : best), null);
+}
+
+// The tiny summary endpoints (~60 B, integer-rounded) are preferred; the 1-minute RTSW feeds (MBs) only serve as fallback.
 export async function loadSpaceWeather(): Promise<SpaceWeather> {
-  const last = (rows: unknown) => (Array.isArray(rows) && rows.length > 1 ? (rows[rows.length - 1] as unknown[]) : null);
-  const [plasma, mag, xr] = await Promise.allSettled([
-    fetchJson<unknown>('https://services.swpc.noaa.gov/products/solar-wind/plasma-2-hour.json'),
-    fetchJson<unknown>('https://services.swpc.noaa.gov/products/solar-wind/mag-2-hour.json'),
-    fetchJson<{ flux?: number; energy?: string }[]>('https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json'),
+  const [spd, mg, xr] = await Promise.allSettled([
+    fetchJson<{ proton_speed?: number }[]>(`${SWPC}/products/summary/solar-wind-speed.json`),
+    fetchJson<{ bz_gsm?: number }[]>(`${SWPC}/products/summary/solar-wind-mag-field.json`),
+    fetchJson<{ flux?: number; energy?: string }[]>(`${SWPC}/json/goes/primary/xrays-1-day.json`),
   ]);
-  const pRow = plasma.status === 'fulfilled' ? last(plasma.value) : null;
-  const mRow = mag.status === 'fulfilled' ? last(mag.value) : null;
-  const speed = pRow ? parseFloat(String(pRow[2])) : NaN;
-  const bz = mRow ? parseFloat(String(mRow[3])) : NaN;
+  let speed = spd.status === 'fulfilled' && Array.isArray(spd.value) ? num(spd.value[0]?.proton_speed) : NaN;
+  let bz = mg.status === 'fulfilled' && Array.isArray(mg.value) ? num(mg.value[0]?.bz_gsm) : NaN;
+  if (!Number.isFinite(speed)) {
+    const w = await fetchJson<unknown>(`${SWPC}/json/rtsw/rtsw_wind_1m.json`, undefined, 25000).catch(() => null);
+    speed = num(pickRtsw<{ proton_speed?: number }>(w, 'proton_speed')?.proton_speed);
+  }
+  if (!Number.isFinite(bz)) {
+    const m = await fetchJson<unknown>(`${SWPC}/json/rtsw/rtsw_mag_1m.json`, undefined, 25000).catch(() => null);
+    bz = num(pickRtsw<{ bz_gsm?: number }>(m, 'bz_gsm')?.bz_gsm);
+  }
   let xray: string | null = null;
   if (xr.status === 'fulfilled') {
     const long = xr.value.filter((x) => x.energy === '0.1-0.8nm' && Number(x.flux) > 0);

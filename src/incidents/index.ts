@@ -1,4 +1,5 @@
 import type { IncidentDef, TrackPoint } from './types';
+import { assetUrl } from '../assets';
 
 export type { IncidentDef, IncidentEvent, IncidentMedia, Sample, TrackPoint } from './types';
 export { sampleAt, indexAt } from './track';
@@ -16,8 +17,8 @@ export const INCIDENTS: IncidentDef[] = Object.entries(modules)
 
 export const incidentById = (id: string) => INCIDENTS.find((d) => d.id === id);
 
-/** URL einer Datei unter public/ */
-export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+/** URL einer Datei unter public/ (Incident-Medien: data/incidents/…) */
+export { assetUrl };
 
 const cache = new Map<string, Promise<TrackPoint[]>>();
 

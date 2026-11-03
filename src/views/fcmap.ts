@@ -1,6 +1,6 @@
 import { Map as MlMap, Marker, type GeoJSONSource, type LayerSpecification, type RasterTileSource } from 'maplibre-gl';
 import { emptyModelGrid, getRegionalModel, isLimitError, ModelSampler, nearestTimeIndex, regionBounds, type ModelGrid, type ModelVar } from '../api/model';
-import { WxLayer, wxEnabled } from '../api/wxmodel';
+import { WxLayer, wxEnabled } from '../api/wettermodell';
 import type { Forecast } from '../api/openmeteo';
 import { FIELDS, PRECIP_STOPS, PRECIP_TICKS, registerFieldProtocol, setActiveSampler, SNOWFALL_STOPS, WindParticles, type FieldId } from '../globe/overlay';
 import { regionsGeoJSON } from '../globe/regions';
