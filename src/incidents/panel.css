@@ -1,0 +1,342 @@
+/* Panel der Ereignis-Rekonstruktion (aside.fp.incident) – gleiche Glasoptik wie die anderen Panels */
+
+.incident .fp-body {
+  display: block;
+}
+.ic-chart {
+  display: block;
+  width: calc(100% - 8px);
+  height: 64px;
+  margin: 8px 4px 0;
+}
+.ic-chart .area {
+  fill: rgba(255, 202, 40, 0.18);
+  stroke: #ffca28;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+.ic-chart .cursor {
+  stroke: #fff;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ic-chart .dot {
+  fill: #ef5350;
+  stroke: #fff;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.ic-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ic-events button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'title time' 'desc desc';
+  column-gap: 8px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.ic-events button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+/* das Ereignis, das laut Zeitstrahl gerade gilt */
+.ic-events button.now {
+  background: rgba(239, 83, 80, 0.16);
+  border-left-color: #ef5350;
+}
+.ic-events b {
+  grid-area: title;
+  font-size: 13px;
+}
+.ic-events time {
+  grid-area: time;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ic-events span {
+  grid-area: desc;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ic-events .impact b {
+  color: #ef9a9a;
+}
+.incident audio {
+  width: 100%;
+  margin-top: 6px;
+}
+.ic-notes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ic-notes li {
+  margin: 3px 0;
+}
+.ic-cues {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.ic-cues button {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ic-cues button:hover,
+.ic-cues button.now {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ic-cues time {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--text-2);
+}
+
+/* ---------- Wiedergabeleiste unten (nutzt die Klassen der Radar-/Vorhersage-Zeitleiste) ---------- */
+.timeline.tl-inc[hidden] {
+  display: none;
+}
+/* die Rekonstruktion ersetzt Zeitleiste und Legende im Dock, solange sie offen ist */
+.globe-bottom.inc-on > .timeline:not(.tl-inc),
+.globe-bottom.inc-on > .legend {
+  display: none !important;
+}
+/* das rechte Panel endet über Leiste und Untertitel */
+.fp.incident {
+  bottom: calc(var(--hud-b, 16px) + 156px);
+}
+.globe-view:not([data-layout='desktop']) .fp.incident {
+  bottom: calc(var(--hud-b, 16px) + 136px);
+}
+.globe-view[data-layout='desktop'] .timeline.tl-inc {
+  width: min(760px, calc(100vw - 24px - var(--hud-shift) * 2 - 120px));
+  min-width: 360px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: 'play head ctl' 'track track track';
+}
+.globe-view[data-layout='desktop'] .timeline.tl-inc .ti-ctl {
+  grid-area: ctl;
+}
+.ti-ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.ti-ctl select {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: inherit;
+  padding: 3px 4px;
+  font-size: 0.8rem;
+}
+.ti-chip {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.75rem;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ti-chip.on {
+  background: rgba(239, 83, 80, 0.32);
+  border-color: #ef5350;
+}
+.timeline.tl-inc .btn.icon-btn.ti-b {
+  width: 30px;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.timeline.tl-inc .btn.icon-btn.ti-b.on {
+  background: rgba(239, 83, 80, 0.45);
+}
+.timeline.tl-inc .btn.icon-btn.ti-b svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+}
+/* Ereignismarken unter dem Regler */
+.tl-inc .tl-days i.radio {
+  background: #ab47bc;
+  height: 9px;
+  width: 2px;
+}
+.tl-inc .tl-days i.impact {
+  background: #ef5350;
+  height: 11px;
+  width: 2px;
+}
+.tl-inc .tl-days span {
+  font-size: 0.68rem;
+}
+/* schmale Ansichten: nur das Wichtigste neben dem Regler */
+.globe-view:not([data-layout='desktop']) .ti-chip {
+  display: none;
+}
+
+/* Untertitel (Transkript) über der Leiste */
+.timeline.tl-inc {
+  position: relative;
+}
+.globe-view[data-layout='desktop'] .timeline.tl-inc {
+  position: absolute;
+}
+.ti-cap {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(640px, 100%);
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: rgba(10, 12, 18, 0.82);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
+}
+.ti-cap[hidden] {
+  display: none;
+}
+
+/* Tooltips der Leiste (CSS wie in der HUD-Leiste: native title-Tooltips kommen zu spät) */
+.tl-inc [data-tip] {
+  position: relative;
+}
+.tl-inc [data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #10162e;
+  color: var(--text);
+  font: 500 12px/1.35 ui-sans-serif, system-ui, sans-serif;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 40;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+}
+.tl-inc .ti-b:last-child[data-tip]:hover::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* Videos & Berichte */
+.ic-mg {
+  margin: 10px 0 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.ic-medias {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ic-media {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ic-mh {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.ic-mh span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ic-mb {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.ic-mb button {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ic-mb button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.ic-embed {
+  margin-top: 6px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+}
+.ic-embed video,
+.ic-embed iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+}
+.ic-embed video {
+  max-height: 560px;
+}
+.tl-inc .tl-days i.video {
+  background: #26c6da;
+  height: 9px;
+  width: 2px;
+}
+.ic-nolink {
+  color: var(--text-2);
+}
+
+/* Fuß in Klammern neben der gewählten Einheit: klein */
+.ic-ft {
+  font-size: 0.78em;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+/* in den Messwert-Kacheln steht die Fuß-Angabe in einer eigenen Zeile */
+.sp-tile b .ic-ft {
+  display: block;
+  margin-top: 1px;
+}

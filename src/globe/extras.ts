@@ -144,7 +144,7 @@ export class ExtraLayers {
   constructor(
     private map: MlMap,
     private stage: GeoStage,
-    private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void },
+    private hooks: { changed(): void; toast(msg: string): void; openLaunch?: (l: Launch, lng: number, lat: number) => void; openIncident?: (id: string) => void },
   ) {
     const self = this;
     this.ctx = {
@@ -178,6 +178,9 @@ export class ExtraLayers {
       },
       get openLaunch() {
         return hooks.openLaunch;
+      },
+      get openIncident() {
+        return hooks.openIncident;
       },
     };
   }

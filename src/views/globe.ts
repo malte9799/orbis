@@ -54,6 +54,8 @@ import { VehiclePanel } from '../globe/vehiclepanel';
 import { SatPanel } from '../globe/satpanel';
 import { CamPanel } from '../globe/campanel';
 import { LaunchPanel } from '../launch/panel';
+import { IncidentPanel } from '../incidents/panel';
+import { incidentById } from '../incidents';
 import { DetailPanel } from '../globe/detailpanel';
 import { detailFromLaunch, getLaunchDetails, type LaunchDetail } from '../launch/tracker';
 import { labelPaint } from '../globe/vector';
@@ -227,6 +229,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   let vehiclePanel: VehiclePanel | null = null;
   let satPanel: SatPanel | null = null;
   let launchPanel: LaunchPanel | null = null;
+  let incidentPanel: IncidentPanel | null = null;
   let camPanel: CamPanel | null = null;
   let detailPanel: DetailPanel | null = null;
 
@@ -1309,6 +1312,12 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     launchPanel?.open(d);
   }
 
+  /** Opens the reconstruction panel of an incident (popup button). */
+  function openIncident(id: string) {
+    const def = incidentById(id);
+    if (def) void incidentPanel?.open(def);
+  }
+
   function openPopup(lngLat: { lng: number; lat: number }, html: string) {
     popup?.remove();
     const node = document.createElement('div');
@@ -1457,7 +1466,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       // NASA layer date = yesterday (today's swaths are still incomplete)
       (map!.getSource('nasa') as RasterTileSource).setTiles([gibsTrueColor(gibsDate(1))]);
       (map!.getSource('hotspots') as RasterTileSource).setTiles([gibsFires(fireDate)]);
-      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat) });
+      extras = new ExtraLayers(map!, geoStage, { changed: updateBadges, toast: (m) => toast(m, 'error'), openLaunch: (l, lng, lat) => void openLaunchTracker(l, lng, lat), openIncident: (id) => openIncident(id) });
       extras.init();
       routing = createRouting(
         map!,
@@ -1497,6 +1506,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         shipPanel?.focusChanged(t?.source === 'ship' ? Number(t.slug) : null);
         vehiclePanel?.focusChanged(t?.source === 'vehicle' ? t.slug : null);
         satPanel?.focusChanged(t?.source === 'sat' ? t.slug : null);
+        incidentPanel?.focusChanged(t?.source === 'incident');
       });
       wahlenPanel = new WahlPanel(el);
       infoPanel = new InfoPanel(el);
@@ -1508,11 +1518,30 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         camPanel?.close();
         wahlenPanel?.close();
         detailPanel?.close();
       };
       launchPanel = new LaunchPanel(el, { map: () => map, live: (data) => extras?.setLaunchLive(data) });
+      incidentPanel = new IncidentPanel(el, {
+        map: () => map,
+        stage: () => geoStage,
+        focus: () => geoFocus,
+        dock: dockEl,
+        dockChanged: () => hud?.syncSheet(),
+        closeOthers: () => {
+          popup?.remove();
+          flightPanel?.close();
+          shipPanel?.close();
+          sondePanel?.close();
+          launchPanel?.close();
+          camPanel?.close();
+          wahlenPanel?.close();
+          detailPanel?.close();
+          infoPanel?.close();
+        },
+      });
       camPanel = new CamPanel(el, { map: () => map, stage: () => geoStage });
       detailPanel = new DetailPanel(el, { map: () => map });
       camPanel.onOpen = () => {
@@ -1522,6 +1551,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         detailPanel?.close();
       };
       detailPanel.onOpen = () => {
@@ -1531,6 +1561,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         satPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         camPanel?.close();
         wahlenPanel?.close();
         infoPanel?.close();
@@ -1540,6 +1571,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
       };
@@ -1711,6 +1743,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         vehiclePanel?.close();
         satPanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         camPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
@@ -1735,6 +1768,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         flightPanel?.close();
         sondePanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         detailPanel?.close();
         popup?.remove();
         const doc = wahlenRegions()[extraResult.region];
@@ -1745,6 +1779,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         vehiclePanel?.close();
         satPanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         sondePanel?.close();
         wahlenPanel?.close();
         flightPanel?.open(extraResult.hex);
@@ -1756,6 +1791,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         sondePanel?.open(extraResult.serial);
@@ -1789,6 +1825,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         satPanel?.close();
         flightPanel?.close();
         launchPanel?.close();
+        incidentPanel?.close();
         detailPanel?.close();
         wahlenPanel?.close();
         shipPanel?.open(extraResult.mmsi);
