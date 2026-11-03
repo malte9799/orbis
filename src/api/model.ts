@@ -1,23 +1,14 @@
 import { omFetch, OpenMeteoLimitError, omPriority } from './omlimit';
 import { wxDeps, type WxLayer } from './wettermodell';
+import { mirrorJson } from './data';
+import { GLOBAL_GRID, MODEL_VARS, OM_BATCH, forecastUrl, parseSnapshot, rowsToSeries, type HourlyRow } from './omgrid';
+
+export { MODEL_VARS };
 
 // Gridded forecast data for the map layers, built from Open-Meteo multi-location requests.
 // A coarse global grid is always loaded; when zoomed in, a finer grid for the viewport is
 // fetched and blended in seamlessly.
 
-/** Fetched variables – kept at 10 so each location costs exactly one API call. */
-export const MODEL_VARS = [
-  'temperature_2m',
-  'relative_humidity_2m',
-  'precipitation',
-  'cloud_cover',
-  'pressure_msl',
-  'wind_speed_10m',
-  'wind_direction_10m',
-  'wind_gusts_10m',
-  'snow_depth',
-  'cape',
-] as const;
 /** Derived in the browser: wind vector, dew point and apparent temperature. */
 export type ModelVar = (typeof MODEL_VARS)[number] | 'u' | 'v' | 'dew_point_2m' | 'apparent_temperature';
 const DERIVED = ['u', 'v', 'dew_point_2m', 'apparent_temperature'] as const;
@@ -68,24 +59,11 @@ export function emptyModelGrid(times: number[]): ModelGrid {
   return { lat0: 90, lon0: -180, dx: 360, dy: 180, nx: 2, ny: 2, wrap: true, times, data };
 }
 
-const FORECAST_DAYS = 3;
-
-type HourlyRow = { hourly: Record<string, (number | null)[]> & { time: string[] } };
-
 async function fetchPoints(points: [number, number][]): Promise<HourlyRow[]> {
-  const BATCH = 100;
   const out: HourlyRow[] = [];
-  for (let i = 0; i < points.length; i += BATCH) {
-    const chunk = points.slice(i, i + BATCH);
-    const q = new URLSearchParams({
-      latitude: chunk.map((p) => p[0].toFixed(2)).join(','),
-      longitude: chunk.map((p) => p[1].toFixed(2)).join(','),
-      hourly: MODEL_VARS.join(','),
-      forecast_days: String(FORECAST_DAYS),
-      wind_speed_unit: 'kmh',
-      timezone: 'GMT',
-    });
-    const json = await omFetch<HourlyRow | HourlyRow[]>(`https://api.open-meteo.com/v1/forecast?${q}`, chunk.length);
+  for (let i = 0; i < points.length; i += OM_BATCH) {
+    const chunk = points.slice(i, i + OM_BATCH);
+    const json = await omFetch<HourlyRow | HourlyRow[]>(forecastUrl(chunk), chunk.length);
     out.push(...(Array.isArray(json) ? json : [json]));
   }
   return out;
@@ -124,36 +102,39 @@ async function fetchGrid(lat0: number, lon0: number, dx: number, dy: number, nx:
   for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) points.push([lat0 - y * dy, lon0 + x * dx]);
   const rows = await fetchPoints(points);
   // hourly data, thinned to 3-hourly steps (plenty for the map, a third of the memory)
-  const allTimes = rows[0].hourly.time.map((t) => Date.parse(`${t}Z`));
-  const keep = allTimes.map((_, i) => i).filter((i) => i % 3 === 0);
-  const times = keep.map((i) => allTimes[i]);
-  const nt = times.length;
-  const n = nx * ny;
-  const data = {} as Record<ModelVar, Float32Array>;
-  for (const v of MODEL_VARS) data[v] = new Float32Array(nt * n);
-  rows.forEach((row, p) => {
-    const h = row.hourly;
-    for (const v of MODEL_VARS) {
-      const src = h[v] ?? [];
-      const dst = data[v];
-      keep.forEach((src_i, t) => {
-        const val = src[src_i];
-        dst[t * n + p] = val == null ? NaN : val;
-      });
-    }
-  });
+  const { times, data } = rowsToSeries(rows) as { times: number[]; data: Record<ModelVar, Float32Array> };
   derive(data);
   return { lat0, lon0, dx, dy, nx, ny, wrap, times, data };
 }
 
 // ---------------------------------------------------------------------------
-// Global grid (15° × 10°, 408 points = 408 API calls) – cached in memory and localStorage for 1 h.
+// Global grid (15° × 10°, 408 points): from the hourly snapshot, else 408 API calls – cached in memory and localStorage for 1 h.
 
 const CACHE_KEY = 'wg.model.v4';
 const CACHE_MS = 60 * 60 * 1000;
 let globalGrid: ModelGrid | null = null;
 let globalAt = 0;
 let globalPromise: Promise<ModelGrid> | null = null;
+
+/**
+ * Hourly snapshot of the collector (openmeteo/global.json on VITE_LIVE_BASE) first – one small file instead of 408 calls;
+ * live Open-Meteo requests if it is missing, malformed, for another grid or older than 2 h.
+ */
+async function loadGlobal(): Promise<ModelGrid> {
+  try {
+    const json = await mirrorJson<unknown>('openmeteo/global.json', () => Promise.reject(new Error('no mirror')), 15000);
+    const s = parseSnapshot(json, GLOBAL_GRID);
+    if (s) {
+      const data = s.data as Record<ModelVar, Float32Array>;
+      derive(data);
+      return { ...GLOBAL_GRID, times: s.times, data };
+    }
+  } catch {
+    /* no mirror configured or unreachable */
+  }
+  const g = GLOBAL_GRID;
+  return omPriority(() => fetchGrid(g.lat0, g.lon0, g.dx, g.dy, g.nx, g.ny, g.wrap));
+}
 
 export function getGlobalModel(): Promise<ModelGrid> {
   if (globalGrid && Date.now() - globalAt < CACHE_MS) return Promise.resolve(globalGrid);
@@ -163,7 +144,7 @@ export function getGlobalModel(): Promise<ModelGrid> {
     globalAt = cached.at;
     return Promise.resolve(cached.grid);
   }
-  globalPromise ??= omPriority(() => fetchGrid(80, -180, 15, 10, 24, 17, true))
+  globalPromise ??= loadGlobal()
     .then((g) => {
       globalGrid = g;
       globalAt = Date.now();
