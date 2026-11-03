@@ -699,6 +699,8 @@ export class PlanesLayer implements GeoPart {
   selected: string | null = null;
   /** the camera sits in this aircraft (cockpit view): its own model, shadow and drop line would hide the view */
   inside: string | null = null;
+  /** the camera follows this aircraft from outside: it shows its name without being hovered */
+  followed: string | null = null;
   /** departure / destination airport [lon, lat] of the selected aircraft, if known */
   private route: { hex: string; origin: [number, number]; destination: [number, number] } | null = null;
   private forecast: GeoLine[] = [];
@@ -754,7 +756,7 @@ export class PlanesLayer implements GeoPart {
     if (mode === 'off') {
       this.crowdHits = [];
       // far out without models the 2D icon can be hovered all the same
-      if (this.hovered) this.tracker.step(now);
+      if (this.hovered || this.followed) this.tracker.step(now);
       this.syncLabel();
       if (this.tracker.planes.size && this.lastFrameHook) {
         this.lastFrameHook = 0;
@@ -932,10 +934,11 @@ export class PlanesLayer implements GeoPart {
     this.map.triggerRepaint();
   }
 
-  /** Callsign above the hovered aircraft; moved here every frame so it never trails behind while zooming. */
+  /** Callsign above the hovered (or followed) aircraft; moved here every frame so it never trails behind while zooming. */
   private syncLabel() {
     const frame = this.frameNow;
-    const p = this.hovered ? this.tracker.planes.get(this.hovered) : undefined;
+    const hex = this.hovered ?? this.followed;
+    const p = hex ? this.tracker.planes.get(hex) : undefined;
     const pos = p && frame?.toScreen(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt);
     if (!p || !pos) {
       this.label.style.display = 'none';
