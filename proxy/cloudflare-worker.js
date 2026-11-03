@@ -40,6 +40,8 @@ const HOSTS = {
   // ocean layers
   'www.ndbc.noaa.gov': 300,
   'api.tidesandcurrents.noaa.gov': 120,
+  // Blitzer.de map markers (no CORS, unofficial): mobile checks are short-lived, cache briefly
+  'www.blitzer.de': 60,
 };
 // the worldwide OpenSky overview is large and changes slowly
 const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchParams.has('lamin') ? 90 : HOSTS[url.hostname]);
