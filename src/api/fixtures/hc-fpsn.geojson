@@ -1,0 +1,71 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "id": 20091,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -79.0613932949444,
+     43.81730862899775
+    ]
+   },
+   "properties": {
+    "OBJECTID": 20091,
+    "location_name": "1000_10_43.8173_-79.0614",
+    "latest_value_nSvHr": 30,
+    "time": 1793732400000,
+    "max_nSvHr": 115,
+    "min_nSvHr": 26,
+    "mean_nSvHr": 30,
+    "download_link": "https://ftp.maps.canada.ca/pub/hc_sc/Radioactivity_Radioactivite/FixedPointSurveillanceNetwork/readings_lectures/1000_10_43.8173_-79.0614.csv",
+    "dose_rate_type": "Terrestrial Gamma "
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 20092,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -79.0737432990784,
+     43.817308628746275
+    ]
+   },
+   "properties": {
+    "OBJECTID": 20092,
+    "location_name": "1000_11_43.8173_-79.0737",
+    "latest_value_nSvHr": 0,
+    "time": 1793732400000,
+    "max_nSvHr": 148,
+    "min_nSvHr": 40,
+    "mean_nSvHr": 44,
+    "download_link": "https://ftp.maps.canada.ca/pub/hc_sc/Radioactivity_Radioactivite/FixedPointSurveillanceNetwork/readings_lectures/1000_11_43.8173_-79.0737.csv",
+    "dose_rate_type": "Terrestrial Gamma "
+   }
+  },
+  {
+   "type": "Feature",
+   "id": 20093,
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -79.05790329384097,
+     43.816144628992035
+    ]
+   },
+   "properties": {
+    "OBJECTID": 20093,
+    "location_name": "1000_2_43.8161_-79.0579",
+    "latest_value_nSvHr": 36,
+    "time": 1793474100000,
+    "max_nSvHr": 132,
+    "min_nSvHr": 32,
+    "mean_nSvHr": 36,
+    "download_link": "https://ftp.maps.canada.ca/pub/hc_sc/Radioactivity_Radioactivite/FixedPointSurveillanceNetwork/readings_lectures/1000_2_43.8161_-79.0579.csv",
+    "dose_rate_type": "Terrestrial Gamma "
+   }
+  }
+ ]
+}

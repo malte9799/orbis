@@ -86,7 +86,8 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 | [Smithsonian Global Volcanism Program](https://volcano.si.edu) | Alle ~1.300 Vulkane mit letztem Ausbruch | 🟢 📦 |
 | [Blitzortung.org](https://www.blitzortung.org) | Blitze live, letzte 15 min weltweit (inoffizieller WebSocket) | ⚠️ nur privat/Unterhaltung, nicht für Warnungen; Rohdaten nur mit Erlaubnis des Betreibers – Erlaubnis ausstehend |
 | [BfS ODL-Messnetz](https://odlinfo.bfs.de) | Radioaktivität (Ortsdosisleistung) Deutschland | 🟢 DL-DE 2.0 |
-| [EURDEP](https://remap.jrc.ec.europa.eu) (JRC) | Radioaktivität: ~3.500 Sonden in über 40 Ländern (u. a. FR, TR, CA, RU, HK) | 🟢 |
+| [STUK](https://www.stuk.fi/en) via [FMI Open Data](https://en.ilmatieteenlaitos.fi/open-data) (WFS `stuk::observations::external-radiation::latest::multipointcoverage`) | Radioaktivität (Ortsdosisleistung, 10-Min-Mittel) Finnland, ~250 Stationen | 🟢 [CC BY 4.0](https://en.ilmatieteenlaitos.fi/open-data-licence), Namensnennung „Säteilyturvakeskus STUK / Ilmatieteen laitos (FMI)“, 📦 |
+| [Health Canada Fixed Point Surveillance Network](https://maps-cartes.services.geo.ca/server_serveur/rest/services/HC/fpsn_en/MapServer) (Geo.ca) | Radioaktivität (Ortsdosisleistung) Kanada, ~80 Stationen; Messwerte älter als 48 h werden verworfen | 🟢 [Open Government Licence – Canada](https://open.canada.ca/en/open-government-licence-canada), Namensnennung „Health Canada“, 📦 |
 | [Safecast](https://safecast.org) · [Karte](https://map.safecast.org) | Radioaktivität weltweit | 🟢 CC0, 📦 |
 
 ## 4. Erde & Umwelt
