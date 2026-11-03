@@ -71,7 +71,7 @@ export default defineExtra({
       features: INCIDENTS.map((d) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [d.lon, d.lat] },
-        properties: { id: d.id, title: d.title, name: d.shortTitle ?? d.title, subtitle: d.subtitle, when: d.when, short: d.craft.reg, glyph: profileOf(d).glyph },
+        properties: { id: d.id, title: d.title, name: d.shortTitle ?? d.title, subtitle: d.subtitle, when: d.when, short: d.labelSub ?? d.craft.reg, glyph: profileOf(d).glyph },
       })),
     });
     ctx.set('incidents', { count: INCIDENTS.length, note: 'Klick auf einen Marker öffnet die Rekonstruktion' });

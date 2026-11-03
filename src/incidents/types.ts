@@ -61,6 +61,8 @@ export interface IncidentDef {
   title: string;
   /** kurzer Name für das Label auf der Karte ("Learjet-Absturz") */
   shortTitle?: string;
+  /** zweite Zeile des Labels auf der Karte; ohne Angabe die kurze Kennung des Fahrzeugs (craft.reg) */
+  labelSub?: string;
   subtitle: string;
   /** Beginn der Rekonstruktion in der Liste: Datum/Zeit des Ereignisses (ISO, UTC) */
   when: string;
