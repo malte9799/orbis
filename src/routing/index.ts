@@ -149,9 +149,24 @@ export function createRouting(map: MlMap, container: HTMLElement, host: RoutingH
   );
 
   function gpsStatus(s: GpsStatus) {
-    if (s === 'denied') toast('Standortzugriff verweigert. Bitte in den Browser-Einstellungen erlauben.', 'error');
-    else if (s === 'unavailable') toast('Standort nicht verfügbar.', 'error');
-    if ((s === 'denied' || s === 'unavailable') && nav) stopNav();
+    if (s !== 'denied' && s !== 'unavailable') return;
+    const msg = s === 'denied' ? 'Standortzugriff verweigert. Bitte in den Browser-Einstellungen erlauben.' : 'Standort nicht verfügbar.';
+    const start = nav?.prep.route.geometry[0];
+    if (!start) {
+      toast(msg, 'error');
+      return;
+    }
+    // no GPS: the map still goes to the start of the route, the message follows once it is there
+    stopNav();
+    let shown = false;
+    const show = () => {
+      if (shown) return;
+      shown = true;
+      toast(msg, 'error');
+    };
+    map.once('moveend', show);
+    window.setTimeout(show, 1500);
+    map.easeTo({ center: start, zoom: Math.max(map.getZoom(), 16), bearing: 0, duration: 900, essential: true });
   }
 
   /** current position: the running GPS, otherwise one high-accuracy reading */
