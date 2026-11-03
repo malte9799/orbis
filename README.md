@@ -394,6 +394,16 @@ Die Wetter-Action liest die Worker-Adresse aus `WETTER_PUBLIC_URL` (bisher `WX_P
 wird – auch bei Vorschauen, die dann die Assets von `main` nutzen. Der Bucket braucht eine CORS-Regel (`GET`/`HEAD`) für die Pages-Domain.
 Ohne `ASSETS_BUCKET` bleibt alles wie bisher in `gh-pages`.
 
+**Inhaltsgehashte Asset-URLs:** `scripts/assets-manifest.mjs` (läuft als erster Schritt von `pnpm build`) hasht (sha256, 12 Hex) alle Dateien
+unter `public/{models,textures,data/airports,data/incidents,data/games}` und schreibt `src/generated/assets-manifest.json`
+(`models/iss.glb` → `models/iss.<hash>.glb`; gitignored, wird bei jedem Build neu erzeugt). Nur mit `VITE_ASSETS_BASE` ist das Manifest gefüllt;
+ohne bleibt es `{}` und `assetUrl()` liefert wie bisher die Klartext-Pfade (lokales `pnpm dev` unverändert). Der Deploy lädt die gehashten
+Schlüssel auf jedem Branch hoch (nur fehlende, `Cache-Control: public, max-age=31536000, immutable`), die Klartext-Schlüssel (1 Tag Cache)
+vorerst zusätzlich auf `main`, damit ältere Builds/Vorschauen weiterlaufen. Später entfernen, sobald nichts Klartext-Pfade nutzt.
+*Aufräumen (noch nicht umgesetzt):* Eine R2-Lifecycle-Regel kann nur nach Alter/Präfix löschen, nicht „nicht mehr referenziert“. Sinnvoll wäre
+ein geplantes Skript, das die Manifeste der letzten N `main`-Deploys (z. B. als Release-Artefakt oder in `gh-pages`) vereinigt und gehashte
+Schlüssel löscht, die in keinem davon vorkommen und älter als einige Wochen sind.
+
 </details>
 
 <details>

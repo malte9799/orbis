@@ -120,10 +120,14 @@ jobs:
           VITE_ASSETS_BASE: ${{ vars.ASSETS_BASE }}
       # Big static assets (models/, textures/ incl. the Moon textures and iss-detail.glb from above, data/airports|incidents|games)
       # live in an R2 bucket instead of gh-pages (1 GB limit). Only active with the repository variable ASSETS_BUCKET:
-      # main uploads them, every branch (previews included) ships a dist/ without them and uses the ones from main.
-      # TODO: content-hashed paths (immutable caching) – for now plain paths with a one-day cache.
+      # every branch (previews included) ships a dist/ without them.
+      # Content-hashed keys (models/iss.<hash>.glb, from src/generated/assets-manifest.json which `pnpm build` wrote above):
+      # uploaded on every branch, but only keys missing in the bucket, with an immutable one-year cache. A preview whose
+      # asset differs from main thus gets its own key and never overwrites what main serves.
+      # Plain keys (models/iss.glb, one-day cache) are synced on main only, for a transition period: older builds and
+      # previews still reference them. Drop the sync once no live build uses plain paths.
       - name: Upload assets to R2
-        if: github.ref == 'refs/heads/main' && vars.ASSETS_BUCKET != ''
+        if: vars.ASSETS_BUCKET != ''
         env:
           R2_BUCKET: ${{ vars.ASSETS_BUCKET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -138,10 +142,28 @@ jobs:
             echo "::warning::R2 nicht konfiguriert – Assets-Upload übersprungen"; exit 0
           fi
           EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          for d in models textures data/airports data/incidents data/games; do
-            aws s3 sync "public/$d" "s3://$R2_BUCKET/$d" --endpoint-url "$EP" \
-              --cache-control "public, max-age=86400" --only-show-errors
-          done
+          MANIFEST=src/generated/assets-manifest.json
+          if [ -f "$MANIFEST" ] && [ "$(jq 'length' "$MANIFEST")" -gt 0 ]; then
+            # keys already in the bucket (hashed ones never change, so existing = up to date)
+            aws s3api list-objects-v2 --bucket "$R2_BUCKET" --endpoint-url "$EP" \
+              --query 'Contents[].Key' --output text | tr '\t' '\n' > existing-keys.txt
+            new=0; skipped=0
+            while IFS=$'\t' read -r logical hashed; do
+              if grep -Fxq -- "$hashed" existing-keys.txt; then skipped=$((skipped + 1)); continue; fi
+              aws s3 cp "public/$logical" "s3://$R2_BUCKET/$hashed" --endpoint-url "$EP" \
+                --cache-control "public, max-age=31536000, immutable" --only-show-errors
+              new=$((new + 1))
+            done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' "$MANIFEST")
+            echo "Hashed assets: $new uploaded, $skipped already present" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::kein Assets-Manifest (VITE_ASSETS_BASE leer?) – gehashte Schlüssel übersprungen"
+          fi
+          if [ "$BRANCH" = "main" ]; then
+            for d in models textures data/airports data/incidents data/games; do
+              aws s3 sync "public/$d" "s3://$R2_BUCKET/$d" --endpoint-url "$EP" \
+                --cache-control "public, max-age=86400" --only-show-errors
+            done
+          fi
       - name: Remove assets from dist
         if: vars.ASSETS_BUCKET != '' && vars.ASSETS_BASE != ''
         run: rm -rf dist/models dist/textures dist/data/airports dist/data/incidents dist/data/games
