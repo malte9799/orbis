@@ -42,6 +42,10 @@ const HOSTS = {
   'api.tidesandcurrents.noaa.gov': 120,
   // Blitzer.de map markers (no CORS, unofficial): mobile checks are short-lived, cache briefly
   'www.blitzer.de': 60,
+  // GTFS-RT vehicle positions (no CORS): HSL (Helsinki), OVapi (Netherlands, rate-limited – cache longer), TransLink SEQ (Brisbane)
+  'realtime.hsl.fi': 15,
+  'gtfs.ovapi.nl': 25,
+  'gtfsrt.api.translink.com.au': 15,
 };
 // the worldwide OpenSky overview is large and changes slowly
 const ttlFor = (url) => (url.hostname === 'opensky-network.org' && !url.searchParams.has('lamin') ? 90 : HOSTS[url.hostname]);

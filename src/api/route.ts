@@ -120,3 +120,52 @@ export function orient(route: FlightRoute, lon: number, lat: number, track: numb
 
 /** Already loaded route (undefined: not asked yet / still loading). */
 export const cachedRoute = (callsign: string): FlightRoute | null | undefined => cache.get(callsign.trim().toUpperCase())?.route;
+
+// ---------------------------------------------------------------------------
+// Aircraft lookup by hex (type, registration, operator) – fills in what readsb's own
+// database doesn't know. Same cache/TTL shape as the route lookup above.
+
+export interface AircraftInfo {
+  type: string;
+  reg: string;
+  operator: string;
+}
+
+interface AdsbdbAircraft {
+  type?: string;
+  icao_type?: string;
+  registration?: string;
+  registered_owner?: string;
+}
+
+const acCache = new Map<string, { at: number; ttl: number; info: AircraftInfo | null }>();
+const acPending = new Map<string, Promise<AircraftInfo | null>>();
+
+/** Cached type/registration/operator of a hex (null: unknown). Never rejects. */
+export function loadAircraft(hex: string): Promise<AircraftInfo | null> {
+  const h = hex.trim().toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(h)) return Promise.resolve(null);
+  const hit = acCache.get(h);
+  if (hit && Date.now() - hit.at < hit.ttl) return Promise.resolve(hit.info);
+  let p = acPending.get(h);
+  if (!p) {
+    p = fetchJson<{ response?: { aircraft?: AdsbdbAircraft } | string }>(viaProxy(`https://api.adsbdb.com/v0/aircraft/${h}`), undefined, 8000)
+      .then((j) => {
+        const a = typeof j.response === 'object' ? j.response?.aircraft : undefined;
+        const info = a ? { type: a.type ?? a.icao_type ?? '', reg: a.registration ?? '', operator: a.registered_owner ?? '' } : null;
+        // "unknown aircraft" is an answer, too – remember it for the same time as a hit
+        acCache.set(h, { at: Date.now(), ttl: TTL_FOUND, info });
+        return info;
+      })
+      .catch(() => {
+        acCache.set(h, { at: Date.now(), ttl: TTL_FAILED, info: null });
+        return null;
+      })
+      .finally(() => acPending.delete(h));
+    acPending.set(h, p);
+  }
+  return p;
+}
+
+/** Already loaded aircraft info (undefined: not asked yet / still loading). */
+export const cachedAircraft = (hex: string): AircraftInfo | null | undefined => acCache.get(hex.trim().toLowerCase())?.info;
