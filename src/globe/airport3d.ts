@@ -2,7 +2,7 @@ import type { ExpressionSpecification, GeoJSONSource, LayerSpecification, Map as
 import type { Feature, FeatureCollection, LineString, Point, Polygon } from 'geojson';
 import { emptyFc, loadAirportLayout, loadAirportLights, loadStaticAirport, staticAirports, type Bounds, type StaticAirport } from '../api/airport';
 import { isSuperseded } from '../api/overpass';
-import { loadRoute, orient, plausible, type FlightRoute } from '../api/route';
+import { loadAircraft, loadRoute, orient, plausible, type AircraftInfo, type FlightRoute } from '../api/route';
 import type { AircraftResult } from '../api/tracking';
 import { PlanesLayer, PlaneTracker, type PlaneModel, type PlaneReport, type PlaneState } from './planes3d';
 import type { Vec3 } from './geo3d/frame';
@@ -618,8 +618,26 @@ export class Airport3D {
     this.layer.selected = hex;
     this.tracker.keep = hex;
     this.checkMode();
-    if (hex) void this.fetchRoute(hex);
+    if (hex) {
+      void this.fetchRoute(hex);
+      void this.fetchAircraft(hex);
+    }
     this.map.triggerRepaint();
+  }
+
+  /** hex → type/registration/operator from adsbdb, for aircraft readsb's own database doesn't know (null = unknown / failed) */
+  private aircraftInfo = new Map<string, AircraftInfo | null>();
+
+  aircraft(hex: string): AircraftInfo | null | undefined {
+    return this.aircraftInfo.get(hex);
+  }
+
+  /** Looked up once per hex per session (readsb already knows most aircraft; adsbdb fills the rest). */
+  private async fetchAircraft(hex: string) {
+    if (hex.startsWith('sonde:') || this.aircraftInfo.has(hex)) return;
+    const found = await loadAircraft(hex);
+    this.aircraftInfo.set(hex, found);
+    if (found && this.layer.selected === hex) this.map.triggerRepaint();
   }
 
   /** hex → route as stored by adsbdb (raw: null = unknown / failed), and the one shown (aligned with the flight direction) */

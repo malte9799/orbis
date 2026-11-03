@@ -1,8 +1,10 @@
 # Plan: Wetterkarten aus Modell-Rohdaten (DWD ICON, GRIB2) statt Open-Meteo-Punktraster
 
-Stand: 2026-10-31 · Status: **Schritte 1–4 umgesetzt** (alle zehn Felder, Geländekorrektur Temperatur/Taupunkt, ICON ist Standard und trägt auch die Vorhersage-Seitenkarte, Open-Meteo nur Rückfall); ICON-EU zurückgestellt, Hosting R2, Horizont 72 h
+Stand: 2026-11-03 · Status: **Schritte 1–5 umgesetzt** (alle zehn Felder, Geländekorrektur Temperatur/Taupunkt per DEM-Lapse-Rate, ICON ist Standard und trägt auch die Vorhersage-Seitenkarte, Open-Meteo nur Rückfall); ICON-EU zurückgestellt, Hosting Cloudflare R2 (kein `data-wx`-Branch), Horizont 72 h
 
-Umsetzungsnotizen Schritt 1: Format siehe [WETTERDATEN-FORMAT.md](WETTERDATEN-FORMAT.md). Abweichungen vom Plan: Läufe liegen unter `v1/<lauf>/…` (unveränderlich, lange cachebar) statt überschriebener Pfade; `latest.json` ist der einzige kurz gecachte Eintrag. Gemessen: Temperatur 39,8 MB für 33 Dateien; Prädiktor „Plane + Zeitdifferenz“ spart gegenüber reiner Zeilen-Differenz ~15–40 %. Punktprobe gegen Open-Meteo `icon_global`: München ±0,5 K; Lhasa/La Paz weichen um 1–3,5 K ab, weil Open-Meteo auf die echte Höhe herunterskaliert (→ Höhenkorrektur, Schritt 5).
+Umsetzungsnotizen Schritt 1: Format siehe [WETTERDATEN-FORMAT.md](WETTERDATEN-FORMAT.md). Abweichungen vom Plan: Läufe liegen unter `v1/<lauf>/…` (unveränderlich, lange cachebar) statt überschriebener Pfade; `latest.json` ist der einzige kurz gecachte Eintrag. Gemessen: Temperatur 39,8 MB für 33 Dateien; Prädiktor „Plane + Zeitdifferenz“ spart gegenüber reiner Zeilen-Differenz ~15–40 %. Punktprobe gegen Open-Meteo `icon_global`: München ±0,5 K; Lhasa/La Paz weichen um 1–3,5 K ab, weil Open-Meteo auf die echte Höhe herunterskaliert (→ Höhenkorrektur, Schritt 5, inzwischen umgesetzt).
+
+Umsetzungsnotiz Schritt 5 (Höhenkorrektur): `scripts/wx-dem.py` baut die Geländehöhen einmalig aus den Mapzen-Terrarium-Tiles (0,0439°, OWX unter `v1/static/dem/`), der Workflow lädt sie bei Bedarf (`workflow_dispatch` mit `dem: true`) nach R2 hoch. Der Client lädt `hsurf` (Modellfläche) und `dem` (echtes Gelände) als Mosaik und korrigiert Temperatur/Taupunkt pixelgenau mit der Standard-Lapse-Rate (`LAPSE_K_PER_M = 0,0065`, [model.ts:411](../src/api/model.ts:411), `terrainDelta()` [model.ts:559](../src/api/model.ts:559)), mit Ausblenden über 2° am Rand des geladenen Bereichs. ICON-EU als zusätzliche Verfeinerungsstufe bleibt zurückgestellt.
 
 ## 1. Ausgangslage und Ziel
 
@@ -25,11 +27,11 @@ Open-Meteo bleibt für Ortsansicht, Marine, Flood, Luftqualität – und als Fal
 | Regional später (Plan: vorab in der Pipeline nahtlos mit ICON global verblenden, Client sieht nur ein feineres Detailgitter über Europa) | **ICON-EU** (6,5 km, **regular-lat-lon nativ**, 120 h, stündlich bis 78 h) und ICON-D2 (2,2 km, 48 h, regular-lat-lon vorhanden) als optionale Verfeinerung – kein Remapping nötig |
 | Backup-Quelle | NOAA GFS 0,25° (gemeinfrei, AWS `noaa-gfs-bdp-pds`, Byte-Range über `.idx`) nur falls DWD ausfällt – nicht in der ersten Ausbaustufe. ECMWF Open Data (0,25°, CC BY 4.0, 3-Tage-Läufe nur 00/12 UTC) bringt gegenüber ICON keine Auflösung → verworfen |
 | Dekoder | **Python + `eccodes` (pip-Wheel mit Binärbibliothek) + numpy + scipy `cKDTree`**. Begründung: ICON-GRIB2 ist komprimiert gepackt; ein reiner Node/WASM-Dekoder wäre Eigenbau; ecCodes ist die Referenz. Passt zu bestehenden `scripts/*.py`, kein apt nötig |
-| Ablage | eigener Orphan-Branch **`data-wx`** (wie `data-osm`, entkoppelt vom 15-min-Workflow `data.yml`), eigener Workflow `wx.yml` |
+| Ablage | ~~eigener Orphan-Branch `data-wx`~~ → **umgesetzt als Cloudflare R2** (siehe Hosting-Zeile unten), eigener Workflow `wx.yml`, entkoppelt vom 15-min-Workflow `data.yml` |
 | Format | eigenes Binärformat „OWX“: Int16-quantisiert, 2.-Ordnung-Delta entlang x, Zickzack, Byte-Planes, gzip → Client dekodiert mit `DecompressionStream('gzip')` (keine Bibliothek) |
 | Clientmodell | Überblick 0,5° (alle Zeiten, 1 Datei/Variable) + Detail 0,125° in 45°-Kacheln (alle Zeiten, 1 Datei/Variable/Kachel), lazy pro Variable |
 | Zeitauflösung | 3-stündlich, +0…+72 h (25 Schritte) – identisch zur heutigen Zeitleiste, `SUBSTEPS=3` bleibt |
-| Hosting | **Entschieden (2026-10-30): Cloudflare R2 + CDN** (Free-Tier: 10 GB, kein Egress). Pipeline lädt per S3-API hoch, Basis-URL als Konstante – Wechsel zu `data-wx` bleibt möglich. Spike misst weiterhin die Größen |
+| Hosting | **Umgesetzt: Cloudflare R2 + Worker-Proxy** (`proxy/wx-worker.js`, Free-Tier: 10 GB, kein Egress). Pipeline (`wx.yml`) lädt per S3-API hoch (Secrets `R2_ACCOUNT_ID`/`R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, Variablen `R2_BUCKET`/`WX_PUBLIC_URL`); Basis-URL `WX_PUBLIC_URL` als Konstante im Client. Branch-Variante verworfen |
 
 ## 3. Datenquelle im Detail
 
@@ -61,7 +63,7 @@ Veröffentlichung: Läufe sind laut Verzeichnislisting ca. **2 h 40 – 3 h 20**
 5. **Quantisieren** (Tabelle in `latest.json`, pro Variable `scale`, `offset`, Sentinel −32768 = fehlt):
    T/Td/PMSL 0,1 K/hPa-Schritt · u,v,Böe 0,1 m/s · Niederschlag √-/log-Skala (8-bit-Bereich genügt) · Bewölkung 1 % · CAPE √-Skala · Schnee log-Skala.
 6. **Schreiben:** `wx/<var>/o.owx` (Überblick), `wx/<var>/t<col>_<row>.owx` (45°×45°-Kacheln = 8×4, Ozean-/leere Kacheln werden zu wenigen Bytes), `latest.json`.
-7. **Veröffentlichen:** wie `data.yml`/`cctv-heat.yml` – `git init -b data-wx`, ein Orphan-Commit, `git push -f`. Vorher harte Größenprüfung (Abbruch > 200 MB).
+7. **Veröffentlichen:** `aws s3 sync`/`cp` gegen die R2-S3-API (Endpoint `https://<account>.r2.cloudflarestorage.com`); Läufe unveränderlich unter `v1/<run>/…` (lange Cache-Header), `latest.json` kurz gecacht; die zwei neuesten Läufe bleiben erhalten, ältere werden entfernt.
 8. Laufzeit-Schätzung 15–25 min, `timeout-minutes: 45`; Public-Repo-Runner (4 vCPU/16 GB) reichen.
 
 `latest.json` (klein, ohne langen Cache geladen):
@@ -75,7 +77,7 @@ Veröffentlichung: Läufe sind laut Verzeichnislisting ca. **2 h 40 – 3 h 20**
 - **OWX-Datei:** Header (JSON: Gitter, Zeiten-Index, scale/offset) + Nutzlast. Pro Schritt 2.-Ordnung-Delta in x-Richtung, Zickzack-Codierung, Byte-Planes getrennt, gzip -9.
 - **Gitter:** Überblick 720×361 (0,5°), Kachel 360×360 (45°, 0,125°) mit 1 Zelle Überlappung für bikubische Nähte.
 - **Warum nicht PNG/WebP?** Canvas liefert nur 8 Bit; 16-Bit-PNG bräuchte einen eigenen Inflater und trennt Zeitschritte in viele Dateien (~250 pro Lauf). Alle Schritte in einer Datei = Zeitleiste ohne Nachladen.
-- **Größenschätzung (UNSICHER, Spike misst):** 4,15 Mio. Zellen × 25 Schritte × ~3–5 Bit ≈ 40 MB je glatter Variable bei 0,125°; Schnee/CAPE/Niederschlag deutlich weniger. Gesamt grob **100–350 MB** – zu viel für sicheres Git-Hosting oben. Gegenmaßnahmen in dieser Reihenfolge: (1) Auflösung je Variable (PMSL 0,5°, Td/CAPE 0,25°; T, u, v, Böe, Niederschlag, Bewölkung, Schnee 0,125°), (2) ab +48 h nur 6-stündlich, (3) Wertepräzision gröber, (4) Hosting auf R2 (kein Repo-Limit, kostenloser Egress, `Range`-Anfragen möglich).
+- **Größenschätzung:** 4,15 Mio. Zellen × 25 Schritte × ~3–5 Bit ≈ 40 MB je glatter Variable bei 0,125°; Schnee/CAPE/Niederschlag deutlich weniger. Gesamt grob 100–350 MB – für Git-Hosting zu viel, deshalb R2 (kein Repo-Limit, kein Egress, `Range`-Anfragen möglich). Zusätzliche Hebel bei Bedarf: Auflösung je Variable gröber, ab +48 h nur 6-stündlich, Wertepräzision gröber.
 - **Repo-Wachstum:** Orphan-Commit mit Force-Push wie bisher → Verlauf bleibt 1 Commit; alte Läufe existieren nicht. Cache: `raw.githubusercontent.com` ~5 min; Cache-Buster `?r=<run>` in allen Dateinamen-URLs, `latest.json` mit `?t=<5-min-Zeitschlitz>`.
 - **Client-Bandbreite:** Überblick pro Variable ~1–3 MB, Kachel ~0,5–2 MB, typische Ansicht (1 Variable, 1–4 Kacheln): **~3–10 MB**, danach Zeitleiste ohne Netz. Variablenwechsel lädt nur die neue Variable. Persistent: `Cache Storage` (nicht localStorage – zu klein), Schlüssel = Run-ID.
 
@@ -90,7 +92,7 @@ Neue Datei `src/api/wxmodel.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` beh�
 5. **Fallback:** `getGlobalModel` lädt `latest.json`; bei Netzfehler, Schema `v` unbekannt oder `issued` älter als 30 h → bisheriger Open-Meteo-Pfad (Code bleibt, nach `model-om.ts` verschoben). Anzeige „Quelle: ICON (DWD), Lauf 12 UTC“ bzw. „Open-Meteo (Fallback)“ im Info-Tooltip. Kein Mischbetrieb innerhalb einer Ansicht.
 6. **Zeit:** `times` aus `latest.json`; `SUBSTEPS=3`-Mischung, `nearestSubIndex`, `emptyMessage` in `fcmap` unverändert. Beim Laufwechsel (Wiederladen nach 30 min) wie heute `prevTime` → neuer Index.
 7. **Organische Körnung** (`organic` in `overlay.ts`): Faktoren sind an `cellDeg` gekoppelt und schrumpfen automatisch mit dem feineren Raster; Feinabstimmung der `warp`/`texture`-Werte nach Sichtprüfung, ggf. Körnung ab 0,125° ganz aus.
-8. **Höhenabhängigkeit der Temperatur:** ICON-T_2M gilt für die geglättete Modellorographie. Optional (Schritt 5): `HSURF` als Feld mitliefern und im `wxfield://`-Protokoll pro Pixel `T += 0,0065·(hsurf − dem)` mit Mapterhorn-Terrain-RGB. Erst nach Sichtvergleich mit zoom.earth entscheiden; ohne Korrektur ist bei 13 km die Abweichung kleiner als beim heutigen 15°-Raster.
+8. **Höhenabhängigkeit der Temperatur – umgesetzt:** `HSURF` (Modellfläche) wird als Feld mitgeliefert; `scripts/wx-dem.py` liefert zusätzlich das echte Gelände (Mapzen-Terrarium-Tiles, einmalig gebaut). `terrainDelta()` in `model.ts` rechnet pro Abfragepunkt `0,0065·(hsurf − dem)` (für Taupunkt mit `TD_LAPSE_RATIO` skaliert), mit Ausblenden über 2° am Rand des geladenen Bereichs.
 9. **`omlimit.ts`:** Budget wird nur noch von Fallback/Orts-Ansicht verbraucht – keine Änderung nötig.
 
 ## 7. Migrationsplan (je Schritt eigener PR)
@@ -102,14 +104,14 @@ Neue Datei `src/api/wxmodel.ts` (Dekoder, Lader, Kachel-Mosaik); `model.ts` beh�
 | 2 | Client-Sampler: `wxmodel.ts`, `ensure`, Überblick+Kacheln, Fallback; **Feld Temperatur** (zunächst hinter `?wx=1`, jetzt Standard, `?wx=0` schaltet aus) | 2 Tage | zoom.earth-Vergleich möglich |
 | 3 | Übrige Felder in der Pipeline (Td, u/v, Böe-Max, Niederschlag-Rate, Bewölkung, PMSL, Schnee, CAPE) + Client-Abhängigkeitstabelle; Windpartikel/Isobaren prüfen | 2–3 Tage | alle Karten |
 | 4 | `fcmap`-Region aus Kacheln, Schalter entfernen (Standard), Open-Meteo-Raster nur noch Fallback, Docs (`DATENQUELLEN.md`, Attribution, `STRUKTUR.md`) | 1 Tag | Umschaltung |
-| 5 | Optional: Höhenkorrektur T (HSURF + DEM), ICON-EU-Kacheln 0,0625° für Europa, Böen aus Stundendateien | 2–4 Tage | Feinschliff |
+| ✓ 5 | Höhenkorrektur T/Td (HSURF + DEM, `wx-dem.py`, `terrainDelta()`); ICON-EU-Kacheln und Böen aus Stundendateien weiterhin zurückgestellt | 2–4 Tage | gebaut |
 | 6 | Optional: GFS-Fallback in der Pipeline | 1–2 Tage | Ausfallsicherheit |
 
 Reihenfolge ist durch Fallback jederzeit rückrollbar; Schritte 1–2 ändern das Nutzerverhalten nicht.
 
 ## 8. Risiken
 
-- **Größe/Hosting** (Abschnitt 5) – größtes Risiko, durch Spike entschärft; Plan B R2.
+- **Größe/Hosting** (Abschnitt 5) – gelöst durch R2 (kein Repo-Limit, kein Egress).
 - **Remap-Qualität** an Küsten (Nearest/IDW vs. konservativ): akzeptabel bei gleicher Zellgröße; Spike vergleicht mit CDO-Gewichten.
 - **Veröffentlichungsverzug/Ausfall DWD:** Läufe kommen nach ~3 h; Client zeigt dann den vorherigen Lauf (bis 30 h alt), danach Open-Meteo. DWD-Server hat Drosselungen (Bot-Verhalten) → moderate Parallelität (≤ 8), User-Agent mit Repo-URL.
 - **GitHub-Nutzungsbedingungen/Limits:** 4 Pushes/Tag à >100 MB sind grenzwertig; Branch bleibt ein Commit, Größenprüfung im Workflow.
@@ -119,12 +121,10 @@ Reihenfolge ist durch Fallback jederzeit rückrollbar; Schritte 1–2 ändern da
 
 ## 9. Offene Fragen an dich
 
-1. **Hosting-Grenze:** Ist Cloudflare R2 (Konto + zwei Secrets) akzeptabel, falls der Spike > 150 MB ergibt – oder soll der Datensatz dann lieber gröber werden (0,25°)?
-2. **Zeitraum:** 3 Tage reichen (PR #128), oder soll die Pipeline gleich bis +120 h (ICON-EU/6-stündlich) vorbereitet werden?
-3. **Europa-Boost:** ICON-EU (6,5 km) als zusätzliche Stufe gewünscht (Schritt 5), oder erst nach dem Vergleich mit zoom.earth?
-4. **Höhenkorrektur** der Temperatur gewünscht (Schritt 5) – oder ist die modellierte Fläche genug?
-5. **Schalter:** Soll der alte Open-Meteo-Pfad nach der Umschaltung dauerhaft als Fallback im Code bleiben (empfohlen) oder später entfernt werden?
-6. **Python im Repo:** Ok, dass die Pipeline in Python (`eccodes`) statt Node läuft?
+Geklärt: Hosting (R2, umgesetzt) und Höhenkorrektur (umgesetzt). Zeitraum (3 Tage) und Europa-Boost (ICON-EU) bleiben ohne Präferenz zurückgestellt, bis Bedarf entsteht. Noch offen:
+
+1. **Schalter:** Soll der alte Open-Meteo-Pfad dauerhaft als Fallback im Code bleiben (empfohlen) oder später entfernt werden?
+2. **Python im Repo:** Ok, dass die Pipeline in Python (`eccodes`) statt Node läuft?
 
 ## 10. Verifikation (pro Schritt)
 
