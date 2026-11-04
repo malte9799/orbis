@@ -1,0 +1,9 @@
+numpy
+pillow
+rasterio
+pyshp
+pandas
+xlrd
+openpyxl
+scikit-image
+scipy

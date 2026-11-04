@@ -1,4 +1,4 @@
-// Große statische Dateien (models/, textures/, data/airports, data/incidents, data/games) können aus einem eigenen
+// Große statische Dateien (models/, textures/, data/airports, data/incidents, data/games, data/plastik, data/drifters, data/currents) können aus einem eigenen
 // Bucket kommen (VITE_ASSETS_BASE, z. B. https://assets.<domain>). Ohne Angabe – auch bei lokalem `pnpm dev` –
 // bleibt es bei den Dateien aus public/ relativ zur Seite.
 // Mit Bucket und Manifest (scripts/assets-manifest.mjs, beim Build erzeugt) werden die Pfade auf inhaltsgehashte,

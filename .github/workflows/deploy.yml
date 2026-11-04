@@ -118,7 +118,7 @@ jobs:
           VITE_OSM_BASE: ${{ vars.OSM_BASE }}
           VITE_WETTER_BASE: ${{ vars.WETTER_BASE }}
           VITE_ASSETS_BASE: ${{ vars.ASSETS_BASE }}
-      # Big static assets (models/, textures/ incl. the Moon textures and iss-detail.glb from above, data/airports|incidents|games)
+      # Big static assets (models/, textures/ incl. the Moon textures and iss-detail.glb from above, data/airports|incidents|games|plastik|drifters|currents)
       # live in an R2 bucket instead of gh-pages (1 GB limit). Only active with the repository variable ASSETS_BUCKET:
       # every branch (previews included) ships a dist/ without them.
       # Content-hashed keys (models/iss.<hash>.glb, from src/generated/assets-manifest.json which `pnpm build` wrote above):
@@ -159,14 +159,14 @@ jobs:
             echo "::warning::kein Assets-Manifest (VITE_ASSETS_BASE leer?) – gehashte Schlüssel übersprungen"
           fi
           if [ "$BRANCH" = "main" ]; then
-            for d in models textures data/airports data/incidents data/games; do
+            for d in models textures data/airports data/incidents data/games data/plastik data/drifters data/currents; do
               aws s3 sync "public/$d" "s3://$R2_BUCKET/$d" --endpoint-url "$EP" \
                 --cache-control "public, max-age=86400" --only-show-errors
             done
           fi
       - name: Remove assets from dist
         if: vars.ASSETS_BUCKET != '' && vars.ASSETS_BASE != ''
-        run: rm -rf dist/models dist/textures dist/data/airports dist/data/incidents dist/data/games
+        run: rm -rf dist/models dist/textures dist/data/airports dist/data/incidents dist/data/games dist/data/plastik dist/data/drifters dist/data/currents
       # Preview-Tab-Titel „Orbis – #prN <PR-Titel>“: PR via Branch nachschlagen und in dist/index.html einbetten
       # (Index-Preview behält den Standardtitel). Ohne PR zum Branch → Branch-Name als Fallback.
       - name: 'Preview-Titel: #pr + Titel'

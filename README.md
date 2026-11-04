@@ -50,6 +50,7 @@ in einer App und nahtlos per Zoom verbunden.**
 | 🗺️ **Live-Karte** | 2D oder Globus, Radar, Satellit, Vorhersage bis +3 Tage mit Zeitleiste, Windströmung, Isobaren |
 | 🌋 **Ereignisse** | Erdbeben, Vulkane, Waldbrände, Stürme, Tsunamis, Blitze live, Polarlicht, Radioaktivität |
 | 🗳️ **Wahlen** | Historische Wahlergebnisse je Bundesland (ab 1990), Zeitstrahl je Wahltermin, Parteien-Legende |
+| 🌊 **Meeresplastik** | Plastikdichte weltweit und im Großen Pazifikmüllstrudel mit Zeitregler der Netzfänge seit 1972 (auch weltweit, NOAA NCEI und weitere offene Datensätze), Plastik aus Flüssen, Herkunftsländer des Strudelmülls, echte Treibbojen-Bahnen (NOAA), Treibgut-Modell (Partikel in der mittleren Strömung sammeln sich in den Müllstrudeln) |
 | 🚗 **Verkehr** | Straßen, Staus, Blitzer & Rotlicht, Flugzeuge, Schiffe, Züge & Busse live, Raketenstarts mit Live-Tracking, Stream & Erinnerung |
 | 📷 **Kameras & Radio** | Tausende Webcams, über 50.000 Radiosender im eingebauten Player |
 | 🧭 **Route & Navigation** | Routenplanung für Auto, Rad und Fuß mit Alternativen und Zwischenstopps; Dienst wählbar (OSM/OSRM, Valhalla, Google Routes, Mapbox, TomTom, OpenRouteService, GraphHopper – mit automatischem Fallback). Navigation mit gefiltertem GPS, Kompass-/Kursrotation der Karte, Abbiegehinweisen, Sprachansage und automatischer Neuberechnung |
@@ -181,7 +182,7 @@ Alle Quellen sind kostenlos und ohne Anmeldung nutzbar. Jede Quelle mit Link, Li
 | 🗳️ **Wahlen** | Ergebnisse je Bundesland seit 1990, gebietsfärbend, Zeitstrahl | [GERDA](https://german-elections.com) (CC BY 4.0), [deutschlandGeoJSON](https://github.com/isellsoap/deutschlandGeoJSON) (BKG) |
 | ⚡ **Blitze & Strahlung** | Blitze live (15 min), Radioaktivität (ODL, STUK Finnland, Health Canada, Safecast), Polarlicht/Kp, Sonnenwind | [Blitzortung](https://www.blitzortung.org), [BfS](https://odlinfo.bfs.de), [STUK/FMI](https://en.ilmatieteenlaitos.fi/open-data-licence), [Health Canada](https://open.canada.ca/en/open-government-licence-canada), [Safecast](https://safecast.org), [NOAA SWPC](https://www.swpc.noaa.gov) |
 | 🌱 **Erde & Umwelt** | Geologie, Plattengrenzen, Rohstoffe, Landbedeckung, Vegetation, Schnee, Aerosole, Nachtlichter | [Macrostrat](https://macrostrat.org), [USGS MRDS](https://mrdata.usgs.gov/mrds/), [BGR](https://services.bgr.de), [Wikidata](https://www.wikidata.org), [ESA WorldCover](https://esa-worldcover.org), NASA GIBS |
-| 🌊 **Meer & Gewässer** | Seegang, Strömung, Flussabfluss, Pegel, Bojen, Gezeiten, Meerestiefe, Algenblüte, Meerestemperatur, Meereis | [Open-Meteo Marine/Flood](https://open-meteo.com), [PEGELONLINE](https://www.pegelonline.wsv.de), [NOAA NDBC](https://www.ndbc.noaa.gov), [CO-OPS](https://tidesandcurrents.noaa.gov), [GEBCO](https://www.gebco.net), [EMODnet](https://emodnet.ec.europa.eu) |
+| 🌊 **Meer & Gewässer** | Seegang, Strömung, Flussabfluss, Pegel, Bojen, Gezeiten, Meerestiefe, Algenblüte, Meerestemperatur, Meereis, Meeresplastik (Dichte, Müllstrudel, Flusseinträge, Herkunft), Treibbojen-Bahnen | [Open-Meteo Marine/Flood](https://open-meteo.com), [PEGELONLINE](https://www.pegelonline.wsv.de), [NOAA NDBC](https://www.ndbc.noaa.gov), [CO-OPS](https://tidesandcurrents.noaa.gov), [GEBCO](https://www.gebco.net), [EMODnet](https://emodnet.ec.europa.eu), [Lebreton et al.](https://doi.org/10.1038/s41598-018-22939-w) u. a. (CC BY 4.0) |
 | ✈️ **Luftraum** | Flugzeuge, Hubschrauber, Ballone, Drohnen live; Flughäfen; Wetterballons in 3D mit Detailpanel; Raketenstarts; Satelliten | [adsb.lol](https://adsb.lol), [adsb.fi](https://adsb.fi), [OpenSky](https://opensky-network.org), [SondeHub](https://sondehub.org), [Launch Library 2](https://thespacedevs.com), [CelesTrak](https://celestrak.org) |
 | 🚆 **Verkehr** | Schiffe (AIS), Züge, Busse, Trams, U-Bahnen live; Autobahn-Staus; Blitzer & Rotlicht (ab Zoom 9); Schiffsrouten | [Digitraffic](https://www.digitraffic.fi), [Transitous](https://transitous.org), [Amtraker](https://amtraker.com), [Entur](https://developer.entur.org), [MBTA](https://api-v3.mbta.com), [SEPTA](https://www3.septa.org), [Autobahn GmbH](https://verkehr.autobahn.de), [OpenStreetMap](https://wiki.openstreetmap.org/wiki/DE:Tag:highway%3Dspeed_camera) |
 | 🛤️ **Verkehrsnetze** | Straßen, Bahn (Tempo, Elektrifizierung), ÖPNV-Linien, Rad- und Wandernetz | [OpenStreetMap](https://www.openstreetmap.org), [OpenRailwayMap](https://www.openrailwaymap.org), [Waymarked Trails](https://waymarkedtrails.org) |
@@ -385,7 +386,7 @@ Verhalten). Lokal gehören sie in `.env.local`.
 | `LIVE_BASE` | `VITE_LIVE_BASE` | schnell wechselnde Snapshots (Tsunami, Safecast, BfS-ODL, STUK-FI, Health-Canada, FIRMS, Demos); Standard: wie `DATA_BASE` |
 | `OSM_BASE` | `VITE_OSM_BASE` | OSM-Kacheln (CCTV-Dichte, Blitzer, ALPR …); Standard: Branch `data-osm` |
 | `WETTER_BASE` | `VITE_WETTER_BASE` | ICON-Wetterfelder (`/v1/latest.json`, `*.owx`); Standard: der bisherige Worker |
-| `ASSETS_BASE` | `VITE_ASSETS_BASE` | `models/`, `textures/`, `data/airports`, `data/incidents`, `data/games`; Standard: Dateien aus `public/` |
+| `ASSETS_BASE` | `VITE_ASSETS_BASE` | `models/`, `textures/`, `data/airports`, `data/incidents`, `data/games`, `data/plastik`, `data/drifters`, `data/currents`; Standard: Dateien aus `public/` |
 
 Die Wetter-Action liest die Worker-Adresse aus `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`, wird als Fallback noch gelesen).
 
@@ -395,7 +396,7 @@ wird – auch bei Vorschauen, die dann die Assets von `main` nutzen. Der Bucket 
 Ohne `ASSETS_BUCKET` bleibt alles wie bisher in `gh-pages`.
 
 **Inhaltsgehashte Asset-URLs:** `scripts/assets-manifest.mjs` (läuft als erster Schritt von `pnpm build`) hasht (sha256, 12 Hex) alle Dateien
-unter `public/{models,textures,data/airports,data/incidents,data/games}` und schreibt `src/generated/assets-manifest.json`
+unter `public/{models,textures,data/airports,data/incidents,data/games,data/plastik,data/drifters,data/currents}` und schreibt `src/generated/assets-manifest.json`
 (`models/iss.glb` → `models/iss.<hash>.glb`; gitignored, wird bei jedem Build neu erzeugt). Nur mit `VITE_ASSETS_BASE` ist das Manifest gefüllt;
 ohne bleibt es `{}` und `assetUrl()` liefert wie bisher die Klartext-Pfade (lokales `pnpm dev` unverändert). Der Deploy lädt die gehashten
 Schlüssel auf jedem Branch hoch (nur fehlende, `Cache-Control: public, max-age=31536000, immutable`), die Klartext-Schlüssel (1 Tag Cache)

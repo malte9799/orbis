@@ -1,0 +1,292 @@
+{
+ "version": 1,
+ "unit": "Teile/km²",
+ "quantity": "Zählung, Summe der vier Größenklassen",
+ "levels": [
+  {
+   "level": 10000.0,
+   "rank": "outer"
+  },
+  {
+   "level": 30000.0,
+   "rank": "mid"
+  },
+  {
+   "level": 100000.0,
+   "rank": "core"
+  }
+ ],
+ "level_reason": "Zählung statt Masse: die Eriksen-Massenraster erreichen 100 kg/km² nur im Nordpazifik/Nordatlantik und 10 kg/km² nur im GPGP und im Mittelmeer; 10^4 / 3*10^4 / 10^5 Teile/km² geben für alle Wirbel Umriss/Innenbereich, ein Kern fehlt im Süd-Pazifik und Süd-Atlantik, weil das Modell dort nirgends so hoch kommt",
+ "year_approx": 2013,
+ "smoothing_cells": 2.0,
+ "grid_deg": 0.2,
+ "credit": "Eriksen et al. 2014 (CC BY 4.0), Modellraster der Plastikdichte, Stand ~2013; Isolinien eigene Ableitung",
+ "licence": "CC BY 4.0",
+ "doi": "10.1371/journal.pone.0111913",
+ "dataDoi": "10.6084/m9.figshare.14390873",
+ "gyres": {
+  "gpgp": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 19758000.0,
+    "n_lines": 2,
+    "n_open": 2,
+    "centroid": [
+     178.5,
+     29.88
+    ],
+    "touches_box": true
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 9573000.0,
+    "n_lines": 2,
+    "n_open": 1,
+    "centroid": [
+     186.28,
+     29.77
+    ],
+    "touches_box": true
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 1896000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     214.8,
+     29.99
+    ],
+    "touches_box": false
+   }
+  },
+  "suedpazifik": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 15050000.0,
+    "n_lines": 3,
+    "n_open": 1,
+    "centroid": [
+     220.24,
+     -30.54
+    ],
+    "touches_box": true
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 879000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     272.3,
+     -29.04
+    ],
+    "touches_box": false
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 0,
+    "n_lines": 0
+   }
+  },
+  "nordatlantik": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 16079000.0,
+    "n_lines": 8,
+    "n_open": 2,
+    "centroid": [
+     -53.04,
+     29.49
+    ],
+    "touches_box": true
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 7444000.0,
+    "n_lines": 3,
+    "n_open": 0,
+    "centroid": [
+     -57.24,
+     28.7
+    ],
+    "touches_box": false
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 86000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     -49.19,
+     27.91
+    ],
+    "touches_box": false
+   }
+  },
+  "suedatlantik": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 7947000.0,
+    "n_lines": 2,
+    "n_open": 1,
+    "centroid": [
+     -21.37,
+     -30.38
+    ],
+    "touches_box": true
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 1651000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     -10.05,
+     -28.32
+    ],
+    "touches_box": false
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 0,
+    "n_lines": 0
+   }
+  },
+  "indik": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 15425000.0,
+    "n_lines": 9,
+    "n_open": 5,
+    "centroid": [
+     85.48,
+     -25.75
+    ],
+    "touches_box": true
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 4483000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     90.44,
+     -29.63
+    ],
+    "touches_box": false
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 578000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     94.73,
+     -31.13
+    ],
+    "touches_box": false
+   }
+  },
+  "mittelmeer": {
+   "outer": {
+    "level": 10000.0,
+    "area_km2": 2030000.0,
+    "n_lines": 2,
+    "n_open": 0,
+    "centroid": [
+     17.92,
+     36.12
+    ],
+    "touches_box": false
+   },
+   "mid": {
+    "level": 30000.0,
+    "area_km2": 1059000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     22.56,
+     34.05
+    ],
+    "touches_box": false
+   },
+   "core": {
+    "level": 100000.0,
+    "area_km2": 278000.0,
+    "n_lines": 1,
+    "n_open": 0,
+    "centroid": [
+     15.62,
+     33.9
+    ],
+    "touches_box": false
+   }
+  }
+ },
+ "mid_area_km2": {
+  "gpgp": 9573000.0,
+  "suedpazifik": 879000.0,
+  "nordatlantik": 7444000.0,
+  "suedatlantik": 1651000.0,
+  "indik": 4483000.0,
+  "mittelmeer": 1059000.0
+ },
+ "gpgp_vs_lebreton": {
+  "count_10000": {
+   "kind": "count",
+   "level": 10000.0,
+   "area_in_raster_km2": 6172000.0,
+   "iou": 0.312,
+   "centre": [
+    215.6,
+    29.5
+   ],
+   "centre_dist_km": 404
+  },
+  "count_30000": {
+   "kind": "count",
+   "level": 30000.0,
+   "area_in_raster_km2": 4343000.0,
+   "iou": 0.427,
+   "centre": [
+    215.1,
+    29.6
+   ],
+   "centre_dist_km": 427
+  },
+  "count_100000": {
+   "kind": "count",
+   "level": 100000.0,
+   "area_in_raster_km2": 1886000.0,
+   "iou": 0.47,
+   "centre": [
+    214.9,
+    30.0
+   ],
+   "centre_dist_km": 416
+  },
+  "mass_3000": {
+   "kind": "mass",
+   "level": 3000.0,
+   "area_in_raster_km2": 3211000.0,
+   "iou": 0.496,
+   "centre": [
+    215.3,
+    29.8
+   ],
+   "centre_dist_km": 398
+  },
+  "mass_10000": {
+   "kind": "mass",
+   "level": 10000.0,
+   "area_in_raster_km2": 937000.0,
+   "iou": 0.304,
+   "centre": [
+    215.2,
+    29.7
+   ],
+   "centre_dist_km": 413
+  }
+ }
+}
