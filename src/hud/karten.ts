@@ -4,7 +4,7 @@ import { catalogOf, MENU_LAYERS } from './catalog';
 import { hasIcon } from './icons';
 
 // A "Karte" is a saved map preset: name, look, base map, at most one weather main layer and an
-// ordered list of overlay layers. Orbis ships three standard Karten; users can change any of them
+// ordered list of overlay layers. Orbis ships standard Karten; users can change any of them
 // (the change lives in a per-Karte draft) and save the result as their own Karte.
 
 export interface KLayer {
@@ -54,7 +54,7 @@ export interface Karte {
    * and 'infra' switch the categories of their menu. What the menu picks is remembered but never
    * counts as a change.
    */
-  menu?: 'wx' | 'traffic' | 'infra' | 'zeugen';
+  menu?: 'wx' | 'traffic' | 'infra' | 'zeugen' | 'gefahren';
   /** Key of a content warning (hud/warnings.ts) that go() must confirm – standard Karten only */
   warn?: 'zeugen';
   /** traffic menu: id of the chosen category ('' = none) */
@@ -87,6 +87,11 @@ export const STANDARD: Karte[] = [
     base: 'dark', labels: true, night: 'auto', main: null,
     tmode: 'archiv', layers: [{ id: 'warfootage' }],
     view: { center: [34.47, 31.5], zoom: 10.6, name: 'Gaza' },
+  },
+  {
+    id: 'gefahren', name: 'Gefahren', icon: 'warn', color: '#e5533d', std: true, menu: 'gefahren',
+    base: 'dark', labels: true, night: 'auto', main: null,
+    tmode: 'unwetter', layers: [{ id: 'dwdwarn' }],
   },
 ];
 
@@ -181,7 +186,7 @@ export function sanitizeKarte(raw: unknown, id?: string): Karte | null {
     layers,
   };
   if (k.main && typeof r.mainVar === 'string') k.mainVar = r.mainVar;
-  if (r.menu === 'wx' || r.menu === 'traffic' || r.menu === 'infra' || r.menu === 'zeugen') k.menu = r.menu;
+  if (r.menu === 'wx' || r.menu === 'traffic' || r.menu === 'infra' || r.menu === 'zeugen' || r.menu === 'gefahren') k.menu = r.menu;
   if (typeof r.tmode === 'string') k.tmode = r.tmode.slice(0, 20);
   if (r.std === true) k.std = true;
   if (r.wind === false) k.wind = false;
