@@ -1,4 +1,4 @@
-import { INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU, ZEUGEN_MENU, type TrafficCat, type WxFamily, type WxMenuItem } from './menus';
+import { GEFAHREN_MENU_ALL, INFRA_MENU, TRAFFIC_MENU, WX_FAMILIES, WX_MENU, ZEUGEN_MENU, type TrafficCat, type WxFamily, type WxMenuItem } from './menus';
 import { EXTRAS, type CatId } from '../globe/layers';
 import { GROUPS, LINKED_EXTRA_IDS } from '../globe/events';
 import { BLACK_MARBLE, BLUE_MARBLE, EOX_S2, ESRI_CLARITY, OPENTOPO, gibsDate, type BaseId } from '../globe/style';
@@ -27,22 +27,43 @@ export const trafficCatOf = (layer: string) => TRAFFIC_MENU.find((c) => c.defaul
 
 export const INFRA_LAYER_IDS = new Set(INFRA_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
 export const infraCatOf = (layer: string) => INFRA_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+/**
+ * Drops menu layers that are not in the catalog (yet) – rows and categories that end up empty
+ * disappear. Lets a menu name layers of branches that are not merged: they show up once they exist.
+ */
+export function pruneMenu(cats: TrafficCat[], known: (id: string) => boolean): TrafficCat[] {
+  return cats
+    .map((c) => ({
+      ...c,
+      defaults: c.defaults?.filter(known),
+      rows: c.rows.map((r) => ({ ...r, layers: r.layers.filter(known) })).filter((r) => r.layers.length),
+    }))
+    .filter((c) => c.rows.length);
+}
+/** whether an id is a catalog entry (same rule as CATALOG below, which is built later in this file) */
+const inCatalog = (id: string) => (EXTRAS.some((d) => d.id === id) && !LINKED_EXTRA_IDS.has(id)) || GROUPS.some((g) => g.id === id && !!g.catalog);
+export const GEFAHREN_MENU: TrafficCat[] = pruneMenu(GEFAHREN_MENU_ALL, inCatalog);
+export const GEFAHREN_LAYER_IDS = new Set(GEFAHREN_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
+export const gefahrenCatOf = (layer: string) => GEFAHREN_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
+
 export const ZEUGEN_LAYER_IDS = new Set(ZEUGEN_MENU.flatMap((c) => [...(c.defaults ?? []), ...c.rows.flatMap((r) => r.layers)]));
 export const zeugenCatOf = (layer: string) => ZEUGEN_MENU.find((c) => c.defaults?.includes(layer) || c.rows.some((r) => r.layers.includes(layer)));
 
 /** the radio menu (category list + layer ids) behind a Karte's `menu` */
-export function radioMenu(menu: 'wx' | 'traffic' | 'infra' | 'zeugen' | undefined) {
+export function radioMenu(menu: 'wx' | 'traffic' | 'infra' | 'zeugen' | 'gefahren' | undefined) {
+  if (menu === 'gefahren') return { cats: GEFAHREN_MENU, ids: GEFAHREN_LAYER_IDS, catOf: gefahrenCatOf };
   if (menu === 'infra') return { cats: INFRA_MENU, ids: INFRA_LAYER_IDS, catOf: infraCatOf };
   if (menu === 'zeugen') return { cats: ZEUGEN_MENU, ids: ZEUGEN_LAYER_IDS, catOf: zeugenCatOf };
   return { cats: TRAFFIC_MENU, ids: TRAFFIC_LAYER_IDS, catOf: trafficCatOf };
 }
 
 /** the menu type of a Karten menu id ('' = none) */
-export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra' | 'zeugen', Set<string>> = {
+export const MENU_LAYERS: Record<'wx' | 'traffic' | 'infra' | 'zeugen' | 'gefahren', Set<string>> = {
   wx: new Set(),
   traffic: TRAFFIC_LAYER_IDS,
   infra: INFRA_LAYER_IDS,
   zeugen: ZEUGEN_LAYER_IDS,
+  gefahren: GEFAHREN_LAYER_IDS,
 };
 
 /** families whose forecast model provides isobars as an option */

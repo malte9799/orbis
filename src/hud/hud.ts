@@ -412,7 +412,7 @@ export function createHud(host: HudHost): Hud {
       k.menu === 'zeugen'
         ? `<button type="button" data-act="zq" class="${ui.zq ? 'on' : ''}" aria-expanded="${ui.zq}" aria-pressed="${ui.zq}" title="Belegquellen der Karte"><i>${ico('list', 2)}</i><span>Quellen</span></button>${ui.zq ? `<div class="subs">${quellenInner()}</div>` : ''}`
         : '';
-    const label = k.menu === 'infra' ? 'Infrastruktur' : k.menu === 'zeugen' ? 'Dokumentation' : 'Verkehrsmittel';
+    const label = k.menu === 'infra' ? 'Infrastruktur' : k.menu === 'zeugen' ? 'Dokumentation' : k.menu === 'gefahren' ? 'Gefahren' : 'Verkehrsmittel';
     return `<div class="wxm hud-glass" role="group" aria-label="${esc(label)}"><div class="mrow cats">${menu.map((c) => {
       const on = c.id === cur;
       return `<button type="button" data-act="tcat" data-id="${esc(c.id)}" class="${on ? 'on' : ''}" aria-pressed="${on}" style="--lc:${esc(k.color)}"><i>${ico(c.icon, 2)}</i><span>${esc(c.label)}</span></button>${on ? `<div class="subs">${c.rows.map((r) => toggle(r.label, r.layers)).join('')}</div>` : ''}`;
