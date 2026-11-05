@@ -689,3 +689,43 @@ body.hud-cover .orbis-nav { z-index: 0; }
 .globe-view[data-layout='desktop'] .globe-bottom .legend-ticks { height: 22px; margin-top: -22px; line-height: 22px; }
 /* every label (also the unit in the lead-in) is centred on its position */
 .globe-view[data-layout='desktop'] .globe-bottom .legend-ticks span { transform: translateX(-50%); margin-left: 0; }
+
+/* Treibbojen und Treibgut-Modell: Umschalter („Echte Zeit | Gemeinsamer Start“, „Historisch ab 1950 | Live“) im Zeitstrahl (der gewählte Modus ist unterstrichen) */
+.timeline .tl-modes { display: inline-flex; gap: 0.75rem; }
+.timeline .tl-mode[aria-pressed='true'] { text-decoration: underline; text-underline-offset: 3px; }
+.timeline .tl-mode[aria-pressed='false'] { opacity: 0.6; }
+.timeline .tl-mode { all: unset; box-sizing: border-box; cursor: pointer; font-size: 0.75rem; font-weight: 600; color: #4dd0e1; text-align: left; white-space: nowrap; }
+.timeline .tl-mode:hover { text-decoration: underline; }
+.timeline .tl-mode:focus-visible { outline: 2px solid #4dd0e1; outline-offset: 2px; border-radius: 3px; }
+
+/* Meeresplastik (Plastik im Meer + Treibbojen + Treibgut-Modell): ein Zeitstrahl mit Reiterzeile (.tl-tabs: „Alle“ und je eine Ebene,
+   dahinter die Modi der gewählten Ebene) und aufklappbaren Optionen (Tempo). Das Live-Modell hat keinen Schieber (.tl-notrack). */
+.timeline.tl-meer { flex-wrap: wrap; }
+.timeline.tl-notrack .tl-track { display: none; }
+.timeline .btn.icon-btn.tl-optbtn { width: 30px; height: 30px; flex: none; border-radius: 50%; background: rgba(255, 255, 255, 0.14); }
+.timeline .btn.icon-btn.tl-optbtn:hover, .timeline .tl-optbtn[aria-expanded='true'] { background: rgba(255, 255, 255, 0.3); }
+.timeline .tl-optbtn svg { width: 16px; height: 16px; }
+.timeline .tl-optbtn[hidden], .timeline .tl-opts[hidden] { display: none; }
+.timeline .tl-opts { order: 10; flex: 0 0 100%; display: grid; gap: 8px; padding: 8px 2px 4px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.timeline .to-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
+.timeline .to-lbl { min-width: 7.5rem; font-size: 0.75rem; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+.timeline .tl-opts .tl-modes { flex-wrap: wrap; gap: 4px 0.75rem; }
+.timeline .tl-tabs { order: -1; flex: 0 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; padding-bottom: 6px; }
+.timeline .tl-tabs[hidden] { display: none; }
+.timeline .tl-tabset { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.timeline .tl-tab { all: unset; box-sizing: border-box; cursor: pointer; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; color: rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.1); }
+.timeline .tl-tab[aria-pressed='true'] { color: #06222a; background: #4dd0e1; }
+.timeline .tl-tab:focus-visible { outline: 2px solid #4dd0e1; outline-offset: 2px; }
+.timeline .to-sw { all: unset; box-sizing: border-box; cursor: pointer; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; color: rgba(255, 255, 255, 0.75); background: rgba(255, 255, 255, 0.1); }
+.timeline .to-sw[aria-checked='true'] { color: #06222a; background: #4dd0e1; }
+.timeline .to-sw:focus-visible { outline: 2px solid #4dd0e1; outline-offset: 2px; }
+.globe-view[data-layout='desktop'] .timeline.tl-meer { grid-template-columns: auto 1fr auto; grid-template-areas: 'play head opt' 'track track track' 'opts opts opts'; }
+.globe-view[data-layout='desktop'] .timeline.tl-meer.tl-notrack { grid-template-areas: 'play head opt' 'opts opts opts'; padding-bottom: 9px; }
+.globe-view[data-layout='desktop'] .timeline.tl-meer:has(.tl-tabs:not([hidden])) { grid-template-areas: 'tabs tabs tabs' 'play head opt' 'track track track' 'opts opts opts'; }
+.globe-view[data-layout='desktop'] .timeline.tl-meer.tl-notrack:has(.tl-tabs:not([hidden])) { grid-template-areas: 'tabs tabs tabs' 'play head opt' 'opts opts opts'; }
+.globe-view[data-layout='desktop'] .timeline .tl-tabs { grid-area: tabs; }
+.globe-view[data-layout='desktop'] .timeline .tl-optbtn { grid-area: opt; }
+.globe-view[data-layout='desktop'] .timeline .tl-opts { grid-area: opts; }
+.globe-view[data-layout='landscape'] .globe-bottom .tl-optbtn { order: 5; }
+.globe-view[data-layout='landscape'] .globe-bottom .tl-opts { order: 9; }
+.globe-view[data-layout='landscape'] .globe-bottom:has(.tl-opts:not([hidden]), .tl-tabs:not([hidden])) { flex-wrap: wrap; }

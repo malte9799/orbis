@@ -1,0 +1,488 @@
+{
+ "version": 1,
+ "experimental": true,
+ "hinweis": "Experimentelles Modell, keine Messung: Es gibt keine gemessenen historischen Umrisse der Plastikwirbel. Der Umriss ist allein auf die Fläche des GPGP von Lebreton et al. 2018 im Jahr 2015 kalibriert; für die anderen Wirbel gilt dieselbe absolute Dichteschwelle ohne Anpassung.",
+ "years": [
+  1950,
+  2022
+ ],
+ "gyres": [
+  "gpgp",
+  "suedpazifik",
+  "nordatlantik",
+  "suedatlantik",
+  "indik",
+  "mittelmeer"
+ ],
+ "tau_years": 15.0,
+ "diffusivity": 1000.0,
+ "dt_days": 2.0,
+ "particles_per_year_pacific_equivalent": 60000,
+ "released": 6905474,
+ "runtime_s": 489,
+ "sources": "Meijer et al. 2021, alle 11696 Flussmündungen weltweit (990,490 t/Jahr), gewichtet nach Menge t/Jahr; Pazifik-Anteil (Box 100° O bis 70° W, 10° S bis 65° N) 63.3%; Partikelmasse so skaliert, dass die Pazifik-Mündungen wie in gpgp-model.py wirken",
+ "production": "Our World in Data, Global plastics production (Geyer et al. 2017, CC BY); nach 2019 linear fortgeschrieben (Ausgleichsgerade 2015 bis 2019)",
+ "current": "NOAA/AOML Global Drifter Program, mittleres Feld (Laurindo et al. 2017, CC BY 4.0), siehe public/data/currents/meta.json",
+ "credits": [
+  "NOAA/AOML Global Drifter Program, Laurindo et al. 2017 (CC BY 4.0)",
+  "Meijer et al. 2021 (CC BY 4.0)",
+  "Our World in Data / Geyer et al. 2017 (CC BY)",
+  "Eigene experimentelle Modellrechnung"
+ ],
+ "calibration": {
+  "year": 2015,
+  "gyre": "gpgp",
+  "target_km2": 1600000.0,
+  "centre": [
+   -141.6,
+   32.2
+  ],
+  "threshold_relative": 1.5035813103911302e-08,
+  "threshold_source": "public/data/plastik/gpgp-model-meta.json (gpgp-model.py)",
+  "threshold_own_calibration_global_run": 1.630171404449015e-08,
+  "gauss_cells": 1.0,
+  "grid_deg": 0.5,
+  "rule": "dieselbe feste Dichteschwelle für alle Jahre und alle Wirbel"
+ },
+ "boxes": {
+  "gpgp": {
+   "lon": [
+    120.0,
+    260.0
+   ],
+   "lat": [
+    0.0,
+    60.0
+   ],
+   "centre": [
+    218.4,
+    32.2
+   ],
+   "search_km": 2500.0,
+   "frame": "0..360"
+  },
+  "suedpazifik": {
+   "lon": [
+    140.0,
+    290.0
+   ],
+   "lat": [
+    -60.0,
+    0.0
+   ],
+   "centre": [
+    255.0,
+    -28.0
+   ],
+   "search_km": 2500.0,
+   "frame": "0..360"
+  },
+  "nordatlantik": {
+   "lon": [
+    -100.0,
+    20.0
+   ],
+   "lat": [
+    0.0,
+    60.0
+   ],
+   "centre": [
+    -45.0,
+    30.0
+   ],
+   "search_km": 2500.0,
+   "frame": "-180..180"
+  },
+  "suedatlantik": {
+   "lon": [
+    -60.0,
+    20.0
+   ],
+   "lat": [
+    -60.0,
+    0.0
+   ],
+   "centre": [
+    -15.0,
+    -28.0
+   ],
+   "search_km": 2500.0,
+   "frame": "-180..180"
+  },
+  "indik": {
+   "lon": [
+    20.0,
+    130.0
+   ],
+   "lat": [
+    -60.0,
+    0.0
+   ],
+   "centre": [
+    80.0,
+    -28.0
+   ],
+   "search_km": 2500.0,
+   "frame": "-180..180"
+  },
+  "mittelmeer": {
+   "lon": [
+    -6.0,
+    36.5
+   ],
+   "lat": [
+    30.0,
+    46.0
+   ],
+   "centre": [
+    16.0,
+    37.0
+   ],
+   "search_km": 1500.0,
+   "frame": "-180..180"
+  }
+ },
+ "gpgp_vs_gpgp_model": {
+  "1990": {
+   "old": 410000,
+   "new": 392900.0459514685
+  },
+  "2000": {
+   "old": 772000,
+   "new": 819708.475104751
+  },
+  "2010": {
+   "old": 1284000,
+   "new": 1416740.602682953
+  },
+  "2015": {
+   "old": 1598000,
+   "new": 1769453.7649535276
+  },
+  "2022": {
+   "old": 2499000,
+   "new": 2305756.6900522346
+  }
+ },
+ "plausibility_vs_eriksen": {
+  "note": "Eriksen et al. 2014 (CC BY 4.0), Flächen >= 3*10^4 (mid) und >= 10^5 Teile/km² (core), Stand ~2013; Modell = Jahre 2013 und 2014; reine Prüfung, keine Anpassung",
+  "gyres": {
+   "gpgp": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 1552000.0,
+      "eriksen_area_km2": 9573000.0,
+      "iou": 0.155,
+      "centre_model": [
+       218.8,
+       32.0
+      ],
+      "centre_eriksen": [
+       186.3,
+       29.8
+      ],
+      "centre_dist_km": 3100
+     },
+     "2014": {
+      "model_area_km2": 1681000.0,
+      "eriksen_area_km2": 9573000.0,
+      "iou": 0.168,
+      "centre_model": [
+       218.2,
+       31.9
+      ],
+      "centre_eriksen": [
+       186.3,
+       29.8
+      ],
+      "centre_dist_km": 3050
+     }
+    },
+    "core": {
+     "2013": {
+      "model_area_km2": 1552000.0,
+      "eriksen_area_km2": 1896000.0,
+      "iou": 0.415,
+      "centre_model": [
+       218.8,
+       32.0
+      ],
+      "centre_eriksen": [
+       214.8,
+       30.0
+      ],
+      "centre_dist_km": 439
+     },
+     "2014": {
+      "model_area_km2": 1681000.0,
+      "eriksen_area_km2": 1896000.0,
+      "iou": 0.427,
+      "centre_model": [
+       218.2,
+       31.9
+      ],
+      "centre_eriksen": [
+       214.8,
+       30.0
+      ],
+      "centre_dist_km": 392
+     }
+    }
+   },
+   "suedpazifik": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     },
+     "2014": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     }
+    },
+    "core": null
+   },
+   "nordatlantik": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 5345000.0,
+      "eriksen_area_km2": 7444000.0,
+      "iou": 0.466,
+      "centre_model": [
+       -52.1,
+       28.3
+      ],
+      "centre_eriksen": [
+       -57.2,
+       28.7
+      ],
+      "centre_dist_km": 507
+     },
+     "2014": {
+      "model_area_km2": 5447000.0,
+      "eriksen_area_km2": 7444000.0,
+      "iou": 0.469,
+      "centre_model": [
+       -51.9,
+       28.3
+      ],
+      "centre_eriksen": [
+       -57.2,
+       28.7
+      ],
+      "centre_dist_km": 520
+     }
+    },
+    "core": {
+     "2013": {
+      "model_area_km2": 5345000.0,
+      "eriksen_area_km2": 86000.0,
+      "iou": 0.016,
+      "centre_model": [
+       -52.1,
+       28.3
+      ],
+      "centre_eriksen": [
+       -49.2,
+       27.9
+      ],
+      "centre_dist_km": 286
+     },
+     "2014": {
+      "model_area_km2": 5447000.0,
+      "eriksen_area_km2": 86000.0,
+      "iou": 0.016,
+      "centre_model": [
+       -51.9,
+       28.3
+      ],
+      "centre_eriksen": [
+       -49.2,
+       27.9
+      ],
+      "centre_dist_km": 273
+     }
+    }
+   },
+   "suedatlantik": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 3646000.0,
+      "eriksen_area_km2": 1651000.0,
+      "iou": 0.183,
+      "centre_model": [
+       -27.1,
+       -30.7
+      ],
+      "centre_eriksen": [
+       -10.0,
+       -28.3
+      ],
+      "centre_dist_km": 1668
+     },
+     "2014": {
+      "model_area_km2": 3821000.0,
+      "eriksen_area_km2": 1651000.0,
+      "iou": 0.182,
+      "centre_model": [
+       -27.1,
+       -30.9
+      ],
+      "centre_eriksen": [
+       -10.0,
+       -28.3
+      ],
+      "centre_dist_km": 1671
+     }
+    },
+    "core": null
+   },
+   "indik": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 2681000.0,
+      "eriksen_area_km2": 4483000.0,
+      "iou": 0.334,
+      "centre_model": [
+       85.9,
+       -26.5
+      ],
+      "centre_eriksen": [
+       90.4,
+       -29.6
+      ],
+      "centre_dist_km": 568
+     },
+     "2014": {
+      "model_area_km2": 2771000.0,
+      "eriksen_area_km2": 4483000.0,
+      "iou": 0.34,
+      "centre_model": [
+       85.9,
+       -26.5
+      ],
+      "centre_eriksen": [
+       90.4,
+       -29.6
+      ],
+      "centre_dist_km": 568
+     }
+    },
+    "core": {
+     "2013": {
+      "model_area_km2": 2681000.0,
+      "eriksen_area_km2": 578000.0,
+      "iou": 0.014,
+      "centre_model": [
+       85.9,
+       -26.5
+      ],
+      "centre_eriksen": [
+       94.7,
+       -31.1
+      ],
+      "centre_dist_km": 1005
+     },
+     "2014": {
+      "model_area_km2": 2771000.0,
+      "eriksen_area_km2": 578000.0,
+      "iou": 0.02,
+      "centre_model": [
+       85.9,
+       -26.5
+      ],
+      "centre_eriksen": [
+       94.7,
+       -31.1
+      ],
+      "centre_dist_km": 1005
+     }
+    }
+   },
+   "mittelmeer": {
+    "mid": {
+     "2013": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     },
+     "2014": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     }
+    },
+    "core": {
+     "2013": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     },
+     "2014": {
+      "model_area_km2": 0,
+      "iou": 0.0
+     }
+    }
+   }
+  }
+ },
+ "summary": {
+  "gpgp": {
+   "max_density_over_threshold_2013": 10.86,
+   "max_density_over_threshold_2022": 16.06,
+   "first_year": 1980,
+   "first_year_ge_0_1_mio_km2": 1982,
+   "area_1990": 393000.0,
+   "area_2000": 820000.0,
+   "area_2010": 1417000.0,
+   "area_2022": 2306000.0
+  },
+  "suedpazifik": {
+   "max_density_over_threshold_2013": 1.57,
+   "max_density_over_threshold_2022": 2.28,
+   "first_year": null,
+   "first_year_ge_0_1_mio_km2": null,
+   "area_1990": 0.0,
+   "area_2000": 0.0,
+   "area_2010": 0.0,
+   "area_2022": 0.0
+  },
+  "nordatlantik": {
+   "max_density_over_threshold_2013": 37.48,
+   "max_density_over_threshold_2022": 54.66,
+   "first_year": 1982,
+   "first_year_ge_0_1_mio_km2": 1984,
+   "area_1990": 1261000.0,
+   "area_2000": 3590000.0,
+   "area_2010": 5112000.0,
+   "area_2022": 6525000.0
+  },
+  "suedatlantik": {
+   "max_density_over_threshold_2013": 9.31,
+   "max_density_over_threshold_2022": 14.65,
+   "first_year": 1978,
+   "first_year_ge_0_1_mio_km2": 1981,
+   "area_1990": 1290000.0,
+   "area_2000": 2085000.0,
+   "area_2010": 3264000.0,
+   "area_2022": 4613000.0
+  },
+  "indik": {
+   "max_density_over_threshold_2013": 6.3,
+   "max_density_over_threshold_2022": 9.33,
+   "first_year": 1983,
+   "first_year_ge_0_1_mio_km2": 1989,
+   "area_1990": 139000.0,
+   "area_2000": 779000.0,
+   "area_2010": 2427000.0,
+   "area_2022": 3372000.0
+  },
+  "mittelmeer": {
+   "max_density_over_threshold_2013": 0.29,
+   "max_density_over_threshold_2022": 0.4,
+   "first_year": null,
+   "first_year_ge_0_1_mio_km2": null,
+   "area_1990": 0.0,
+   "area_2000": 0.0,
+   "area_2010": 0.0,
+   "area_2022": 0.0
+  }
+ }
+}

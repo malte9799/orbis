@@ -46,6 +46,30 @@ import { EXTRA_CLICK_LAYERS, EXTRAS, ExtraLayers, type ExtraId } from '../globe/
 import type { Launch } from '../api/transport';
 import { FlightPanel } from '../globe/flightpanel';
 import { WahlPanel } from '../globe/wahlenpanel';
+import { plastikCount, plastikModelArea, plastikYear, plastikYears, subscribePlastik } from '../globe/layers/shared/plastiktime';
+import {
+  dayCalendarYear,
+  MEER_SPEEDS,
+  meerRange,
+  meerState,
+  setMeerFocus,
+  setMeerPlaying,
+  setMeerSpeed,
+  setMeerTime,
+  subscribeMeer,
+  subscribeMeerTick,
+  tickMeer,
+  type MeerFocus,
+  type MeerLayer,
+  type MeerSpeed,
+} from '../globe/layers/shared/meerzeit';
+import { histDate } from '../globe/layers/shared/treibhistorie';
+import { SCALE_STOPS } from '../globe/layers/shared/plastikgeo';
+import { CONC_STOPS, COUNT_STOPS } from '../globe/layers/shared/plastiktows';
+import { areaMio, MODEL_COLOR, MODEL_NOTE } from '../globe/layers/shared/plastikmodell';
+import { driftState, setDriftMode, setDriftTime, subscribeDrift } from '../globe/layers/shared/treibbojentime';
+import { SHARED_SPAN_DAYS, yearToDay } from '../globe/layers/shared/treibbojen';
+import { modelRunMode, modelState, restartModel, RUN_DAYS, RUN_YEARS, setModelMode, setModelRunTarget, subscribeModel, subscribeModelTick } from '../globe/layers/shared/treibmodelltime';
 import { wahlenRegions } from '../api/wahlen';
 import { SondePanel } from '../globe/sondepanel';
 import { InfoPanel } from '../globe/infopanel';
@@ -181,6 +205,7 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       <div class="legend" hidden></div>
       <div class="timeline" hidden>
         <button class="btn icon-btn tl-play" aria-label="Abspielen"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+        <div class="tl-tabs" hidden></div>
         <div class="tl-head"><b></b><span></span></div>
         <div class="tl-track">
           <input type="range" class="tl-range" min="0" max="0" value="0" aria-label="Zeit"/>
@@ -188,6 +213,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
         </div>
         <button class="btn small tl-now" title="Zur aktuellen Zeit">Jetzt</button>
         <span class="tl-time"></span>
+        <button type="button" class="btn icon-btn tl-optbtn" aria-label="Optionen" aria-expanded="false" title="Tempo" hidden><svg viewBox="0 0 24 24"><path d="M4 7h10v2H4zM18 7h2v2h-2zM14 5h2v6h-2zM4 15h2v2H4zM10 15h10v2H10zM6 13h2v6H6z"/></svg></button>
+        <div class="tl-opts" hidden></div>
       </div>
     </div>
     <div class="readout" hidden></div>`;
@@ -325,6 +352,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     else if (prev.wind !== state.wind || prev.isobars !== state.isobars) void applyModelLayers();
     if (extrasChanged) {
       extras?.setEnabled(Object.keys(nextExtras) as ExtraId[]);
+      // Zeitstrahl und Legende gehören teils einer Ebene (Wahlen, Plastik im Meer): beim Ein- und Ausschalten neu aufbauen
+      renderTimeline();
+      renderLegend();
       // without aircraft there is nothing left to show or follow in its panel
       if (!extras?.isOn('aircraft') && !extras?.isOn('airport3d')) flightPanel?.close();
     }
@@ -871,6 +901,9 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   const daysEl = timeline.querySelector<HTMLDivElement>('.tl-days')!;
   const playBtn = timeline.querySelector<HTMLButtonElement>('.tl-play')!;
   const nowBtn = timeline.querySelector<HTMLButtonElement>('.tl-now')!;
+  const optBtn = timeline.querySelector<HTMLButtonElement>('.tl-optbtn')!;
+  const optsEl = timeline.querySelector<HTMLDivElement>('.tl-opts')!;
+  const tabsEl = timeline.querySelector<HTMLDivElement>('.tl-tabs')!;
 
   async function ensureRadar() {
     if (!map) return;
@@ -946,13 +979,41 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
   }
 
   // ----- timeline (radar frames, forecast steps or election dates) ------------
-  type TimelineMode = 'none' | 'radar' | 'model' | 'wahlen';
+  type TimelineMode = 'none' | 'radar' | 'model' | 'wahlen' | 'meer';
+  /** which of the marine-plastic layers are on (and loaded): they share one timeline, the "Meeresplastik" mode */
+  const meerOn = () => ({
+    plastik: !!extras?.isOn('plastik') && plastikYears().length > 0,
+    bojen: !!extras?.isOn('treibbojen') && !!driftState().ready,
+    modell: !!extras?.isOn('treibmodell') && !!modelState().ready,
+  });
+  const meerActive = () => {
+    const o = meerOn();
+    return o.plastik || o.bojen || o.modell;
+  };
+  const MEER_LAYERS: readonly MeerLayer[] = ['plastik', 'bojen', 'modell'];
+  const MEER_LABEL: Record<MeerLayer, string> = { plastik: 'Plastik im Meer', bojen: 'Treibbojen', modell: 'Treibgut-Modell' };
+  /** the tab chosen by the user ("Alle" by default); with a single layer on, that layer is the focus whatever was chosen */
+  let meerChosen: MeerFocus = 'all';
+  const meerEffectiveFocus = (o = meerOn()): MeerFocus => {
+    const list = MEER_LAYERS.filter((l) => o[l]);
+    if (list.length === 1) return list[0];
+    return meerChosen !== 'all' && o[meerChosen] ? meerChosen : 'all';
+  };
+  /** the focus of the shared state (meerzeit.ts) follows the tabs and the layers that are on */
+  const syncMeerFocus = () => setMeerFocus(meerEffectiveFocus());
+  /** does the clock of the timeline drive something in the shown view? Otherwise the layer runs its own loop (live model, shared start) and the clock stays. */
+  const meerFollowing = (o = meerOn()) => {
+    const f = meerEffectiveFocus(o);
+    return f === 'all' ? o.plastik || o.bojen || o.modell : f === 'bojen' ? driftState().mode === 'real' : f === 'modell' ? modelRunMode() === 'hist' : true;
+  };
   const timelineMode = (): TimelineMode =>
     // Der Zeitstrahl gehört der Ebene Wahlen, solange sie an ist – radar/modellwahl übernimmt sie zurück,
     // wenn die Ebene ausgeschaltet wird (Chip / Auge)
     extras?.isOn('wahlen') && wahlenMarks().length
       ? 'wahlen'
-      : state.overlay === 'radar'
+      : meerActive()
+        ? 'meer'
+        : state.overlay === 'radar'
         ? radar?.frames.length
           ? 'radar'
           : 'none'
@@ -964,19 +1025,78 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     renderTimeline();
     renderLegend();
   });
+  // the marine-plastic layers: structural changes (play, speed, coupling, jumps, data) redraw timeline and legend at once, the running
+  // clock only the timeline and at most every 100 ms
+  const meerChanged = () => {
+    renderTimeline();
+    renderLegend();
+  };
+  subscribePlastik(meerChanged);
+  subscribeDrift(meerChanged);
+  subscribeModel(meerChanged);
+  subscribeMeer(meerChanged);
+  let meerTickAt = 0;
+  const meerTick = () => {
+    if (timelineMode() !== 'meer') return;
+    const now = performance.now();
+    if (now - meerTickAt < 100) return;
+    meerTickAt = now;
+    renderTimeline();
+  };
+  subscribeMeerTick(meerTick);
+  subscribeModelTick(meerTick);
+
+  /** The clock runs in a frame loop of its own while it plays and a layer follows it (the layers only read it). */
+  let meerRaf = 0;
+  function syncMeerDriver() {
+    if (meerActive()) syncMeerFocus();
+    const want = timelineMode() === 'meer' && meerState().playing && meerFollowing();
+    if (want && !meerRaf) {
+      let last = performance.now();
+      const loop = (now: number) => {
+        // a long pause (hidden tab) must not make the time jump
+        tickMeer(Math.min(100, Math.max(0, now - last)));
+        last = now;
+        meerRaf = requestAnimationFrame(loop);
+      };
+      meerRaf = requestAnimationFrame(loop);
+    } else if (!want && meerRaf) {
+      cancelAnimationFrame(meerRaf);
+      meerRaf = 0;
+    }
+  }
 
   const timeLabel = (ms: number) =>
     dateTimeTxt(ms, { weekday: 'short', hour: is12() ? 'numeric' : '2-digit', minute: '2-digit' }) + (tzUtc() ? ' UTC' : '');
 
   let timelineKey = '';
+  /** the Meeresplastik timeline has set the play icon / options (to be undone when another timeline takes over) */
+  let driftIconShown = false;
+  let optsOpen = false;
+  let meerOptKey = '';
+  let meerTabsKey = '';
   function renderTimeline() {
     const mode = timelineMode();
     if (timeline.hidden !== (mode === 'none')) {
       timeline.hidden = mode === 'none';
       hud?.syncSheet();
     }
+    syncMeerDriver();
+    const meer = mode === 'meer';
+    if (!meer && driftIconShown) {
+      // das Abspiel-Symbol gehörte dem Meeresplastik-Zeitstrahl: zurück auf „Abspielen“, Optionen weg
+      driftIconShown = false;
+      stopAnimation();
+      timeline.classList.remove('tl-meer', 'tl-notrack');
+      rangeEl.disabled = false;
+      optBtn.hidden = true;
+      optsEl.hidden = true;
+      tabsEl.hidden = true;
+      meerTabsKey = '';
+    }
     if (mode === 'none') return;
     if (mode === 'wahlen') return renderWahlenTimeline();
+    if (meer) return renderMeerTimeline();
     const times = mode === 'radar' ? radar!.frames.map((f) => f.time * 1000) : globalModel!.times;
     const idx = mode === 'radar' ? radarIdx : timeIdx;
     let t = mode === 'radar' ? times[idx] : sampler?.time ?? times[Math.round(idx)];
@@ -1076,6 +1196,234 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     }
   }
 
+  /** "Jun 1994" for a day count since 1970-01-01 */
+  const monthYear = (day: number) => new Date(Math.floor(day) * 86400000).toLocaleDateString('de-DE', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  const NF = new Intl.NumberFormat('de-DE');
+
+  /** the options (tempo); rebuilt only when something in them changes */
+  function meerOptsHtml(): string {
+    const m = meerState();
+    const mode = (v: MeerSpeed) => `<button type="button" class="tl-mode" data-meer-speed="${v}" aria-pressed="${m.speed === v}">1 Jahr = ${v} s</button>`;
+    return `<div class="to-row"><span class="to-lbl">Tempo</span><span class="tl-modes">${MEER_SPEEDS.map(mode).join('')}</span></div>`;
+  }
+
+  /**
+   * The tab row of the timeline: "Alle" and one tab per plastic layer that is on (only with two or more), then the modes of the layer in
+   * focus (Treibbojen: Echte Zeit / Gemeinsamer Start, Treibgut-Modell: Historisch ab 1950 / Live / 10 Jahre ab leerem Meer). Rebuilt only on change.
+   */
+  function meerTabsHtml(on: ReturnType<typeof meerOn>, focus: MeerFocus): string {
+    const btn = (cls: string, attr: string, value: string, label: string, pressed: boolean) =>
+      `<button type="button" class="${cls}" ${attr}="${value}" aria-pressed="${pressed}">${label}</button>`;
+    const list = MEER_LAYERS.filter((l) => on[l]);
+    let html = '';
+    if (list.length > 1) {
+      html += `<span class="tl-tabset" role="group" aria-label="Ansicht">${btn('tl-tab', 'data-meer-focus', 'all', 'Alle', focus === 'all')}${list
+        .map((l) => btn('tl-tab', 'data-meer-focus', l, MEER_LABEL[l], focus === l))
+        .join('')}</span>`;
+    }
+    if (focus === 'bojen') {
+      const shared = driftState().mode === 'shared';
+      html += `<span class="tl-modes">${btn('tl-mode', 'data-drift-mode', 'real', 'Echte Zeit', !shared)}${btn('tl-mode', 'data-drift-mode', 'shared', 'Gemeinsamer Start', shared)}</span>`;
+    } else if (focus === 'modell') {
+      const mode = modelRunMode();
+      html += `<span class="tl-modes">${btn('tl-mode', 'data-model-mode', 'hist', 'Historisch ab 1950', mode === 'hist')}${btn('tl-mode', 'data-model-mode', 'live', 'Live', mode === 'live')}${btn('tl-mode', 'data-model-mode', 'run', '10 Jahre ab leerem Meer', mode === 'run')}</span>`;
+    }
+    return html;
+  }
+
+  /** ticks under the slider for a calendar axis: one per 5 years, a label per 10 */
+  function calendarTicks(lo: number, hi: number): string {
+    const span = Math.max(1, hi - lo);
+    let html = '';
+    for (let y = dayCalendarYear(lo); y <= dayCalendarYear(hi); y += 5) {
+      const pos = ((yearToDay(y) - lo) / span) * 100;
+      if (pos < 0) continue;
+      html += `<i style="left:${pos}%"></i>`;
+      if (y % 10 === 0 && pos < 96) html += `<span style="left:${pos}%">${y}</span>`;
+    }
+    return html;
+  }
+
+  /**
+   * Der Zeitstrahl „Meeresplastik“ für „Plastik im Meer“, „Treibbojen“ und „Treibgut-Modell“. Zwei oder mehr Ebenen an: eine Reiterzeile
+   * „Alle“ (gemeinsamer Kalender, Achse 1950 bis zum Ende der Bojendaten, alle Ebenen laufen mit) oder je eine Ebene (nur deren eigener
+   * Zeitstrahl: Plastik im Meer = Schieber über seine Jahre, Treibbojen = über den Datenbereich, Echte Zeit / Gemeinsamer Start, Treibgut-
+   * Modell = Historisch ab 1950 mit Schieber, Live ohne Schieber oder 10 Jahre ab leerem Meer mit eigenem Schieber 0 bis 10 Jahre); die übrigen Ebenen halten dann ihren Stand (shared/meerzeit.ts,
+   * `focus`). Ist nur eine Ebene an, gibt es keine Reiter und die Ansicht dieser Ebene. Abspielen / Pause und Tempo gelten für die gezeigte
+   * Ansicht. Reiter und Optionen entstehen nur bei Änderung, damit ein Klick nicht verloren geht, wenn die Zeit läuft.
+   */
+  function renderMeerTimeline() {
+    const on = meerOn();
+    const m = meerState();
+    const focus = m.focus;
+    const live = focus === 'modell' && modelRunMode() === 'live';
+    const run = focus === 'modell' && modelRunMode() === 'run';
+    const shared = focus === 'bojen' && driftState().mode === 'shared';
+    // no slider: the live model has a counter only
+    const track = !live;
+    driftIconShown = true;
+    timeline.classList.add('tl-meer');
+    timeline.classList.toggle('tl-notrack', !track);
+    optBtn.hidden = false;
+    optBtn.setAttribute('aria-expanded', String(optsOpen));
+    const label = m.playing ? 'Pause' : 'Abspielen';
+    if (playBtn.getAttribute('aria-label') !== label) {
+      playBtn.innerHTML = m.playing
+        ? '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+        : '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>';
+      playBtn.setAttribute('aria-label', label);
+    }
+
+    // tabs and modes of the layer in focus
+    const tabsKey = [focus, on.plastik, on.bojen, on.modell, driftState().mode, modelRunMode()].join(':');
+    if (tabsKey !== meerTabsKey) {
+      meerTabsKey = tabsKey;
+      tabsEl.innerHTML = meerTabsHtml(on, focus);
+      tabsEl.hidden = !tabsEl.innerHTML;
+      hud?.syncSheet();
+    }
+    // options (tempo)
+    const optKey = [optsOpen, m.speed].join(':');
+    if (optKey !== meerOptKey) {
+      meerOptKey = optKey;
+      optsEl.hidden = !optsOpen;
+      if (optsOpen) optsEl.innerHTML = meerOptsHtml();
+      hud?.syncSheet();
+    }
+
+    // slider and its ticks: the axis of the view in focus
+    const ys = plastikYears();
+    let sliderMax: number;
+    let sliderValue: number;
+    let tickKey: string;
+    let ticks: () => string;
+    if (focus === 'plastik') {
+      // the years of the layer (tow years and model years), one step each
+      sliderMax = Math.max(1, ys.length - 1);
+      const y = plastikYear();
+      sliderValue = Math.max(0, y == null ? 0 : ys.indexOf(y));
+      tickKey = `meer:plastik:${ys.join(',')}`;
+      ticks = () => {
+        const every = Math.max(1, Math.ceil(ys.length / 8));
+        return ys
+          .map((y, i) => `<i style="left:${(i / sliderMax) * 100}%"></i>${i % every === 0 && (i / sliderMax) * 100 < 96 ? `<span style="left:${(i / sliderMax) * 100}%">${y}</span>` : ''}`)
+          .join('');
+      };
+    } else if (run) {
+      // the run "10 Jahre ab leerem Meer": its own axis, 0 to 10 years in days (while the model catches up the slider stands at the target)
+      sliderMax = RUN_DAYS;
+      sliderValue = Math.max(0, Math.min(RUN_DAYS, Math.round(modelState().target ?? modelState().day)));
+      tickKey = 'meer:run';
+      ticks = () =>
+        Array.from({ length: RUN_YEARS + 1 }, (_, y) => `<i style="left:${(y / RUN_YEARS) * 100}%"></i>${y % 2 === 0 && y < RUN_YEARS ? `<span style="left:${(y / RUN_YEARS) * 100}%">${y}</span>` : ''}`).join('');
+    } else if (shared) {
+      sliderMax = SHARED_SPAN_DAYS;
+      sliderValue = Math.round(driftState().time);
+      tickKey = 'meer:shared';
+      ticks = () => '';
+    } else {
+      const r = meerRange();
+      sliderMax = Math.max(1, Math.round(r.hi - r.lo));
+      sliderValue = Math.round(m.time - r.lo);
+      tickKey = `meer:${r.lo}:${sliderMax}`;
+      ticks = () => calendarTicks(r.lo, r.hi);
+    }
+    rangeEl.disabled = !track;
+    rangeEl.step = '1';
+    rangeEl.min = '0';
+    rangeEl.max = String(sliderMax);
+    rangeEl.value = String(sliderValue);
+    rangeEl.style.setProperty('--p', `${Math.max(0, Math.min(100, (sliderValue / sliderMax) * 100))}%`);
+    if (tickKey !== timelineKey) {
+      timelineKey = tickKey;
+      daysEl.innerHTML = ticks();
+    }
+
+    // status
+    const ms = modelState();
+    const sea = NF.format(ms.inSea);
+    const reach = histDate(ms.day);
+    const modelHist = on.modell && modelRunMode() === 'hist';
+    const lagging = modelHist && (focus === 'all' || focus === 'modell') && m.time - reach > 5;
+    const d = driftState();
+    const year = dayCalendarYear(m.time);
+    const py = plastikYear();
+    const plastikParts = (): string[] => {
+      const a = plastikModelArea(py);
+      return [`Modell-Umriss ${a == null ? 'kein Modell' : (areaMio(a) ?? 'noch keine Fläche')}`, `Netzfänge ${NF.format(plastikCount(py))}`];
+    };
+    const runYear = (day: number) => (day / 365).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const pct = (ms.stranded * 100).toLocaleString('de-DE', { maximumFractionDigits: 0 });
+    const modelPart = (): string =>
+      modelRunMode() === 'run'
+        ? ms.target !== null && ms.target - ms.day > 5
+          ? `Modell rechnet … Jahr ${runYear(ms.day)} von ${RUN_YEARS} (Ziel ${runYear(ms.target)})`
+          : `Jahr ${runYear(ms.day)} von ${RUN_YEARS} · ${sea} im Meer · ${pct} % gestrandet`
+        : modelHist
+        ? lagging
+          ? `Modell rechnet … ${dayCalendarYear(reach)} (${sea} im Meer)`
+          : `Modell ${sea} im Meer`
+        : `Modell live: Tag ${NF.format(ms.day)}${Math.floor(ms.day / 365) >= 1 ? ` (${Math.floor(ms.day / 365)} J)` : ''}, ${sea} im Meer, ${(ms.stranded * 100).toLocaleString('de-DE', { maximumFractionDigits: 0 })} % gestrandet`;
+    let title: string;
+    let when: string;
+    let parts: string[];
+    let big: string;
+    const notes: string[] = [];
+    if (focus === 'plastik') {
+      title = 'Plastik im Meer';
+      when = String(py ?? '–');
+      parts = plastikParts();
+      big = String(py ?? '–');
+      notes.push('frühere Netzfänge blass', MODEL_NOTE, 'Dichtekarte = Stand 2015');
+    } else if (focus === 'bojen') {
+      title = 'Treibbojen';
+      when = shared ? `Gemeinsamer Start, Jahr ${(d.time / 365).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : monthYear(m.time);
+      parts = [`Bojen ${NF.format(d.active)}`];
+      big = shared ? `Jahr ${(d.time / 365).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : String(year);
+    } else if (focus === 'modell') {
+      title = 'Treibgut-Modell';
+      when = live ? 'Live' : run ? '10 Jahre ab leerem Meer' : monthYear(m.time);
+      parts = [modelPart()];
+      big = live ? 'Live' : run ? `Jahr ${runYear(ms.day)}` : lagging ? `Modell ${dayCalendarYear(reach)}` : String(year);
+      notes.push('Treibgut-Modell: vereinfacht, keine Vorhersage');
+    } else {
+      title = 'Meeresplastik';
+      when = on.bojen || on.modell ? monthYear(m.time) : String(year);
+      parts = [];
+      if (on.plastik) parts.push(...plastikParts());
+      if (on.bojen) parts.push(`Bojen ${NF.format(d.active)}`);
+      if (on.modell) parts.push(modelPart());
+      big = lagging ? `Modell ${dayCalendarYear(reach)}` : String(year);
+      if (on.plastik) notes.push('frühere Netzfänge blass', MODEL_NOTE, 'Dichtekarte = Stand 2015');
+      if (on.modell) notes.push('Treibgut-Modell: vereinfacht, keine Vorhersage');
+    }
+    headEl.innerHTML = `<b>${escapeHtml(title)}</b><span>${escapeHtml([when, ...parts, ...notes].join(' · '))}</span>`;
+    timeEl.innerHTML = `<b>${escapeHtml(big)}</b><small>${escapeHtml(parts.join(' · ').slice(0, 60))}</small>`;
+  }
+
+  timeline.addEventListener('click', (e) => {
+    if (timelineMode() !== 'meer') return;
+    const t = e.target as HTMLElement;
+    if (t.closest('.tl-optbtn')) {
+      optsOpen = !optsOpen;
+      return renderTimeline();
+    }
+    const speed = t.closest<HTMLElement>('[data-meer-speed]');
+    if (speed) return setMeerSpeed(Number(speed.dataset.meerSpeed) as MeerSpeed);
+    // tab: "Alle" or one layer
+    const tab = t.closest<HTMLElement>('[data-meer-focus]');
+    if (tab) {
+      meerChosen = (tab.dataset.meerFocus as MeerFocus) ?? 'all';
+      return syncMeerFocus();
+    }
+    // Treibbojen: „Echte Zeit“ (Kalender) / „Gemeinsamer Start“ (eigener Lauf)
+    const b = t.closest<HTMLElement>('[data-drift-mode]');
+    if (b) return setDriftMode(b.dataset.driftMode === 'real' ? 'real' : 'shared');
+    // Treibgut-Modell: „Historisch ab 1950“ (Zeitstrahl) / „Live“ (eigener Lauf)
+    const mm = t.closest<HTMLElement>('[data-model-mode]');
+    if (mm) return setModelMode(mm.dataset.modelMode === 'live' ? 'live' : mm.dataset.modelMode === 'run' ? 'run' : 'hist');
+  });
+
   function setTimeIndex(i: number) {
     if (timelineMode() === 'wahlen') setWahlenStep(i);
     else if (timelineMode() === 'radar') showRadarFrame(i);
@@ -1102,20 +1450,47 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     stopAnimation();
     if (timelineMode() === 'radar') showRadarTime(radar!.frames[0].time * 1000 + Number(rangeEl.value) * 60000, true);
     // bei Wahlen zeichnen die Abonnenten (Ebene, Zeitstrahl, Legende) selbst neu
-    else if (timelineMode() !== 'wahlen') setTimeIndex(Number(rangeEl.value));
+    else if (timelineMode() === 'meer') {
+      // scrubbing pauses; the layers that are driven jump to the date (the model catches up from its checkpoints)
+      setMeerPlaying(false);
+      const f = meerState().focus;
+      if (f === 'plastik') {
+        const y = plastikYears()[Number(rangeEl.value)];
+        if (y != null) setMeerTime(yearToDay(y));
+      } else if (f === 'bojen' && driftState().mode === 'shared') setDriftTime(Number(rangeEl.value));
+      else if (f === 'modell' && modelRunMode() === 'run') setModelRunTarget(Number(rangeEl.value));
+      else setMeerTime(meerRange().lo + Number(rangeEl.value));
+    } else if (timelineMode() !== 'wahlen') setTimeIndex(Number(rangeEl.value));
     else setWahlenStep(Number(rangeEl.value));
   });
   const jumpToNow = () => {
     stopAnimation();
     if (timelineMode() === 'radar') showRadarFrame(lastPastRadarFrame());
     else if (timelineMode() === 'wahlen') setWahlenStep(wahlenMarks().length - 1);
-    else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
+    else if (timelineMode() === 'meer') {
+      const f = meerState().focus;
+      if (f === 'modell' && modelRunMode() !== 'hist') {
+        // the live / 10-year run starts anew
+        restartModel();
+        setMeerPlaying(true);
+      } else if (f === 'bojen' && driftState().mode === 'shared') {
+        // the shared start from its release
+        setDriftTime(0);
+        setMeerPlaying(true);
+      } else {
+        // the latest date of the axis of the view (the end of the data)
+        setMeerPlaying(false);
+        setMeerTime(meerRange().hi);
+      }
+    } else if (globalModel) setTimeIndex(nearestSubIndex(globalModel.times));
   };
   nowBtn.addEventListener('click', jumpToNow);
   daysEl.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('.tl-nowlbl')) jumpToNow();
   });
   playBtn.addEventListener('click', () => {
+    // Meeresplastik: der gemeinsame Takt (frame loop above); die eigenen Läufe der Ebenen lesen denselben Schalter
+    if (timelineMode() === 'meer') return setMeerPlaying(!meerState().playing);
     if (playTimer || playRaf) return stopAnimation();
     playBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
     playBtn.setAttribute('aria-label', 'Pause');
@@ -1175,6 +1550,56 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       if (w) return { title: w.title, sub: w.sub, gradient: '', ticks: [], swatches: w.swatches.map(([color, label]) => ({ color, label })) };
       return null;
     }
+    // Meeresplastik: Legende der eingeschalteten Ebenen zusammen (Farbskala der Netzfänge, Farben der Punkte / des Umrisses)
+    if (timelineMode() === 'meer') {
+      const on = meerOn();
+      const subs: string[] = [];
+      const swatches: { color: string; label: string }[] = [];
+      let gradient = '';
+      let ticks: { pos: number; label: string }[] = [];
+      let title = 'Meeresplastik';
+      if (on.plastik) {
+        // Farbe der Netzfänge nach Masse (gleiche Skala wie das Dichtebild)
+        const lo = SCALE_STOPS[0][0];
+        const hi = SCALE_STOPS[SCALE_STOPS.length - 1][0];
+        const pos = (v: number) => ((v - lo) / (hi - lo)) * 100;
+        gradient = `linear-gradient(90deg, ${SCALE_STOPS.map(([v, c]) => `${c} ${pos(v).toFixed(1)}%`).join(', ')})`;
+        ticks = [[0, '≤ 1 kg'], [pos(Math.log10(10000)), '10 kg'], [pos(Math.log10(100000)), '100 kg']].map(([p, label]) => ({ pos: p as number, label: label as string }));
+        subs.push('Netzfänge Nordpazifik (Lebreton): g/km² (Masse), Farbleiste · weltweite Netzfänge in Blau bis Gelb: Teile/km² (Zählung) oder, wo nur das vorliegt, Teile/m³ Netzwasser, nicht mit Massen vergleichbar · grau: 0 oder ohne Angabe · Dichtefläche = fester Stand 2015 (Lebreton 2018); Netzfänge und gestrichelter Modell-Umriss ändern sich mit der Zeit');
+        swatches.push(
+          { color: COUNT_STOPS[0][1], label: '100 Teile/km²' },
+          { color: COUNT_STOPS[2][1], label: '10.000 Teile/km²' },
+          { color: COUNT_STOPS[4][1], label: '1 Mio. Teile/km²' },
+          { color: CONC_STOPS[0][1], label: '0,001 Teile/m³' },
+          { color: CONC_STOPS[2][1], label: '0,1 Teile/m³' },
+          { color: CONC_STOPS[4][1], label: '10 Teile/m³' },
+        );
+        swatches.push({ color: MODEL_COLOR, label: 'Modell-Umriss (experimentell, keine Messung)' });
+        swatches.push({ color: '#cfe8ff', label: 'Isolinien anderer Müllstrudel: Eriksen 2014, Modell, Teile/km²' });
+      }
+      if (on.bojen) {
+        const n = driftState().ready?.count ?? 0;
+        subs.push(`Treibbojen (NOAA): ${n.toLocaleString('de-DE')} Bojen, Spur: letzte 90 Tage, Position alle 5 Tage`);
+        swatches.push({ color: '#4dd0e1', label: 'Boje, aktuelle Position' });
+      }
+      if (on.modell) {
+        const n = modelState().ready?.count ?? 0;
+        const rm = modelRunMode();
+        const start =
+          rm === 'hist'
+            ? 'historisch: leeres Meer am 1.1.1950, täglich neue Partikel an den Flussmündungen im Verhältnis zur weltweiten Plastikproduktion (Our World in Data / Geyer et al. 2017, CC BY), Abbau mit 15 Jahren Zeitkonstante, ist das Meer voll, geht das älteste'
+            : rm === 'run'
+              ? '10 Jahre ab leerem Meer: täglich 6 Partikel an den Flussmündungen, Schieber 0 bis 10 Jahre, am Ende beginnt nach kurzer Pause ein neuer Lauf; ist das Meer voll, geht das älteste Partikel'
+              : 'Start verteilt wie das beobachtete Plastik an der Oberfläche (Eriksen et al. 2014, CC BY 4.0), ist das Meer voll, geht das älteste Partikel';
+        subs.push(
+          `Treibgut-Modell: bis zu ${n.toLocaleString('de-DE')} Modellpartikel · ${start} · Flussmündungen nach Emission gewichtet (Meijer et al. 2021, CC BY 4.0) · Spur: letzte 46 Tage · vereinfachtes Modell, keine Vorhersage · Strömung: NOAA/AOML-Drifter-Klimatologie (Laurindo et al. 2017, CC BY 4.0)`,
+        );
+        swatches.push({ color: '#ffcc80', label: 'Modellpartikel im Meer (gestrandete blenden aus)' });
+      }
+      if (!on.plastik) title = on.bojen && !on.modell ? 'Treibbojen (NOAA)' : !on.bojen && on.modell ? 'Treibgut-Modell' : 'Meeresplastik';
+      else if (!on.bojen && !on.modell) title = 'Plastik im Meer: Netzfänge';
+      return { title, sub: subs.join(' | '), gradient, ticks, swatches };
+    }
     const o = state.overlay;
     const t = (title: string, sub: string, gradient: string, ticks: [number, string][]): LegendInfo => ({
       title, sub, gradient, ticks: ticks.map(([pos, label]) => ({ pos, label })),
@@ -1225,13 +1650,11 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
     const l = legendInfo();
     legend.innerHTML = l
       ? `<div class="legend-title">${escapeHtml(l.title)} <small>${escapeHtml(l.sub)}</small></div>${
-          l.swatches
-            ? `<div class="legend-list">${l.swatches.map((s) => `<span><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('')}</div>`
-            : l.gradient
-              ? `<div class="legend-bar" style="background:${l.gradient}"></div>
+          l.gradient
+            ? `<div class="legend-bar" style="background:${l.gradient}"></div>
         <div class="legend-ticks">${l.ticks.map((x) => `<span style="left:${x.pos}%">${escapeHtml(x.label)}</span>`).join('')}</div>`
-              : ''
-        }`
+            : ''
+        }${l.swatches ? `<div class="legend-list">${l.swatches.map((s) => `<span><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('')}</div>` : ''}`
       : '';
     legend.hidden = !l;
     // without a colour scale (true-colour image) the phone layouts, which show only the bar, drop it
@@ -1980,6 +2403,8 @@ export function createGlobeView(onOpenForecast: (p: Place) => void, onOpenSpace:
       clearInterval(refreshTimer);
       clearInterval(liveTimer);
       stopAnimation();
+      cancelAnimationFrame(meerRaf);
+      meerRaf = 0;
       wind?.stop();
       extras?.stop();
       hideReadout();

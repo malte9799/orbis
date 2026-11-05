@@ -14,6 +14,8 @@ export interface InfoPanelData {
   /** big "from → to" line under the header */
   hero?: { from: string; to: string; fromSub?: string; toSub?: string; note?: string };
   tiles?: [label: string, value: string][];
+  /** trusted HTML (e.g. a small SVG chart) between the tiles and the categories; the caller escapes everything in it */
+  html?: string;
   /** collapsible categories; `rows` values are escaped, `href` makes a value a link */
   sections?: { key: string; title: string; open?: boolean; rows: { k: string; v: string; href?: string }[] }[];
   note?: string;
@@ -81,7 +83,7 @@ export class InfoPanel {
         ),
       )
       .join('');
-    this.body.innerHTML = `${hero}${tiles}${cats}${d.note ? `<div class="fp-note">${escapeHtml(d.note)}</div>` : ''}`;
+    this.body.innerHTML = `${hero}${tiles}${d.html ?? ''}${cats}${d.note ? `<div class="fp-note">${escapeHtml(d.note)}</div>` : ''}`;
     this.body.scrollTop = 0;
     const url = safeUrl(d.link?.url);
     this.actions.hidden = !url;

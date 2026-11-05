@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // same list as the "Upload assets to R2" step in .github/workflows/deploy.yml
-export const ASSET_DIRS = ['models', 'textures', 'data/airports', 'data/incidents', 'data/games'];
+export const ASSET_DIRS = ['models', 'textures', 'data/airports', 'data/incidents', 'data/games', 'data/plastik', 'data/drifters', 'data/currents'];
 const HASH_LEN = 12;
 const OUT = join(root, 'src/generated/assets-manifest.json');
 

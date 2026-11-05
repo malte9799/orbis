@@ -1,0 +1,47 @@
+{
+ "version": 1,
+ "experimental": true,
+ "hinweis": "Experimentelles Modell, keine Messung: Es gibt keine gemessenen historischen Umrisse des Great Pacific Garbage Patch. Der Umriss ist auf die Fläche von Lebreton et al. 2018 im Jahr 2015 kalibriert.",
+ "source": "rivers",
+ "years": [
+  1950,
+  2022
+ ],
+ "tau_years": 15.0,
+ "tau_tested": [
+  10.0,
+  15.0,
+  20.0
+ ],
+ "diffusivity": 1000.0,
+ "dt_days": 2.0,
+ "particles_per_year_per_source": 6000,
+ "released": 874000,
+ "sources": {
+  "rivers": "Meijer et al. 2021 (Flussmündungen, 7145 Mündungen im Pazifik: 100° O bis 70° W, 10° S bis 65° N), gewichtet nach Menge t/Jahr",
+  "fishing": "nicht modelliert"
+ },
+ "production": "Our World in Data, Global plastics production (Geyer et al. 2017, CC BY); nach 2019 linear fortgeschrieben (Ausgleichsgerade 2015 bis 2019)",
+ "current": "NOAA/AOML Global Drifter Program, mittleres Feld (Laurindo et al. 2017, CC BY 4.0), siehe public/data/currents/meta.json",
+ "calibration": {
+  "year": 2015,
+  "target_km2": 1600000.0,
+  "centre": [
+   -141.6,
+   32.2
+  ],
+  "threshold_relative": 1.5035813103911302e-08,
+  "gauss_cells": 1.0,
+  "grid_deg": 0.5,
+  "rule": "feste Dichteschwelle für alle Jahre"
+ },
+ "plausibility": {
+  "centroid_2015": [
+   218.9,
+   31.9
+  ],
+  "distance_km": 56,
+  "iou_2015": 0.7,
+  "first_year": 1982
+ }
+}
