@@ -2,9 +2,10 @@ import { Map as MlMap, Marker, type GeoJSONSource } from 'maplibre-gl';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
 import { Viewer, type KeyboardComponent } from 'mapillary-js';
 import 'mapillary-js/dist/mapillary.css';
-import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat } from './data';
+import { bboxOf, loadData, SCOPES, scopeOf, STYLE, type BBox, type Feat, type Props } from './data';
 import { escapeHtml } from '../util';
 import { snapshotJson } from '../api/data';
+import { CITIES, randomCityPoint } from './cities';
 
 // Street guessing (GeoGuessr light) on Mapillary's open street-level photos.
 // A random place in the chosen area is searched for a photo; you place a guess on a map.
@@ -17,6 +18,8 @@ export interface StreetOptions {
   rounds: number;
   /** only 360° photos, taken from the places listed in the data branch (street/panos.json) */
   panos?: boolean;
+  /** only places in big cities (no country roads); the scope still limits the continent */
+  cities?: boolean;
 }
 
 export interface StreetGame {
@@ -63,6 +66,8 @@ function randomPoint(feats: Feat[], boxes: BBox[], weights: number[], total: num
 interface Photo {
   id: string;
   lngLat: [number, number];
+  /** city the search point was drawn from (city mode) */
+  city?: string;
 }
 
 async function searchPhoto(token: string, [lng, lat]: [number, number], pano = false, half = HALF): Promise<Photo | null> {
@@ -115,7 +120,9 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     pool = scope.filter ? points.filter(inScope) : points;
     if (pool.length < 20) pool = [];
   }
-  const panos = pool.length > 0;
+  const panos = pool.length > 0 && !o.cities;
+  const cities = o.cities ? CITIES.filter((c) => !scope.filter || scope.filter({ cont: c[3] } as Props)) : [];
+  const cityMode = cities.length > 0;
 
   const root = document.createElement('div');
   root.className = 'sg';
@@ -139,6 +146,7 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
   let viewer: Viewer | null = null;
   let guess: [number, number] | null = null;
   let truth: [number, number] | null = null;
+  let truthCity = '';
   let round = 0;
   /** search for the next round, started while the current one is played */
   let upcoming: Promise<Photo | null> | null = null;
@@ -169,6 +177,17 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
 
   async function loadPhoto(): Promise<Photo | null> {
     for (let attempt = 0; attempt < 6 && !dead; attempt++) {
+      if (cityMode) {
+        // 360° photos first (small search box around the point), any photo in the last attempts
+        const hit = await firstHit(
+          Array.from({ length: 6 }, () => {
+            const { pt, name } = randomCityPoint(cities);
+            return searchPhoto(o.token, pt, attempt < 3, 0.01).then((p) => p && { ...p, city: name });
+          }),
+        );
+        if (hit) return hit;
+        continue;
+      }
       const hit = await firstHit(
         Array.from({ length: 6 }, () => (panos ? searchPhoto(o.token, pool[Math.floor(Math.random() * pool.length)], true, 0.02) : searchPhoto(o.token, randomPoint(feats, boxes, weights, total)))),
       );
@@ -215,6 +234,7 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
       if (dead) return;
       if (!photo) throw new Error('Kein Foto gefunden – in diesem Gebiet gibt es offenbar wenig Mapillary-Abdeckung.');
       truth = photo.lngLat;
+      truthCity = photo.city ?? '';
       mountViewer(photo.id);
       loading.hidden = true;
       if (round < o.rounds) {
@@ -254,7 +274,7 @@ export async function startStreetGame(host: HTMLElement, o: StreetOptions, onExi
     result.hidden = false;
     result.innerHTML = `
       <b>${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString('de-DE')} km daneben</b>
-      <span>+${pts} Punkte</span>`;
+      <span>${truthCity ? `${escapeHtml(truthCity)} · ` : ''}+${pts} Punkte</span>`;
   });
 
   function finish() {

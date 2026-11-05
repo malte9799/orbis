@@ -201,6 +201,12 @@ export function createGamesView(): GamesView {
       <h2>Straßen-Rater</h2>
       <p class="gm-lead">Du stehst mitten in einer 360°-Aufnahme, schaust dich um und tippst auf der Karte, wo du bist. 5 Runden, bis zu 5000 Punkte pro Runde.</p>
       <div class="gm-field"><span>Gebiet</span><select class="sg-scope"></select></div>
+      <div class="gm-field"><span>Orte</span>
+        <div class="gm-seg" data-k="cities">
+          <button type="button" data-v="1" class="on">Nur Städte<small>Große Städte weltweit, keine Land- und Waldstraßen</small></button>
+          <button type="button" data-v="0">Überall<small>Zufälliger Ort im Gebiet</small></button>
+        </div>
+      </div>
       <div class="gm-field"><span>Bewegung</span>
         <div class="gm-seg" data-k="move">
           <button type="button" data-v="1" class="on">Frei<small>Du kannst dich umsehen und weiterfahren</small></button>
@@ -584,7 +590,7 @@ export function createGamesView(): GamesView {
       street?.destroy();
       showPanel('none');
       err.textContent = '';
-      street = await startStreetGame(host, { token, scope: val('.sg-scope'), move: segVal.move === '1', rounds: 5, panos: true }, leaveStreet);
+      street = await startStreetGame(host, { token, scope: val('.sg-scope'), move: segVal.move === '1', rounds: 5, panos: true, cities: segVal.cities === '1' }, leaveStreet);
     } catch (e) {
       showPanel('street');
       err.textContent = `Konnte nicht starten: ${(e as Error).message}`;
