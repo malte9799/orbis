@@ -427,3 +427,7 @@
 .ic-pin-x:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+.ic-chart.deep .area {
+  fill: rgba(79, 195, 247, 0.18);
+  stroke: #4fc3f7;
+}

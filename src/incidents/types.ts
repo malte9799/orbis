@@ -49,13 +49,20 @@ export interface IncidentAudio {
   cues?: { s: number; e: number; text: string }[];
 }
 
+/** Art des Fahrzeugs: Flugzeug (Höhe in ft über Grund) oder Tauchboot (Spur in Metern, unter Wasser negativ) */
+export type IncidentKind = 'aircraft' | 'submersible';
+
 export interface IncidentDef {
   id: string;
+  /** ohne Angabe: 'aircraft'. 'submersible': Höhe der Spur ist die Wassertiefe in m (negativ, 0 = Meeresspiegel) */
+  kind?: IncidentKind;
   /** Reihenfolge in Listen; Lücken lassen */
   order: number;
   title: string;
   /** kurzer Name für das Label auf der Karte ("Learjet-Absturz") */
   shortTitle?: string;
+  /** zweite Zeile des Labels auf der Karte; ohne Angabe die kurze Kennung des Fahrzeugs (craft.reg) */
+  labelSub?: string;
   subtitle: string;
   /** Beginn der Rekonstruktion in der Liste: Datum/Zeit des Ereignisses (ISO, UTC) */
   when: string;
@@ -65,9 +72,15 @@ export interface IncidentDef {
   place: string;
   /** sachliche Kurzfassung mit Quellen */
   summary: string;
-  aircraft: { callsign: string; reg: string; hex: string; type: string; from: string; to: string };
-  /** Pfad der Flugspur unter public/ */
+  craft: { callsign: string; reg: string; hex?: string; type: string; from: string; to: string };
+  /** Pfad der Flugspur (Tauchspur) unter public/; 'bundle:<id>/<datei>.json': kleine Spur aus src/incidents/data, im Bundle */
   track: string;
+  /** Begleitschiff (z. B. Mutterschiff): eigene Spur im gleichen Format (Höhe 0), wird als Schiff gezeigt */
+  ship?: { name: string; track: string };
+  /** Meeresboden am Ort (m, positiv): Maßstab für Profil und "über Grund" bei Tauchbooten */
+  seabedM?: number;
+  /** Ortszeit neben UTC in der Leiste, z. B. { label: 'Florida', offsetH: -5 } */
+  localTime?: { label: string; offsetH: number };
   /** Teilfenster für den Regler "Endphase" (Unix-Sekunden) */
   focus: { from: number; to: number };
   /** wie die Daten zu lesen sind (Einheiten, Lücken, Unsicherheiten) */
@@ -80,7 +93,7 @@ export interface IncidentDef {
 
 export const defineIncident = (def: IncidentDef): IncidentDef => def;
 
-/** [Unix-s, lat, lon, Höhe ft | null (unbekannt), Groundspeed kt, Kurs °, 1 = Höhe/Position berechnet statt gemessen] */
+/** [Unix-s, lat, lon, Höhe ft (Tauchboot: Tiefe m, negativ) | null (unbekannt), Groundspeed kt, Kurs °, 1 = Höhe/Position berechnet statt gemessen] */
 export type TrackPoint = [number, number, number, number | null, number, number, 1?];
 
 export interface Sample {

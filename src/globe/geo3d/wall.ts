@@ -40,6 +40,8 @@ export interface GeoWallOptions {
   /** full below this altitude, gone above `goneM` */
   fullM: number;
   goneM: number;
+  /** lies below the surface (submersible): not hidden by the globe */
+  seeThrough?: boolean;
 }
 
 export class GeoWall {
@@ -48,8 +50,10 @@ export class GeoWall {
   private globeAnchor: Vec3 = [0, 0, 1];
   private mercAnchor: Vec3 = [0, 0, 0];
   private count = 0;
+  private seeThrough: boolean;
 
   constructor(opts: GeoWallOptions) {
+    this.seeThrough = !!opts.seeThrough;
     this.mat = new THREE.ShaderMaterial({
       vertexShader: VERTEX,
       fragmentShader: FRAGMENT,
@@ -135,6 +139,7 @@ export class GeoWall {
   update(frame: GeoFrame, now: number, liftM = 0) {
     this.mat.uniforms.uNow.value = now;
     setAnchor(this.mat.uniforms as unknown as ReturnType<typeof anchorUniforms>, frame, this.globeAnchor, this.mercAnchor, liftM);
+    if (this.seeThrough) this.mat.uniforms.uHide.value = 0;
   }
 
   dispose() {

@@ -5,6 +5,7 @@ import { GeoLine } from '../globe/geo3d/line';
 import type { GeoPart, GeoTarget } from '../globe/geo3d/stage';
 import { GeoWall } from '../globe/geo3d/wall';
 import { airliner } from '../globe/planes3d';
+import type { IncidentKind } from './types';
 
 // 3D der Rekonstruktion als Teil der GeoStage (src/globe/geo3d): Flugzeugmodell, geflogene Spur nach Höhe eingefärbt, Wand zum
 // Boden, gestrichelte Gesamtspur, Linie und Schatten unter dem Flugzeug und Ereignismarken in Spurhöhe. Alles ist nach Länge,
@@ -61,9 +62,50 @@ function bandColor(ft: number): { band: number; color: string } {
   return { band, color: '#ef5350' };
 }
 
+const DEPTH_STOPS: [number, number][] = [[0, 0x4fc3f7], [1000, 0x29b6f6], [2500, 0x3f51b5], [3800, 0x4a148c]];
+const DEPTH_MAX = 3800;
+/** Farbe nach Tiefe in m (positiv), in BANDS Stufen */
+function depthColor(depthM: number): { band: number; color: string } {
+  const f = Math.max(0, Math.min(DEPTH_MAX, depthM));
+  const band = Math.min(BANDS - 1, Math.floor((f / DEPTH_MAX) * BANDS));
+  const mid = ((band + 0.5) / BANDS) * DEPTH_MAX;
+  const c = new THREE.Color();
+  for (let i = 1; i < DEPTH_STOPS.length; i++) {
+    if (mid <= DEPTH_STOPS[i][0]) {
+      c.setHex(DEPTH_STOPS[i - 1][1]).lerp(new THREE.Color(DEPTH_STOPS[i][1]), (mid - DEPTH_STOPS[i - 1][0]) / (DEPTH_STOPS[i][0] - DEPTH_STOPS[i - 1][0]));
+      return { band, color: `#${c.getHexString()}` };
+    }
+  }
+  return { band, color: '#4a148c' };
+}
+
+/** Tauchboot (Titan: 6,7 m lang, 2,8 m breit): Kapsel, Nase nach +y, Mittelpunkt im Ursprung */
+function submersibleGeometry(): THREE.BufferGeometry {
+  const g = new THREE.CapsuleGeometry(1.25, 4.2, 6, 16);
+  g.scale(1, 1, 0.9);
+  return g;
+}
+
+/** Schiff (Polar Prince: 67 m lang), Bug nach +y, Kiel auf z = 0 */
+function shipGeometry(): THREE.BufferGeometry {
+  const hull = new THREE.Shape();
+  hull.moveTo(-7, -33).lineTo(7, -33).lineTo(7, 16).lineTo(0, 33).lineTo(-7, 16).closePath();
+  const hullGeo = new THREE.ExtrudeGeometry(hull, { depth: 7, bevelEnabled: false });
+  const house = new THREE.BoxGeometry(11, 14, 7).translate(0, -10, 10.5);
+  const merged = new THREE.BufferGeometry();
+  const parts = [hullGeo.toNonIndexed(), house.toNonIndexed()];
+  const pos = parts.flatMap((p) => Array.from(p.getAttribute('position').array));
+  const nor = parts.flatMap((p) => Array.from(p.getAttribute('normal').array));
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  merged.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  return merged;
+}
+
 /** Modell mindestens so lang auf dem Bildschirm (CSS px), damit man es beim Auszoomen noch sieht */
 const MIN_PX = 26;
 const MODEL_LENGTH_M = 18.8;
+const SUB_LENGTH_M = 6.7;
+const SHIP_LENGTH_M = 67;
 const MARK_PX = 5;
 /** Wand: unter diesem Kartenmaßstab (m pro Pixel in der Bildmitte) ganz weg, über dem zweiten voll da (Zoom 12 ≈ 30 m/px, Zoom 10 ≈ 120 m/px) */
 const WALL_NEAR_M = 40;
@@ -77,19 +119,32 @@ export class IncidentScene implements GeoPart {
   readonly source = 'incident';
   /** das Flugzeug als Ziel des Kamera-Fokus (Klick darauf folgt ihm) */
   target: GeoTarget | null = null;
-  private plane = new THREE.Mesh(airliner(0.5), new THREE.MeshLambertMaterial({ color: 0xff5a4a, side: THREE.DoubleSide }));
-  private shadow = new THREE.Mesh(airliner(0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+  private plane: THREE.Mesh;
+  private shadow: THREE.Mesh;
+  /** Begleitschiff (nur wenn das Ereignis eins hat) und seine Route */
+  private ship: THREE.Mesh | null = null;
+  private shipPose: { lon: number; lat: number; track: number } | null = null;
+  private route: GeoLine | null = null;
+  /** Tauchboot: Spur unter Wasser, durch den Globus hindurch sichtbar */
+  private sub: boolean;
   private markGeo = new THREE.SphereGeometry(1, 14, 10);
   private marks: { data: IncidentMark; mesh: THREE.Mesh; screen: [number, number] | null }[] = [];
   /** gestrichelte Gesamtspur (auch der noch nicht geflogene Teil) */
   private full: GeoLine | null = null;
   /** geflogene Spur: eine Linie je Höhenstufe */
   private runs: { line: GeoLine; end: Vec3 }[] = [];
-  private wall = new GeoWall({ color: '#ffb74d', fullM: 60000, goneM: 70000 });
+  private wall: GeoWall;
   private drop: GeoLine | null = null;
   private pose: IncidentPose | null = null;
   private trailLen = 0;
-  constructor(private map: MlMap) {
+  constructor(private map: MlMap, kind: IncidentKind = 'aircraft') {
+    this.sub = kind === 'submersible';
+    this.plane = new THREE.Mesh(
+      this.sub ? submersibleGeometry() : airliner(0.5),
+      new THREE.MeshLambertMaterial({ color: this.sub ? 0xfff59d : 0xff5a4a, side: THREE.DoubleSide }),
+    );
+    this.shadow = new THREE.Mesh(airliner(0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+    this.wall = new GeoWall({ color: this.sub ? '#4fc3f7' : '#ffb74d', fullM: 60000, goneM: 70000, seeThrough: this.sub });
     for (const m of [this.plane, this.shadow]) m.matrixAutoUpdate = false;
     this.object.add(this.shadow, this.plane, this.wall.object);
     this.wall.setStyle(WALL_OPACITY, 0);
@@ -103,7 +158,7 @@ export class IncidentScene implements GeoPart {
       this.full = null;
     }
     if (pts.length > 1) {
-      this.full = new GeoLine(pts, { color: '#ffffff', width: 1.5, opacity: 0.75, dash: [5, 4] });
+      this.full = new GeoLine(pts, { color: '#ffffff', width: 1.5, opacity: 0.75, dash: [5, 4], seeThrough: this.sub });
       this.object.add(this.full.object);
     }
     this.map.triggerRepaint();
@@ -135,14 +190,15 @@ export class IncidentScene implements GeoPart {
     if (pts.length > 1) {
       // aufeinanderfolgende Teilstücke gleicher Höhenstufe werden eine Linie; der Endpunkt gehört auch zur nächsten
       let start = 0;
-      let cur = bandColor(((pts[0][2] + pts[1][2]) / 2) / FT);
+      const band = (a: Vec3, b: Vec3) => (this.sub ? depthColor(-(a[2] + b[2]) / 2) : bandColor((a[2] + b[2]) / 2 / FT));
+      let cur = band(pts[0], pts[1]);
       const flush = (end: number) => {
-        const line = new GeoLine(pts.slice(start, end + 1), { color: cur.color, width: 3.2, opacity: 0.95 });
+        const line = new GeoLine(pts.slice(start, end + 1), { color: cur.color, width: 3.2, opacity: 0.95, seeThrough: this.sub });
         this.object.add(line.object);
         this.runs.push({ line, end: pts[end] });
       };
       for (let i = 1; i < pts.length - 1; i++) {
-        const b = bandColor(((pts[i][2] + pts[i + 1][2]) / 2) / FT);
+        const b = band(pts[i], pts[i + 1]);
         if (b.band !== cur.band) {
           flush(i);
           start = i;
@@ -167,10 +223,36 @@ export class IncidentScene implements GeoPart {
       const pts: Vec3[] = [[pose.lon, pose.lat, pose.altM], [pose.lon, pose.lat, 0]];
       if (this.drop) this.drop.setPoints(pts);
       else {
-        this.drop = new GeoLine(pts, { color: '#ffffff', width: 1, opacity: 0.45 });
+        this.drop = new GeoLine(pts, { color: '#ffffff', width: 1, opacity: 0.45, seeThrough: this.sub });
         this.object.add(this.drop.object);
       }
     }
+    this.map.triggerRepaint();
+  }
+
+  /** Route des Begleitschiffs [lon, lat] (dünne Linie auf dem Wasser) */
+  setShipRoute(pts: Vec3[]) {
+    if (this.route) {
+      this.object.remove(this.route.object);
+      this.route.dispose();
+      this.route = null;
+    }
+    if (!this.ship) {
+      this.ship = new THREE.Mesh(shipGeometry(), new THREE.MeshLambertMaterial({ color: 0xef5350, side: THREE.DoubleSide }));
+      this.ship.matrixAutoUpdate = false;
+      this.ship.visible = false;
+      this.object.add(this.ship);
+    }
+    if (pts.length > 1) {
+      this.route = new GeoLine(pts, { color: '#ffcc80', width: 1.6, opacity: 0.85, dash: [6, 4] });
+      this.object.add(this.route.object);
+    }
+    this.map.triggerRepaint();
+  }
+
+  /** Das Schiff zur Wiedergabezeit (null: nicht zeigen) */
+  setShipPose(pose: { lon: number; lat: number; track: number } | null) {
+    this.shipPose = pose;
     this.map.triggerRepaint();
   }
 
@@ -205,13 +287,24 @@ export class IncidentScene implements GeoPart {
   update(frame: GeoFrame, now: number) {
     const p = this.pose;
     const lift = p ? this.lift(p.lon, p.lat) : 0;
-    this.plane.visible = this.shadow.visible = !!p && !frame.occluded(p.lon, p.lat, p.altM + lift);
+    // Tauchboot: nur verborgen, wenn die Wasseroberfläche darüber hinter dem Horizont liegt (der Globus selbst verdeckt es nicht)
+    this.plane.visible = !!p && !frame.occluded(p.lon, p.lat, this.sub ? 0 : p.altM + lift);
+    this.shadow.visible = this.plane.visible && !this.sub;
     if (p) {
       const mpp = frame.metresPerPixel(p.lon, p.lat, p.altM + lift);
-      const scale = Math.max(1, (MIN_PX * mpp) / MODEL_LENGTH_M);
+      const scale = Math.max(1, (MIN_PX * mpp) / (this.sub ? SUB_LENGTH_M : MODEL_LENGTH_M));
       frame.place(this.plane.matrix, p.lon, p.lat, p.altM + lift, p.track, scale).multiply(new THREE.Matrix4().makeRotationX(rad(p.pitch)));
-      frame.place(this.shadow.matrix, p.lon, p.lat, lift + 0.5, p.track, scale).multiply(FLATTEN);
+      if (!this.sub) frame.place(this.shadow.matrix, p.lon, p.lat, lift + 0.5, p.track, scale).multiply(FLATTEN);
     }
+    if (this.ship) {
+      const sp = this.shipPose;
+      this.ship.visible = !!sp && !frame.occluded(sp.lon, sp.lat, 0);
+      if (sp && this.ship.visible) {
+        const scale = Math.max(1, (MIN_PX * frame.metresPerPixel(sp.lon, sp.lat, 0)) / SHIP_LENGTH_M);
+        frame.place(this.ship.matrix, sp.lon, sp.lat, 0, sp.track, scale);
+      }
+    }
+    this.route?.update(frame, now, 0);
     for (const r of this.runs) r.line.update(frame, now, lift);
     if (this.drop) {
       if (p) this.drop.update(frame, now, lift);
@@ -229,8 +322,8 @@ export class IncidentScene implements GeoPart {
     }
     for (const m of this.marks) {
       const { data: d, mesh } = m;
-      mesh.visible = !frame.occluded(d.lon, d.lat, d.altM + lift);
-      m.screen = mesh.visible ? frame.toScreen(d.lon, d.lat, d.altM + lift) : null;
+      mesh.visible = !frame.occluded(d.lon, d.lat, this.sub ? 0 : d.altM + lift);
+      m.screen = mesh.visible ? (this.sub ? frame.toScreenBelow(d.lon, d.lat, d.altM + lift) : frame.toScreen(d.lon, d.lat, d.altM + lift)) : null;
       frame.place(mesh.matrix, d.lon, d.lat, d.altM + lift, 0, MARK_PX * frame.metresPerPixel(d.lon, d.lat, d.altM + lift));
     }
     return false;
@@ -239,6 +332,11 @@ export class IncidentScene implements GeoPart {
   dispose() {
     this.full?.dispose();
     this.drop?.dispose();
+    this.route?.dispose();
+    if (this.ship) {
+      this.ship.geometry.dispose();
+      (this.ship.material as THREE.Material).dispose();
+    }
     for (const r of this.runs) r.line.dispose();
     this.wall.dispose();
     this.plane.geometry.dispose();
