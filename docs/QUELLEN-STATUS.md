@@ -35,7 +35,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - WarSpotting (zerstörtes Material) ✅ (ukr.warspotting.net, inoffiziell/best-effort)
 - Global Conflict Tracker ✅
 - War Watch ✅
-- SIPRI / Global Firepower ❌
+- SIPRI ✅ / Global Firepower ✅ (siehe Intelligence; Militärausgaben via World Bank, GFP separat)
 - hormuz.now ✅
 
 ## Kameras
@@ -65,7 +65,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - MITRE ATT&CK ✅
 - EDGAR (SEC) ✅
 - Wikidata / GFCI ✅ (teilweise)
-- Global Firepower ✅ / SIPRI ❌
+- Global Firepower ✅ / SIPRI ✅ (Militärausgaben via World Bank Open Data, SIPRI-sourced; kein direktes SIPRI-JSON, TIV fehlt)
 - Global Conflict Tracker ✅
 
 ## Wetter & Umwelt
@@ -83,7 +83,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - Radio Browser ✅
 - OSM Militärbasen ✅
 - Wikimedia Commons (Fotos) ✅
-- NASA GIBS (Satellitenbilder für Events) ❌
+- NASA GIBS (Satellitenbilder für Events) ✅ (WMTS-Capabilities/Metadaten + Zeitdimensionen/Templates, kein Key; nur Data-Layer)
 - Panoramax/KartaView/Mapillary (Street View) ✅
 
 ## Daten-Architektur
@@ -103,6 +103,6 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 ## Status-Summary
 - Integriert: ~50+ Quellen (Data-Layer/Loader+Collector; teils Placeholder/best-effort)
 - Teilweise: ~7 (inkl. Ship-Historie als Snapshot-Contract ohne freie globale Historie-Quelle)
-- Fehlt (echte Datenquellen): **2** — SIPRI, NASA GIBS
-- Fehlt (Infrastruktur/Performance): PMTiles-Pipeline Kameras/Infra (2 Einträge), EUMETSAT-Wolken vollständig
+- Fehlt (echte Datenquellen): **0** (gelistete ARGOS-Datenquellen als Data-Layer/best-effort/Contract abgebildet)
+- Fehlt (Infrastruktur/Performance): PMTiles-Pipeline Kameras/Infra (2 Einträge), EUMETSAT-Wolken vollständig, Ship-Snapshot-Worker deploy
 - In Arbeit: 2 (Ship-Snapshot-Worker deploy, VIP-Aircraft/Networth-Curation)
