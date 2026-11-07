@@ -15,8 +15,8 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 ## Schiffe
 - aisstream.io (AIS) ✅
 - Fintraffic Digitraffic Marine ✅
-- Dark Vessels ❌
-- Sanctioned Vessels ❌
+- Dark Vessels ✅ (GFW AIS-disabling, Placeholder ohne `GFW_API_TOKEN`)
+- Sanctioned Vessels ✅ (OFAC SDN Vessel-Entries)
 - Schiffs-Snapshot (Worker) 🚧 (Client-Loader vorhanden, Worker scaffolded)
 - Ship-Historie ❌
 
@@ -25,14 +25,14 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - NASA EONET (Vulkane/Feuer/Stürme) ✅
 - NASA FIRMS (Feuerfoci) ✅
 - NHC (Hurrikan-Kegel) ✅
-- WHO (Ausbrüche) ❌
+- WHO (Ausbrüche) ✅ (DON API, weekly Snapshot)
 - GDACS (Alarme) ✅
 - GDELT (Presse) ✅ (neu: Loader + Collector)
 - UCDP (Konflikte) ✅ (neu: Loader + Collector)
 - GeoConfirmed (Verified) ✅ (neu: Loader + Feed + Gruppe)
 - ISW/CTP (Frontlinien) ⚠️ (Ukraine-Front vorhanden)
 - DeepStateMap (Ukraine-Front) ✅
-- WarSpotting (zerstörtes Material) ❌
+- WarSpotting (zerstörtes Material) ✅ (ukr.warspotting.net, inoffiziell/best-effort)
 - Global Conflict Tracker ✅
 - War Watch ✅
 - SIPRI / Global Firepower ❌
@@ -61,7 +61,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - Sanktionslisten ✅
 - Safecast / RadNet ✅
 - Feodo Tracker (C2) ✅ (neu: Loader + Collector + Geo)
-- C2IntelFeeds ❌
+- C2IntelFeeds ✅ (drb-ra/C2IntelFeeds 30d, IP-Geolocation)
 - MITRE ATT&CK ✅
 - EDGAR (SEC) ✅
 - Wikidata / GFCI ✅ (teilweise)
@@ -101,9 +101,8 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - by_hex / by_mmsi ✅
 
 ## Status-Summary
-- Integriert: ~35 Quellen
-- Teilweise: ~8
-- Fehlt: ~25 (viele Intelligence/Erweiterte Quellen)
-- In Arbeit: 2 (Ship-Snapshot, VIP-Aircraft-Curation)
-EOF
-echo done
+- Integriert: ~50+ Quellen (Data-Layer/Loader+Collector; teils Placeholder/best-effort)
+- Teilweise: ~6
+- Fehlt (echte Datenquellen): **3** — SIPRI, Ship-Historie, NASA GIBS
+- Fehlt (Infrastruktur/Performance): PMTiles-Pipeline Kameras/Infra (2 Einträge), EUMETSAT-Wolken vollständig
+- In Arbeit: 2 (Ship-Snapshot-Worker deploy, VIP-Aircraft/Networth-Curation)
