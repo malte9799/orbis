@@ -33,10 +33,10 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - ISW/CTP (Frontlinien) ⚠️ (Ukraine-Front vorhanden)
 - DeepStateMap (Ukraine-Front) ✅
 - WarSpotting (zerstörtes Material) ❌
-- Global Conflict Tracker ❌
-- War Watch ❌
+- Global Conflict Tracker ✅
+- War Watch ✅
 - SIPRI / Global Firepower ❌
-- hormuz.now ❌
+- hormuz.now ✅
 
 ## Kameras
 - Fintraffic, DriveBC, Caltrans, Ontario 511, HK, Toronto, etc. ✅ (viele Feeds)
@@ -48,25 +48,25 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - Natural Earth ✅
 - OurAirports ✅
 - PMTiles (ARGOS-Stil) ❌
-- Epoch AI (Rechenzentren) ⚠️
+- Epoch AI (Rechenzentren) ✅
 
 ## Intelligence / Erweitert
-- IMF PortWatch ❌
-- IODA (Internet-Ausfälle) ❌
-- Reisehinweise (US/UK/AU) ❌
-- Global Energy Monitor ❌
-- EIA ❌
-- JODI-Oil ❌
-- UN Comtrade ❌
-- Sanktionslisten ❌
+- IMF PortWatch ✅
+- IODA (Internet-Ausfälle) ✅
+- Reisehinweise (US/UK/AU) ✅
+- Global Energy Monitor ✅
+- EIA ✅
+- JODI-Oil ✅
+- UN Comtrade ✅
+- Sanktionslisten ✅
 - Safecast / RadNet ✅
 - Feodo Tracker (C2) ✅ (neu: Loader + Collector + Geo)
 - C2IntelFeeds ❌
-- MITRE ATT&CK ❌
-- EDGAR (SEC) ❌
+- MITRE ATT&CK ✅
+- EDGAR (SEC) ✅
 - Wikidata / GFCI ✅ (teilweise)
-- Global Firepower / SIPRI ❌
-- Global Conflict Tracker ❌
+- Global Firepower ✅ / SIPRI ❌
+- Global Conflict Tracker ✅
 
 ## Wetter & Umwelt
 - Open-Meteo ✅
