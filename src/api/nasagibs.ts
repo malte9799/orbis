@@ -1,16 +1,32 @@
 import { snapshotJson } from './data';
 
+export interface NasaGibsResourceUrl {
+  format: string;
+  resourceType: string;
+  template: string;
+}
+
 export interface NasaGibsLayer {
   id: string;
   title: string;
   abstract: string | null;
+  format: string | null;
+  tileMatrixSets: string[];
   defaultTime: string | null;
+  /** Time dimension values/ranges from WMTS capabilities (e.g. single dates or `start/end/P1D`). */
   time: string | null;
+  resourceUrls: NasaGibsResourceUrl[];
 }
 
 export interface NasaGibsData {
   generated: string;
   source: string;
+  capabilitiesUrl: string;
+  /** WMTS/XYZ event-imagery template hints (GIBS EPSG:4326 best). `{Time}` = ISO date or `default`. */
+  templateHints: {
+    wmtsTile: string;
+    xyz4326: string;
+  };
   total: number;
   layers: NasaGibsLayer[];
 }
@@ -28,6 +44,11 @@ function unescapeXml(s: string): string {
     .trim();
 }
 
+function attr(tag: string, name: string): string | null {
+  const m = tag.match(new RegExp(`${name}="([^"]*)"`, 'i'));
+  return m ? unescapeXml(m[1]) : null;
+}
+
 export function parseGibsCapabilities(xml: string): NasaGibsLayer[] {
   const layers: NasaGibsLayer[] = [];
   const layerBlocks = xml.match(/<Layer\b[^>]*>[\s\S]*?<\/Layer>/g) ?? [];
@@ -39,6 +60,12 @@ export function parseGibsCapabilities(xml: string): NasaGibsLayer[] {
     const title = titleMatch ? unescapeXml(titleMatch[1]) : id;
     const abstractMatch = block.match(/<ows:Abstract(?:\s[^>]*)?>([\s\S]*?)<\/ows:Abstract>/);
     const abstract = abstractMatch ? unescapeXml(abstractMatch[1]) : null;
+    const formatMatch = block.match(/<Format>([\s\S]*?)<\/Format>/);
+    const format = formatMatch ? unescapeXml(formatMatch[1]) : null;
+
+    const tileMatrixSets = [...block.matchAll(/<TileMatrixSet>([\s\S]*?)<\/TileMatrixSet>/g)].map((m) =>
+      unescapeXml(m[1]),
+    );
 
     let defaultTime: string | null = null;
     let time: string | null = null;
@@ -51,7 +78,19 @@ export function parseGibsCapabilities(xml: string): NasaGibsLayer[] {
       time = values.length > 0 ? values.join('; ') : null;
     }
 
-    layers.push({ id, title, abstract, defaultTime, time });
+    const resourceUrls: NasaGibsResourceUrl[] = [];
+    for (const m of block.matchAll(/<ResourceURL\b([^>]*)\/?>/g)) {
+      const tag = m[1];
+      const template = attr(tag, 'template');
+      if (!template) continue;
+      resourceUrls.push({
+        format: attr(tag, 'format') ?? 'image/jpeg',
+        resourceType: attr(tag, 'resourceType') ?? 'tile',
+        template,
+      });
+    }
+
+    layers.push({ id, title, abstract, format, tileMatrixSets, defaultTime, time, resourceUrls });
   }
   return layers;
 }
@@ -64,6 +103,13 @@ async function fetchNasaGibsLive(): Promise<NasaGibsData> {
   return {
     generated: new Date().toISOString(),
     source: 'NASA GIBS (earthdata.nasa.gov)',
+    capabilitiesUrl: GIBS_CAPABILITIES_URL,
+    templateHints: {
+      wmtsTile:
+        'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/{Layer}/default/{Time}/{TileMatrixSet}/{TileMatrix}/{TileRow}/{TileCol}.{ext}',
+      xyz4326:
+        'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/{Layer}/default/{Time}/{TileMatrixSet}/{z}/{y}/{x}.{ext}',
+    },
     total: layers.length,
     layers,
   };
