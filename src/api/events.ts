@@ -17,8 +17,8 @@ export type EventKind =
   | 'dust'
   | 'landslide'
   | 'heat'
-  | 'other';
-
+  | 'other'
+  | 'verified';
 export interface EventProps {
   kind: EventKind;
   title: string;
@@ -49,6 +49,7 @@ const KIND_COLOR: Record<EventKind, string> = {
   landslide: '#8b5e3c',
   heat: '#ff3b6b',
   other: '#9aa3b5',
+  verified: '#ff9d3b',
 };
 export const kindColor = (k: EventKind) => KIND_COLOR[k];
 

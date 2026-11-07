@@ -164,6 +164,7 @@ const GLYPHS: Record<GlyphId, Part[]> = {
   ],
   // Gesundheitseinrichtungen: Kreuz
   cross: [{ mode: 'fill', d: 'M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z' }],
+  verified: [{ mode: 'stroke', width: 2, d: 'M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6z' }],
   vote: [
     { mode: 'fill', d: 'M4 12.5h16v7.5H4z' },
     { mode: 'stroke', width: 2, d: 'M10 12.5V10h4v2.5 M9.3 2.8h6.1V8.4l-1.7 1.3H9.9L9.3 7.9z M10.6 6l1.4 1.3 2.2-2.3' },
