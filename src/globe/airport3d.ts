@@ -15,12 +15,10 @@ import { FONT_BOLD, FONT_REGULAR } from './vector';
 
 /** From this zoom on the airport layout is loaded and shown. */
 export const AIRPORT_ZOOM = 11;
-/** From this zoom on aircraft are drawn as models with trails (when the map is tilted). */
+/** From this zoom on aircraft are drawn as models with trails (also top-down, never as 2D icons). */
 const PLANE_ZOOM = 9;
 /** from this zoom on all aircraft are simple models on the globe; further out they are too small to tell */
 const CROWD_ZOOM = 3;
-/** Below this pitch (degrees) the map counts as flat: 2D icons and flat trails, no heights. */
-const TILT_MIN = 5;
 /** Retry after a failed load (the public Overpass servers are often at capacity). */
 const RETRY_MS = 20000;
 /**
@@ -49,15 +47,13 @@ const contains = (c: Bounds, b: Bounds) => c.west <= b.west && c.south <= b.sout
 
 export interface Ap3dHooks {
   info(i: { loading?: boolean; count?: number; note?: string }): void;
-  /** the map was tilted/flattened or zoomed across a threshold: 2D icons may need updating */
+  /** the mode changed or zoom crossed a threshold: 2D icons may need updating */
   modeChanged(): void;
-  /** flat map with 2D icons: refresh their positions from the smoothed state */
-  iconsTick(): void;
   /** fetch this aircraft and feed it (a link names an aircraft the map has not seen yet) */
   load(hex: string): Promise<void>;
 }
 
-export type PlaneMode = 'off' | 'flat' | '3d';
+export type PlaneMode = 'off' | '3d';
 
 type Poly = Feature<Polygon>;
 type Line = Feature<LineString>;
@@ -102,8 +98,6 @@ export class Airport3D {
     this.layer = new PlanesLayer(map, this.tracker, {
       mode: () => this.mode(),
       only: () => this.onlySelected(),
-      icons: () => this.iconsOn,
-      tick: () => this.hooks.iconsTick(),
       frame: (planes) => this.updateLabels(planes),
       target: (hex, cockpit) => this.followTarget(hex, cockpit),
       crowd: () => this.crowd(),
@@ -175,14 +169,14 @@ export class Airport3D {
     return this.layer.selected;
   }
 
-  /** 'off' without aircraft layer or zoomed out; 'flat' while the flat map is not tilted. */
+  /** 'off' without aircraft layer or zoomed out; from PLANE_ZOOM on always '3d' (also top-down). */
   mode(): PlaneMode {
     if (!this.planesOn) return 'off';
     if (this.crowd()) return '3d';
     if (this.map.getZoom() < PLANE_ZOOM && !this.onlySelected()) return 'off';
     // far out the selected aircraft is a model: a flat icon means nothing on a ball
     if (this.onlySelected() && this.stage.frame?.globe) return '3d';
-    return this.map.getPitch() > TILT_MIN ? '3d' : 'flat';
+    return '3d';
   }
 
   /** Keep the aircraft (3D layer, labels, click targets) above everything else. */
@@ -599,8 +593,7 @@ export class Airport3D {
     // far out the models are only for aircraft, also when the selected one makes the mode '3d'
     if (this.map.getZoom() < PLANE_ZOOM && this.layer.selected !== `sonde:${serial}`) return false;
     if (!this.tracker.planes.has(`sonde:${serial}`)) return false;
-    const mode = this.mode();
-    return mode === '3d' || (mode === 'flat' && !this.iconsOn);
+    return this.mode() === '3d';
   }
 
   private updateLabels(planes: PlaneState[]) {

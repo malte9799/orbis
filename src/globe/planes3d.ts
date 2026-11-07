@@ -576,7 +576,6 @@ class TrailRig {
   line = new GeoLine([], { color: TRAIL_COLOR, width: TRAIL_STYLE.width, opacity: TRAIL_STYLE.opacity, fadeMs: TRAIL_STYLE.fade });
   wall = new GeoWall({ color: TRAIL_COLOR, fullM: WALL_FULL_M, goneM: WALL_MAX_M });
   private count = -1;
-  private flatBuilt = false;
   /** longitude of the last point, the head stays next to it across the antimeridian */
   private lastLon = 0;
 
@@ -584,24 +583,23 @@ class TrailRig {
     return lon + 360 * Math.round((this.lastLon - lon) / 360);
   }
 
-  private build(trail: [number, number, number, number][], flat: boolean) {
+  private build(trail: [number, number, number, number][]) {
     this.lastLon = trail[0][0];
     const pts = trail.map((t): Vec3 => {
       this.lastLon = this.near(t[0]);
-      return [this.lastLon, t[1], flat ? 0.3 : t[2]];
+      return [this.lastLon, t[1], t[2]];
     });
     pts.push(pts[pts.length - 1]); // the head, moved every frame
     const times = [...trail.map((t) => t[3]), -1];
     this.line.setPoints(pts, times);
     this.wall.setPoints(pts, times);
     this.count = trail.length;
-    this.flatBuilt = flat;
   }
 
   /** Bring the geometry to the aircraft's trail and current (displayed) position. */
-  sync(p: PlaneState, flat: boolean, selected: boolean, frame: GeoFrame, now: number, lift: number) {
-    if (p.trail.length !== this.count || flat !== this.flatBuilt) this.build(p.trail, flat);
-    const head: Vec3 = [this.near(p.dLon), p.dLat, flat || p.ground ? 0.3 : p.dAlt];
+  sync(p: PlaneState, selected: boolean, frame: GeoFrame, now: number, lift: number) {
+    if (p.trail.length !== this.count) this.build(p.trail);
+    const head: Vec3 = [this.near(p.dLon), p.dLat, p.ground ? 0.3 : p.dAlt];
     this.line.setHead(head);
     this.wall.setHead(head);
     const style = selected ? TRAIL_STYLE_SELECTED : TRAIL_STYLE;
@@ -611,7 +609,7 @@ class TrailRig {
     this.wall.setStyle(style.wall, style.fade);
     this.line.update(frame, now, lift);
     this.wall.update(frame, now, lift);
-    this.wall.object.visible = !flat && !p.ground && p.dAlt > 3;
+    this.wall.object.visible = !p.ground && p.dAlt > 3;
   }
 
   hide() {
@@ -669,14 +667,10 @@ function greatCircle(a: Vec3, b: Vec3, n: number, refLon: number): Vec3[] {
 }
 
 export interface PlanesLayerHooks {
-  /** 'off': nothing drawn; 'flat': map not tilted (flat trails, models only without 2D icons); '3d': tilted, or on the globe */
-  mode(): 'off' | 'flat' | '3d';
+  /** 'off': nothing drawn; '3d' from PLANE_ZOOM on: models with heights and 3D trails, also top-down */
+  mode(): 'off' | '3d';
   /** far out only this aircraft (the selected one) is drawn, with its trail and route; null: all */
   only(): string | null;
-  /** are the 2D aircraft icons shown (then the models are left out in flat mode)? */
-  icons(): boolean;
-  /** about 10× a second while the 2D icons are shown on a flat map: move them with the smoothed positions */
-  tick(): void;
   /** called about 4× a second with the planes that are drawn */
   frame(planes: PlaneState[]): void;
   /** what the camera follows for this aircraft */
@@ -690,9 +684,7 @@ export class PlanesLayer implements GeoPart {
   readonly source = 'plane';
   private frameNow: GeoFrame | null = null;
   private lastFrameHook = 0;
-  private lastTick = 0;
   private mats = makeMats();
-  private flatNow = false;
   private drop = dropGeometry();
   private pulseGeo = new THREE.SphereGeometry(1, 20, 14);
   /** hex of the aircraft whose trail is drawn at full strength */
@@ -764,9 +756,6 @@ export class PlanesLayer implements GeoPart {
       }
       return false;
     }
-    const flat = mode === 'flat';
-    this.flatNow = flat;
-    const models = !flat || !this.hooks.icons();
     const only = this.hooks.only();
     this.tracker.step(now);
     const crowd = this.hooks.crowd();
@@ -778,10 +767,6 @@ export class PlanesLayer implements GeoPart {
     const drawn: PlaneState[] = [];
     const map = this.map;
     const terrain = map.getTerrain();
-    if (flat && !models && now - this.lastTick > 100) {
-      this.lastTick = now;
-      this.hooks.tick();
-    }
     // only what is (nearly) in view is built and drawn; on the globe the horizon decides
     const b = map.getBounds();
     const padLon = (b.getEast() - b.getWest()) * 0.5;
@@ -797,19 +782,18 @@ export class PlanesLayer implements GeoPart {
         continue;
       }
       const inView = frame.globe || (p.dLon > b.getWest() - padLon && p.dLon < b.getEast() + padLon && p.dLat > b.getSouth() - padLat && p.dLat < b.getNorth() + padLat);
-      // ground vehicles are drawn by their 2D icon on the flat map (never both)
-      if (!inView || (flat && (p.model === 'car' || p.model === 'tug'))) {
+      if (!inView) {
         hideAll(p);
         continue;
       }
       const elev = terrain ? (map.queryTerrainElevation([p.dLon, p.dLat]) ?? 0) : 0;
-      const air = !flat && !p.ground && p.dAlt > 3;
-      const alt = (flat ? (p.ground ? 0.2 : 1) : p.dAlt + (p.ground ? 0.2 : 0)) + elev;
+      const air = !p.ground && p.dAlt > 3;
+      const alt = p.dAlt + (p.ground ? 0.2 : 0) + elev;
       // behind the Earth: its trail may still reach around the horizon
       const hidden = frame.occluded(p.dLon, p.dLat, alt);
       // metres per screen pixel: models keep a readable size when zoomed out (about 26 px long)
       const mpp = frame.metresPerPixel(p.dLon, p.dLat, alt);
-      if (models && !hidden && p.hex !== this.inside) {
+      if (!hidden && p.hex !== this.inside) {
         if (!p.obj || p.objModel !== p.model || p.objEmergency !== p.emergency) {
           if (p.obj) {
             this.object.remove(p.obj);
@@ -853,13 +837,13 @@ export class PlanesLayer implements GeoPart {
       } else {
         for (const o of [p.obj, p.shadow, p.drop]) if (o) o.visible = false;
       }
-      this.syncTrail(frame, p, elev, flat, now);
+      this.syncTrail(frame, p, elev, now);
       if (hidden || p.hex === this.inside) {
         if (p.pulse) p.pulse.visible = false;
-      } else this.syncPulse(frame, p, now, mpp, elev, flat);
+      } else this.syncPulse(frame, p, now, mpp, elev);
     }
     this.syncLabel();
-    this.syncForecast(frame, flat);
+    this.syncForecast(frame);
     if (now - this.lastFrameHook > 250) {
       this.lastFrameHook = now;
       this.hooks.frame(drawn);
@@ -939,7 +923,7 @@ export class PlanesLayer implements GeoPart {
     const frame = this.frameNow;
     const hex = this.hovered ?? this.followed;
     const p = hex ? this.tracker.planes.get(hex) : undefined;
-    const pos = p && frame?.toScreen(p.dLon, p.dLat, this.flatNow ? 1 : p.dAlt);
+    const pos = p && frame?.toScreen(p.dLon, p.dLat, p.dAlt);
     if (!p || !pos) {
       this.label.style.display = 'none';
       return;
@@ -993,13 +977,12 @@ export class PlanesLayer implements GeoPart {
     }
     for (const p of this.tracker.planes.values()) {
       if (!p.rig?.line.object.visible) continue;
-      const flat = this.flatNow;
-      const air = !flat && !p.ground && p.dAlt > 3;
+      const air = !p.ground && p.dAlt > 3;
       if (p.obj?.visible) {
-        const c = screen(p.dLon, p.dLat, flat ? 1 : p.dAlt);
+        const c = screen(p.dLon, p.dLat, p.dAlt);
         if (c) consider(p.hex, Math.max(0, Math.hypot(x - c[0], y - c[1]) - 14));
       }
-      const pts: [number, number, number, number][] = [...p.trail.map((t) => [t[0], t[1], flat ? 0.3 : t[2], t[3]] as [number, number, number, number]), [p.dLon, p.dLat, flat || p.ground ? 0.3 : p.dAlt, now]];
+      const pts: [number, number, number, number][] = [...p.trail.map((t) => [t[0], t[1], t[2], t[3]] as [number, number, number, number]), [p.dLon, p.dLat, p.ground ? 0.3 : p.dAlt, now]];
       let prevTop: [number, number] | null = null;
       let prevBot: [number, number] | null = null;
       for (const [lon, lat, alt, t] of pts) {
@@ -1037,7 +1020,7 @@ export class PlanesLayer implements GeoPart {
   }
 
   /** A white, see-through sphere that grows and fades around an aircraft whose position just arrived. */
-  private syncPulse(frame: GeoFrame, p: PlaneState, now: number, mpp: number, elev: number, flat: boolean) {
+  private syncPulse(frame: GeoFrame, p: PlaneState, now: number, mpp: number, elev: number) {
     const t = p.pulseAt ? (now - p.pulseAt) / PULSE_MS : 1;
     if (t >= 1) {
       if (p.pulse) {
@@ -1062,7 +1045,7 @@ export class PlanesLayer implements GeoPart {
     const crowdK = Math.min(1, Math.max(0.6, Math.sqrt(40 / Math.max(1, this.tracker.planes.size))));
     const maxPx = Math.max(12, Math.min(56, 0.5 * planePx) * crowdK);
     const px = maxPx * (0.25 + 0.75 * (1 - (1 - t) ** 2));
-    frame.place(p.pulse.matrix, p.dLon, p.dLat, (flat || p.ground ? 1 : p.dAlt) + elev, 0, px * mpp);
+    frame.place(p.pulse.matrix, p.dLon, p.dLat, (p.ground ? 1 : p.dAlt) + elev, 0, px * mpp);
     p.pulse.visible = true;
   }
 
@@ -1081,12 +1064,12 @@ export class PlanesLayer implements GeoPart {
   }
 
   /** Grey dashed line from the departure airport to the start of the trail and on to the destination. */
-  private syncForecast(frame: GeoFrame, flat: boolean) {
+  private syncForecast(frame: GeoFrame) {
     const p = this.selected ? this.tracker.planes.get(this.selected) : undefined;
     const r = this.route;
     const legs: ForecastLeg[] = [];
     if (p && r && r.hex === p.hex) {
-      const alt = (a: number) => (flat || p.ground ? 0.3 : a);
+      const alt = (a: number) => (p.ground ? 0.3 : a);
       const first = p.trail[0];
       // the departure airport is only drawn to the trail when the data begins far away from it
       if (metres(r.origin[0], r.origin[1], first[0], first[1]) > 15000) legs.push({ from: [r.origin[0], r.origin[1], 0.3], to: [first[0], first[1], alt(first[2])], anchor: 'from' });
@@ -1114,12 +1097,12 @@ export class PlanesLayer implements GeoPart {
     return line;
   }
 
-  private syncTrail(frame: GeoFrame, p: PlaneState, elev: number, flat: boolean, now: number) {
+  private syncTrail(frame: GeoFrame, p: PlaneState, elev: number, now: number) {
     if (!p.rig) {
       p.rig = new TrailRig();
       this.object.add(p.rig.line.object, p.rig.wall.object);
     }
-    p.rig.sync(p, flat, this.selected === p.hex, frame, now, elev);
+    p.rig.sync(p, this.selected === p.hex, frame, now, elev);
   }
 }
 

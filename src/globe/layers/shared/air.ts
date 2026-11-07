@@ -116,13 +116,6 @@ export function refreshAircraftIcons(ctx: ExtraCtx) {
   // aircraft of the cache that the latest request did not return stay visible (they keep flying on their course)
   const cached = airport ? airport.cachedFeatures(new Set(fc.features.map((f) => String(f.properties?.hex)))) : [];
   let features = airport ? [...fc.features, ...cached].filter((f) => !airport.owns(String(f.properties?.hex))) : fc.features;
-  // on a flat map the icons move like the 3D models: smoothed position and heading
-  if (airport?.mode() === 'flat') {
-    features = features.map((f) => {
-      const live = airport.planeInfo(String(f.properties?.hex));
-      return live ? { ...f, geometry: { type: 'Point', coordinates: [live.lon, live.lat] }, properties: { ...f.properties, track: live.track } } : f;
-    });
-  }
   st.heliFeatures = features.filter((f) => f.properties?.kind === 'heli') as Feature<Point>[];
   ctx.setData('aircraft', { ...fc, features });
 }
@@ -274,7 +267,7 @@ export function applyAir(ctx: ExtraCtx) {
 /** the 3D airport layer (also carries the 3D aircraft and radiosondes) */
 export function createAirport(ctx: ExtraCtx) {
   const st = getState(ctx);
-  st.airport3d = new Airport3D(ctx.map, ctx.stage, 'marker', { load: (hex) => loadAircraftByHex(hex).then((fc) => st.airport3d?.feed(fc)), info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx), iconsTick: () => refreshLiveIcons(ctx) });
+  st.airport3d = new Airport3D(ctx.map, ctx.stage, 'marker', { load: (hex) => loadAircraftByHex(hex).then((fc) => st.airport3d?.feed(fc)), info: (i) => ctx.set('airport3d', i), modeChanged: () => refreshLiveIcons(ctx) });
   st.airport3d.init();
 }
 
