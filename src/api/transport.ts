@@ -2,7 +2,7 @@ import type { Feature, FeatureCollection, Point } from 'geojson';
 import { store } from '../store';
 import { proxyBase, viaProxy } from './proxy';
 import { fetchJson } from '../util';
-import { mirrorJson } from './data';
+import { mirrorJson, snapshotJson } from './data';
 
 // Live transport and spaceflight: rocket launches, airports, ships (AIS) and trains.
 
@@ -432,4 +432,15 @@ export async function loadTrainDetails(num: number, date: string) {
     delay: last?.differenceInMinutes ?? null,
     lastStation: name(last?.stationShortCode),
   };
+}
+
+/** Snapshot of live vessels from orbis-data (if available), else null (fall back to AIS stream). */
+export async function loadShipSnapshot(): Promise<Ship[] | null> {
+  try {
+    const data = await snapshotJson<{ ships?: Ship[] } | Ship[]>('ships/vessels.json');
+    if (Array.isArray(data)) return data;
+    return data?.ships ?? null;
+  } catch {
+    return null;
+  }
 }
