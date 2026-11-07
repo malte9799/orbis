@@ -485,6 +485,21 @@ export function radarForecastSteps(lastTime: number, horizonMin = 60): RadarFram
 /** RainViewer by default; a self-hosted, API-compatible server (LibreWXR) can be set in the settings. */
 export const radarHost = () => (store.getKeys().radarHost || 'https://api.rainviewer.com').replace(/\/+$/, '');
 
+export interface VerifiedEventFC {
+  type: 'FeatureCollection';
+  features: { type: 'Feature'; geometry: { type: 'Point'; coordinates: [number, number] }; properties: { id: string; icon: string; factionId: number; color: string; date: string; dateSort: number } }[];
+  factionMeta?: { id: number; color: string; name: string; conflict: string; conflictName: string; conflictUrl: string; conflictCode: string }[];
+}
+
+/** Verified conflict events (GeoConfirmed community). Snapshot from orbis-data, live fallback. */
+export async function loadVerifiedEvents(): Promise<VerifiedEventFC> {
+  return snapshotJson<VerifiedEventFC>('events/geoconfirmed.json', async () => {
+    const res = await fetch('https://geoconfirmed.org/api/placemark/geojson');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as VerifiedEventFC;
+  });
+}
+
 export async function loadRadarFrames(): Promise<RadarFrames> {
   const data = await fetchJson<{
     host: string;

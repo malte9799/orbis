@@ -394,10 +394,47 @@ function resetOnProxyChange() {
  * call) – cached for two minutes (also across page reloads) and shown when zoomed out.
  * Aircraft seen more recently in a zoomed-in view show their newer position instead.
  */
+let globalRefreshPromise: Promise<AircraftResult> | null = null;
+
 export async function loadGlobalAircraft(): Promise<AircraftResult> {
   resetOnProxyChange();
   await hydrate();
-  if (globalCache && Date.now() - globalCache.at < 120000) return mergeLive(globalCache.fc, globalCache.at);
+  // Stale-while-revalidate: serve cached snapshot immediately, refresh in background
+  if (globalCache) {
+    const cached = mergeLive(globalCache.fc, globalCache.at);
+    if (Date.now() - globalCache.at >= 120000 && !globalRefreshPromise) {
+      globalRefreshPromise = (async () => {
+        try {
+          const staleFn = () => (globalCache ? mergeLive(globalCache.fc, globalCache.at) : liveSeen.size ? mergeLive(null, 0) : null);
+          const [osk, mil] = await Promise.allSettled([
+            Date.now() - globalFailedAt < 300000
+              ? Promise.reject(new Error('OpenSky-Weltübersicht pausiert (letzter Versuch fehlgeschlagen)'))
+              : fetchJson<unknown>(viaProxy('https://opensky-network.org/api/states/all?extended=1'), undefined, 30000).catch((e) => {
+                  globalFailedAt = Date.now();
+                  throw e;
+                }),
+            loadMilitaryAircraft(),
+          ]);
+          const milFc = mil.status === 'fulfilled' ? mil.value : null;
+          if (osk.status === 'rejected') {
+            const s = staleFn();
+            if (s) return s;
+            if (milFc) return { ...milFc, source: 'nur Militär (adsb.lol) – OpenSky nicht erreichbar' };
+            throw osk.reason;
+          }
+          const milHex = new Set(milFc?.features.map((f) => String(f.properties?.hex)) ?? []);
+          const base = toFeatures(parseOpenSky(osk.value), '').features.filter((f) => !milHex.has(String(f.properties?.hex)));
+          const fc: AircraftResult = { type: 'FeatureCollection', features: [...base, ...(milFc?.features ?? [])], source: milFc ? 'OpenSky Network + adsb.lol (Militär)' : 'OpenSky Network (Weltübersicht)' };
+          globalCache = { at: Date.now(), fc };
+          kvSet('ac-global', globalCache);
+          return mergeLive(fc, globalCache.at);
+        } finally {
+          globalRefreshPromise = null;
+        }
+      })();
+    }
+    return cached;
+  }
   const stale = () => (globalCache ? mergeLive(globalCache.fc, globalCache.at) : liveSeen.size ? mergeLive(null, 0) : null);
   const [osk, mil] = await Promise.allSettled([
     Date.now() - globalFailedAt < 300000
