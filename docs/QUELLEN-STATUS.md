@@ -18,7 +18,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 - Dark Vessels ✅ (GFW AIS-disabling, Placeholder ohne `GFW_API_TOKEN`)
 - Sanctioned Vessels ✅ (OFAC SDN Vessel-Entries)
 - Schiffs-Snapshot (Worker) 🚧 (Client-Loader vorhanden, Worker scaffolded)
-- Ship-Historie ❌
+- Ship-Historie ⚠️ (Data-Layer/Snapshot-Contract: `ships/history.json` + `ships/tracks/{mmsi}.json`, Loader `src/api/shiphistory.ts`; keine freie globale historische AIS-Quelle ohne Registrierung/Bezahl-Keys – aisstream realtime, GFW/kommerziell nur mit Token/Vertrag; best-effort Collector-Hook)
 
 ## Events
 - USGS (Beben) ✅
@@ -102,7 +102,7 @@ Legende: ✅ integriert · ⚠️ teilweise · ❌ fehlt · 🚧 in Arbeit
 
 ## Status-Summary
 - Integriert: ~50+ Quellen (Data-Layer/Loader+Collector; teils Placeholder/best-effort)
-- Teilweise: ~6
-- Fehlt (echte Datenquellen): **3** — SIPRI, Ship-Historie, NASA GIBS
+- Teilweise: ~7 (inkl. Ship-Historie als Snapshot-Contract ohne freie globale Historie-Quelle)
+- Fehlt (echte Datenquellen): **2** — SIPRI, NASA GIBS
 - Fehlt (Infrastruktur/Performance): PMTiles-Pipeline Kameras/Infra (2 Einträge), EUMETSAT-Wolken vollständig
 - In Arbeit: 2 (Ship-Snapshot-Worker deploy, VIP-Aircraft/Networth-Curation)

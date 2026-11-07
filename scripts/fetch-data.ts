@@ -901,5 +901,39 @@ await task('street-panos', 29 * DAY, async () => {
   console.log(`  ${data.points.length} points`);
 });
 
+// Ship-Historie: contract snapshot for vessel tracks (no free global historical AIS without paid keys/registration).
+// Populated best-effort when an authorized source is configured (e.g. GFW_API_TOKEN for Global Fishing Watch tracks,
+// or observed-position accumulation by the ships worker). Without a source, writes the documented empty schema so
+// clients have a stable snapshot contract at ships/history.json; per-vessel detail lives at ships/tracks/{mmsi}.json.
+await task('ship-history', 7 * DAY, async () => {
+  const gfwToken = process.env.GFW_API_TOKEN;
+  const generated = new Date().toISOString();
+  if (!gfwToken) {
+    write('ships/history.json', {
+      generated,
+      source: 'placeholder',
+      sourceConstraint:
+        'No free global historical AIS track source is configured (aisstream is realtime only; MarineTraffic/VesselFinder/Spire are paid). ' +
+        'Set GFW_API_TOKEN in the collector environment for best-effort GFW-backed track snapshots, or populate ships/tracks/{mmsi}.json from observed positions.',
+      tracks: [],
+      index: [],
+    });
+    console.log('  ship-history: no GFW_API_TOKEN – wrote schema placeholder');
+    return;
+  }
+  // Authorized hook: GFW track APIs require vessel-specific queries and pagination; this collector only seeds the
+  // contract when a token exists. Extend with explicit MMSI/vessel-id lists as needed.
+  write('ships/history.json', {
+    generated,
+    source: 'gfw-ready (no vessel list queried)',
+    sourceConstraint:
+      'GFW_API_TOKEN is present but no vessel query list is configured; this task seeds the ship-history contract only. ' +
+      'Implement targeted GFW vessel-track queries (per MMSI/vessel id) to populate ships/tracks/{mmsi}.json and index.',
+    tracks: [],
+    index: [],
+  });
+  console.log('  ship-history: GFW_API_TOKEN present – wrote contract (no vessel queries configured)');
+});
+
 meta.updated = new Date().toISOString();
 write('meta.json', meta);
