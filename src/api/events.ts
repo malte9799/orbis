@@ -501,6 +501,36 @@ export async function loadVerifiedEvents(): Promise<VerifiedEventFC> {
   });
 }
 
+/** GDELT press events (last 24h). Live fallback to GDELT geo API. */
+export async function loadGdeltEvents(): Promise<FeatureCollection<Point, { name: string; url: string }>> {
+  return snapshotJson<FeatureCollection<Point, { name: string; url: string }>>(
+    'events/gdelt.json',
+    async () => {
+      const res = await fetch('https://api.gdeltproject.org/api/v2/geo/geo?query=conflict%20OR%20protest%20OR%20military%20OR%20attack&mode=PointData&format=GeoJSON&timespan=24h&maxpoints=500');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as FeatureCollection<Point, { name: string; url: string }>;
+    },
+  );
+}
+
+/** UCDP conflict events with fatalities (recent). Live fallback to UCDP GED API. */
+export async function loadUcdpEvents(): Promise<FeatureCollection<Point, { id: string; deaths: number; side_a: string; side_b: string }>> {
+  return snapshotJson<FeatureCollection<Point, { id: string; deaths: number; side_a: string; side_b: string }>>(
+    'events/ucdp.json',
+    async () => {
+      const res = await fetch('https://ucdpapi.pcr.uu.se/api/gedevents/24.1?pagesize=1000&page=0');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const features = (data?.Result || []).map((e: any) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [e.longitude, e.latitude] },
+        properties: { id: String(e.id), deaths: e.deaths_a + e.deaths_b + e.deaths_civilians + e.deaths_unknown, side_a: e.side_a, side_b: e.side_b },
+      }));
+      return { type: 'FeatureCollection', features };
+    },
+  );
+}
+
 export async function loadRadarFrames(): Promise<RadarFrames> {
   const data = await fetchJson<{
     host: string;

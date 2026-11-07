@@ -57,5 +57,3 @@ export async function loadVipData(): Promise<VipData | null> {
     return null;
   }
 }
-EOF
-pnpm typecheck 2>&1 | head
