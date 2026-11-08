@@ -8,11 +8,11 @@ export default defineExtra({
   section: 'earth',
   cat: 'gefahr',
   label: 'Radioaktivität',
-  hint: 'Ortsdosisleistung – BfS (DE), STUK/FMI (FI), Health Canada (CA), Safecast (weltweit)',
+  hint: 'Ortsdosisleistung – BfS (DE), STUK/FMI (FI), Health Canada (CA), SSM (SE), NUSC (TW), Safecast (weltweit)',
   glyph: 'radiation',
   icon: 'radiation',
   color: '#c0ca33',
-  sources: { radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://en.ilmatieteenlaitos.fi/open-data-licence">STUK / FMI</a> (CC BY 4.0), <a href="https://open.canada.ca/en/open-government-licence-canada">Health Canada</a> (OGL-Canada), <a href="https://safecast.org/">Safecast</a> (CC0)' },
+  sources: { radiation: 'Radioaktivität: <a href="https://odlinfo.bfs.de/">BfS</a> (DL-DE 2.0), <a href="https://en.ilmatieteenlaitos.fi/open-data-licence">STUK / FMI</a> (CC BY 4.0), <a href="https://open.canada.ca/en/open-government-licence-canada">Health Canada</a> (OGL-Canada), <a href="https://karttjanst.ssm.se/gammastationer">SSM</a> (SE), <a href="https://data.gov.tw/dataset/119233">NUSC/RMC</a> (OGDL-Taiwan-1.0), <a href="https://safecast.org/">Safecast</a> (CC0)' },
   addLayers({ add, hidden }) {
     add(
       {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickRtsw, parseStukXml, packHcStations } from './earth';
+import { pickRtsw, parseStukXml, packHcStations, pickSsmLatest, parseNuscCsv } from './earth';
 import stukXml from './fixtures/stuk-multipointcoverage.xml?raw';
 import hcJson from './fixtures/hc-fpsn.geojson?raw';
 
@@ -34,4 +34,34 @@ describe('packHcStations', () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toEqual(['1000_10', -79.0614, 43.8173, 0.03, 1793732400]);
   });
+});
+
+describe('pickSsmLatest', () => {
+  it('picks the newest valid hourly value and ignores stale/invalid rows', () => {
+    const now = 1794135600000 + 3600000;
+    const json = {
+      resolution: 'Hour',
+      values: [
+        [1794121200000, 0.1415],
+        [1794135600000, 0.138],
+        [1794132000000, 0.139],
+        [1794135600000 - 49 * 3600000, 0.2],
+        [1794135600000, 0],
+      ],
+    };
+    expect(pickSsmLatest(json, now)).toEqual({ usvh: 0.138, time: 1794135600000 });
+  });
+  it('returns null for missing or empty values', () => {
+    expect(pickSsmLatest({}, 0)).toBeNull();
+    expect(pickSsmLatest({ values: [] }, 0)).toBeNull();
+  });
+});
+
+describe('parseNuscCsv', () => {
+  it('parses OGDL CSV rows (µSv/h, Taiwan time +08:00) and drops stale/invalid rows', () => {
+    const csv = '\uFEFF監測站,監測站(英文),監測值(微西弗/時),時間,GPS經度,GPS緯度\n磺潭,HWANGTAN,0.052,2026-11-08 19:05,121.646598,25.199527\n舊站,OLD,0.040,2026-11-01 00:00,121.0,25.0\n壞站,BAD,-1,2026-11-08 19:05,121.0,25.0\n';
+    const now = Date.parse('2026-11-08T12:00:00Z'); // 20:00 +08
+    expect(parseNuscCsv(csv, now)).toEqual([['HWANGTAN', 121.6466, 25.1995, 0.052, Date.parse('2026-11-08T11:05:00Z') / 1000]]);
+  });
+  it('returns an empty list for missing data', () => expect(parseNuscCsv('', 0)).toEqual([]));
 });
