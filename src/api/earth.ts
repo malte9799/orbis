@@ -385,6 +385,13 @@ async function loadHc() {
   });
 }
 
+// Browser live fallbacks for CORS-restricted feeds go through the data proxy (no-op in Node / without config).
+const proxied = (url: string) => {
+  if (typeof window === 'undefined') return url;
+  const proxy = String((import.meta as any).env?.VITE_PROXY_URL || '').trim();
+  return proxy ? `${proxy}${proxy.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}` : url;
+};
+
 const SSM_STATIONS: { id: number; name: string; lon: number; lat: number }[] = [
   { id: 20, name: 'Bjuröklubb', lon: 21.575704, lat: 64.479836 },
   { id: 5, name: 'Brämön', lon: 17.739191, lat: 62.219809 },
@@ -439,7 +446,7 @@ export async function fetchSsmStations(): Promise<RadiationStation[]> {
     SSM_STATIONS.map(async (s) => {
       try {
         const json = await fetchJson<unknown>(
-          `https://karttjanst.ssm.se/data/getHistoryForStation?locationId=${s.id}&start=${start}&end=${end}`,
+          proxied(`https://karttjanst.ssm.se/data/getHistoryForStation?locationId=${s.id}&start=${start}&end=${end}`),
           undefined,
           20000,
         );
@@ -499,7 +506,7 @@ export function parseNuscCsv(text: string, now = Date.now()): RadiationStation[]
 
 /** Live NUSC/RMC download (Taiwan). Also used by the orbis-data collector for the nusc-tw.json snapshot. */
 export async function fetchNuscStations(): Promise<RadiationStation[]> {
-  const list = parseNuscCsv(await fetchText(NUSC_CSV, 30000));
+  const list = parseNuscCsv(await fetchText(proxied(NUSC_CSV), 30000));
   if (!list.length) throw new Error('NUSC (TW): no stations in response');
   return list;
 }
