@@ -59,7 +59,7 @@ async function mirrorFetch<T>(key: string, read: (r: Response) => Promise<T>, li
 export const mirrorJson = <T>(key: string, live: () => Promise<T>, timeoutMs = 20000) => mirrorFetch<T>(key, (r) => r.json() as Promise<T>, live, timeoutMs);
 export const mirrorText = (key: string, live: () => Promise<string>, timeoutMs = 20000) => mirrorFetch<string>(key, (r) => r.text(), live, timeoutMs);
 
-const LIVE_PATHS = /^(tsunami\/|safecast\.json$|bfs-odl\.json$|stuk-fi\.json$|hc-ca\.json$|firms\/world\.json$|demos\.json$)/;
+const LIVE_PATHS = /^(tsunami\/|safecast\.json$|bfs-odl\.json$|stuk-fi\.json$|hc-ca\.json$|ssm-se\.json$|nusc-tw\.json$|firms\/world\.json$|demos\.json$)/;
 
 async function get(path: string, timeoutMs: number): Promise<Response> {
   const ctrl = new AbortController();

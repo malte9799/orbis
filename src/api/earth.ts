@@ -224,6 +224,8 @@ export async function loadTsunami(): Promise<FeatureCollection<Point>> {
 // • BfS ODL measuring network (~1,700 probes in Germany, hourly, Datenlizenz DE 2.0)
 // • STUK Finland via FMI open data (~250 stations, 10-min mean, CC BY 4.0)
 // • Health Canada Fixed Point Surveillance Network (~80 stations, Open Government Licence – Canada)
+// • SSM gamma stations in Sweden (28 stations, hourly, public data by Strålsäkerhetsmyndigheten)
+// • NUSC/RMC monitoring network in Taiwan (63 stations, OGDL-Taiwan-1.0)
 // • Safecast real-time sensors worldwide (CC0)
 
 /** Colour for an ambient dose rate (µSv/h). */
@@ -232,7 +234,7 @@ export function doseColor(v: number) {
 }
 
 export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; failed: string[] }> {
-  const [bfs, fi, ca, safecast] = await Promise.allSettled([loadBfs(), loadStuk(), loadHc(), loadSafecast()]);
+  const [bfs, fi, ca, se, tw, safecast] = await Promise.allSettled([loadBfs(), loadStuk(), loadHc(), loadSsm(), loadNusc(), loadSafecast()]);
   const failed: string[] = [];
   const features: Feature<Point>[] = [];
   if (bfs.status === 'fulfilled') features.push(...bfs.value);
@@ -241,9 +243,13 @@ export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; f
   else failed.push('STUK (FI)');
   if (ca.status === 'fulfilled') features.push(...ca.value);
   else failed.push('Health Canada');
+  if (se.status === 'fulfilled') features.push(...se.value);
+  else failed.push('SSM (SE)');
+  if (tw.status === 'fulfilled') features.push(...tw.value);
+  else failed.push('NUSC (TW)');
   if (safecast.status === 'fulfilled') features.push(...safecast.value);
   else failed.push('Safecast');
-  if (failed.length === 4) throw (bfs as PromiseRejectedResult).reason;
+  if (failed.length === 6) throw (bfs as PromiseRejectedResult).reason;
   return { fc: { type: 'FeatureCollection', features }, failed };
 }
 
@@ -376,6 +382,141 @@ async function loadHc() {
     country: 'Kanada',
     url: 'https://maps-cartes.services.geo.ca/server_serveur/rest/services/HC/fpsn_en/MapServer',
     source: 'Health Canada (Fixed Point Surveillance Network), Open Government Licence – Canada',
+  });
+}
+
+// Browser live fallbacks for CORS-restricted feeds go through the data proxy (no-op in Node / without config).
+const proxied = (url: string) => {
+  if (typeof window === 'undefined') return url;
+  const proxy = String((import.meta as any).env?.VITE_PROXY_URL || '').trim();
+  return proxy ? `${proxy}${proxy.includes('?') ? '&' : '?'}url=${encodeURIComponent(url)}` : url;
+};
+
+const SSM_STATIONS: { id: number; name: string; lon: number; lat: number }[] = [
+  { id: 20, name: 'Bjuröklubb', lon: 21.575704, lat: 64.479836 },
+  { id: 5, name: 'Brämön', lon: 17.739191, lat: 62.219809 },
+  { id: 7, name: 'Fårösund', lon: 18.953185, lat: 57.916548 },
+  { id: 8, name: 'Gävle', lon: 17.160678, lat: 60.716108 },
+  { id: 18, name: 'Gielas', lon: 15.064835, lat: 65.326835 },
+  { id: 17, name: 'Göteborg', lon: 11.992493, lat: 57.715663 },
+  { id: 16, name: 'Hallands väderö', lon: 12.545135, lat: 56.449702 },
+  { id: 21, name: 'Hällum', lon: 13.037723, lat: 58.321843 },
+  { id: 6, name: 'Järnäsklubb', lon: 19.67325, lat: 63.435083 },
+  { id: 11, name: 'Karesuando', lon: 22.444084, lat: 68.441708 },
+  { id: 1278, name: 'Kilsbergen', lon: 14.895527, lat: 59.299653 },
+  { id: 4, name: 'Krångede', lon: 16.170134, lat: 63.151255 },
+  { id: 19, name: 'Malå', lon: 18.59386, lat: 65.151105 },
+  { id: 22, name: 'Malmö', lon: 13.070478, lat: 55.571452 },
+  { id: 2, name: 'Mora', lon: 14.504203, lat: 60.960148 },
+  { id: 1276, name: 'Norrköping', lon: 16.146979, lat: 58.582775 },
+  { id: 23, name: 'Ölands norra udde', lon: 17.095227, lat: 57.367094 },
+  { id: 13, name: 'Ölands södra udde', lon: 16.400251, lat: 56.197685 },
+  { id: 12, name: 'Pajala', lon: 23.390461, lat: 67.203564 },
+  { id: 9, name: 'Ritsem', lon: 17.467395, lat: 67.725446 },
+  { id: 1, name: 'Sala', lon: 16.684325, lat: 59.909306 },
+  { id: 25, name: 'Skarpö', lon: 18.740399, lat: 59.344588 },
+  { id: 14, name: 'Skillinge', lon: 14.314184, lat: 55.489083 },
+  { id: 10, name: 'Storön', lon: 23.096068, lat: 65.697082 },
+  { id: 15, name: 'Sunne', lon: 13.116605, lat: 59.863948 },
+  { id: 3, name: 'Tännäs', lon: 12.667646, lat: 62.449441 },
+  { id: 1277, name: 'Växjö', lon: 14.829683, lat: 56.846292 },
+  { id: 24, name: 'Visingsö', lon: 14.405655, lat: 58.094882 },
+];
+
+/** Picks the latest [ts_ms, µSv/h] pair from an SSM history response. */
+export function pickSsmLatest(json: unknown, now = Date.now()): { usvh: number; time: number } | null {
+  const vals = (json as { values?: unknown })?.values;
+  if (!Array.isArray(vals)) return null;
+  let best: { usvh: number; time: number } | null = null;
+  for (const row of vals) {
+    if (!Array.isArray(row) || row.length < 2) continue;
+    const t = Number(row[0]);
+    const v = Number(row[1]);
+    if (!Number.isFinite(t) || !Number.isFinite(v) || v <= 0 || v > 100 || now - t > STALE_MS) continue;
+    if (!best || t > best.time) best = { usvh: v, time: t };
+  }
+  return best;
+}
+
+/** Live SSM download (Sweden, 28 gamma stations). Also used by the orbis-data collector for the ssm-se.json snapshot. */
+export async function fetchSsmStations(): Promise<RadiationStation[]> {
+  const end = Date.now();
+  const start = end - 12 * 3600000;
+  const rows = await Promise.all(
+    SSM_STATIONS.map(async (s) => {
+      try {
+        const json = await fetchJson<unknown>(
+          proxied(`https://karttjanst.ssm.se/data/getHistoryForStation?locationId=${s.id}&start=${start}&end=${end}`),
+          undefined,
+          20000,
+        );
+        const latest = pickSsmLatest(json, end);
+        return latest ? ([s.name, r4(s.lon), r4(s.lat), Math.round(latest.usvh * 1e4) / 1e4, Math.round(latest.time / 1000)] as RadiationStation) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const list = rows.filter((r): r is RadiationStation => r != null);
+  if (!list.length) throw new Error('SSM (SE): no stations in response');
+  return list;
+}
+
+async function loadSsm(): Promise<Feature<Point>[]> {
+  return stationFeatures(await snapshotJson('ssm-se.json', fetchSsmStations), {
+    what: 'Messstelle',
+    country: 'Schweden · Stundenmittel',
+    url: 'https://karttjanst.ssm.se/gammastationer',
+    source: 'Strålsäkerhetsmyndigheten (SSM)',
+  });
+}
+
+const NUSC_CSV = 'https://www.nusc.gov.tw/open/gammamonitor_u.csv';
+
+/** Parses the NUSC/RMC Taiwan open-data CSV (OGDL-Taiwan-1.0): Chinese header, values in µSv/h, Taiwan local time. */
+export function parseNuscCsv(text: string, now = Date.now()): RadiationStation[] {
+  const lines = text.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const head = lines[0].split(',').map((s) => s.trim());
+  // expected: 監測站,監測站(英文),監測值(微西弗/時),時間,GPS經度,GPS緯度
+  const idx = (n: number, en: string) => {
+    const i = head.findIndex((h) => h === en || h.includes(en));
+    return i >= 0 ? i : n;
+  };
+  const iName = idx(1, '英文');
+  const iVal = idx(2, '監測值');
+  const iTime = idx(3, '時間');
+  const iLon = idx(4, '經度');
+  const iLat = idx(5, '緯度');
+  const out: RadiationStation[] = [];
+  for (const line of lines.slice(1)) {
+    if (!line.trim()) continue;
+    const c = line.split(',');
+    const v = Number(c[iVal]);
+    const lon = Number(c[iLon]);
+    const lat = Number(c[iLat]);
+    const rawT = (c[iTime] ?? '').trim();
+    const t = Date.parse(rawT.includes('+') || rawT.endsWith('Z') ? rawT : rawT.replace(' ', 'T') + '+08:00');
+    if (!Number.isFinite(v) || v <= 0 || v > 100 || !Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(t) || now - t > STALE_MS) continue;
+    const name = (c[iName] ?? c[0] ?? '').trim();
+    out.push([name, r4(lon), r4(lat), Math.round(v * 1e4) / 1e4, Math.round(t / 1000)]);
+  }
+  return out;
+}
+
+/** Live NUSC/RMC download (Taiwan). Also used by the orbis-data collector for the nusc-tw.json snapshot. */
+export async function fetchNuscStations(): Promise<RadiationStation[]> {
+  const list = parseNuscCsv(await fetchText(proxied(NUSC_CSV), 30000));
+  if (!list.length) throw new Error('NUSC (TW): no stations in response');
+  return list;
+}
+
+async function loadNusc(): Promise<Feature<Point>[]> {
+  return stationFeatures(await snapshotJson('nusc-tw.json', fetchNuscStations), {
+    what: 'Messstelle',
+    country: 'Taiwan',
+    url: 'https://data.gov.tw/dataset/119233',
+    source: 'NUSC Radiation Monitoring Center (Taiwan), OGDL-Taiwan-1.0',
   });
 }
 
