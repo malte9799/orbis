@@ -157,7 +157,7 @@ inkrementellem Diff-Update; Punkte über einen zentralen Icon-Atlas rendern.
 
 ## 6b. VIP-People-Tracking (ARGOS)
 
-> Hinweis 2026-11-09: Das VIP-Modul (`src/api/vip.ts`) wurde wegen ungeklärter Datenherkunft/Personenbezug entfernt; dieser Abschnitt ist nur noch Ideensammlung, nicht geplant.
+> Hinweis 2026-11-09: Das VIP-Modul (`src/api/vip.ts`) ist wieder integriert (Wikidata CC0, Fotos mit Commons-Lizenz). Flugzeug-Hex-Liste und Net-Worth-Labels stammen aus ARGOS Atlas (Herkunft/Lizenz schriftlich klären), siehe `QUELLEN-LIZENZEN.md`.
 
 Datenquellen (aus ARGOS beobachtet):
 - **Personen-Stammdaten:** `/api/vip.json` – Wikidata/Forbes-ähnliche Liste (Name, Rolle, Foto, Nettovermögen, Staatsbürgerschaft, Geburtsdatum). Quellen laut ARGOS-Attributions: Wikidata (CC0), REST Countries, World Bank.
