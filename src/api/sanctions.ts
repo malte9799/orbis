@@ -1,5 +1,9 @@
 import { snapshotJson } from './data';
 
+/** Credits for the lists contained in the sanctions snapshot. */
+export const OFAC_ATTRIBUTION = 'U.S. Treasury OFAC SDN list (public domain)';
+export const UK_SANCTIONS_ATTRIBUTION = 'UK Sanctions List, FCDO (Open Government Licence v3.0)';
+
 export interface SanctionEntry {
   id: string;
   name: string;
@@ -16,14 +20,17 @@ export interface SanctionsData {
   entries: SanctionEntry[];
 }
 
-function parseOfacConsolidated(xml: string): SanctionEntry[] {
+export function parseOfacConsolidated(xml: string): SanctionEntry[] {
   const out: SanctionEntry[] = [];
   const publish = (xml.match(/<Publish_Date>([^<]+)<\/Publish_Date>/)?.[1] ?? '').trim();
   for (const chunk of xml.split('<sdnEntry>')) {
     if (!chunk.includes('</sdnEntry>')) continue;
     const block = chunk.slice(0, chunk.indexOf('</sdnEntry>'));
+    // primary identity = everything before the first <akaList>; names inside aliases must not leak into it
+    const akaStart = block.indexOf('<akaList>');
+    const primary = akaStart >= 0 ? block.slice(0, akaStart) : block;
     const tag = (t: string) => {
-      const m = block.match(new RegExp(`<${t}>([\\s\\S]*?)</${t}>`));
+      const m = primary.match(new RegExp(`<${t}>([\\s\\S]*?)</${t}>`));
       return m ? m[1].trim() : '';
     };
     const uid = tag('uid');
@@ -32,7 +39,7 @@ function parseOfacConsolidated(xml: string): SanctionEntry[] {
     const type = tag('sdnType') || 'Entity';
     const name = [first, last].filter(Boolean).join(' ').trim() || last || first;
     if (!name) continue;
-    const programs = [...block.matchAll(/<program>([^<]+)<\/program>/g)].map((m) => m[1].trim());
+    const programs = [...primary.matchAll(/<program>([^<]+)<\/program>/g)].map((m) => m[1].trim());
     const aliases: string[] = [];
     for (const aka of block.split('<aka>')) {
       if (!aka.includes('</aka>')) continue;

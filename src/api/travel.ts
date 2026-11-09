@@ -1,7 +1,7 @@
 import { snapshotJson } from './data';
 
 export interface TravelAdvisory {
-  source: 'US' | 'UK' | 'AU';
+  source: 'US' | 'UK';
   country: string;
   iso2?: string;
   iso3?: string;
@@ -17,7 +17,6 @@ export interface TravelAdvisories {
   generated?: string;
   us: TravelAdvisory[];
   uk: TravelAdvisory[];
-  au: TravelAdvisory[];
 }
 
 const US_LEVELS: Record<number, string> = {
@@ -104,43 +103,16 @@ async function fetchUk(): Promise<TravelAdvisory[]> {
   return out;
 }
 
-async function fetchAu(): Promise<TravelAdvisory[]> {
-  const res = await fetch('https://www.smartraveller.gov.au/destinations-export');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as unknown;
-  const levels: Record<string, number> = {
-    'Do not travel': 4,
-    'Reconsider your need to travel': 3,
-    'Exercise a high degree of caution': 2,
-    'Exercise normal safety precautions': 1,
-  };
-  const rows = Array.isArray(data) ? data : [];
-  return rows.map((d) => {
-    const r = d as Record<string, unknown>;
-    return {
-      source: 'AU' as const,
-      country: String(r.title ?? ''),
-      level: levels[String(r.field_overall_advice_level ?? '')] ?? null,
-      levelText: String(r.field_overall_advice_level ?? ''),
-      url: r.field_url ? String(r.field_url) : undefined,
-      updated: r.changed ? String(r.changed) : undefined,
-      summary: r.field_last_update_notes ? String(r.field_last_update_notes) : undefined,
-      region: r.field_region ? String(r.field_region) : undefined,
-    };
-  });
-}
-
-/** Travel advisories (US State Dept, UK FCDO, AU DFAT) from orbis-data snapshot, live fallback to all three. */
+/** Travel advisories (US State Dept, UK FCDO) from orbis-data snapshot, live fallback to both. */
 export async function loadTravelAdvisories(): Promise<TravelAdvisories> {
   return snapshotJson<TravelAdvisories>(
     'intel/travel-advisories.json',
     async () => {
-      const [us, uk, au] = await Promise.allSettled([fetchUs(), fetchUk(), fetchAu()]);
+      const [us, uk] = await Promise.allSettled([fetchUs(), fetchUk()]);
       return {
         generated: new Date().toISOString(),
         us: us.status === 'fulfilled' ? us.value : [],
         uk: uk.status === 'fulfilled' ? uk.value : [],
-        au: au.status === 'fulfilled' ? au.value : [],
       };
     },
   );

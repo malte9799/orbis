@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const MITRE_ATTRIBUTION = 'MITRE ATT&CK® © The MITRE Corporation, used under the ATT&CK Terms of Use';
+
 export interface MitreTactic {
   id: string;
   name: string;
@@ -54,7 +57,7 @@ function isActive(obj: any): boolean {
   return !obj?.revoked && !obj?.x_mitre_deprecated && hasEnterpriseDomain(obj);
 }
 
-function transformBundle(bundle: any): MitreAttackData {
+export function transformBundle(bundle: any): MitreAttackData {
   const objects: any[] = Array.isArray(bundle?.objects) ? bundle.objects : [];
 
   const tactics: MitreTactic[] = [];

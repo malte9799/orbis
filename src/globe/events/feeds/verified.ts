@@ -1,4 +1,4 @@
-import { loadVerifiedEvents } from '../../../api/events';
+import { loadVerifiedEvents, GEOCONFIRMED_ATTRIBUTION } from '../../../api/events';
 import { defineFeed, type EventFeature } from '../types';
 
 export default defineFeed<EventFeature[]>({
@@ -15,7 +15,7 @@ export default defineFeed<EventFeature[]>({
         kind: 'verified',
         title: f.properties?.id || 'Verified event',
         date: f.properties?.date,
-        source: 'GeoConfirmed',
+        source: GEOCONFIRMED_ATTRIBUTION,
         color: f.properties?.color || '#ff9d3b',
         weight: 0.6,
       },

@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const WARSPOTTING_ATTRIBUTION = 'WarSpotting (ukr.warspotting.net)';
+
 export type WarSpottingStatus = 'destroyed' | 'damaged' | 'captured';
 
 export interface WarSpottingTypeCount {

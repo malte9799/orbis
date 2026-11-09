@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const WHO_ATTRIBUTION = 'World Health Organization, Disease Outbreak News (CC BY-NC-SA 3.0 IGO)';
+
 export const WHO_DON_API_URL = 'https://www.who.int/api/news/diseaseoutbreaknews';
 export const WHO_DON_SITE_URL = 'https://www.who.int/emergencies/disease-outbreak-news';
 

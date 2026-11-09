@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const EPOCH_ATTRIBUTION = 'Epoch AI, Frontier Data Centers (CC BY)';
+
 export const EPOCH_DC_URL = 'https://epoch.ai/data/data_centers/data_centers.csv';
 
 export interface EpochDc {

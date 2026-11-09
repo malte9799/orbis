@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const C2INTEL_ATTRIBUTION = 'C2IntelFeeds by drb-ra (CC BY-NC-SA 4.0)';
+
 export interface C2IntelServer {
   ip_address: string;
   /** IOC description from C2IntelFeeds (e.g. "Possible Cobaltstrike C2 IP"). */

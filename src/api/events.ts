@@ -19,6 +19,7 @@ export type EventKind =
   | 'heat'
   | 'other'
   | 'verified';
+
 export interface EventProps {
   kind: EventKind;
   title: string;
@@ -513,21 +514,48 @@ export async function loadGdeltEvents(): Promise<FeatureCollection<Point, { name
   );
 }
 
-/** UCDP conflict events with fatalities (recent). Live fallback to UCDP GED API. */
-export async function loadUcdpEvents(): Promise<FeatureCollection<Point, { id: string; deaths: number; side_a: string; side_b: string }>> {
-  return snapshotJson<FeatureCollection<Point, { id: string; deaths: number; side_a: string; side_b: string }>>(
-    'events/ucdp.json',
-    async () => {
-      const res = await fetch('https://ucdpapi.pcr.uu.se/api/gedevents/24.1?pagesize=1000&page=0');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const features = (data?.Result || []).map((e: any) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [e.longitude, e.latitude] },
-        properties: { id: String(e.id), deaths: e.deaths_a + e.deaths_b + e.deaths_civilians + e.deaths_unknown, side_a: e.side_a, side_b: e.side_b },
-      }));
-      return { type: 'FeatureCollection', features };
+/** Attribution strings for the event feeds (show them wherever the data is rendered). */
+export const GDELT_ATTRIBUTION = 'GDELT Project (gdeltproject.org)';
+export const UCDP_ATTRIBUTION = 'UCDP, Uppsala University (CC BY 4.0)';
+export const GEOCONFIRMED_ATTRIBUTION = 'GeoConfirmed (geoconfirmed.org)';
+
+/** UCDP GED API version used for the live fallback; bump together with the release notes on ucdp.uu.se. */
+export const UCDP_GED_VERSION = '24.1';
+
+export type UcdpFC = FeatureCollection<Point, { id: string; deaths: number; side_a: string; side_b: string }>;
+
+/** Maps a UCDP GED API response to a point collection; missing death fields count as 0 (no NaN). */
+export function parseUcdpEvents(data: any): UcdpFC {
+  const features = (Array.isArray(data?.Result) ? data.Result : []).map((e: any) => ({
+    type: 'Feature' as const,
+    geometry: { type: 'Point' as const, coordinates: [Number(e.longitude), Number(e.latitude)] },
+    properties: {
+      id: String(e.id),
+      deaths: (Number(e.deaths_a) || 0) + (Number(e.deaths_b) || 0) + (Number(e.deaths_civilians) || 0) + (Number(e.deaths_unknown) || 0),
+      side_a: e.side_a,
+      side_b: e.side_b,
     },
+  }));
+  return { type: 'FeatureCollection', features };
+}
+
+/**
+ * UCDP conflict events with fatalities (recent). Snapshot first; the live UCDP GED API requires an access token
+ * (`x-ucdp-access-token`, key `ucdp` in the settings) – without a token there is no live fallback.
+ */
+export async function loadUcdpEvents(): Promise<UcdpFC> {
+  const token = store.getKeys().ucdp;
+  return snapshotJson<UcdpFC>(
+    'events/ucdp.json',
+    token
+      ? async () => {
+          const res = await fetch(`https://ucdpapi.pcr.uu.se/api/gedevents/${UCDP_GED_VERSION}?pagesize=1000&page=0`, {
+            headers: { 'x-ucdp-access-token': token },
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return parseUcdpEvents(await res.json());
+        }
+      : undefined,
   );
 }
 

@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const PORTWATCH_ATTRIBUTION = 'IMF PortWatch (portwatch.imf.org)';
+
 export interface PortWatchPort {
   portid: string;
   portname: string;

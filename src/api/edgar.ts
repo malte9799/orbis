@@ -28,6 +28,7 @@ export function edgarSearchUrl(days = 7, now: Date = new Date()): string {
 }
 
 export const EDGAR_SEARCH_URL = edgarSearchUrl();
+export const EDGAR_ATTRIBUTION = 'U.S. SEC EDGAR (public domain)';
 
 function parseCompany(displayName: string): { company: string; tickers: string[] } {
   let s = displayName.trim();
@@ -94,13 +95,10 @@ export function parseEdgarFilings(json: unknown): EdgarFiling[] {
   return filings;
 }
 
-async function fetchEdgarLive(days = 7): Promise<EdgarData> {
-  const res = await fetch(edgarSearchUrl(days));
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const filings = parseEdgarFilings(await res.json());
-  return { generated: new Date().toISOString(), source: 'SEC EDGAR (efts.sec.gov)', total: filings.length, filings };
-}
-
+/**
+ * SEC EDGAR filings, snapshot only: SEC fair-access rules require a descriptive User-Agent, which browsers cannot set,
+ * so there is no live fallback in the client (the data collector fetches it with a proper User-Agent).
+ */
 export async function loadEdgar(): Promise<EdgarData> {
-  return snapshotJson<EdgarData>('intel/edgar.json', () => fetchEdgarLive(), 60000);
+  return snapshotJson<EdgarData>('intel/edgar.json', undefined, 60000);
 }

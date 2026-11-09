@@ -157,6 +157,8 @@ inkrementellem Diff-Update; Punkte über einen zentralen Icon-Atlas rendern.
 
 ## 6b. VIP-People-Tracking (ARGOS)
 
+> Hinweis 2026-11-09: Das VIP-Modul (`src/api/vip.ts`) wurde wegen ungeklärter Datenherkunft/Personenbezug entfernt; dieser Abschnitt ist nur noch Ideensammlung, nicht geplant.
+
 Datenquellen (aus ARGOS beobachtet):
 - **Personen-Stammdaten:** `/api/vip.json` – Wikidata/Forbes-ähnliche Liste (Name, Rolle, Foto, Nettovermögen, Staatsbürgerschaft, Geburtsdatum). Quellen laut ARGOS-Attributions: Wikidata (CC0), REST Countries, World Bank.
 - **Bewegungsdaten:** `/api/vip/semana` – aggregierte Flugbewegungen von VIP-Jets pro Woche (Zielairports, Häufigkeiten). Abgeleitet aus Flight-Tracking (adsb.lol/OpenSky) + Aircraft-DB (Typ/Reg).

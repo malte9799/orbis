@@ -16,6 +16,15 @@ export interface VipCompany {
   hq_country?: string;
 }
 
+export const VIP_ATTRIBUTION =
+  'Personen, Firmen, Yachten: Wikidata (CC0 1.0); Fotos: Wikimedia Commons (Lizenz und Urheber je Foto); Flugzeug-Hex-Liste und Vermögenslabels: kuratiert, Herkunft/Lizenz ungeklärt';
+
+/** Photo credit line ("Urheber, Lizenz") or null when the person has no photo/credit. */
+export function vipPhotoCredit(p: Pick<VipPerson, 'photo' | 'photo_license' | 'photo_credit'>): string | null {
+  if (!p.photo || !p.photo_credit) return null;
+  return p.photo_license ? `${p.photo_credit}, ${p.photo_license} (Wikimedia Commons)` : `${p.photo_credit} (Wikimedia Commons)`;
+}
+
 export interface VipAircraft { tail: string; hex: string; type: string }
 export interface VipYacht { name: string; mmsi?: number; length_m?: number }
 
@@ -24,6 +33,10 @@ export interface VipPerson {
   name: string;
   role?: string;
   photo?: string | null;
+  /** Commons licence short name of the photo (e.g. "CC BY-SA 4.0"); only free licences are published. */
+  photo_license?: string;
+  /** Photo author per Commons (plain text); show next to the photo. */
+  photo_credit?: string;
   description?: string;
   net_worth_label?: string;
   citizenship?: string;

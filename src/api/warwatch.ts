@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const WARWATCH_ATTRIBUTION = 'War Watch (warwatch.ch, CC BY 4.0)';
+
 export const WAR_WATCH_URL = 'https://warwatch.ch/wp-json/warwatch/v1/all-map-data';
 
 export interface WarWatchParty {

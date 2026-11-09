@@ -435,11 +435,18 @@ export async function loadTrainDetails(num: number, date: string) {
 }
 
 /** Snapshot of live vessels from orbis-data (if available), else null (fall back to AIS stream). */
+/** Snapshot file shapes: bare array, `{ ships }` (older) or `{ vessels }` (ships worker, with `source` credit). */
+export function shipsFromSnapshot(data: unknown): Ship[] | null {
+  const d = data as { ships?: unknown; vessels?: unknown; source?: unknown } | null;
+  const list = Array.isArray(data) ? data : Array.isArray(d?.vessels) ? d.vessels : Array.isArray(d?.ships) ? d.ships : null;
+  if (!list) return null;
+  const source = typeof d?.source === 'string' ? d.source : 'aisstream.io';
+  return (list as Partial<Ship>[]).map((v) => ({ ...v, source: v.source ?? source }) as Ship);
+}
+
 export async function loadShipSnapshot(): Promise<Ship[] | null> {
   try {
-    const data = await snapshotJson<{ ships?: Ship[] } | Ship[]>('ships/vessels.json');
-    if (Array.isArray(data)) return data;
-    return data?.ships ?? null;
+    return shipsFromSnapshot(await snapshotJson<unknown>('ships/vessels.json'));
   } catch {
     return null;
   }

@@ -5,7 +5,7 @@ export default defineGroup({
   order: 25,
   label: 'Verifizierte Ereignisse',
   hint: 'GeoConfirmed (community OSINT)',
-  icon: 'verified' as any,
+  icon: 'verified',
   feeds: ['verified'],
   kinds: ['verified'],
   mapLayers: ['ev-circle', 'ev-glyph'],

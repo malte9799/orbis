@@ -1,3 +1,4 @@
+import { store } from '../store';
 import { snapshotJson } from './data';
 
 export interface EiaSpotPrice {
@@ -16,8 +17,11 @@ export interface EiaData {
   prices: EiaSpotPrice[];
 }
 
-export const EIA_URL =
-  'https://api.eia.gov/v2/petroleum/pri/spt/data/?api_key=DEMO_KEY&frequency=daily&data[0]=value&facets[series][]=RWTC&facets[series][]=RBRTE&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=200';
+export const EIA_ATTRIBUTION = 'U.S. Energy Information Administration (EIA)';
+
+/** Live EIA API URL; needs a personal API key (key `eia` in the settings), never a shared demo key. */
+export const eiaUrl = (apiKey: string) =>
+  `https://api.eia.gov/v2/petroleum/pri/spt/data/?api_key=${encodeURIComponent(apiKey)}&frequency=daily&data[0]=value&facets[series][]=RWTC&facets[series][]=RBRTE&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=200`;
 
 export function parseEiaResponse(raw: any): EiaData {
   const rows = Array.isArray(raw?.response?.data) ? raw.response.data : [];
@@ -33,16 +37,17 @@ export function parseEiaResponse(raw: any): EiaData {
     }))
     .filter((p: EiaSpotPrice) => p.period !== '' && p.series !== '');
   if (prices.length === 0) throw new Error('EIA: no price rows');
-  return { generated: new Date().toISOString(), source: 'U.S. Energy Information Administration (EIA)', prices };
+  return { generated: new Date().toISOString(), source: EIA_ATTRIBUTION, prices };
 }
 
-async function fetchEiaLive(): Promise<EiaData> {
-  const res = await fetch(EIA_URL);
+async function fetchEiaLive(apiKey: string): Promise<EiaData> {
+  const res = await fetch(eiaUrl(apiKey));
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return parseEiaResponse(await res.json());
 }
 
-/** EIA petroleum spot prices (snapshot from orbis-data, live fallback to the EIA API). */
+/** EIA petroleum spot prices (snapshot from orbis-data; live fallback only with a user-provided EIA key). */
 export async function loadEia(): Promise<EiaData> {
-  return snapshotJson<EiaData>('intel/eia.json', fetchEiaLive);
+  const key = store.getKeys().eia;
+  return snapshotJson<EiaData>('intel/eia.json', key ? () => fetchEiaLive(key) : undefined);
 }

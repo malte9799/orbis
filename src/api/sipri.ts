@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const SIPRI_ATTRIBUTION = 'SIPRI via World Bank (CC BY 4.0)';
+
 export interface SipriExpenditureRecord {
   iso3: string;
   iso2?: string;
@@ -96,7 +99,7 @@ export function parseSipriFromWorldBank(usdRows: WbRow[], gdpRows: WbRow[], from
   return {
     generated: new Date().toISOString(),
     source: 'SIPRI Military Expenditure Database via World Bank Open Data',
-    sourceUrl: 'https://www.sipri.org/databases/milex',
+    sourceUrl: 'https://data.worldbank.org/indicator/MS.MIL.XPND.CD',
     sourceConstraint:
       'Expenditure data (USD and %GDP) sourced from World Bank indicators MS.MIL.XPND.CD / MS.MIL.XPND.GD.ZS (SIPRI-derived). SIPRI arms transfers (TIV) are not included here because no open machine-readable SIPRI endpoint was used; values may include regional aggregates (isRegion=true).',
     indicators: INDICATORS.map(({ id, name, unit }) => ({ id, name, unit })),

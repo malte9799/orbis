@@ -1,5 +1,8 @@
 import { snapshotJson } from './data';
 
+/** Source credit to show wherever this data is rendered. */
+export const GEM_ATTRIBUTION = 'Global Energy Monitor (CC BY 4.0)';
+
 export interface GemAsset {
   asset_id: string;
   location_id?: string;
