@@ -8,7 +8,6 @@
 [![Datenquellen](https://img.shields.io/badge/📚_Datenquellen-Liste-0b7285?style=for-the-badge)](docs/DATENQUELLEN.md)
 
 [![Deploy](https://img.shields.io/github/actions/workflow/status/malte9799/orbis/deploy.yml?branch=main&label=Deploy&logo=githubactions&logoColor=white)](https://github.com/malte9799/orbis/actions/workflows/deploy.yml)
-[![Daten-Snapshots](https://img.shields.io/github/actions/workflow/status/malte9799/orbis/data.yml?label=Daten-Snapshots&logo=githubactions&logoColor=white)](https://github.com/malte9799/orbis/actions/workflows/data.yml)
 ![Letzter Commit](https://img.shields.io/github/last-commit/malte9799/orbis?logo=git&logoColor=white)
 ![Repo-Größe](https://img.shields.io/github/repo-size/malte9799/orbis)
 ![Quellen](https://img.shields.io/badge/Quellen-100%25_kostenlos-2f9e44)
@@ -120,7 +119,7 @@ automatisch hier; Hineinzoomen auf die Erde führt zurück zur Wetterkarte.
   Rover-Gebiete – bis 25 cm/px).
 - Perseverance, Curiosity und Ingenuity stehen auf der Oberfläche (aufrecht, mit dem Planeten mitdrehend); ihre Fahrspuren und
   die 72 Ingenuity-Flüge aus den NASA-MMGIS-Daten sind eingezeichnet und folgen der Zeitleiste (Sol, gefahrene Strecke im Steckbrief).
-  Fahrspuren: `scripts/mars-traverse.mjs` (Daten-Branch, Rückfall `public/data/mars-traverse.json`).
+  Fahrspuren: aus dem Daten-Bucket (Rückfall `public/data/mars-traverse.json`).
 
 #### 🗺️ Planetenkarte
 
@@ -236,7 +235,6 @@ Alles läuft über GitHub Actions und den Branch `gh-pages` (Repo-Einstellungen 
 | `deploy.yml` | Push auf jeden Branch | baut die App; `main` → Seite, andere Branches → `preview/<branch>/`, mit Status-Kommentar im PR |
 | `pr-preview.yml` | PR geöffnet | Status-Kommentar, falls die Vorschau schon fertig war |
 | `preview-cleanup.yml` | PR geschlossen, Branch gelöscht, wöchentlich | entfernt nicht mehr benötigte Vorschauen |
-| `data.yml` | alle 15 min | Daten-Snapshots im Branch `data` |
 
 Alle Änderungen an `gh-pages` laufen über `scripts/gh-pages.sh`, das gleichzeitige Läufe sicher zusammenführt.
 
@@ -353,15 +351,15 @@ Der Token landet im ausgelieferten Code und ist damit öffentlich sichtbar. Alle
 </details>
 
 <details>
-<summary><b>📦 Daten-Snapshots (<code>data</code>-Branch)</b></summary>
+<summary><b>📦 Daten-Snapshots (Cloudflare R2)</b></summary>
 
 <br>
 
 Einige Quellen erlauben keine Abrufe direkt aus dem Browser (fehlende CORS-Header) oder sind für jeden Browser zu groß: Seekabel
 (weltweite OpenStreetMap-Abfrage), Vulkane (Smithsonian), Tsunami-Meldungen (NOAA), Safecast, Radio Browser und mehrere Webcam-Listen.
-`.github/workflows/data.yml` lädt sie deshalb serverseitig – live alle 15 Minuten, den Rest täglich – mit
-`scripts/fetch-data.ts` in den Branch `data`. Die App liest sie über `raw.githubusercontent.com` und fällt sonst auf die
-Originalquelle zurück. Der erste Lauf startet automatisch beim Push, danach per Zeitplan (oder manuell unter *Actions*).
+Eigene Collector (Repo Orbismap/data) laden sie deshalb serverseitig – live im Minuten-Takt, den Rest täglich – in
+Cloudflare-R2-Buckets (`orbis-live`, `orbis-data`, `orbis-osm`). Die App liest sie von dort und fällt sonst auf die
+Originalquelle zurück.
 
 **Schlüssel für alle Nutzer teilen (optional):** Dienste mit kostenlosem Schlüssel, deren Daten sich als Datei abbilden
 lassen, kann die Action mit *deinem* Schlüssel abrufen – er liegt dann nur als GitHub-Secret vor, nie im Browser.
@@ -377,18 +375,15 @@ aisstream, Windy, Fahrzeug-Feeds) – die bleiben pro Nutzer unter *Einstellunge
 
 <br>
 
-Alle Basisadressen sind per Build-Variable umschaltbar (`deploy.yml` reicht die Repository-Variablen durch, leer = bisheriges
-Verhalten). Lokal gehören sie in `.env.local`.
+Alle Basisadressen sind per Build-Variable umschaltbar (`deploy.yml` reicht die Repository-Variablen durch, leer = Standard). Lokal gehören sie in `.env.local`.
 
 | Repository-Variable | Build-Variable | Wirkung (Standard, wenn leer) |
 |---|---|---|
-| `DATA_BASE` | `VITE_DATA_BASE` | Basis der Daten-Snapshots (`raw.githubusercontent.com/…/data/`) |
-| `LIVE_BASE` | `VITE_LIVE_BASE` | schnell wechselnde Snapshots (Tsunami, Safecast, BfS-ODL, STUK-FI, Health-Canada, FIRMS, Demos); Standard: wie `DATA_BASE` |
-| `OSM_BASE` | `VITE_OSM_BASE` | OSM-Kacheln (CCTV-Dichte, Blitzer, ALPR …); Standard: Branch `data-osm` |
-| `WETTER_BASE` | `VITE_WETTER_BASE` | ICON-Wetterfelder (`/v1/latest.json`, `*.owx`); Standard: der bisherige Worker |
+| `DATA_BASE` | `VITE_DATA_BASE` | Basis der Daten-Snapshots (`https://orbis-data.maltee.dev/`) |
+| `LIVE_BASE` | `VITE_LIVE_BASE` | schnell wechselnde Snapshots (Tsunami, Safecast, BfS-ODL, STUK-FI, Health-Canada, FIRMS, Demos); Standard: `https://orbis-live.maltee.dev/` |
+| `OSM_BASE` | `VITE_OSM_BASE` | OSM-Kacheln (CCTV-Dichte, Blitzer, ALPR …); Standard: `https://orbis-osm.maltee.dev/` |
+| `WETTER_BASE` | `VITE_WETTER_BASE` | ICON-Wetterfelder (`/v1/latest.json`, `*.owx`); Standard: `https://orbis-wetter.maltee.dev` |
 | `ASSETS_BASE` | `VITE_ASSETS_BASE` | `models/`, `textures/`, `data/airports`, `data/incidents`, `data/games`, `data/plastik`, `data/drifters`, `data/currents`; Standard: Dateien aus `public/` |
-
-Die Wetter-Action liest die Worker-Adresse aus `WETTER_PUBLIC_URL` (bisher `WX_PUBLIC_URL`, wird als Fallback noch gelesen).
 
 **Assets auslagern:** Ist die Repository-Variable `ASSETS_BUCKET` gesetzt (plus die Secrets `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
 `R2_SECRET_ACCESS_KEY`), lädt der Deploy auf `main` diese Ordner nach R2 und entfernt sie aus `dist/`, bevor `gh-pages` geschrieben
