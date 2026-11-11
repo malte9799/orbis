@@ -2,7 +2,7 @@ import { defineExtra, type ExtraCtx } from '../types';
 import type { Feature, FeatureCollection, Point } from 'geojson';
 import { empty } from '../shared/geo';
 import { OSM_BASE } from '../../../api/data';
-import { builtRegions, loadOsmTiles, USE_PMTILES } from '../../../api/osmtiles';
+import { loadOsmTiles } from '../../../api/osmtiles';
 import { ALPR_FOV_ANGLE, ALPR_FOV_RADIUS, ALPR_FOV_ZOOM, ALPR_MOUNT, CAM_DETAIL_ZOOM, CARDINAL, fovSectors } from '../shared/cams';
 import { cardHtml } from '../../popup';
 import { escapeHtml, fetchJson } from '../../../util';
@@ -17,9 +17,6 @@ const KIND: Record<string, string> = { public: 'öffentlicher Raum', outdoor: 'a
 // Data: monthly OpenStreetMap extracts (collectors/osm-tiles.mjs of the data repo, bucket orbis-osm):
 //   cctv.pmtiles    cameras as vector tiles, read through src/api/osmtiles.ts (record layout: see FIELDS there)
 //   heat/cctv.json  density cells [lon, lat, count] of the whole world (~1 km)
-// Without VITE_OSM_BASE the old JSON files of the `data-osm` branch are read instead (TODO: entfernen nach Umstellung):
-//   cctv-<region>.json           density cells [lon, lat, count]
-//   cctv-<region>-tiles.json / cctv-<region>/<ix>_<iy>.json   the 0.5° tiles (loaded by osmtiles.ts)
 const HEAT_BASE = OSM_BASE;
 type Rec = [number, number, number, string, string, string, number, string, number];
 
@@ -35,14 +32,7 @@ async function loadHeat(ctx: ExtraCtx) {
   const st = getState(ctx);
   if (st.heat !== 'idle') return;
   st.heat = 'loading';
-  let cells: [number, number, number][] = [];
-  if (USE_PMTILES) {
-    cells = await fetchJson<[number, number, number][]>(`${HEAT_BASE}heat/cctv.json`, undefined, 60000).catch(() => []);
-  } else {
-    const regions = await builtRegions();
-    const parts = await Promise.allSettled(regions.map((r) => fetchJson<[number, number, number][]>(`${HEAT_BASE}cctv-${r}.json`, undefined, 40000)));
-    cells = parts.flatMap((p) => (p.status === 'fulfilled' ? p.value : []));
-  }
+  const cells = await fetchJson<[number, number, number][]>(`${HEAT_BASE}heat/cctv.json`, undefined, 60000).catch(() => []);
   if (!cells.length) {
     st.heat = 'idle';
     return;

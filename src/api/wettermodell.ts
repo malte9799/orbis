@@ -11,7 +11,7 @@ export { decodeOwxRaw };
 // ModelSampler mixes both on top of the Open-Meteo grid and falls back to that wherever a field is missing.
 
 // VITE_WETTER_BASE überschreibt den Host (z. B. wetter.<domain>); ohne Angabe der bisherige Worker.
-export const WETTER_BASE = String(import.meta.env?.VITE_WETTER_BASE || 'https://orbis-wx.malte9799.workers.dev').replace(/\/+$/, '');
+export const WETTER_BASE = String(import.meta.env?.VITE_WETTER_BASE || 'https://orbis-wetter.maltee.dev').replace(/\/+$/, '');
 const MAX_AGE_MS = 30 * 3600 * 1000;
 const META_TTL_MS = 5 * 60 * 1000;
 const TILE = 45;

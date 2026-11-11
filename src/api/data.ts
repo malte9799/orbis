@@ -1,34 +1,20 @@
-// Snapshots of sources that browsers cannot query directly (no CORS headers or blocked
-// origins). A scheduled GitHub Action (.github/workflows/data.yml) downloads them server-side
-// into the `data` branch; raw.githubusercontent.com serves them with CORS enabled.
+// Snapshots of sources that browsers cannot query directly (no CORS headers or blocked origins). The data
+// collectors write them to Cloudflare R2 (orbis-data, orbis-live, orbis-osm); override per VITE_*_BASE.
 // Every loader falls back to the original source if the snapshot is unavailable.
-
-function dataBase(): string {
-  // Lokale Overrides für Tests: VITE_DATA_BASE zeigt dann auf einen Ordner mit Snapshot-Dateien.
-  if (import.meta.env?.VITE_DATA_BASE) return withSlash(String(import.meta.env.VITE_DATA_BASE));
-  // Node (the data Action) has no location – snapshots are read only in the browser.
-  if (typeof location === 'undefined') return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
-  // On GitHub Pages (owner.github.io/repo) use that repository, otherwise the main one.
-  const m = /^([\w-]+)\.github\.io$/.exec(location.hostname);
-  const repo = location.pathname.split('/').filter(Boolean)[0];
-  if (m && repo) return `https://raw.githubusercontent.com/${m[1]}/${repo}/data/`;
-  return 'https://raw.githubusercontent.com/malte9799/orbis/data/';
-}
-
-export const DATA_BASE = dataBase();
 
 function withSlash(u: string): string {
   return u.endsWith('/') ? u : u + '/';
 }
 
-// Schnell wechselnde Snapshots (Minuten-Takt) können von einem eigenen Host kommen (VITE_LIVE_BASE); ohne Angabe
-// liegen sie wie bisher in DATA_BASE.
-export const LIVE_BASE = import.meta.env?.VITE_LIVE_BASE ? withSlash(String(import.meta.env.VITE_LIVE_BASE)) : DATA_BASE;
+const baseOf = (v: unknown, dflt: string) => withSlash(v ? String(v) : dflt);
 
-// OSM-Kacheln (Kamera-Dichte, Blitzer …): VITE_OSM_BASE, sonst der `data-osm`-Branch neben `data`.
-export const OSM_BASE = import.meta.env?.VITE_OSM_BASE
-  ? withSlash(String(import.meta.env.VITE_OSM_BASE))
-  : DATA_BASE.replace(/\/data\/$/, '/data-osm/');
+export const DATA_BASE = baseOf(import.meta.env?.VITE_DATA_BASE, 'https://orbis-data.maltee.dev/');
+
+// Schnell wechselnde Snapshots (Minuten-Takt): eigener Host (orbis-live).
+export const LIVE_BASE = baseOf(import.meta.env?.VITE_LIVE_BASE, 'https://orbis-live.maltee.dev/');
+
+// OSM-Kacheln (Kamera-Dichte, Blitzer …): PMTiles im Bucket orbis-osm.
+export const OSM_BASE = baseOf(import.meta.env?.VITE_OSM_BASE, 'https://orbis-osm.maltee.dev/');
 
 /** Whether the clock-worker mirrors on LIVE_BASE (orbis-live) are used – only with an explicit VITE_LIVE_BASE. */
 export const LIVE_MIRROR = Boolean(import.meta.env?.VITE_LIVE_BASE);
@@ -73,7 +59,7 @@ async function get(path: string, timeoutMs: number): Promise<Response> {
   }
 }
 
-/** JSON snapshot from the data branch, else the live fallback. */
+/** JSON snapshot from the data bucket, else the live fallback. */
 export async function snapshotJson<T>(path: string, live?: () => Promise<T>, timeoutMs = 30000): Promise<T> {
   try {
     return (await (await get(path, timeoutMs)).json()) as T;
@@ -83,7 +69,7 @@ export async function snapshotJson<T>(path: string, live?: () => Promise<T>, tim
   }
 }
 
-/** Text snapshot (XML feeds) from the data branch, else the live fallback. */
+/** Text snapshot (XML feeds) from the data bucket, else the live fallback. */
 export async function snapshotText(path: string, live?: () => Promise<string>, timeoutMs = 20000): Promise<string> {
   try {
     return await (await get(path, timeoutMs)).text();
@@ -107,7 +93,7 @@ export async function fetchText(url: string, timeoutMs = 20000): Promise<string>
 
 let available: Promise<boolean> | null = null;
 
-/** Whether the data branch exists (meta.json is written by every run of the Action). */
+/** Whether the data bucket is reachable (meta.json is written by every run of the Action). */
 export function snapshotsAvailable(): Promise<boolean> {
   available ??= get('meta.json', 10000)
     .then(() => true)
