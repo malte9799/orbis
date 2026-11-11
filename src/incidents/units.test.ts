@@ -8,12 +8,16 @@ const mem = new Map<string, string>();
   removeItem: (k: string) => void mem.delete(k),
 };
 
-const { altTxt, climbFtTxt, kntTxt, localize } = await import('./units');
+const { altTxt, climbFtTxt, depthTxt, kntTxt, localize } = await import('./units');
 
 const set = (o: Record<string, string>) => mem.set('wg.options', JSON.stringify(o));
 beforeEach(() => mem.clear());
 
 describe('Einheiten im Ereignistext', () => {
+  it('Wassertiefe: Meter, Fuß in Klammern', () => {
+    expect(depthTxt(3346)).toBe('3.346 m (10.978 ft)');
+    expect(localize('in {{d:3346}} Tiefe')).toBe('in 3.346 m (10.978 ft) Tiefe');
+  });
   it('metrisch: Meter, Fuß in Klammern', () => {
     expect(altTxt(35000)).toBe('10.668 m (35.000 ft)');
     expect(climbFtTxt(-41250)).toBe('−209,6 m/s (−41.250 ft/min)');

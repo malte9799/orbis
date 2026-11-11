@@ -129,6 +129,8 @@ export interface GeoLineOptions {
   dash?: [number, number];
   /** a point has faded out this long after its time (ms) */
   fadeMs?: number;
+  /** lies below the surface (submersible): not hidden by the globe, which is in front of it */
+  seeThrough?: boolean;
 }
 
 function segmentDistance(x: number, y: number, a: [number, number], b: [number, number]) {
@@ -145,6 +147,7 @@ export class GeoLine implements GeoPart {
   private opacity: number;
   private globeOnly: boolean;
   private groundOnFlat: boolean;
+  private seeThrough: boolean;
   private dash: [number, number] | null;
   private points: Vec3[] = [];
   private segs = -1;
@@ -156,6 +159,7 @@ export class GeoLine implements GeoPart {
     this.opacity = opts.opacity ?? 1;
     this.globeOnly = !!opts.globeOnly;
     this.groundOnFlat = !!opts.groundOnFlat;
+    this.seeThrough = !!opts.seeThrough;
     this.dash = opts.dash ?? null;
     this.cssWidth = opts.width;
     this.mat = new THREE.ShaderMaterial({
@@ -287,6 +291,7 @@ export class GeoLine implements GeoPart {
       u.uDash.value.set((on + off) * this.cssWidth * frame.centreMetresPerPixel, on / (on + off));
     }
     setAnchor(u as unknown as ReturnType<typeof anchorUniforms>, frame, this.globeAnchor, this.mercAnchor, liftM);
+    if (this.seeThrough) u.uHide.value = 0;
   }
 
   setWidth(px: number) {

@@ -238,6 +238,14 @@ export class GeoFrame {
   }
 
   /** Position in CSS pixels of a point on the unit sphere's scale, on the globe; null behind the camera. The globe is not asked. */
+  /** Like toScreen for something below the surface that is drawn through the globe: hidden only when the surface above it is. */
+  toScreenBelow(lon: number, lat: number, altM: number): [number, number] | null {
+    if (this.occluded(lon, lat, 0)) return null;
+    const c = this.clip(lon, lat, altM);
+    if (c.w <= 0) return null;
+    return [(c.x / c.w * 0.5 + 0.5) * this.width, (1 - (c.y / c.w * 0.5 + 0.5)) * this.height];
+  }
+
   unitToScreen(x: number, y: number, z: number): [number, number] | null {
     const e = this.globeMatrix.elements;
     const w = e[3] * x + e[7] * y + e[11] * z + e[15];
