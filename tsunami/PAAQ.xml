@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <feed xmlns="http://www.w3.org/2005/Atom" xmlns:geo="http://www.w3.org/2003/01/geo/wgs84_pos#" xmlns:georss="http://www.georss.org/georss">
+    <id>urn:uuid:b4efa8c2-db9d-4599-97e8-22c246b18cb0</id><title>Tsunami Information Statement Number 1</title>
+    <updated>2026-11-11T01:51:32Z</updated>
+    <author>
+      <name>NWS National Tsunami Warning Center Palmer AK</name>
+<uri>https://www.tsunami.gov/</uri>
+     <email>ntwc@noaa.gov</email>
+    </author>
+<icon>https://www.tsunami.gov/images/favicon.ico</icon>
+<link type="application/atom+xml" rel="self" title="self" href="https://www.tsunami.gov/events/xml/PAAQAtom.xml"/>
+  
+   <entry>
+
+    <title>65 miles SW of Port Alice, British Columbia</title><updated>2026-11-11T01:51:32Z</updated>
+<geo:lat>49.293</geo:lat>
+<geo:long>-127.676</geo:long>
+<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">
+     <strong>Category:</strong> Information<br/><strong>Bulletin Issue Time: </strong> 2026.11.11 01:51:32 UTC <br/><strong>Preliminary Magnitude: </strong>4.7(Ml)<br/><strong>Lat/Lon: </strong>49.293 / -127.676<br/><strong>Affected Region: </strong>65 miles SW of Port Alice, British Columbia<br/><b>Note:</b>  * There is NO tsunami danger from this earthquake.<br/><strong>Definition: </strong>An information statement indicates that an earthquake has occurred, but does not pose a tsunami threat, or that a tsunami warning, advisory, or watch has been issued for another section of the ocean. <a href="https://www.tsunami.gov/events/PAAQ/2026/11/11/tobe7v/1/WEAK53/WEAK53.txt">View bulletin</a>  </div></summary>
+    <id>urn:uuid:4825643d-1e0e-433b-aa63-03636a4cbc35</id><link rel="related" title="CapXML document" href="https://www.tsunami.gov/events/PAAQ/2026/11/11/tobe7v/1/WEAK53/PAAQCAP.xml" type="application/cap+xml" />
+<link rel="alternate" title="Bulletin" href="https://www.tsunami.gov/events/PAAQ/2026/11/11/tobe7v/1/WEAK53/WEAK53.txt" type="application/xml" />
+</entry>
+</feed>
