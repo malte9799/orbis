@@ -1,6 +1,6 @@
 // Snapshot der Angemeldeten Versammlungen D/AT/CH (demonstrations.org, Demos Berlin e.V.,
-// CC BY-SA 4.0): Die API spiegelt behördliche Versammlungslisten als GeoJSON; scripts/fetch-data.ts
-// aktualisiert `demos.json` alle 15 Minuten im `data`-Branch, der Browser liest nur den Snapshot.
+// CC BY-SA 4.0): Die API spiegelt behördliche Versammlungslisten als GeoJSON; Orbismap/data collectors/fetch-data.ts
+// aktualisiert `demos.json` alle 15 Minuten im R2-Bucket, der Browser liest nur den Snapshot.
 //
 // Ein Eintrag pro Treffpunkt (mehrere Starts = mehrere Einräge): `r` ist die Rolle
 // (start/waypoint/rally/end – AK/ZK/EK der Behörden). `u` verlinkt die Seite auf demonstrations.org,

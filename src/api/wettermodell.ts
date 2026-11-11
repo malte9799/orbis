@@ -5,7 +5,7 @@ import { yieldToMain } from '../yield';
 
 export { decodeOwxRaw };
 
-// Forecast fields from the DWD ICON model, prepared by scripts/wetter-icon.py (format: docs/WETTERDATEN-FORMAT.md)
+// Forecast fields from the DWD ICON model, prepared by Orbismap/data collectors/wetter-icon.py (format: docs/WETTERDATEN-FORMAT.md)
 // and served from the R2 bucket orbis-wetter (https://orbis-wetter.maltee.dev, pipeline in Orbismap/data). A coarse 0.5° overview of the whole world (all time steps) is always
 // loaded; when zoomed in, the 45° tiles (0.125°) covering the view are stitched into one detail grid.
 // ModelSampler mixes both on top of the Open-Meteo grid and falls back to that wherever a field is missing.

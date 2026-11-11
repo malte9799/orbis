@@ -1,5 +1,7 @@
 # Plan: Flächen und Wege im OSM-Monatsauszug (zurückgestellt)
 
+> Hinweis: Skripte/Workflows/Branches in diesem Dokument sind historisch; die Pipelines liegen jetzt in Orbismap/data.
+
 Stand: Der Lauf `scripts/cctv-heat.mjs` (Workflow `cctv-heat`, Branch `data-osm`) streamt die
 Geofabrik-Extrakte mit `osmium tags-filter -R` und liefert deshalb **nur Knoten**: CCTV, Blitzer,
 ALPR, OSM-Webcams, Windräder, Schächte/Stollen/Bohrlöcher (Client: `src/api/osmtiles.ts`).

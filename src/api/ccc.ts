@@ -1,6 +1,6 @@
 // Snapshot der US-Protest-Events (Crowd Counting Consortium, Harvard/UConn, CC0 1.0): Die
-// Dataverse-CSV (Phase 3, monatlich fortgeschrieben) wird von scripts/fetch-data.ts wöchentlich
-// heruntergeladen, auf Ereignispunkte reduziert und als `ccc-us.json` in den `data`-Branch gelegt.
+// Dataverse-CSV (Phase 3, monatlich fortgeschrieben) wird von Orbismap/data collectors/fetch-data.ts wöchentlich
+// heruntergeladen, auf Ereignispunkte reduziert und als `ccc-us.json` in den R2-Daten-Bucket gelegt.
 //
 // `s` ist die geschätzte Größe (size_mean); `sb` der Freitext zur Größe; `so` die erste beigelegte Quelle.
 

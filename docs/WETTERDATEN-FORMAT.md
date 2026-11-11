@@ -1,7 +1,7 @@
 # Wetterdaten-Format (OWX)
 
-Format der Wetterkarten-Felder, die `scripts/wetter-icon.py` aus DWD-ICON-Rohdaten erzeugt und
-`.github/workflows/wetter.yml` in einen Cloudflare-R2-Bucket lädt. Hintergrund und Migration:
+Format der Wetterkarten-Felder, die `collectors/wetter-icon.py` (Orbismap/data) aus DWD-ICON-Rohdaten erzeugt und
+den Workflow `wetter.yml` (Orbismap/data) in einen Cloudflare-R2-Bucket lädt. Hintergrund und Migration:
 [PLAN-GRIB-WETTERKARTEN.md](PLAN-GRIB-WETTERKARTEN.md). Version 1.
 
 ## Dateien im Bucket
@@ -38,9 +38,9 @@ Die ICON-Temperatur gilt für die geglättete Modelloberfläche (13 km). Für T�
 
 - **`hsurf`** (Höhe der Modelloberfläche, m): zeitinvariante ICON-Variable `HSURF`, wie die anderen Variablen unter
   `v1/<lauf>/hsurf/` (ein Zeitschritt, `static: true` in `latest.json`). Gleiches Gitter wie die Temperatur.
-- **`dem`** (Geländehöhe, m): `scripts/wetter-dem.py` baut sie aus den Terrarium-Kacheln (Mapzen/AWS Open Data, Zoom 5) auf ein
+- **`dem`** (Geländehöhe, m): `collectors/wetter-dem.py` (Orbismap/data) baut sie aus den Terrarium-Kacheln (Mapzen/AWS Open Data, Zoom 5) auf ein
   Lat/Lon-Gitter mit 0,0439° (≈ 4,9 km), 1025 × 1025 Punkte je 45°-Kachel, unter `v1/static/dem/t<c>_<r>.owx`. Meer = 0 m,
-  jenseits ±85,05° fehlt der Wert. Gesamt ~7 MB. Auslösen: Workflow `wetter.yml` mit Eingabe `dem = true`.
+  jenseits ±85,05° fehlt der Wert. Gesamt ~7 MB. Auslösen: Workflow `wetter.yml` in Orbismap/data mit Eingabe `dem = true`.
 - Fehlt `hsurf` oder `dem`, bleibt die Temperatur unkorrigiert.
 - Hinweis zur Höhenquelle: [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
 
@@ -98,7 +98,7 @@ Jeder uint16-Wert `z` ist ein Zickzack-codiertes Residuum `d = (z >> 1) ^ −(z 
 2. Zeitliche Summe: `q[0] = s[0]`, `q[t] = q[t−1] + s[t]`.
 
 Der Encoder bildet das spiegelbildlich (erst Differenz zum Vorschritt, dann Plane-Prädiktor). Referenzdekoder: `decode()` in
-`scripts/wetter-icon.py` (wird im Selbsttest `--selftest` gegen die Quelle geprüft).
+`collectors/wetter-icon.py` (Orbismap/data) (wird im Selbsttest `--selftest` gegen die Quelle geprüft).
 
 ## Größe (Temperatur, Lauf 2026103012, 25 Schritte)
 

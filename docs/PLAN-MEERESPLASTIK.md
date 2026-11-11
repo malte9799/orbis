@@ -1,5 +1,7 @@
 # Plan: Meeresplastik und Great Pacific Garbage Patch (GPGP)
 
+> Hinweis: Skripte/Workflows/Branches in diesem Dokument sind historisch; die Pipelines liegen jetzt in Orbismap/data.
+
 Einbau der Quellen aus der GPGP-Recherche (Stand 2026-11-04) in Orbis. Ergebnis: drei neue Ebenen in der
 Gruppe **Meer** (`section: 'ocean'`, `cat: 'meer'`) und ein Abschnitt „Meeresplastik“ in [DATENQUELLEN.md](DATENQUELLEN.md).
 

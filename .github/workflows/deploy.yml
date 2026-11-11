@@ -7,8 +7,8 @@ name: Deploy (main + branch previews)
 
 on:
   push:
-    # `data` and `data-osm` only hold snapshots, `gh-pages` is the output
-    branches-ignore: [data, data-osm, gh-pages]
+    # `gh-pages` is the output
+    branches-ignore: [gh-pages]
   workflow_dispatch:
 
 permissions:
