@@ -22,7 +22,7 @@ export async function loadShippingLanes(): Promise<FeatureCollection> {
 
 // ---------------------------------------------------------------------------
 // Submarine telecom cables – OpenStreetMap (ODbL). The worldwide Overpass query is too heavy for
-// every browser, so the data workflow stores it daily in the data branch (scripts/fetch-data.ts).
+// every browser, so the data pipeline stores it daily in the R2 data bucket (Orbismap/data collectors/fetch-data.ts).
 
 export const loadCables = () => snapshotJson<FeatureCollection>('osm-cables/cables.json', undefined, 40000);
 

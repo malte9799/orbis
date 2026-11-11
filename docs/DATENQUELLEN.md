@@ -4,7 +4,7 @@ Alle Daten, Dienste und Medien, die Orbis nutzt – nach Themen sortiert, mit Li
 (soweit bekannt) Lizenz. Zurück zur [Startseite](../README.md).
 
 **Legende:** 🟢 frei, ohne Anmeldung · 🔑 optional mit kostenlosem Schlüssel · 🌐 über den
-[Daten-Proxy](../README.md#-deployment) (CORS/Drosselung) · 📦 als Snapshot im `data`-Branch ·
+[Daten-Proxy](../README.md#-deployment) (CORS/Drosselung) · 📦 als Snapshot im R2-Bucket (Pipeline: Orbismap/data) ·
 🚫 nur nicht-kommerzielle Nutzung
 
 > Die Rohdaten stammen von den jeweiligen Anbietern. Für Warnungen gelten immer die amtlichen Stellen.
@@ -261,7 +261,7 @@ Bandbreiten sind methodische Unsicherheit der Modelle, keine Messfehler. Fotos v
 | [QLDTraffic](https://qldtraffic.qld.gov.au/more/Developers-and-Data/) | Queensland – Webcams (GeoJSON, Pfad `/v1/webcams`, Felder ungetestet) | 🔑 `QLDTRAFFIC_KEY`, 📦 |
 | [NPS API](https://www.nps.gov/subjects/developer/) | Webcams US-Nationalparks | 🔑 `NPS_API_KEY`, 📦 |
 | [DeFlock](https://deflock.org) · [deflock-data](https://github.com/flockhopper3/deflock-data) · [Tiles](https://tiles.dontgetflocked.com) | Kennzeichen-Kameras (ALPR) mit Blickrichtung | 🟢 OSM-basiert |
-| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Geofabrik-Extrakte) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), aus monatlichen [Geofabrik](https://download.geofabrik.de)-Auszügen (`scripts/cctv-heat.mjs`, Branch `data-osm`): Dichte-Heatmap und Einzelkameras in 0,5°-Kacheln ab Zoom 11, kein Live-Overpass; derselbe Lauf liefert als Knoten-Kacheln auch Blitzer/Rotlicht (`highway=speed_camera`, `type=enforcement`), ALPR, OSM-Webcams, Windräder (`generator:source=wind`) sowie Schächte/Stollen/Bohrlöcher/Bergwerks-Punkte (`blitzer-*`, `alpr-*`, `webcam-*`, `wind-*`, `resource-*`); Wege und Flächen nicht enthalten, Overpass bleibt Fallback bzw. liefert diese | 🟢 ODbL, 📦 |
+| [OpenStreetMap](https://wiki.openstreetmap.org/wiki/Tag:man_made%3Dsurveillance) (Geofabrik-Extrakte) | Überwachungskameras (`man_made=surveillance`, ohne ALPR/Webcams), aus monatlichen [Geofabrik](https://download.geofabrik.de)-Auszügen (`collectors/osm-tiles.mjs` in Orbismap/data, Bucket orbis-osm): Dichte-Heatmap und Einzelkameras in 0,5°-Kacheln ab Zoom 11, kein Live-Overpass; derselbe Lauf liefert als Knoten-Kacheln auch Blitzer/Rotlicht (`highway=speed_camera`, `type=enforcement`), ALPR, OSM-Webcams, Windräder (`generator:source=wind`) sowie Schächte/Stollen/Bohrlöcher/Bergwerks-Punkte (`blitzer-*`, `alpr-*`, `webcam-*`, `wind-*`, `resource-*`); Wege und Flächen nicht enthalten, Overpass bleibt Fallback bzw. liefert diese | 🟢 ODbL, 📦 |
 | [Radio Browser](https://www.radio-browser.info) | Über 50.000 Radiosender, eingebauter Player | 🟢 📦 |
 
 ## 9. Infrastruktur
@@ -270,7 +270,7 @@ Bandbreiten sind methodische Unsicherheit der Modelle, keine Messfehler. Fotos v
 |---|---|---|
 | [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass) | Unterseekabel (Telekommunikation) – weniger vollständig als kommerzielle Karten; frühere Quelle TeleGeography siehe [Archiv](archiv/telegeography-seekabel.md) | 🟢 ODbL, 📦 |
 | [PeeringDB](https://www.peeringdb.com) | Internetknoten (IXPs); Rechenzentren (~5.300 Standorte mit Betreiber und Zahl der angeschlossenen Netze) | 🟢 |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass, `telecom`/`building=data_center`) | Rechenzentren, die PeeringDB nicht führt (~3.200 nach Abgleich); wöchentlicher Auszug (`scripts/fetch-data.ts`) | 🟢 ODbL, 📦 |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) (Overpass, `telecom`/`building=data_center`) | Rechenzentren, die PeeringDB nicht führt (~3.200 nach Abgleich); wöchentlicher Auszug (`collectors/fetch-data.ts` (Orbismap/data)) | 🟢 ODbL, 📦 |
 | [WRI Global Power Plant Database](https://datasets.wri.org/dataset/globalpowerplantdatabase) | Wind-, Solar-, Kern-, Kohle-, Gas-, Wasserkraftwerke | 🟢 CC BY 4.0 |
 | OpenStreetMap (Overpass) | Einzelne Windräder, Öl-/Gaspipelines | 🟢 ODbL |
 
@@ -349,7 +349,7 @@ Gebaut vom orbis-data-Sammler (Task `wahlen`, Gruppe `manual`, Ausgabe `wahlen/d
 | [NASA Mars Trek](https://trek.nasa.gov/mars/) | Farbmosaik, MOLA-Höhe, THEMIS-Infrarot, HRSC-Farbmosaike (ESA/DLR/FU Berlin, CC BY-SA 3.0 IGO), HiRISE-Regionalmosaike (bis 25 cm/px), Geologie, Täler, Mineralien; Produktliste per `scripts/mars-products.mjs` |
 | Regionale Höhenmodelle (HRSC-, CTX- und HiRISE-DEMs) | 3D-Relief beim Hineinzoomen (z. B. Gale, Columbia Hills, Victoria); Liste per `scripts/mars-products.mjs` |
 | [CTX Global Mosaic](https://astro.arcgis.com/arcgis/rest/services/OnMars/CTX/MapServer) (NASA/JPL/MSSS/Caltech Murray Lab via Esri) | 5-m-Basiskarte |
-| [NASA MMGIS](https://mars.nasa.gov/maps/) | Fahrspuren von Perseverance & Curiosity, 72 Ingenuity-Flüge (`scripts/mars-traverse.mjs`, Rückfall `public/data/mars-traverse.json`) |
+| [NASA MMGIS](https://mars.nasa.gov/maps/) | Fahrspuren von Perseverance & Curiosity, 72 Ingenuity-Flüge (`collectors/mars-traverse.mjs` in Orbismap/data, Rückfall `public/data/mars-traverse.json`) |
 | [Landestellen-Steckbriefe](https://mars.nasa.gov/mars2020/) | Viking, Pathfinder, Spirit, Opportunity, Phoenix, Curiosity, InSight, Perseverance, Zhurong |
 
 ### Raumsonden & Wikipedia
@@ -403,9 +403,9 @@ politische Ereignisse – mit Inhalts-Warnung beim ersten Öffnen.
 |---|---|---|
 | [Archive Genocide](https://archivegenocide.com/) 🟢🌐📦 | `warfootage` – Videopositionen (exakte Pins, approximierte Clips als Heatmap), Backend-JSON `/geolocation/data` | Web |
 | [whofundedgenocide.com](https://whofundedgenocide.com/) (FEC-Bulkdaten) 🟢📦 | `moneyflow` – PAC-Geldflüsse pro Kongresswahlbezirk; Skript `scripts/moneyflow.mjs` → `public/data` | Web |
-| [demonstrations.org](https://demonstrations.org/) (Demos Berlin e.V.) 🟢📦 | `demos` – angemeldete Versammlungen D/AT/CH der kommenden Tage; API-Spiegel der amtlichen Versammlungslisten (GeoJSON, Routen als LineString); Task `demos` in `scripts/fetch-data.ts` alle 15 min → `data`-Branch | [API](https://api.demonstrations.org/v1/docs) · **CC BY-SA 4.0** |
-| [Crowd Counting Consortium](https://dataverse.harvard.edu/dataverse/crowdcountingconsortium) (Harvard/UConn) 🟢📦 | `usprotests` – US-Protestevents mit Geocodierung, Datum, Größe, Themen; Task `ccc-us` wöchentlich → `data`-Branch | [DOI 10.7910/DVN/RI9JFU](https://doi.org/10.7910/DVN/RI9JFU) · **CC0 1.0** |
-| [Bellingcat – Civilian Harm in Ukraine](https://ukraine.bellingcat.com/) 🟢📦 | `ukraineharm` – verortete Vorfälle ziviler Schäden seit 24.02.2022 (Beleg-Links zu Originalposts, keine Medien); Task `ukraine-harm` täglich → `data`-Branch | Rohdaten der TimeMap (JSON), **Lizenz nicht angegeben** – Attribution und Link |
+| [demonstrations.org](https://demonstrations.org/) (Demos Berlin e.V.) 🟢📦 | `demos` – angemeldete Versammlungen D/AT/CH der kommenden Tage; API-Spiegel der amtlichen Versammlungslisten (GeoJSON, Routen als LineString); Task `demos` in `collectors/fetch-data.ts` (Orbismap/data) alle 15 min → R2-Bucket (Orbismap/data) | [API](https://api.demonstrations.org/v1/docs) · **CC BY-SA 4.0** |
+| [Crowd Counting Consortium](https://dataverse.harvard.edu/dataverse/crowdcountingconsortium) (Harvard/UConn) 🟢📦 | `usprotests` – US-Protestevents mit Geocodierung, Datum, Größe, Themen; Task `ccc-us` wöchentlich → R2-Bucket (Orbismap/data) | [DOI 10.7910/DVN/RI9JFU](https://doi.org/10.7910/DVN/RI9JFU) · **CC0 1.0** |
+| [Bellingcat – Civilian Harm in Ukraine](https://ukraine.bellingcat.com/) 🟢📦 | `ukraineharm` – verortete Vorfälle ziviler Schäden seit 24.02.2022 (Beleg-Links zu Originalposts, keine Medien); Task `ukraine-harm` täglich → R2-Bucket (Orbismap/data) | Rohdaten der TimeMap (JSON), **Lizenz nicht angegeben** – Attribution und Link |
 | [Kiel Ukraine Support Tracker](https://www.ifw-kiel.de/topics/war-against-ukraine/ukraine-support-tracker/) (Institut für Weltwirtschaft) 🟢📦 | `ukrainesupport` – zugewiesene Hilfe je Geberland (Mrd. €, finanziell/humanitär/militärisch), Blatt „Country Summary (€)“ der XLSX; Task `ukraine-support` wöchentlich | XLSX-Download, **Lizenz nicht angegeben** – Attribution und Link |
 | [Tech for Palestine](https://data.techforpalestine.org/) 🟢 | `gazazahlen` – Tageszahlen Gaza/Westjordanland (Gesundheitsministerium, UN-OCHA), Infrastruktur-Schäden, Namensliste (Zusammenfassung); direkt aus dem Browser (CORS `*`) | **Public Domain** |
 | [IPC – Integrated Food Security Phase Classification](https://www.ipcinfo.org/) via HDX 🟢📦 | `gazahunger` – Ernährungslage je Governorate (Phasen 1–5, Verlauf); Task `ipc-gaza` täglich | **CC0** |

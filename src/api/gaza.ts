@@ -2,7 +2,7 @@
 // - Tech for Palestine (data.techforpalestine.org, Public Domain): Tageszahlen des Gesundheits-
 //   ministeriums Gaza und der UN-Meldungen im Westjordanland, Infrastruktur-Schäden, Namensliste
 //   (Zusammenfassung). Die API hat CORS `*` und wird direkt gelesen.
-// - IPC Hunger (HDX, CC0): scripts/fetch-data.ts spiegelt `ipc-gaza.json` in den data-Branch.
+// - IPC Hunger (HDX, CC0): Orbismap/data collectors/fetch-data.ts spiegelt `ipc-gaza.json` in den R2-Daten-Bucket.
 
 const T4P = 'https://data.techforpalestine.org/api/';
 

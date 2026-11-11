@@ -1,5 +1,7 @@
 # Plan: Datenquellen aus „God's Eye View“ übernehmen
 
+> Hinweis: Skripte/Workflows/Branches in diesem Dokument sind historisch; die Pipelines liegen jetzt in Orbismap/data.
+
 Abgleich der Quellen von [bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view)
 (`DATA_SOURCES.md`, ~85 Live-Quellen + ~12 gebündelte Datensätze) mit [DATENQUELLEN.md](DATENQUELLEN.md),
 und wie die fehlenden in Orbis eingebaut werden. Stand: 2026-10-26.

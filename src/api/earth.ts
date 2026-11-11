@@ -255,7 +255,7 @@ export async function loadRadiation(): Promise<{ fc: FeatureCollection<Point>; f
 
 type RawFc = FeatureCollection<Point, Record<string, unknown>>;
 
-/** Live BfS ODL download (also used by scripts/fetch-data.ts for the data-branch snapshot). */
+/** Live BfS ODL download (also used by Orbismap/data collectors/fetch-data.ts for the R2 snapshot). */
 export function fetchBfsRaw() {
   return fetchJson<RawFc>(
     'https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:odlinfo_odl_1h_latest&outputFormat=application/json',

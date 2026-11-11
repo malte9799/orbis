@@ -2,7 +2,7 @@ import { snapshotJson } from '../api/data';
 import type { LandingSite } from './moon';
 
 // Mars: landing sites, rover traverses and the Ingenuity flights. The traverses come from
-// NASA's MMGIS (condensed by scripts/mars-traverse.mjs, refreshed in the data branch).
+// NASA's MMGIS (condensed by Orbismap/data collectors/mars-traverse.mjs, refreshed in the R2 data bucket).
 
 export const SOL_MS = 88_775_244;
 

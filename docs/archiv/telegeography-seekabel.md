@@ -1,5 +1,7 @@
 # Archiv: Seekabel von TeleGeography
 
+> Hinweis: Skripte/Workflows/Branches in diesem Dokument sind historisch; die Pipelines liegen jetzt in Orbismap/data.
+
 Bis Oktober 2026 kamen die Seekabel-Ebene und ihre Anlandepunkte aus der
 [TeleGeography Submarine Cable Map](https://www.submarinecablemap.com). Die Ebene wurde auf
 OpenStreetMap (ODbL) umgestellt, weil die TeleGeography-Datenbank **nicht offen lizenziert** ist:

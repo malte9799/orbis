@@ -1,4 +1,4 @@
-// Zivile Schäden in der Ukraine (Bellingcat „Civilian Harm in Ukraine“): scripts/fetch-data.ts
+// Zivile Schäden in der Ukraine (Bellingcat „Civilian Harm in Ukraine“): Orbismap/data collectors/fetch-data.ts
 // spiegelt die öffentlichen Rohdaten der TimeMap täglich als `ukraine-harm.json` in den
 // `data`-Branch; der Browser liest nur den Snapshot. Die Vorfälle verlinken auf Originalposts
 // (Social Media) – Medien werden nicht kopiert oder eingebettet.
@@ -43,9 +43,9 @@ export function ukraineHarm(): Promise<UkraineHarmData> {
 }
 
 // ---------------------------------------------------------------------------
-// Hilfe für die Ukraine (Kiel Ukraine Support Tracker): scripts/fetch-data.ts liest wöchentlich die
+// Hilfe für die Ukraine (Kiel Ukraine Support Tracker): Orbismap/data collectors/fetch-data.ts liest wöchentlich die
 // XLSX-Veröffentlichung des Instituts und legt je Geberland die zugewiesenen Beträge (Mrd. €) als
-// `ukraine-support.json` in den `data`-Branch.
+// `ukraine-support.json` in den R2-Daten-Bucket.
 
 export interface UkraineDonor {
   n: string;
@@ -84,7 +84,7 @@ export function ukraineSupport(): Promise<UkraineSupportData> {
 // ---------------------------------------------------------------------------
 // Lage nach Oblast: Insecurity Insight (Vorfälle mit Explosivwaffen, nur Region – die Koordinaten sind
 // im Datensatz gelöscht), offizielle Luftalarme (Stunden je Monat) und WHO SSA (Angriffe aufs
-// Gesundheitswesen je Monat, ohne Ort). scripts/fetch-data.ts schreibt `ukraine-oblast.json`.
+// Gesundheitswesen je Monat, ohne Ort). Orbismap/data collectors/fetch-data.ts schreibt `ukraine-oblast.json`.
 
 export interface UkraineRegion {
   /** Vorfälle gesamt, je Jahr / Sektor / Waffenart */
