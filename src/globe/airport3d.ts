@@ -9,6 +9,7 @@ import type { Vec3 } from './geo3d/frame';
 import { cockpitView } from './geo3d/focus';
 import type { GeoStage, GeoTarget } from './geo3d/stage';
 import { FONT_BOLD, FONT_REGULAR } from './vector';
+import { addLayerOrdered } from './layerorder';
 
 // "Flughafen 3D": taxiways, aprons and gates from OpenStreetMap plus aircraft as 3D
 // models with trails and callsign labels. Everything lives in its own sources/layers (ap3d-*).
@@ -204,7 +205,7 @@ export class Airport3D {
     const before = m.getLayer(this.before) ? this.before : undefined;
     const hidden = { visibility: 'none' as const };
     const add = (l: LayerSpecification) => {
-      if (!m.getLayer(l.id)) m.addLayer(l, before);
+      if (!m.getLayer(l.id)) addLayerOrdered(m, l, before);
     };
     const roads = { source: 'ap3d-line', minzoom: AIRPORT_ZOOM - 1 };
     add({

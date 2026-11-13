@@ -22,6 +22,7 @@ import { cardHtml } from './popup';
 import { heightNum } from '../units';
 import type { DetailContent } from './detailpanel';
 import { OPTIONS_EVENT } from '../store';
+import { addLayerOrdered } from './layerorder';
 
 // Additional map content beyond weather: European measurements, live air/space traffic and
 // infrastructure. Every source is free and keyless.
@@ -153,7 +154,7 @@ export class ExtraLayers {
       stage,
       hidden: { visibility: 'none' },
       add: (layer, before) => {
-        if (!map.getLayer(layer.id)) map.addLayer(layer, before && map.getLayer(before) ? before : undefined);
+        if (!map.getLayer(layer.id)) addLayerOrdered(map, layer, before);
       },
       setData: (source, data) => this.setData(source, data),
       loadOnce: (id, maxAge, fn) => this.loadOnce(id, maxAge, fn),
@@ -196,7 +197,7 @@ export class ExtraLayers {
     registerSilhouettes(m);
     const hidden = { visibility: 'none' as const };
     const add = (layer: LayerSpecification, before?: string) => {
-      if (!m.getLayer(layer.id)) m.addLayer(layer, before && m.getLayer(before) ? before : undefined);
+      if (!m.getLayer(layer.id)) addLayerOrdered(m, layer, before);
     };
     // earth observation & geology (raster overlays, below labels)
     // 3D-Höhenmodell (hybrid: Mapterhorn + AWS über ein eigenes Protokoll) – dient nur der

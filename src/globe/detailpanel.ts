@@ -2,6 +2,7 @@ import type { Map as MlMap, GeoJSONSource } from 'maplibre-gl';
 import type { GlyphId } from './icons';
 import { glyphSvg } from './icons';
 import { escapeHtml } from '../util';
+import { addLayerOrdered } from './layerorder';
 import './flightpanel.css';
 
 // Right-hand detail panel for the documentation layers of the Zeugen-Karte (Versammlungen
@@ -107,7 +108,8 @@ export class DetailPanel {
   private ensureRoute(map: MlMap) {
     if (map.getSource('detail-route')) return;
     map.addSource('detail-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    map.addLayer(
+    addLayerOrdered(
+      map,
       {
         id: 'detail-route-bg',
         type: 'line',
@@ -118,7 +120,8 @@ export class DetailPanel {
       },
       'marker',
     );
-    map.addLayer(
+    addLayerOrdered(
+      map,
       {
         id: 'detail-route',
         type: 'line',
